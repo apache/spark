@@ -28,9 +28,9 @@ import org.apache.spark.annotation.Private
  * removed.
  *
  * The underlying implementation uses Scala compiler's specialization to generate optimized
- * storage for two primitive types (Long and Int). It is much faster than Java's standard HashSet
- * while incurring much less memory overhead. This can serve as building blocks for higher level
- * data structures such as an optimized HashMap.
+ * storage for four primitive types (Long, Int, Double, and Float). It is much faster than Java's
+ * standard HashSet while incurring much less memory overhead. This can serve as building blocks
+ * for higher level data structures such as an optimized HashMap.
  *
  * This OpenHashSet is designed to serve as building blocks for higher level data structures
  * such as an optimized hash map. Compared with standard hash set implementations, this class
@@ -41,14 +41,14 @@ import org.apache.spark.annotation.Private
  * to explore all spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
 @Private
-class OpenHashSet[@specialized(Long, Int) T: ClassTag](
+class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     initialCapacity: Int,
     loadFactor: Double)
   extends Serializable {
 
   require(initialCapacity <= OpenHashSet.MAX_CAPACITY,
     s"Can't make capacity bigger than ${OpenHashSet.MAX_CAPACITY} elements")
-  require(initialCapacity >= 1, "Invalid initial capacity")
+  require(initialCapacity >= 0, "Invalid initial capacity")
   require(loadFactor < 1.0, "Load factor must be less than 1.0")
   require(loadFactor > 0.0, "Load factor must be greater than 0.0")
 
@@ -77,6 +77,10 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
       (new LongHasher).asInstanceOf[Hasher[T]]
     } else if (mt == ClassTag.Int) {
       (new IntHasher).asInstanceOf[Hasher[T]]
+    } else if (mt == ClassTag.Double) {
+      (new DoubleHasher).asInstanceOf[Hasher[T]]
+    } else if (mt == ClassTag.Float) {
+      (new FloatHasher).asInstanceOf[Hasher[T]]
     } else {
       new Hasher[T]
     }
@@ -271,8 +275,12 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
   private def nextPowerOf2(n: Int): Int = {
-    val highBit = Integer.highestOneBit(n)
-    if (highBit == n) n else highBit << 1
+    if (n == 0) {
+      1
+    } else {
+      val highBit = Integer.highestOneBit(n)
+      if (highBit == n) n else highBit << 1
+    }
   }
 }
 
@@ -289,7 +297,7 @@ object OpenHashSet {
    * A set of specialized hash function implementation to avoid boxing hash code computation
    * in the specialized implementation of OpenHashSet.
    */
-  sealed class Hasher[@specialized(Long, Int) T] extends Serializable {
+  sealed class Hasher[@specialized(Long, Int, Double, Float) T] extends Serializable {
     def hash(o: T): Int = o.hashCode()
   }
 
@@ -299,6 +307,17 @@ object OpenHashSet {
 
   class IntHasher extends Hasher[Int] {
     override def hash(o: Int): Int = o
+  }
+
+  class DoubleHasher extends Hasher[Double] {
+    override def hash(o: Double): Int = {
+      val bits = java.lang.Double.doubleToLongBits(o)
+      (bits ^ (bits >>> 32)).toInt
+    }
+  }
+
+  class FloatHasher extends Hasher[Float] {
+    override def hash(o: Float): Int = java.lang.Float.floatToIntBits(o)
   }
 
   private def grow1(newSize: Int) {}

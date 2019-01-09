@@ -22,26 +22,36 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(
     val sparkContext: SparkContext,
     val conf: SQLConf,
-    val extraStrategies: Seq[Strategy])
+    val experimentalMethods: ExperimentalMethods)
   extends SparkStrategies {
 
   def numPartitions: Int = conf.numShufflePartitions
 
-  def strategies: Seq[Strategy] =
-      extraStrategies ++ (
+  override def strategies: Seq[Strategy] =
+    experimentalMethods.extraStrategies ++
+      extraPlanningStrategies ++ (
+      PythonEvals ::
+      DataSourceV2Strategy ::
       FileSourceStrategy ::
-      DataSourceStrategy ::
-      DDLStrategy ::
+      DataSourceStrategy(conf) ::
       SpecialLimits ::
       Aggregation ::
+      Window ::
       JoinSelection ::
       InMemoryScans ::
       BasicOperators :: Nil)
+
+  /**
+   * Override to add extra planning strategies to the planner. These strategies are tried after
+   * the strategies defined in [[ExperimentalMethods]], and before the regular strategies.
+   */
+  def extraPlanningStrategies: Seq[Strategy] = Nil
 
   override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
     plan.collect {

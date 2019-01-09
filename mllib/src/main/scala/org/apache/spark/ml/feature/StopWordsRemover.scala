@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -28,8 +30,11 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 /**
  * A feature transformer that filters out stop words from input.
- * Note: null values from input array are preserved unless adding null to stopWords explicitly.
- * @see [[http://en.wikipedia.org/wiki/Stop_words]]
+ *
+ * @note null values from input array are preserved unless adding null to stopWords
+ * explicitly.
+ *
+ * @see <a href="http://en.wikipedia.org/wiki/Stop_words">Stop words (Wikipedia)</a>
  */
 @Since("1.5.0")
 class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String)
@@ -49,7 +54,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   /**
    * The words to be filtered out.
    * Default: English stop words
-   * @see [[StopWordsRemover.loadDefaultStopWords()]]
+   * @see `StopWordsRemover.loadDefaultStopWords()`
    * @group param
    */
   @Since("1.5.0")
@@ -81,7 +86,27 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("1.5.0")
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"), caseSensitive -> false)
+  /**
+   * Locale of the input for case insensitive matching. Ignored when [[caseSensitive]]
+   * is true.
+   * Default: Locale.getDefault.toString
+   * @group param
+   */
+  @Since("2.4.0")
+  val locale: Param[String] = new Param[String](this, "locale",
+    "Locale of the input for case insensitive matching. Ignored when caseSensitive is true.",
+    ParamValidators.inArray[String](Locale.getAvailableLocales.map(_.toString)))
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setLocale(value: String): this.type = set(locale, value)
+
+  /** @group getParam */
+  @Since("2.4.0")
+  def getLocale: String = $(locale)
+
+  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
+    caseSensitive -> false, locale -> Locale.getDefault.toString)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -92,8 +117,10 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
-      // TODO: support user locale (SPARK-15064)
-      val toLower = (s: String) => if (s != null) s.toLowerCase else s
+      val lc = new Locale($(locale))
+      // scalastyle:off caselocale
+      val toLower = (s: String) => if (s != null) s.toLowerCase(lc) else s
+      // scalastyle:on caselocale
       val lowerStopWords = $(stopWords).map(toLower(_)).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
@@ -106,8 +133,8 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
-    require(inputType.sameType(ArrayType(StringType)),
-      s"Input type must be ArrayType(StringType) but got $inputType.")
+    require(inputType.sameType(ArrayType(StringType)), "Input type must be " +
+      s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
     SchemaUtils.appendColumn(schema, $(outputCol), inputType, schema($(inputCol)).nullable)
   }
 
@@ -129,7 +156,8 @@ object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
    * Loads the default stop words for the given language.
    * Supported languages: danish, dutch, english, finnish, french, german, hungarian,
    * italian, norwegian, portuguese, russian, spanish, swedish, turkish
-   * @see [[http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/]]
+   * @see <a href="http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/">
+   * here</a>
    */
   @Since("2.0.0")
   def loadDefaultStopWords(language: String): Array[String] = {

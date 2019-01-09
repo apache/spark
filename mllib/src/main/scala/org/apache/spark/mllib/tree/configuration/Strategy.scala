@@ -28,8 +28,8 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
 /**
  * Stores all the configuration options for tree construction
  * @param algo  Learning goal.  Supported:
- *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
- *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+ *              `org.apache.spark.mllib.tree.configuration.Algo.Classification`,
+ *              `org.apache.spark.mllib.tree.configuration.Algo.Regression`
  * @param impurity Criterion used for information gain calculation.
  *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
  *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
@@ -43,9 +43,9 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *                for choosing how to split on features at each node.
  *                More bins give higher granularity.
  * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
- *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+ *                             `org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort`
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
- *                                number of discrete values they take. An entry (n -> k)
+ *                                number of discrete values they take. An entry (n to k)
  *                                indicates that feature n is categorical with k categories
  *                                indexed from 0: {0, 1, ..., k-1}.
  * @param minInstancesPerNode Minimum number of instances each child must have after split.

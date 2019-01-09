@@ -18,13 +18,15 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.Future
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
@@ -42,8 +44,9 @@ private[spark] class StandaloneSchedulerBackend(
   with Logging {
 
   private var client: StandaloneAppClient = null
-  private var stopping = false
+  private val stopping = new AtomicBoolean(false)
   private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = sc.conf
     override protected def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
 
@@ -52,17 +55,23 @@ private[spark] class StandaloneSchedulerBackend(
 
   private val registrationBarrier = new Semaphore(0)
 
-  private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
+  private val maxCores = conf.get(config.CORES_MAX)
   private val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
     super.start()
-    launcherBackend.connect()
+
+    // SPARK-21159. The scheduler backend should only try to connect to the launcher when in client
+    // mode. In cluster mode, the code that submits the application to the Master needs to connect
+    // to the launcher instead.
+    if (sc.deployMode == "client") {
+      launcherBackend.connect()
+    }
 
     // The endpoint for executors to talk to us
     val driverUrl = RpcEndpointAddress(
-      sc.conf.get("spark.driver.host"),
-      sc.conf.get("spark.driver.port").toInt,
+      sc.conf.get(config.DRIVER_HOST_ADDRESS),
+      sc.conf.get(config.DRIVER_PORT),
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     val args = Seq(
       "--driver-url", driverUrl,
@@ -71,18 +80,18 @@ private[spark] class StandaloneSchedulerBackend(
       "--cores", "{{CORES}}",
       "--app-id", "{{APP_ID}}",
       "--worker-url", "{{WORKER_URL}}")
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val extraJavaOpts = sc.conf.get(config.EXECUTOR_JAVA_OPTIONS)
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath")
+    val classPathEntries = sc.conf.get(config.EXECUTOR_CLASS_PATH)
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
-    val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
+    val libraryPathEntries = sc.conf.get(config.EXECUTOR_LIBRARY_PATH)
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
 
     // When testing, expose the parent class path to the child. This is processed by
     // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
     // when the assembly is built with the "*-provided" profiles enabled.
     val testingClassPath =
-      if (sys.props.contains("spark.testing")) {
+      if (sys.props.contains(IS_TESTING.key)) {
         sys.props("java.class.path").split(java.io.File.pathSeparator).toSeq
       } else {
         Nil
@@ -93,8 +102,8 @@ private[spark] class StandaloneSchedulerBackend(
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
-    val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
-    val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
+    val webUrl = sc.ui.map(_.webUrl).getOrElse("")
+    val coresPerExecutor = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
     // If we're using dynamic allocation, set our initial executor limit to 0 for now.
     // ExecutorAllocationManager will send the real initial limit to the Master later.
     val initialExecutorLimit =
@@ -103,8 +112,8 @@ private[spark] class StandaloneSchedulerBackend(
       } else {
         None
       }
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
+    val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
+      webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
     client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -112,7 +121,7 @@ private[spark] class StandaloneSchedulerBackend(
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
-  override def stop(): Unit = synchronized {
+  override def stop(): Unit = {
     stop(SparkAppHandle.State.FINISHED)
   }
 
@@ -125,28 +134,28 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def disconnected() {
     notifyContext()
-    if (!stopping) {
+    if (!stopping.get) {
       logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 
   override def dead(reason: String) {
     notifyContext()
-    if (!stopping) {
+    if (!stopping.get) {
       launcherBackend.setState(SparkAppHandle.State.KILLED)
       logError("Application has been killed. Reason: " + reason)
       try {
         scheduler.error(reason)
       } finally {
         // Ensure the application terminates, as we can no longer run jobs.
-        sc.stop()
+        sc.stopInNewThread()
       }
     }
   }
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
     memory: Int) {
-    logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
+    logInfo("Granted executor ID %s on hostPort %s with %d core(s), %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
 
@@ -158,6 +167,11 @@ private[spark] class StandaloneSchedulerBackend(
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason)
+  }
+
+  override def workerRemoved(workerId: String, host: String, message: String): Unit = {
+    logInfo("Worker %s removed: %s".format(workerId, message))
+    removeWorker(workerId, host, message)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -206,20 +220,20 @@ private[spark] class StandaloneSchedulerBackend(
     registrationBarrier.release()
   }
 
-  private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
-    try {
-      stopping = true
+  private def stop(finalState: SparkAppHandle.State): Unit = {
+    if (stopping.compareAndSet(false, true)) {
+      try {
+        super.stop()
+        client.stop()
 
-      super.stop()
-      client.stop()
-
-      val callback = shutdownCallback
-      if (callback != null) {
-        callback(this)
+        val callback = shutdownCallback
+        if (callback != null) {
+          callback(this)
+        }
+      } finally {
+        launcherBackend.setState(finalState)
+        launcherBackend.close()
       }
-    } finally {
-      launcherBackend.setState(finalState)
-      launcherBackend.close()
     }
   }
 

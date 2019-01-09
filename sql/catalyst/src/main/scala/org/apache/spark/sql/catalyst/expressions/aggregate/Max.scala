@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the maximum value of expr.")
+  usage = "_FUNC_(expr) - Returns the maximum value of `expr`.")
 case class Max(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
@@ -32,9 +33,6 @@ case class Max(child: Expression) extends DeclarativeAggregate {
 
   // Return data type.
   override def dataType: DataType = child.dataType
-
-  // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(child.dataType, "function max")
@@ -48,12 +46,12 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* max = */ Greatest(Seq(max, child))
+    /* max = */ greatest(max, child)
   )
 
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
-      /* max = */ Greatest(Seq(max.left, max.right))
+      /* max = */ greatest(max.left, max.right)
     )
   }
 

@@ -80,6 +80,10 @@ private[spark] class CoalescedRDD[T: ClassTag](
 
   require(maxPartitions > 0 || maxPartitions == prev.partitions.length,
     s"Number of partitions ($maxPartitions) must be positive.")
+  if (partitionCoalescer.isDefined) {
+    require(partitionCoalescer.get.isInstanceOf[Serializable],
+      "The partition coalescer passed in must be serializable.")
+  }
 
   override def getPartitions: Array[Partition] = {
     val pc = partitionCoalescer.getOrElse(new DefaultPartitionCoalescer())
@@ -262,17 +266,17 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
         numCreated += 1
       }
     }
-    tries = 0
     // if we don't have enough partition groups, create duplicates
     while (numCreated < targetLen) {
-      var (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(tries)
-      tries += 1
+      // Copy the preferred location from a random input partition.
+      // This helps in avoiding skew when the input partitions are clustered by preferred location.
+      val (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(
+        rnd.nextInt(partitionLocs.partsWithLocs.length))
       val pgroup = new PartitionGroup(Some(nxt_replica))
       groupArr += pgroup
       groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
       addPartToPGroup(nxt_part, pgroup)
       numCreated += 1
-      if (tries >= partitionLocs.partsWithLocs.length) tries = 0
     }
   }
 

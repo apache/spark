@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
   extends Aggregator[T, (Boolean, T), T] {
 
-  private val encoder = implicitly[Encoder[T]]
+  @transient private val encoder = implicitly[Encoder[T]]
 
   override def zero: (Boolean, T) = (false, null.asInstanceOf[T])
 

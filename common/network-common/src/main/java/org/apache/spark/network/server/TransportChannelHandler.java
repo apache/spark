@@ -21,11 +21,13 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import org.apache.spark.network.TransportContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportResponseHandler;
+import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.RequestMessage;
 import org.apache.spark.network.protocol.ResponseMessage;
@@ -56,18 +58,21 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
   private final boolean closeIdleConnections;
+  private final TransportContext transportContext;
 
   public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
       long requestTimeoutMs,
-      boolean closeIdleConnections) {
+      boolean closeIdleConnections,
+      TransportContext transportContext) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
     this.closeIdleConnections = closeIdleConnections;
+    this.transportContext = transportContext;
   }
 
   public TransportClient getClient() {
@@ -88,14 +93,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while registering channel", e);
+      logger.error("Exception from request handler while channel is active", e);
     }
     try {
       responseHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while registering channel", e);
+      logger.error("Exception from response handler while channel is active", e);
     }
-    super.channelRegistered(ctx);
+    super.channelActive(ctx);
   }
 
   @Override
@@ -103,22 +108,37 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while unregistering channel", e);
+      logger.error("Exception from request handler while channel is inactive", e);
     }
     try {
       responseHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while unregistering channel", e);
+      logger.error("Exception from response handler while channel is inactive", e);
     }
-    super.channelUnregistered(ctx);
+    super.channelInactive(ctx);
+  }
+
+  /**
+   * Overwrite acceptInboundMessage to properly delegate ChunkFetchRequest messages
+   * to ChunkFetchRequestHandler.
+   */
+  @Override
+  public boolean acceptInboundMessage(Object msg) throws Exception {
+    if (msg instanceof ChunkFetchRequest) {
+      return false;
+    } else {
+      return super.acceptInboundMessage(msg);
+    }
   }
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
     if (request instanceof RequestMessage) {
       requestHandler.handle((RequestMessage) request);
-    } else {
+    } else if (request instanceof ResponseMessage) {
       responseHandler.handle((ResponseMessage) request);
+    } else {
+      ctx.fireChannelRead(request);
     }
   }
 
@@ -158,6 +178,18 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   public TransportResponseHandler getResponseHandler() {
     return responseHandler;
+  }
+
+  @Override
+  public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+    transportContext.getRegisteredConnections().inc();
+    super.channelRegistered(ctx);
+  }
+
+  @Override
+  public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+    transportContext.getRegisteredConnections().dec();
+    super.channelUnregistered(ctx);
   }
 
 }

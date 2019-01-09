@@ -19,18 +19,22 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.sql.execution.streaming.Offset
+import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, PartitionOffset}
 
 /**
  * An [[Offset]] for the [[KafkaSource]]. This one tracks all partitions of subscribed topics and
  * their offsets.
  */
 private[kafka010]
-case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
-  override def toString(): String = {
-    partitionToOffsets.toSeq.sortBy(_._1.toString).mkString("[", ", ", "]")
-  }
+case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends OffsetV2 {
+
+  override val json = JsonUtils.partitionOffsets(partitionToOffsets)
 }
+
+private[kafka010]
+case class KafkaSourcePartitionOffset(topicPartition: TopicPartition, partitionOffset: Long)
+  extends PartitionOffset
 
 /** Companion object of the [[KafkaSourceOffset]] */
 private[kafka010] object KafkaSourceOffset {
@@ -38,6 +42,7 @@ private[kafka010] object KafkaSourceOffset {
   def getPartitionOffsets(offset: Offset): Map[TopicPartition, Long] = {
     offset match {
       case o: KafkaSourceOffset => o.partitionToOffsets
+      case so: SerializedOffset => KafkaSourceOffset(so).partitionToOffsets
       case _ =>
         throw new IllegalArgumentException(
           s"Invalid conversion from offset of ${offset.getClass} to KafkaSourceOffset")
@@ -51,4 +56,10 @@ private[kafka010] object KafkaSourceOffset {
   def apply(offsetTuples: (String, Int, Long)*): KafkaSourceOffset = {
     KafkaSourceOffset(offsetTuples.map { case(t, p, o) => (new TopicPartition(t, p), o) }.toMap)
   }
+
+  /**
+   * Returns [[KafkaSourceOffset]] from a JSON [[SerializedOffset]]
+   */
+  def apply(offset: SerializedOffset): KafkaSourceOffset =
+    KafkaSourceOffset(JsonUtils.partitionOffsets(offset.json))
 }

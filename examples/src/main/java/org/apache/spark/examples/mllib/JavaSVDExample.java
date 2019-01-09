@@ -18,7 +18,8 @@
 package org.apache.spark.examples.mllib;
 
 // $example on$
-import java.util.LinkedList;
+import java.util.Arrays;
+import java.util.List;
 // $example off$
 
 import org.apache.spark.SparkConf;
@@ -43,22 +44,22 @@ public class JavaSVDExample {
     JavaSparkContext jsc = JavaSparkContext.fromSparkContext(sc);
 
     // $example on$
-    double[][] array = {{1.12, 2.05, 3.12}, {5.56, 6.28, 8.94}, {10.2, 8.0, 20.5}};
-    LinkedList<Vector> rowsList = new LinkedList<>();
-    for (int i = 0; i < array.length; i++) {
-      Vector currentRow = Vectors.dense(array[i]);
-      rowsList.add(currentRow);
-    }
-    JavaRDD<Vector> rows = jsc.parallelize(rowsList);
+    List<Vector> data = Arrays.asList(
+            Vectors.sparse(5, new int[] {1, 3}, new double[] {1.0, 7.0}),
+            Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+            Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+    );
+
+    JavaRDD<Vector> rows = jsc.parallelize(data);
 
     // Create a RowMatrix from JavaRDD<Vector>.
     RowMatrix mat = new RowMatrix(rows.rdd());
 
-    // Compute the top 3 singular values and corresponding singular vectors.
-    SingularValueDecomposition<RowMatrix, Matrix> svd = mat.computeSVD(3, true, 1.0E-9d);
-    RowMatrix U = svd.U();
-    Vector s = svd.s();
-    Matrix V = svd.V();
+    // Compute the top 5 singular values and corresponding singular vectors.
+    SingularValueDecomposition<RowMatrix, Matrix> svd = mat.computeSVD(5, true, 1.0E-9d);
+    RowMatrix U = svd.U();  // The U factor is a RowMatrix.
+    Vector s = svd.s();     // The singular values are stored in a local dense vector.
+    Matrix V = svd.V();     // The V factor is a local dense matrix.
     // $example off$
     Vector[] collectPartitions = (Vector[]) U.rows().collect();
     System.out.println("U factor is:");

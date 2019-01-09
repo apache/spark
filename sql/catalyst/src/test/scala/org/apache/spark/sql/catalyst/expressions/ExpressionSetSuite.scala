@@ -32,6 +32,38 @@ class ExpressionSetSuite extends SparkFunSuite {
 
   val aAndBSet = AttributeSet(aUpper :: bUpper :: Nil)
 
+  // An [AttributeReference] with almost the maximum hashcode, to make testing canonicalize rules
+  // like `case GreaterThan(l, r) if l.hashcode > r.hashcode => GreaterThan(r, l)` easier
+  val maxHash =
+    Canonicalize.ignoreNamesTypes(
+      AttributeReference("maxHash", IntegerType)(exprId =
+        new ExprId(4, NamedExpression.jvmId) {
+          // maxHash's hashcode is calculated based on this exprId's hashcode, so we set this
+          // exprId's hashCode to this specific value to make sure maxHash's hashcode is
+          // `Int.MaxValue`
+          override def hashCode: Int = 1394598635
+          // We are implementing this equals() only because the style-checking rule "you should
+          // implement equals and hashCode together" requires us to
+          override def equals(obj: Any): Boolean = super.equals(obj)
+        })).asInstanceOf[AttributeReference]
+  assert(maxHash.hashCode() == Int.MaxValue)
+
+  // An [AttributeReference] with almost the minimum hashcode, to make testing canonicalize rules
+  // like `case GreaterThan(l, r) if l.hashcode > r.hashcode => GreaterThan(r, l)` easier
+  val minHash =
+    Canonicalize.ignoreNamesTypes(
+      AttributeReference("minHash", IntegerType)(exprId =
+        new ExprId(5, NamedExpression.jvmId) {
+          // minHash's hashcode is calculated based on this exprId's hashcode, so we set this
+          // exprId's hashCode to this specific value to make sure minHash's hashcode is
+          // `Int.MinValue`
+          override def hashCode: Int = -462684520
+          // We are implementing this equals() only because the style-checking rule "you should
+          // implement equals and hashCode together" requires us to
+          override def equals(obj: Any): Boolean = super.equals(obj)
+        })).asInstanceOf[AttributeReference]
+  assert(minHash.hashCode() == Int.MinValue)
+
   def setTest(size: Int, exprs: Expression*): Unit = {
     test(s"expect $size: ${exprs.mkString(", ")}") {
       val set = ExpressionSet(exprs)
@@ -75,10 +107,14 @@ class ExpressionSetSuite extends SparkFunSuite {
   setTest(1, aUpper >= bUpper, bUpper <= aUpper)
 
   // `Not` canonicalization
-  setTest(1, Not(aUpper > 1), aUpper <= 1, Not(Literal(1) < aUpper), Literal(1) >= aUpper)
-  setTest(1, Not(aUpper < 1), aUpper >= 1, Not(Literal(1) > aUpper), Literal(1) <= aUpper)
-  setTest(1, Not(aUpper >= 1), aUpper < 1, Not(Literal(1) <= aUpper), Literal(1) > aUpper)
-  setTest(1, Not(aUpper <= 1), aUpper > 1, Not(Literal(1) >= aUpper), Literal(1) < aUpper)
+  setTest(1, Not(maxHash > 1), maxHash <= 1, Not(Literal(1) < maxHash), Literal(1) >= maxHash)
+  setTest(1, Not(minHash > 1), minHash <= 1, Not(Literal(1) < minHash), Literal(1) >= minHash)
+  setTest(1, Not(maxHash < 1), maxHash >= 1, Not(Literal(1) > maxHash), Literal(1) <= maxHash)
+  setTest(1, Not(minHash < 1), minHash >= 1, Not(Literal(1) > minHash), Literal(1) <= minHash)
+  setTest(1, Not(maxHash >= 1), maxHash < 1, Not(Literal(1) <= maxHash), Literal(1) > maxHash)
+  setTest(1, Not(minHash >= 1), minHash < 1, Not(Literal(1) <= minHash), Literal(1) > minHash)
+  setTest(1, Not(maxHash <= 1), maxHash > 1, Not(Literal(1) >= maxHash), Literal(1) < maxHash)
+  setTest(1, Not(minHash <= 1), minHash > 1, Not(Literal(1) >= minHash), Literal(1) < minHash)
 
   // Reordering AND/OR expressions
   setTest(1, aUpper > bUpper && aUpper <= 10, aUpper <= 10 && aUpper > bUpper)
@@ -139,20 +175,14 @@ class ExpressionSetSuite extends SparkFunSuite {
     aUpper > bUpper || aUpper <= Rand(1L) || aUpper <= 10,
     aUpper <= Rand(1L) || aUpper <= 10 || aUpper > bUpper)
 
-  // Partial reorder case: we don't reorder non-deterministic expressions,
-  // but we can reorder sub-expressions in deterministic AND/OR expressions.
-  // There are two predicates:
-  //   (aUpper > bUpper || bUpper > 100) => we can reorder sub-expressions in it.
-  //   (aUpper === Rand(1L))
-  setTest(1,
+  // Keep all the non-deterministic expressions even they are semantically equal.
+  setTest(2, Rand(1L), Rand(1L))
+
+  setTest(2,
     (aUpper > bUpper || bUpper > 100) && aUpper === Rand(1L),
     (bUpper > 100 || aUpper > bUpper) && aUpper === Rand(1L))
 
-  // There are three predicates:
-  //   (Rand(1L) > aUpper)
-  //   (aUpper <= Rand(1L) && aUpper > bUpper)
-  //   (aUpper > 10 && bUpper > 10) => we can reorder sub-expressions in it.
-  setTest(1,
+  setTest(2,
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (aUpper > 10 && bUpper > 10),
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (bUpper > 10 && aUpper > 10))
 
@@ -174,4 +204,48 @@ class ExpressionSetSuite extends SparkFunSuite {
     assert((initialSet - (aLower + 1)).size == 0)
 
   }
+
+  test("add multiple elements to set") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Nil)
+    val setToAddWithSameExpression = ExpressionSet(aUpper + 1 :: aUpper + 2 :: Nil)
+    val setToAddWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet ++ setToAddWithSameExpression).size == 2)
+    assert((initialSet ++ setToAddWithOutSameExpression).size == 3)
+  }
+
+  test("add single element to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+
+    assert((initialSet + (aUpper + 1)).size == 2)
+    assert((initialSet + Rand(0)).size == 3)
+    assert((initialSet + (aUpper + 2)).size == 3)
+  }
+
+  test("remove single element to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+
+    assert((initialSet - (aUpper + 1)).size == 1)
+    assert((initialSet - Rand(0)).size == 2)
+    assert((initialSet - (aUpper + 2)).size == 2)
+  }
+
+  test("add multiple elements to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToAddWithSameDeterministicExpression = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToAddWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet ++ setToAddWithSameDeterministicExpression).size == 3)
+    assert((initialSet ++ setToAddWithOutSameExpression).size == 4)
+  }
+
+  test("remove multiple elements to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToRemoveWithSameDeterministicExpression = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToRemoveWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet -- setToRemoveWithSameDeterministicExpression).size == 1)
+    assert((initialSet -- setToRemoveWithOutSameExpression).size == 2)
+  }
+
 }

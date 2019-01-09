@@ -17,25 +17,75 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark for Dataset typed operations comparing with DataFrame and RDD versions.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/DatasetBenchmark-results.txt".
+ * }}}
  */
-object DatasetBenchmark {
+object DatasetBenchmark extends SqlBasedBenchmark {
 
   case class Data(l: Long, s: String)
+
+  def backToBackMapLong(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
+    import spark.implicits._
+
+    val rdd = spark.sparkContext.range(0, numRows)
+    val ds = spark.range(0, numRows)
+    val df = ds.toDF("l")
+    val func = (l: Long) => l + 1
+
+    val benchmark = new Benchmark("back-to-back map long", numRows, output = output)
+
+    benchmark.addCase("RDD") { iter =>
+      var res = rdd
+      var i = 0
+      while (i < numChains) {
+        res = res.map(func)
+        i += 1
+      }
+      res.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("DataFrame") { iter =>
+      var res = df
+      var i = 0
+      while (i < numChains) {
+        res = res.select($"l" + 1 as "l")
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("Dataset") { iter =>
+      var res = ds.as[Long]
+      var i = 0
+      while (i < numChains) {
+        res = res.map(func)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark
+  }
 
   def backToBackMap(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
     val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
-    val benchmark = new Benchmark("back-to-back map", numRows)
+    val benchmark = new Benchmark("back-to-back map", numRows, output = output)
     val func = (d: Data) => Data(d.l + 1, d.s)
 
     val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
@@ -72,11 +122,54 @@ object DatasetBenchmark {
     benchmark
   }
 
+  def backToBackFilterLong(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
+    import spark.implicits._
+
+    val rdd = spark.sparkContext.range(1, numRows)
+    val ds = spark.range(1, numRows)
+    val df = ds.toDF("l")
+    val func = (l: Long) => l % 2L == 0L
+
+    val benchmark = new Benchmark("back-to-back filter Long", numRows, output = output)
+
+    benchmark.addCase("RDD") { iter =>
+      var res = rdd
+      var i = 0
+      while (i < numChains) {
+        res = res.filter(func)
+        i += 1
+      }
+      res.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("DataFrame") { iter =>
+      var res = df
+      var i = 0
+      while (i < numChains) {
+        res = res.filter($"l" % 2L === 0L)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("Dataset") { iter =>
+      var res = ds.as[Long]
+      var i = 0
+      while (i < numChains) {
+        res = res.filter(func)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark
+  }
+
   def backToBackFilter(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
     val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
-    val benchmark = new Benchmark("back-to-back filter", numRows)
+    val benchmark = new Benchmark("back-to-back filter", numRows, output = output)
     val func = (d: Data, i: Int) => d.l % (100L + i) == 0L
     val funcs = 0.until(numChains).map { i =>
       (d: Data) => func(d, i)
@@ -134,7 +227,7 @@ object DatasetBenchmark {
     import spark.implicits._
 
     val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
-    val benchmark = new Benchmark("aggregate", numRows)
+    val benchmark = new Benchmark("aggregate", numRows, output = output)
 
     val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
     benchmark.addCase("RDD sum") { iter =>
@@ -156,51 +249,22 @@ object DatasetBenchmark {
     benchmark
   }
 
-  def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder
+  override def getSparkSession: SparkSession = {
+    SparkSession.builder
       .master("local[*]")
       .appName("Dataset benchmark")
       .getOrCreate()
+  }
 
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numRows = 100000000
     val numChains = 10
-
-    val benchmark = backToBackMap(spark, numRows, numChains)
-    val benchmark2 = backToBackFilter(spark, numRows, numChains)
-    val benchmark3 = aggregate(spark, numRows)
-
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    back-to-back map:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    RDD                                           3448 / 3646         29.0          34.5       1.0X
-    DataFrame                                     2647 / 3116         37.8          26.5       1.3X
-    Dataset                                       4781 / 5155         20.9          47.8       0.7X
-    */
-    benchmark.run()
-
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    RDD                                           1346 / 1618         74.3          13.5       1.0X
-    DataFrame                                       59 /   72       1695.4           0.6      22.8X
-    Dataset                                       2777 / 2805         36.0          27.8       0.5X
-    */
-    benchmark2.run()
-
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    RDD sum                                       1420 / 1523         70.4          14.2       1.0X
-    DataFrame sum                                   31 /   49       3214.3           0.3      45.6X
-    Dataset sum using Aggregator                  3216 / 3257         31.1          32.2       0.4X
-    Dataset complex Aggregator                    7948 / 8461         12.6          79.5       0.2X
-    */
-    benchmark3.run()
+    runBenchmark("Dataset Benchmark") {
+      backToBackMapLong(spark, numRows, numChains).run()
+      backToBackMap(spark, numRows, numChains).run()
+      backToBackFilterLong(spark, numRows, numChains).run()
+      backToBackFilter(spark, numRows, numChains).run()
+      aggregate(spark, numRows).run()
+    }
   }
 }

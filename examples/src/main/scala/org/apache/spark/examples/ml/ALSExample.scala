@@ -65,6 +65,8 @@ object ALSExample {
     val model = als.fit(training)
 
     // Evaluate the model by computing the RMSE on the test data
+    // Note we set cold start strategy to 'drop' to ensure we don't get NaN evaluation metrics
+    model.setColdStartStrategy("drop")
     val predictions = model.transform(test)
 
     val evaluator = new RegressionEvaluator()
@@ -73,7 +75,23 @@ object ALSExample {
       .setPredictionCol("prediction")
     val rmse = evaluator.evaluate(predictions)
     println(s"Root-mean-square error = $rmse")
+
+    // Generate top 10 movie recommendations for each user
+    val userRecs = model.recommendForAllUsers(10)
+    // Generate top 10 user recommendations for each movie
+    val movieRecs = model.recommendForAllItems(10)
+
+    // Generate top 10 movie recommendations for a specified set of users
+    val users = ratings.select(als.getUserCol).distinct().limit(3)
+    val userSubsetRecs = model.recommendForUserSubset(users, 10)
+    // Generate top 10 user recommendations for a specified set of movies
+    val movies = ratings.select(als.getItemCol).distinct().limit(3)
+    val movieSubSetRecs = model.recommendForItemSubset(movies, 10)
     // $example off$
+    userRecs.show()
+    movieRecs.show()
+    userSubsetRecs.show()
+    movieSubSetRecs.show()
 
     spark.stop()
   }

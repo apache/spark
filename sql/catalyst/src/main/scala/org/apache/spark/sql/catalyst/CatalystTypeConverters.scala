@@ -170,6 +170,9 @@ object CatalystTypeConverters {
             convertedIterable += elementConverter.toCatalyst(item)
           }
           new GenericArrayData(convertedIterable.toArray)
+        case other => throw new IllegalArgumentException(
+          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+            + s"cannot be converted to an array of ${elementType.catalogString}")
       }
     }
 
@@ -199,34 +202,18 @@ object CatalystTypeConverters {
     private[this] val keyConverter = getConverterForType(keyType)
     private[this] val valueConverter = getConverterForType(valueType)
 
-    override def toCatalystImpl(scalaValue: Any): MapData = scalaValue match {
-      case m: Map[_, _] =>
-        val length = m.size
-        val convertedKeys = new Array[Any](length)
-        val convertedValues = new Array[Any](length)
+    override def toCatalystImpl(scalaValue: Any): MapData = {
+      val keyFunction = (k: Any) => keyConverter.toCatalyst(k)
+      val valueFunction = (k: Any) => valueConverter.toCatalyst(k)
 
-        var i = 0
-        for ((key, value) <- m) {
-          convertedKeys(i) = keyConverter.toCatalyst(key)
-          convertedValues(i) = valueConverter.toCatalyst(value)
-          i += 1
-        }
-        ArrayBasedMapData(convertedKeys, convertedValues)
-
-      case jmap: JavaMap[_, _] =>
-        val length = jmap.size()
-        val convertedKeys = new Array[Any](length)
-        val convertedValues = new Array[Any](length)
-
-        var i = 0
-        val iter = jmap.entrySet.iterator
-        while (iter.hasNext) {
-          val entry = iter.next()
-          convertedKeys(i) = keyConverter.toCatalyst(entry.getKey)
-          convertedValues(i) = valueConverter.toCatalyst(entry.getValue)
-          i += 1
-        }
-        ArrayBasedMapData(convertedKeys, convertedValues)
+      scalaValue match {
+        case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
+        case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
+        case other => throw new IllegalArgumentException(
+          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+            + "cannot be converted to a map type with "
+            + s"key type (${keyType.catalogString}) and value type (${valueType.catalogString})")
+      }
     }
 
     override def toScala(catalystValue: MapData): Map[Any, Any] = {
@@ -272,6 +259,9 @@ object CatalystTypeConverters {
           idx += 1
         }
         new GenericInternalRow(ar)
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to ${structType.catalogString}")
     }
 
     override def toScala(row: InternalRow): Row = {
@@ -296,6 +286,10 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
       case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
+      case chr: Char => UTF8String.fromString(chr.toString)
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to the string type")
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
@@ -329,12 +323,11 @@ object CatalystTypeConverters {
         case d: JavaBigDecimal => Decimal(d)
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
+        case other => throw new IllegalArgumentException(
+          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+            + s"cannot be converted to ${dataType.catalogString}")
       }
-      if (decimal.changePrecision(dataType.precision, dataType.scale)) {
-        decimal
-      } else {
-        null
-      }
+      decimal.toPrecision(dataType.precision, dataType.scale)
     }
     override def toScala(catalystValue: Decimal): JavaBigDecimal = {
       if (catalystValue == null) null
@@ -433,18 +426,11 @@ object CatalystTypeConverters {
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))
-    case m: Map[_, _] =>
-      val length = m.size
-      val convertedKeys = new Array[Any](length)
-      val convertedValues = new Array[Any](length)
-
-      var i = 0
-      for ((key, value) <- m) {
-        convertedKeys(i) = convertToCatalyst(key)
-        convertedValues(i) = convertToCatalyst(value)
-        i += 1
-      }
-      ArrayBasedMapData(convertedKeys, convertedValues)
+    case map: Map[_, _] =>
+      ArrayBasedMapData(
+        map,
+        (key: Any) => convertToCatalyst(key),
+        (value: Any) => convertToCatalyst(value))
     case other => other
   }
 

@@ -15,8 +15,8 @@ possible**. We recommend the following:
 * If at all possible, run Spark on the same nodes as HDFS. The simplest way is to set up a Spark
 [standalone mode cluster](spark-standalone.html) on the same nodes, and configure Spark and
 Hadoop's memory and CPU usage to avoid interference (for Hadoop, the relevant options are
-`mapred.child.java.opts` for the per-task memory and `mapred.tasktracker.map.tasks.maximum`
-and `mapred.tasktracker.reduce.tasks.maximum` for number of tasks). Alternatively, you can run
+`mapred.child.java.opts` for the per-task memory and `mapreduce.tasktracker.map.tasks.maximum`
+and `mapreduce.tasktracker.reduce.tasks.maximum` for number of tasks). Alternatively, you can run
 Hadoop and Spark on a common cluster manager like [Mesos](running-on-mesos.html) or
 [Hadoop YARN](running-on-yarn.html).
 
@@ -37,7 +37,7 @@ use the same disks as HDFS.
 
 # Memory
 
-In general, Spark can run well with anywhere from **8 GB to hundreds of gigabytes** of memory per
+In general, Spark can run well with anywhere from **8 GiB to hundreds of gigabytes** of memory per
 machine. In all cases, we recommend allocating only at most 75% of the memory for Spark; leave the
 rest for the operating system and buffer cache.
 
@@ -47,7 +47,7 @@ Storage tab of Spark's monitoring UI (`http://<driver-node>:4040`) to see its si
 Note that memory usage is greatly affected by storage level and serialization format -- see
 the [tuning guide](tuning.html) for tips on how to reduce it.
 
-Finally, note that the Java VM does not always behave well with more than 200 GB of RAM. If you
+Finally, note that the Java VM does not always behave well with more than 200 GiB of RAM. If you
 purchase machines with more RAM than this, you can run _multiple worker JVMs per node_. In
 Spark's [standalone mode](spark-standalone.html), you can set the number of workers per node
 with the `SPARK_WORKER_INSTANCES` variable in `conf/spark-env.sh`, and the number of cores

@@ -17,46 +17,50 @@
 
 package org.apache.spark.sql.util
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import scala.collection.JavaConverters._
 
-import scala.collection.mutable.ListBuffer
-import scala.util.control.NonFatal
-
-import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental}
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
+import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.util.{ListenerBus, Utils}
 
 /**
  * :: Experimental ::
  * The interface of query execution listener that can be used to analyze execution metrics.
  *
- * Note that implementations should guarantee thread-safety as they can be invoked by
+ * @note Implementations should guarantee thread-safety as they can be invoked by
  * multiple different threads.
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 trait QueryExecutionListener {
 
   /**
    * A callback function that will be called when a query executed successfully.
-   * Note that this can be invoked by multiple different threads.
    *
    * @param funcName name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param durationNs the execution time for this query in nanoseconds.
+   *
+   * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
   def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit
 
   /**
    * A callback function that will be called when a query execution failed.
-   * Note that this can be invoked by multiple different threads.
    *
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param exception the exception that failed this query.
+   *
+   * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
   def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit
@@ -66,82 +70,88 @@ trait QueryExecutionListener {
 /**
  * :: Experimental ::
  *
- * Manager for [[QueryExecutionListener]]. See [[org.apache.spark.sql.SQLContext.listenerManager]].
+ * Manager for [[QueryExecutionListener]]. See `org.apache.spark.sql.SQLContext.listenerManager`.
  */
 @Experimental
-@InterfaceStability.Evolving
-class ExecutionListenerManager private[sql] () extends Logging {
+@Evolving
+// The `session` is used to indicate which session carries this listener manager, and we only
+// catch SQL executions which are launched by the same session.
+// The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
+// user-specified listeners during construction. We should not do it when cloning this listener
+// manager, as we will copy all listeners to the cloned listener manager.
+class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
+  extends Logging {
+
+  private val listenerBus = new ExecutionListenerBus(session)
+
+  if (loadExtensions) {
+    val conf = session.sparkContext.conf
+    conf.get(QUERY_EXECUTION_LISTENERS).foreach { classNames =>
+      Utils.loadExtensions(classOf[QueryExecutionListener], classNames, conf).foreach(register)
+    }
+  }
 
   /**
    * Registers the specified [[QueryExecutionListener]].
    */
   @DeveloperApi
-  def register(listener: QueryExecutionListener): Unit = writeLock {
-    listeners += listener
+  def register(listener: QueryExecutionListener): Unit = {
+    listenerBus.addListener(listener)
   }
 
   /**
    * Unregisters the specified [[QueryExecutionListener]].
    */
   @DeveloperApi
-  def unregister(listener: QueryExecutionListener): Unit = writeLock {
-    listeners -= listener
+  def unregister(listener: QueryExecutionListener): Unit = {
+    listenerBus.removeListener(listener)
   }
 
   /**
    * Removes all the registered [[QueryExecutionListener]].
    */
   @DeveloperApi
-  def clear(): Unit = writeLock {
-    listeners.clear()
+  def clear(): Unit = {
+    listenerBus.removeAllListeners()
   }
 
-  private[sql] def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-    readLock {
-      withErrorHandling { listener =>
-        listener.onSuccess(funcName, qe, duration)
+  /**
+   * Get an identical copy of this listener manager.
+   */
+  private[sql] def clone(session: SparkSession): ExecutionListenerManager = {
+    val newListenerManager = new ExecutionListenerManager(session, loadExtensions = false)
+    listenerBus.listeners.asScala.foreach(newListenerManager.register)
+    newListenerManager
+  }
+}
+
+private[sql] class ExecutionListenerBus(session: SparkSession)
+  extends SparkListener with ListenerBus[QueryExecutionListener, SparkListenerSQLExecutionEnd] {
+
+  session.sparkContext.listenerBus.addToSharedQueue(this)
+
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case e: SparkListenerSQLExecutionEnd => postToAll(e)
+    case _ =>
+  }
+
+  override protected def doPostEvent(
+      listener: QueryExecutionListener,
+      event: SparkListenerSQLExecutionEnd): Unit = {
+    if (shouldReport(event)) {
+      val funcName = event.executionName.get
+      event.executionFailure match {
+        case Some(ex) =>
+          listener.onFailure(funcName, event.qe, ex)
+        case _ =>
+          listener.onSuccess(funcName, event.qe, event.duration)
       }
     }
   }
 
-  private[sql] def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-    readLock {
-      withErrorHandling { listener =>
-        listener.onFailure(funcName, qe, exception)
-      }
-    }
-  }
-
-  private[this] val listeners = ListBuffer.empty[QueryExecutionListener]
-
-  /** A lock to prevent updating the list of listeners while we are traversing through them. */
-  private[this] val lock = new ReentrantReadWriteLock()
-
-  private def withErrorHandling(f: QueryExecutionListener => Unit): Unit = {
-    for (listener <- listeners) {
-      try {
-        f(listener)
-      } catch {
-        case NonFatal(e) => logWarning("Error executing query execution listener", e)
-      }
-    }
-  }
-
-  /** Acquires a read lock on the cache for the duration of `f`. */
-  private def readLock[A](f: => A): A = {
-    val rl = lock.readLock()
-    rl.lock()
-    try f finally {
-      rl.unlock()
-    }
-  }
-
-  /** Acquires a write lock on the cache for the duration of `f`. */
-  private def writeLock[A](f: => A): A = {
-    val wl = lock.writeLock()
-    wl.lock()
-    try f finally {
-      wl.unlock()
-    }
+  private def shouldReport(e: SparkListenerSQLExecutionEnd): Boolean = {
+    // Only catch SQL execution with a name, and triggered by the same spark session that this
+    // listener manager belongs.
+    e.executionName.isDefined && e.qe.sparkSession.eq(this.session)
   }
 }

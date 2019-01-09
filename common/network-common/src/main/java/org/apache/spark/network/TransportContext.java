@@ -17,10 +17,13 @@
 
 package org.apache.spark.network;
 
+import java.util.ArrayList;
 import java.util.List;
 
-import com.google.common.collect.Lists;
+import com.codahale.metrics.Counter;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
@@ -32,11 +35,13 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
+import org.apache.spark.network.server.ChunkFetchRequestHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.TransportFrameDecoder;
@@ -61,23 +66,73 @@ public class TransportContext {
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
+  private final boolean isClientOnly;
+  // Number of registered connections to the shuffle service
+  private Counter registeredConnections = new Counter();
 
-  private final MessageEncoder encoder;
-  private final MessageDecoder decoder;
+  /**
+   * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
+   * before switching the current context class loader to ExecutorClassLoader.
+   *
+   * Netty's MessageToMessageEncoder uses Javassist to generate a matcher class and the
+   * implementation calls "Class.forName" to check if this calls is already generated. If the
+   * following two objects are created in "ExecutorClassLoader.findClass", it will cause
+   * "ClassCircularityError". This is because loading this Netty generated class will call
+   * "ExecutorClassLoader.findClass" to search this class, and "ExecutorClassLoader" will try to use
+   * RPC to load it and cause to load the non-exist matcher class again. JVM will report
+   * `ClassCircularityError` to prevent such infinite recursion. (See SPARK-17714)
+   */
+  private static final MessageEncoder ENCODER = MessageEncoder.INSTANCE;
+  private static final MessageDecoder DECODER = MessageDecoder.INSTANCE;
+
+  // Separate thread pool for handling ChunkFetchRequest. This helps to enable throttling
+  // max number of TransportServer worker threads that are blocked on writing response
+  // of ChunkFetchRequest message back to the client via the underlying channel.
+  private static EventLoopGroup chunkFetchWorkers;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
-    this(conf, rpcHandler, false);
+    this(conf, rpcHandler, false, false);
   }
 
   public TransportContext(
       TransportConf conf,
       RpcHandler rpcHandler,
       boolean closeIdleConnections) {
+    this(conf, rpcHandler, closeIdleConnections, false);
+  }
+
+  /**
+   * Enables TransportContext initialization for underlying client and server.
+   *
+   * @param conf TransportConf
+   * @param rpcHandler RpcHandler responsible for handling requests and responses.
+   * @param closeIdleConnections Close idle connections if it is set to true.
+   * @param isClientOnly This config indicates the TransportContext is only used by a client.
+   *                     This config is more important when external shuffle is enabled.
+   *                     It stops creating extra event loop and subsequent thread pool
+   *                     for shuffle clients to handle chunked fetch requests.
+   */
+  public TransportContext(
+      TransportConf conf,
+      RpcHandler rpcHandler,
+      boolean closeIdleConnections,
+      boolean isClientOnly) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
-    this.encoder = new MessageEncoder();
-    this.decoder = new MessageDecoder();
     this.closeIdleConnections = closeIdleConnections;
+    this.isClientOnly = isClientOnly;
+
+    synchronized(TransportContext.class) {
+      if (chunkFetchWorkers == null &&
+          conf.getModuleName() != null &&
+          conf.getModuleName().equalsIgnoreCase("shuffle") &&
+          !isClientOnly) {
+        chunkFetchWorkers = NettyUtils.createEventLoop(
+            IOMode.valueOf(conf.ioMode()),
+            conf.chunkFetchHandlerThreads(),
+            "shuffle-chunk-fetch-handler");
+      }
+    }
   }
 
   /**
@@ -90,7 +145,7 @@ public class TransportContext {
   }
 
   public TransportClientFactory createClientFactory() {
-    return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
+    return createClientFactory(new ArrayList<>());
   }
 
   /** Create a server which will attempt to bind to a specific port. */
@@ -110,7 +165,7 @@ public class TransportContext {
   }
 
   public TransportServer createServer() {
-    return createServer(0, Lists.<TransportServerBootstrap>newArrayList());
+    return createServer(0, new ArrayList<>());
   }
 
   public TransportChannelHandler initializePipeline(SocketChannel channel) {
@@ -134,14 +189,23 @@ public class TransportContext {
       RpcHandler channelRpcHandler) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
-      channel.pipeline()
-        .addLast("encoder", encoder)
+      ChunkFetchRequestHandler chunkFetchHandler =
+        createChunkFetchHandler(channelHandler, channelRpcHandler);
+      ChannelPipeline pipeline = channel.pipeline()
+        .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
-        .addLast("decoder", decoder)
-        .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
+        .addLast("decoder", DECODER)
+        .addLast("idleStateHandler",
+          new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
+      // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
+      if (conf.getModuleName() != null &&
+          conf.getModuleName().equalsIgnoreCase("shuffle")
+          && !isClientOnly) {
+        pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
+      }
       return channelHandler;
     } catch (RuntimeException e) {
       logger.error("Error while initializing Netty pipeline", e);
@@ -158,10 +222,23 @@ public class TransportContext {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      rpcHandler);
+      rpcHandler, conf.maxChunksBeingTransferred());
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs(), closeIdleConnections);
+      conf.connectionTimeoutMs(), closeIdleConnections, this);
+  }
+
+  /**
+   * Creates the dedicated ChannelHandler for ChunkFetchRequest messages.
+   */
+  private ChunkFetchRequestHandler createChunkFetchHandler(TransportChannelHandler channelHandler,
+      RpcHandler rpcHandler) {
+    return new ChunkFetchRequestHandler(channelHandler.getClient(),
+      rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred());
   }
 
   public TransportConf getConf() { return conf; }
+
+  public Counter getRegisteredConnections() {
+    return registeredConnections;
+  }
 }

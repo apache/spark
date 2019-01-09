@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 
 /** A trait that represents the type of a resourced needed by a function. */
@@ -33,7 +35,7 @@ object ArchiveResource extends FunctionResourceType("archive")
 
 object FunctionResourceType {
   def fromString(resourceType: String): FunctionResourceType = {
-    resourceType.toLowerCase match {
+    resourceType.toLowerCase(Locale.ROOT) match {
       case "jar" => JarResource
       case "file" => FileResource
       case "archive" => ArchiveResource

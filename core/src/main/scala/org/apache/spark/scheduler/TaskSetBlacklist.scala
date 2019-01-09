@@ -28,12 +28,20 @@ import org.apache.spark.util.Clock
  * (task, executor) / (task, nodes) pairs, and also completely blacklisting executors and nodes
  * for the entire taskset.
  *
+ * It also must store sufficient information in task failures for application level blacklisting,
+ * which is handled by [[BlacklistTracker]].  Note that BlacklistTracker does not know anything
+ * about task failures until a taskset completes successfully.
+ *
  * THREADING:  This class is a helper to [[TaskSetManager]]; as with the methods in
  * [[TaskSetManager]] this class is designed only to be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
  */
-private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int, val clock: Clock)
-    extends Logging {
+private[scheduler] class TaskSetBlacklist(
+    private val listenerBus: LiveListenerBus,
+    val conf: SparkConf,
+    val stageId: Int,
+    val stageAttemptId: Int,
+    val clock: Clock) extends Logging {
 
   private val MAX_TASK_ATTEMPTS_PER_EXECUTOR = conf.get(config.MAX_TASK_ATTEMPTS_PER_EXECUTOR)
   private val MAX_TASK_ATTEMPTS_PER_NODE = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
@@ -41,7 +49,9 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   private val MAX_FAILED_EXEC_PER_NODE_STAGE = conf.get(config.MAX_FAILED_EXEC_PER_NODE_STAGE)
 
   /**
-   * A map from each executor to the task failures on that executor.
+   * A map from each executor to the task failures on that executor.  This is used for blacklisting
+   * within this taskset, and it is also relayed onto [[BlacklistTracker]] for app-level
+   * blacklisting if this taskset completes successfully.
    */
   val execToFailures = new HashMap[String, ExecutorFailuresInTaskSet]()
 
@@ -55,11 +65,21 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   private val blacklistedExecs = new HashSet[String]()
   private val blacklistedNodes = new HashSet[String]()
 
+  private var latestFailureReason: String = null
+
+  /**
+   * Get the most recent failure reason of this TaskSet.
+   * @return
+   */
+  def getLatestFailureReason: String = {
+    latestFailureReason
+  }
+
   /**
    * Return true if this executor is blacklisted for the given task.  This does *not*
-   * need to return true if the executor is blacklisted for the entire stage.
-   * That is to keep this method as fast as possible in the inner-loop of the
-   * scheduler, where those filters will have already been applied.
+   * need to return true if the executor is blacklisted for the entire stage, or blacklisted
+   * for the entire application.  That is to keep this method as fast as possible in the inner-loop
+   * of the scheduler, where those filters will have already been applied.
    */
   def isExecutorBlacklistedForTask(executorId: String, index: Int): Boolean = {
     execToFailures.get(executorId).exists { execFailures =>
@@ -72,10 +92,10 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   }
 
   /**
-   * Return true if this executor is blacklisted for the given stage.  Completely ignores
-   * anything to do with the node the executor is on.  That
-   * is to keep this method as fast as possible in the inner-loop of the scheduler, where those
-   * filters will already have been applied.
+   * Return true if this executor is blacklisted for the given stage.  Completely ignores whether
+   * the executor is blacklisted for the entire application (or anything to do with the node the
+   * executor is on).  That is to keep this method as fast as possible in the inner-loop of the
+   * scheduler, where those filters will already have been applied.
    */
   def isExecutorBlacklistedForTaskSet(executorId: String): Boolean = {
     blacklistedExecs.contains(executorId)
@@ -88,9 +108,11 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   private[scheduler] def updateBlacklistForFailedTask(
       host: String,
       exec: String,
-      index: Int): Unit = {
+      index: Int,
+      failureReason: String): Unit = {
+    latestFailureReason = failureReason
     val execFailures = execToFailures.getOrElseUpdate(exec, new ExecutorFailuresInTaskSet(host))
-    execFailures.updateWithFailure(index)
+    execFailures.updateWithFailure(index, clock.getTimeMillis())
 
     // check if this task has also failed on other executors on the same host -- if its gone
     // over the limit, blacklist this task from the entire host.
@@ -110,16 +132,23 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
     }
 
     // Check if enough tasks have failed on the executor to blacklist it for the entire stage.
-    if (execFailures.numUniqueTasksWithFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
+    val numFailures = execFailures.numUniqueTasksWithFailures
+    if (numFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
       if (blacklistedExecs.add(exec)) {
         logInfo(s"Blacklisting executor ${exec} for stage $stageId")
         // This executor has been pushed into the blacklist for this stage.  Let's check if it
         // pushes the whole node into the blacklist.
         val blacklistedExecutorsOnNode =
           execsWithFailuresOnNode.filter(blacklistedExecs.contains(_))
-        if (blacklistedExecutorsOnNode.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
+        val now = clock.getTimeMillis()
+        listenerBus.post(
+          SparkListenerExecutorBlacklistedForStage(now, exec, numFailures, stageId, stageAttemptId))
+        val numFailExec = blacklistedExecutorsOnNode.size
+        if (numFailExec >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
           if (blacklistedNodes.add(host)) {
             logInfo(s"Blacklisting ${host} for stage $stageId")
+            listenerBus.post(
+              SparkListenerNodeBlacklistedForStage(now, host, numFailExec, stageId, stageAttemptId))
           }
         }
       }

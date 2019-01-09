@@ -11,7 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -51,6 +51,7 @@ private[spark] abstract class RestSubmissionServer(
     val host: String,
     val requestedPort: Int,
     val masterConf: SparkConf) extends Logging {
+
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
@@ -94,6 +95,7 @@ private[spark] abstract class RestSubmissionServer(
       new HttpConnectionFactory())
     connector.setHost(host)
     connector.setPort(startPort)
+    connector.setReuseAddress(!Utils.isWindows)
     server.addConnector(connector)
 
     val mainHandler = new ServletContextHandler

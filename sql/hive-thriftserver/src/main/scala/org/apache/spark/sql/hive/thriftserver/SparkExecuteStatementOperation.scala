@@ -34,8 +34,8 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -50,8 +50,13 @@ private[hive] class SparkExecuteStatementOperation(
   with Logging {
 
   private var result: DataFrame = _
+
+  // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
+  // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
+  // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
+  private var resultList: Option[Array[SparkRow]] = _
+
   private var iter: Iterator[SparkRow] = _
-  private var iterHeader: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
@@ -66,9 +71,9 @@ private[hive] class SparkExecuteStatementOperation(
 
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
-    sqlContext.sparkContext.clearJobGroup()
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
+    sqlContext.sparkContext.clearJobGroup()
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
@@ -97,8 +102,8 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getAs[Timestamp](ordinal)
       case BinaryType =>
         to += from.getAs[Array[Byte]](ordinal)
-      case _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = HiveUtils.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
+        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
     }
   }
@@ -111,9 +116,15 @@ private[hive] class SparkExecuteStatementOperation(
 
     // Reset iter to header when fetching start from first row
     if (order.equals(FetchOrientation.FETCH_FIRST)) {
-      val (ita, itb) = iterHeader.duplicate
-      iter = ita
-      iterHeader = itb
+      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+        resultList = None
+        result.toLocalIterator.asScala
+      } else {
+        if (resultList.isEmpty) {
+          resultList = Some(result.collect())
+        }
+        resultList.get.iterator
+      }
     }
 
     if (!iter.hasNext) {
@@ -159,6 +170,7 @@ private[hive] class SparkExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
+              registerCurrentOperationLog()
               try {
                 execute()
               } catch {
@@ -227,17 +239,14 @@ private[hive] class SparkExecuteStatementOperation(
       }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
-        val useIncrementalCollect =
-          sqlContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
-        if (useIncrementalCollect) {
+        if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+          resultList = None
           result.toLocalIterator.asScala
         } else {
-          result.collect().iterator
+          resultList = Some(result.collect())
+          resultList.get.iterator
         }
       }
-      val (itra, itrb) = iter.duplicate
-      iterHeader = itra
-      iter = itrb
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>
@@ -245,6 +254,8 @@ private[hive] class SparkExecuteStatementOperation(
           return
         } else {
           setState(OperationState.ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           throw e
         }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
@@ -263,9 +274,6 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def cancel(): Unit = {
     logInfo(s"Cancel '$statement' with $statementId")
-    if (statementId != null) {
-      sqlContext.sparkContext.cancelJobGroup(statementId)
-    }
     cleanup(OperationState.CANCELED)
   }
 
@@ -277,6 +285,9 @@ private[hive] class SparkExecuteStatementOperation(
         backgroundHandle.cancel(true)
       }
     }
+    if (statementId != null) {
+      sqlContext.sparkContext.cancelJobGroup(statementId)
+    }
   }
 }
 
@@ -284,7 +295,7 @@ object SparkExecuteStatementOperation {
   def getTableSchema(structType: StructType): TableSchema = {
     val schema = structType.map { field =>
       val attrTypeString = if (field.dataType == NullType) "void" else field.dataType.catalogString
-      new FieldSchema(field.name, attrTypeString, "")
+      new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
     }
     new TableSchema(schema.asJava)
   }

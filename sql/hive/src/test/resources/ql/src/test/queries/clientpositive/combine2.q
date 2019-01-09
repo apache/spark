@@ -1,10 +1,10 @@
 USE default;
 
 set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
-set mapred.min.split.size=256;
-set mapred.min.split.size.per.node=256;
-set mapred.min.split.size.per.rack=256;
-set mapred.max.split.size=256;
+set mapreduce.input.fileinputformat.split.minsize=256;
+set mapreduce.input.fileinputformat.split.minsize.per.node=256;
+set mapreduce.input.fileinputformat.split.minsize.per.rack=256;
+set mapreduce.input.fileinputformat.split.maxsize=256;
 set hive.exec.dynamic.partition=true;
 set hive.exec.dynamic.partition.mode=nonstrict;
 set mapred.cache.shared.enabled=false;
@@ -18,7 +18,7 @@ set hive.merge.smallfiles.avgsize=0;
 create table combine2(key string) partitioned by (value string);
 
 -- EXCLUDE_HADOOP_MAJOR_VERSIONS(0.20, 0.20S)
--- This test sets mapred.max.split.size=256 and hive.merge.smallfiles.avgsize=0
+-- This test sets mapreduce.input.fileinputformat.split.maxsize=256 and hive.merge.smallfiles.avgsize=0
 -- in an attempt to force the generation of multiple splits and multiple output files.
 -- However, Hadoop 0.20 is incapable of generating splits smaller than the block size
 -- when using CombineFileInputFormat, so only one split is generated. This has a

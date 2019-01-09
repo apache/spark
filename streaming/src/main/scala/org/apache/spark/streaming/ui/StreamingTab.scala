@@ -38,6 +38,7 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
 
   ssc.addStreamingListener(listener)
   ssc.sc.addSparkListener(listener)
+  parent.setStreamingJobProgressListener(listener)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
 
@@ -48,7 +49,7 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
 
   def detach() {
     getSparkUI(ssc).detachTab(this)
-    getSparkUI(ssc).removeStaticHandler("/static/streaming")
+    getSparkUI(ssc).detachHandler("/static/streaming")
   }
 }
 

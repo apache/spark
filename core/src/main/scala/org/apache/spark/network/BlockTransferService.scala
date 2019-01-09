@@ -25,9 +25,9 @@ import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ShuffleClient}
+import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}
 import org.apache.spark.util.ThreadUtils
 
 private[spark]
@@ -67,7 +67,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       port: Int,
       execId: String,
       blockIds: Array[String],
-      listener: BlockFetchingListener): Unit
+      listener: BlockFetchingListener,
+      tempFileManager: DownloadFileManager): Unit
 
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
@@ -86,7 +87,12 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    *
    * It is also only available after [[init]] is invoked.
    */
-  def fetchBlockSync(host: String, port: Int, execId: String, blockId: String): ManagedBuffer = {
+  def fetchBlockSync(
+      host: String,
+      port: Int,
+      execId: String,
+      blockId: String,
+      tempFileManager: DownloadFileManager): ManagedBuffer = {
     // A monitor for the thread to wait on.
     val result = Promise[ManagedBuffer]()
     fetchBlocks(host, port, execId, Array(blockId),
@@ -95,12 +101,19 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.failure(exception)
         }
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          val ret = ByteBuffer.allocate(data.size.toInt)
-          ret.put(data.nioByteBuffer())
-          ret.flip()
-          result.success(new NioManagedBuffer(ret))
+          data match {
+            case f: FileSegmentManagedBuffer =>
+              result.success(f)
+            case e: EncryptedManagedBuffer =>
+              result.success(e)
+            case _ =>
+              val ret = ByteBuffer.allocate(data.size.toInt)
+              ret.put(data.nioByteBuffer())
+              ret.flip()
+              result.success(new NioManagedBuffer(ret))
+          }
         }
-      })
+      }, tempFileManager)
     ThreadUtils.awaitResult(result.future, Duration.Inf)
   }
 

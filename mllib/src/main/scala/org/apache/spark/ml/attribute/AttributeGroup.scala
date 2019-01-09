@@ -239,7 +239,9 @@ object AttributeGroup {
     }
   }
 
-  /** Creates an attribute group from a [[StructField]] instance. */
+  /**
+   * Creates an attribute group from a `StructField` instance.
+   */
   def fromStructField(field: StructField): AttributeGroup = {
     require(field.dataType == new VectorUDT)
     if (field.metadata.contains(ML_ATTR)) {

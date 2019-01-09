@@ -35,13 +35,13 @@ but the ids must be within the integer value range.
 
 ### Explicit vs. implicit feedback
 
-The standard approach to matrix factorization based collaborative filtering treats 
+The standard approach to matrix factorization-based collaborative filtering treats
 the entries in the user-item matrix as *explicit* preferences given by the user to the item,
 for example, users giving ratings to movies.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
 clicks, purchases, likes, shares etc.). The approach used in `spark.ml` to deal with such data is taken
-from [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
+from [Collaborative Filtering for Implicit Feedback Datasets](https://doi.org/10.1109/ICDM.2008.22).
 Essentially, instead of trying to model the matrix of ratings directly, this approach treats the data
 as numbers representing the *strength* in observations of user actions (such as the number of clicks,
 or the cumulative duration someone spent viewing a movie). Those numbers are then related to the level of
@@ -55,11 +55,39 @@ We scale the regularization parameter `regParam` in solving each least squares p
 the number of ratings the user generated in updating user factors,
 or the number of ratings the product received in updating product factors.
 This approach is named "ALS-WR" and discussed in the paper
-"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](http://dx.doi.org/10.1007/978-3-540-68880-8_32)".
+"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](https://doi.org/10.1007/978-3-540-68880-8_32)".
 It makes `regParam` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
-## Examples
+### Cold-start strategy
+
+When making predictions using an `ALSModel`, it is common to encounter users and/or items in the 
+test dataset that were not present during training the model. This typically occurs in two 
+scenarios:
+
+1. In production, for new users or items that have no rating history and on which the model has not 
+been trained (this is the "cold start problem").
+2. During cross-validation, the data is split between training and evaluation sets. When using 
+simple random splits as in Spark's `CrossValidator` or `TrainValidationSplit`, it is actually 
+very common to encounter users and/or items in the evaluation set that are not in the training set
+
+By default, Spark assigns `NaN` predictions during `ALSModel.transform` when a user and/or item 
+factor is not present in the model. This can be useful in a production system, since it indicates 
+a new user or item, and so the system can make a decision on some fallback to use as the prediction.
+
+However, this is undesirable during cross-validation, since any `NaN` predicted values will result
+in `NaN` results for the evaluation metric (for example when using `RegressionEvaluator`).
+This makes model selection impossible.
+
+Spark allows users to set the `coldStartStrategy` parameter
+to "drop" in order to drop any rows in the `DataFrame` of predictions that contain `NaN` values. 
+The evaluation metric will then be computed over the non-`NaN` data and will be valid. 
+Usage of this parameter is illustrated in the example below.
+
+**Note:** currently the supported cold start strategies are "nan" (the default behavior mentioned 
+above) and "drop". Further strategies may be supported in future.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -149,4 +177,12 @@ als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.als.html) for more details.
+
+{% include_example r/ml/als.R %}
+</div>
+
 </div>

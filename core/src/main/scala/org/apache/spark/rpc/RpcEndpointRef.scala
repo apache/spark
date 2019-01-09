@@ -63,25 +63,21 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   def ask[T: ClassTag](message: Any): Future[T] = ask(message, defaultAskTimeout)
 
   /**
-   * Send a message to the corresponding [[RpcEndpoint]] and get its result within a default
-   * timeout, or throw a SparkException if this fails even after the default number of retries.
-   * The default `timeout` will be used in every trial of calling `sendWithReply`. Because this
-   * method retries, the message handling in the receiver side should be idempotent.
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] and get its result within a
+   * default timeout, throw an exception if this fails.
    *
    * Note: this is a blocking action which may cost a lot of time,  so don't call it in a message
    * loop of [[RpcEndpoint]].
-   *
+
    * @param message the message to send
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithRetry[T: ClassTag](message: Any): T = askWithRetry(message, defaultAskTimeout)
+  def askSync[T: ClassTag](message: Any): T = askSync(message, defaultAskTimeout)
 
   /**
-   * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a
-   * specified timeout, throw a SparkException if this fails even after the specified number of
-   * retries. `timeout` will be used in every trial of calling `sendWithReply`. Because this method
-   * retries, the message handling in the receiver side should be idempotent.
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] and get its result within a
+   * specified timeout, throw an exception if this fails.
    *
    * Note: this is a blocking action which may cost a lot of time, so don't call it in a message
    * loop of [[RpcEndpoint]].
@@ -91,33 +87,9 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithRetry[T: ClassTag](message: Any, timeout: RpcTimeout): T = {
-    // TODO: Consider removing multiple attempts
-    var attempts = 0
-    var lastException: Exception = null
-    while (attempts < maxRetries) {
-      attempts += 1
-      try {
-        val future = ask[T](message, timeout)
-        val result = timeout.awaitResult(future)
-        if (result == null) {
-          throw new SparkException("RpcEndpoint returned null")
-        }
-        return result
-      } catch {
-        case ie: InterruptedException => throw ie
-        case e: Exception =>
-          lastException = e
-          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
-      }
-
-      if (attempts < maxRetries) {
-        Thread.sleep(retryWaitMs)
-      }
-    }
-
-    throw new SparkException(
-      s"Error sending message [message = $message]", lastException)
+  def askSync[T: ClassTag](message: Any, timeout: RpcTimeout): T = {
+    val future = ask[T](message, timeout)
+    timeout.awaitResult(future)
   }
 
 }

@@ -32,9 +32,6 @@ import org.apache.spark.sql.SparkSession;
 /**
  * Java example demonstrating model selection using TrainValidationSplit.
  *
- * The example is based on {@link org.apache.spark.examples.ml.JavaSimpleParamsExample}
- * using linear regression.
- *
  * Run with
  * {{{
  * bin/run-example ml.JavaModelSelectionViaTrainValidationSplitExample
@@ -73,7 +70,8 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
       .setEstimator(lr)
       .setEvaluator(new RegressionEvaluator())
       .setEstimatorParamMaps(paramGrid)
-      .setTrainRatio(0.8);  // 80% for training and the remaining 20% for validation
+      .setTrainRatio(0.8)  // 80% for training and the remaining 20% for validation
+      .setParallelism(2);  // Evaluate up to 2 parameter settings in parallel
 
     // Run train validation split, and choose the best set of parameters.
     TrainValidationSplitModel model = trainValidationSplit.fit(training);

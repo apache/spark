@@ -38,12 +38,10 @@ class MLUtils(object):
     """
 
     @staticmethod
-    def _parse_libsvm_line(line, multiclass=None):
+    def _parse_libsvm_line(line):
         """
         Parses a line in LIBSVM format into (label, indices, values).
         """
-        if multiclass is not None:
-            warnings.warn("deprecated", DeprecationWarning)
         items = line.split(None)
         label = float(items[0])
         nnz = len(items) - 1
@@ -73,7 +71,7 @@ class MLUtils(object):
 
     @staticmethod
     @since("1.0.0")
-    def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None, multiclass=None):
+    def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None):
         """
         Loads labeled data in the LIBSVM format into an RDD of
         LabeledPoint. The LIBSVM format is a text-based format used by
@@ -116,8 +114,6 @@ class MLUtils(object):
         LabeledPoint(-1.0, (6,[1,3,5],[4.0,5.0,6.0]))
         """
         from pyspark.mllib.regression import LabeledPoint
-        if multiclass is not None:
-            warnings.warn("deprecated", DeprecationWarning)
 
         lines = sc.textFile(path, minPartitions)
         parsed = lines.map(lambda l: MLUtils._parse_libsvm_line(l))
@@ -499,7 +495,7 @@ class LinearDataGenerator(object):
     def generateLinearRDD(sc, nexamples, nfeatures, eps,
                           nParts=2, intercept=0.0):
         """
-        Generate a RDD of LabeledPoints.
+        Generate an RDD of LabeledPoints.
         """
         return callMLlibFunc(
             "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),
@@ -521,7 +517,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -77,6 +77,11 @@ private[streaming] class JavaStreamingListenerWrapper(javaStreamingListener: Jav
     )
   }
 
+  override def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted): Unit = {
+    javaStreamingListener.onStreamingStarted(
+      new JavaStreamingListenerStreamingStarted(streamingStarted.time))
+  }
+
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
     javaStreamingListener.onReceiverStarted(
       new JavaStreamingListenerReceiverStarted(toJavaReceiverInfo(receiverStarted.receiverInfo)))

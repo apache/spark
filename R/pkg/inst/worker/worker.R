@@ -62,13 +62,13 @@ compute <- function(mode, partition, serializer, deserializer, key,
       # Transform the result data.frame back to a list of rows
       output <- split(output, seq(nrow(output)))
     } else {
-      # Serialize the ouput to a byte array
+      # Serialize the output to a byte array
       stopifnot(serializer == "byte")
     }
   } else {
     output <- computeFunc(partition, inputData)
   }
-  return (output)
+  return(output)
 }
 
 outputResult <- function(serializer, output, outputCon) {
@@ -90,6 +90,7 @@ bootTime <- currentTimeSecs()
 bootElap <- elapsedSecs()
 
 rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
+connectionTimeout <- as.integer(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
 dirs <- strsplit(rLibDir, ",")[[1]]
 # Set libPaths to include SparkR package as loadNamespace needs this
 # TODO: Figure out if we can avoid this by not loading any objects that require
@@ -98,8 +99,13 @@ dirs <- strsplit(rLibDir, ",")[[1]]
 suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
-inputCon <- socketConnection(port = port, blocking = TRUE, open = "rb")
-outputCon <- socketConnection(port = port, blocking = TRUE, open = "wb")
+inputCon <- socketConnection(
+    port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+SparkR:::doServerAuth(inputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
+
+outputCon <- socketConnection(
+    port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+SparkR:::doServerAuth(outputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
 
 # read the index of the current partition inside the RDD
 partition <- SparkR:::readInt(inputCon)

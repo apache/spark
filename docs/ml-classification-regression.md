@@ -46,7 +46,7 @@ parameter to select between these two algorithms, or leave it unset and Spark wi
 
 For more background and more details about the implementation of binomial logistic regression, refer to the documentation of [logistic regression in `spark.mllib`](mllib-linear-methods.html#logistic-regression). 
 
-**Example**
+**Examples**
 
 The following example shows how to train binomial and multinomial logistic regression 
 models for binary classification with elastic net regularization. `elasticNetParam` corresponds to
@@ -55,15 +55,31 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+
+More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegression).
+
 {% include_example scala/org/apache/spark/examples/ml/LogisticRegressionWithElasticNetExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+
+More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/classification/LogisticRegression.html).
+
 {% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionWithElasticNetExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
+
+More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegression).
+
 {% include_example python/ml/logistic_regression_with_elastic_net.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+
+{% include_example binomial r/ml/logit.R %}
 </div>
 
 </div>
@@ -71,7 +87,7 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 The `spark.ml` implementation of logistic regression also supports
 extracting a summary of the model over the training set. Note that the
 predictions and metrics which are stored as `DataFrame` in
-`BinaryLogisticRegressionSummary` are annotated `@transient` and hence
+`LogisticRegressionSummary` are annotated `@transient` and hence
 only available on the driver.
 
 <div class="codetabs">
@@ -81,10 +97,9 @@ only available on the driver.
 [`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionTrainingSummary)
 provides a summary for a
 [`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel).
-Currently, only binary classification is supported and the
-summary must be explicitly cast to
-[`BinaryLogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary).
-This will likely change when multiclass classification is supported.
+In the case of binary classification, certain additional metrics are
+available, e.g. ROC curve. The binary summary can be accessed via the
+`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary).
 
 Continuing the earlier example:
 
@@ -95,19 +110,25 @@ Continuing the earlier example:
 [`LogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/LogisticRegressionTrainingSummary.html)
 provides a summary for a
 [`LogisticRegressionModel`](api/java/org/apache/spark/ml/classification/LogisticRegressionModel.html).
-Currently, only binary classification is supported and the
-summary must be explicitly cast to
-[`BinaryLogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html). 
-Support for multiclass model summaries will be added in the future.
+In the case of binary classification, certain additional metrics are
+available, e.g. ROC curve. The binary summary can be accessed via the
+`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html).
 
 Continuing the earlier example:
 
 {% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionSummaryExample.java %}
 </div>
 
-<!--- TODO: Add python model summaries once implemented -->
 <div data-lang="python" markdown="1">
-Logistic regression model summary is not yet supported in Python.
+[`LogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionSummary)
+provides a summary for a
+[`LogisticRegressionModel`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionModel).
+In the case of binary classification, certain additional metrics are
+available, e.g. ROC curve. See [`BinaryLogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.BinaryLogisticRegressionTrainingSummary).
+
+Continuing the earlier example:
+
+{% include_example python/ml/logistic_regression_summary_example.py %}
 </div>
 
 </div>
@@ -137,10 +158,11 @@ We minimize the weighted negative log-likelihood, using a multinomial response m
 
 For a detailed derivation please see [here](https://en.wikipedia.org/wiki/Multinomial_logistic_regression#As_a_log-linear_model).
 
-**Example**
+**Examples**
 
 The following example shows how to train a multiclass logistic regression 
-model with elastic net regularization.
+model with elastic net regularization, as well as extract the multiclass
+training summary for evaluating the model.
 
 <div class="codetabs">
 
@@ -156,6 +178,13 @@ model with elastic net regularization.
 {% include_example python/ml/multiclass_logistic_regression_with_elastic_net.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+
+{% include_example multinomial r/ml/logit.R %}
+</div>
+
 </div>
 
 
@@ -164,7 +193,7 @@ model with elastic net regularization.
 Decision trees are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
@@ -194,6 +223,14 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+
+{% include_example classification r/ml/decisionTree.R %}
+
+</div>
+
 </div>
 
 ## Random forest classifier
@@ -201,7 +238,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 Random forests are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -227,6 +264,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 {% include_example python/ml/random_forest_classifier_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+
+{% include_example classification r/ml/randomForest.R %}
+</div>
+
 </div>
 
 ## Gradient-boosted tree classifier
@@ -234,7 +279,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 Gradient-boosted trees (GBTs) are a popular classification and regression method using ensembles of decision trees. 
 More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -260,6 +305,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 {% include_example python/ml/gradient_boosted_tree_classifier_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+
+{% include_example classification r/ml/gbt.R %}
+</div>
+
 </div>
 
 ## Multilayer perceptron classifier
@@ -284,34 +337,94 @@ The number of nodes `$N$` in the output layer corresponds to the number of class
 
 MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
 
-**Example**
+**Examples**
 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.MultilayerPerceptronClassifier) for more details.
+
 {% include_example scala/org/apache/spark/examples/ml/MultilayerPerceptronClassifierExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/MultilayerPerceptronClassifier.html) for more details.
+
 {% include_example java/org/apache/spark/examples/ml/JavaMultilayerPerceptronClassifierExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.MultilayerPerceptronClassifier) for more details.
+
 {% include_example python/ml/multilayer_perceptron_classification.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.mlp.html) for more details.
+
+{% include_example r/ml/mlp.R %}
 </div>
 
+</div>
+
+## Linear Support Vector Machine
+
+A [support vector machine](https://en.wikipedia.org/wiki/Support_vector_machine) constructs a hyperplane
+or set of hyperplanes in a high- or infinite-dimensional space, which can be used for classification,
+regression, or other tasks. Intuitively, a good separation is achieved by the hyperplane that has
+the largest distance to the nearest training-data points of any class (so-called functional margin),
+since in general the larger the margin the lower the generalization error of the classifier. LinearSVC
+in Spark ML supports binary classification with linear SVM. Internally, it optimizes the 
+[Hinge Loss](https://en.wikipedia.org/wiki/Hinge_loss) using OWLQN optimizer.
+
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.LinearSVC) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/LinearSVCExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/LinearSVC.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaLinearSVCExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.LinearSVC) for more details.
+
+{% include_example python/ml/linearsvc.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.svmLinear.html) for more details.
+
+{% include_example r/ml/svmLinear.R %}
+</div>
+
+</div>
 
 ## One-vs-Rest classifier (a.k.a. One-vs-All)
 
 [OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) is an example of a machine learning reduction for performing multiclass classification given a base classifier that can perform binary classification efficiently.  It is also known as "One-vs-All."
 
-`OneVsRest` is implemented as an `Estimator`. For the base classifier it takes instances of `Classifier` and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
+`OneVsRest` is implemented as an `Estimator`. For the base classifier, it takes instances of `Classifier` and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
 
 Predictions are done by evaluating each binary classifier and the index of the most confident classifier is output as label.
 
-**Example**
+**Examples**
 
 The example below demonstrates how to load the
 [Iris dataset](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclass/iris.scale), parse it as a DataFrame and perform multiclass classification using `OneVsRest`. The test error is calculated to measure the algorithm accuracy.
@@ -342,13 +455,31 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 ## Naive Bayes
 
 [Naive Bayes classifiers](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
-probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence 
-assumptions between the features. The `spark.ml` implementation currently supports both [multinomial
-naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
-and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
-More information can be found in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
+probabilistic, multiclass classifiers based on applying Bayes' theorem with strong (naive) independence 
+assumptions between every pair of features.
 
-**Example**
+Naive Bayes can be trained very efficiently. With a single pass over the training data,
+it computes the conditional probability distribution of each feature given each label.
+For prediction, it applies Bayes' theorem to compute the conditional probability distribution
+of each label given an observation.
+
+MLlib supports both [multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
+and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+
+*Input data*:
+These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+Within that context, each observation is a document and each feature represents a term.
+A feature's value is the frequency of the term (in multinomial Naive Bayes) or
+a zero or one indicating whether the term was found in the document (in Bernoulli Naive Bayes).
+Feature values must be *non-negative*. The model type is selected with an optional parameter
+"multinomial" or "bernoulli" with "multinomial" as the default.
+For document classification, the input feature vectors should usually be sparse vectors.
+Since the training data is only used once, it is not necessary to cache it.
+
+[Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
+setting the parameter $\lambda$ (default to $1.0$). 
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -371,6 +502,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 {% include_example python/ml/naive_bayes_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
+
+{% include_example r/ml/naiveBayes.R %}
+</div>
+
 </div>
 
 
@@ -383,7 +522,7 @@ summaries is similar to the logistic regression case.
 
   > When fitting LinearRegressionModel without intercept on dataset with constant nonzero column by "l-bfgs" solver, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
 
-**Example**
+**Examples**
 
 The following
 example demonstrates training an elastic net regularized linear
@@ -392,15 +531,24 @@ regression model and extracting model summary statistics.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+
+More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.regression.LinearRegression).
+
 {% include_example scala/org/apache/spark/examples/ml/LinearRegressionWithElasticNetExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+
+More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/regression/LinearRegression.html).
+
 {% include_example java/org/apache/spark/examples/ml/JavaLinearRegressionWithElasticNetExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 <!--- TODO: Add python model summaries once implemented -->
+
+More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.regression.LinearRegression).
+
 {% include_example python/ml/linear_regression_with_elastic_net.py %}
 </div>
 
@@ -507,11 +655,16 @@ others.
       <td>Continuous</td>
       <td>Inverse*, Idenity, Log</td>
     </tr>
+    <tr>
+      <td>Tweedie</td>
+      <td>Zero-inflated continuous</td>
+      <td>Power link function</td>
+    </tr>
     <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
   </tbody>
 </table>
 
-**Example**
+**Examples**
 
 The following example demonstrates training a GLM with a Gaussian response and identity link
 function and extracting model summary statistics.
@@ -519,21 +672,31 @@ function and extracting model summary statistics.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+
 Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GeneralizedLinearRegressionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+
 Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GeneralizedLinearRegression.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaGeneralizedLinearRegressionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
+
 Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
 
 {% include_example python/ml/generalized_linear_regression_example.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.glm.html) for more details.
+
+{% include_example r/ml/glm.R %}
 </div>
 
 </div>
@@ -544,7 +707,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 Decision trees are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
@@ -571,6 +734,13 @@ More details on parameters can be found in the [Python API documentation](api/py
 {% include_example python/ml/decision_tree_regression_example.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+
+{% include_example regression r/ml/decisionTree.R %}
+</div>
+
 </div>
 
 
@@ -579,7 +749,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 Random forests are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -605,6 +775,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 
 {% include_example python/ml/random_forest_regressor_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+
+{% include_example regression r/ml/randomForest.R %}
+</div>
+
 </div>
 
 ## Gradient-boosted tree regression
@@ -612,7 +790,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 Gradient-boosted trees (GBTs) are a popular regression method using ensembles of decision trees. 
 More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
 
-**Example**
+**Examples**
 
 Note: For this example dataset, `GBTRegressor` actually only needs 1 iteration, but that will not
 be true in general.
@@ -638,6 +816,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 
 {% include_example python/ml/gradient_boosted_tree_regressor_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+
+{% include_example regression r/ml/gbt.R %}
+</div>
+
 </div>
 
 
@@ -700,20 +886,36 @@ The implementation matches the result from R's survival function
 
   > When fitting AFTSurvivalRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is different from R survival::survreg.
 
-**Example**
+**Examples**
 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.AFTSurvivalRegression) for more details.
+
 {% include_example scala/org/apache/spark/examples/ml/AFTSurvivalRegressionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/AFTSurvivalRegression.html) for more details.
+
 {% include_example java/org/apache/spark/examples/ml/JavaAFTSurvivalRegressionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.AFTSurvivalRegression) for more details.
+
 {% include_example python/ml/aft_survival_regression.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.survreg.html) for more details.
+
+{% include_example r/ml/survreg.R %}
 </div>
 
 </div>
@@ -724,7 +926,7 @@ The implementation matches the result from R's survival function
 belongs to the family of regression algorithms. Formally isotonic regression is a problem where
 given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
 and `$X = {x_1, x_2, ..., x_n}$` the unknown response values to be fitted
-finding a function that minimises
+finding a function that minimizes
 
 `\begin{equation}
   f(x) = \sum_{i=1}^n w_i (y_i - x_i)^2
@@ -739,11 +941,11 @@ Essentially isotonic regression is a
 best fitting the original data points.
 
 We implement a
-[pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
+[pool adjacent violators algorithm](https://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
-[parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
+[parallelizing isotonic regression](https://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is a DataFrame which contains three columns
-label, features and weight. Additionally IsotonicRegression algorithm has one
+label, features and weight. Additionally, IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.
 This argument specifies if the isotonic regression is
 isotonic (monotonically increasing) or antitonic (monotonically decreasing).
@@ -765,7 +967,7 @@ is treated as piecewise linear function. The rules for prediction therefore are:
   predictions of the two closest features. In case there are multiple values
   with the same feature then the same rules as in previous point are used.
 
-### Examples
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -786,6 +988,14 @@ Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.ml.html#pyspa
 
 {% include_example python/ml/isotonic_regression_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more details on the API.
+
+{% include_example r/ml/isoreg.R %}
+</div>
+
 </div>
 
 # Linear methods
@@ -945,7 +1155,7 @@ Random forests combine many decision trees in order to reduce the risk of overfi
 The `spark.ml` implementation supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
 
-For more information on the algorithm itself, please see the [`spark.mllib` documentation on random forests](mllib-ensembles.html).
+For more information on the algorithm itself, please see the [`spark.mllib` documentation on random forests](mllib-ensembles.html#random-forests).
 
 ### Inputs and Outputs
 
@@ -1026,7 +1236,7 @@ GBTs iteratively train decision trees in order to minimize a loss function.
 The `spark.ml` implementation supports GBTs for binary classification and for regression,
 using both continuous and categorical features.
 
-For more information on the algorithm itself, please see the [`spark.mllib` documentation on GBTs](mllib-ensembles.html).
+For more information on the algorithm itself, please see the [`spark.mllib` documentation on GBTs](mllib-ensembles.html#gradient-boosted-trees-gbts).
 
 ### Inputs and Outputs
 

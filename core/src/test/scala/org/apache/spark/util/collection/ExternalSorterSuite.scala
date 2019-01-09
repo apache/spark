@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.unsafe.array.LongArray
@@ -388,13 +389,13 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sorter.insertAll(elements)
     assert(sorter.numSpills > 0, "sorter did not spill")
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
-    assert(iter.next() === (0, Nil))
-    assert(iter.next() === (1, List((1, 1))))
-    assert(iter.next() === (2, (0 until 1000).map(x => (2, 2)).toList))
-    assert(iter.next() === (3, Nil))
-    assert(iter.next() === (4, Nil))
-    assert(iter.next() === (5, List((5, 5))))
-    assert(iter.next() === (6, Nil))
+    assert(iter.next() === ((0, Nil)))
+    assert(iter.next() === ((1, List((1, 1)))))
+    assert(iter.next() === ((2, (0 until 1000).map(x => (2, 2)).toList)))
+    assert(iter.next() === ((3, Nil)))
+    assert(iter.next() === ((4, Nil)))
+    assert(iter.next() === ((5, List((5, 5)))))
+    assert(iter.next() === ((6, Nil)))
     sorter.stop()
   }
 
@@ -639,7 +640,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = false, kryo = false)
       .set("spark.shuffle.memoryFraction", "0.01")
       .set("spark.memory.useLegacyMode", "true")
-      .set("spark.testing.memory", "100000000")
+      .set(TEST_MEMORY, 100000000L)
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
     val N = 2e5.toInt

@@ -30,12 +30,15 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * the corresponding joint dataset.
  *
  * A numerically stable algorithm is implemented to compute the mean and variance of instances:
- * Reference: [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]]
+ * Reference: <a href="http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance">
+ * variance-wiki</a>
  * Zero elements (including explicit zero values) are skipped when calling add(),
  * to have time complexity O(nnz) instead of O(n) for each column.
  *
  * For weighted instances, the unbiased estimation of variance is defined by the reliability
- * weights: [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]].
+ * weights:
+ * see <a href="https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights">
+ * Reliability weights (Wikipedia)</a>.
  */
 @Since("1.1.0")
 @DeveloperApi
@@ -49,7 +52,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var totalCnt: Long = 0
   private var totalWeightSum: Double = 0.0
   private var weightSquareSum: Double = 0.0
-  private var weightSum: Array[Double] = _
+  private var currWeightSum: Array[Double] = _
   private var nnz: Array[Long] = _
   private var currMax: Array[Double] = _
   private var currMin: Array[Double] = _
@@ -75,7 +78,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       currM2n = Array.ofDim[Double](n)
       currM2 = Array.ofDim[Double](n)
       currL1 = Array.ofDim[Double](n)
-      weightSum = Array.ofDim[Double](n)
+      currWeightSum = Array.ofDim[Double](n)
       nnz = Array.ofDim[Long](n)
       currMax = Array.fill[Double](n)(Double.MinValue)
       currMin = Array.fill[Double](n)(Double.MaxValue)
@@ -88,7 +91,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localCurrM2n = currM2n
     val localCurrM2 = currM2
     val localCurrL1 = currL1
-    val localWeightSum = weightSum
+    val localWeightSum = currWeightSum
     val localNumNonzeros = nnz
     val localCurrMax = currMax
     val localCurrMin = currMin
@@ -136,8 +139,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       weightSquareSum += other.weightSquareSum
       var i = 0
       while (i < n) {
-        val thisNnz = weightSum(i)
-        val otherNnz = other.weightSum(i)
+        val thisNnz = currWeightSum(i)
+        val otherNnz = other.currWeightSum(i)
         val totalNnz = thisNnz + otherNnz
         val totalCnnz = nnz(i) + other.nnz(i)
         if (totalNnz != 0.0) {
@@ -154,7 +157,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           currMax(i) = math.max(currMax(i), other.currMax(i))
           currMin(i) = math.min(currMin(i), other.currMin(i))
         }
-        weightSum(i) = totalNnz
+        currWeightSum(i) = totalNnz
         nnz(i) = totalCnnz
         i += 1
       }
@@ -167,7 +170,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       this.totalCnt = other.totalCnt
       this.totalWeightSum = other.totalWeightSum
       this.weightSquareSum = other.weightSquareSum
-      this.weightSum = other.weightSum.clone()
+      this.currWeightSum = other.currWeightSum.clone()
       this.nnz = other.nnz.clone()
       this.currMax = other.currMax.clone()
       this.currMin = other.currMin.clone()
@@ -186,7 +189,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val realMean = Array.ofDim[Double](n)
     var i = 0
     while (i < n) {
-      realMean(i) = currMean(i) * (weightSum(i) / totalWeightSum)
+      realMean(i) = currMean(i) * (currWeightSum(i) / totalWeightSum)
       i += 1
     }
     Vectors.dense(realMean)
@@ -210,8 +213,9 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       var i = 0
       val len = currM2n.length
       while (i < len) {
-        realVariance(i) = (currM2n(i) + deltaMean(i) * deltaMean(i) * weightSum(i) *
-          (totalWeightSum - weightSum(i)) / totalWeightSum) / denominator
+        // We prevent variance from negative value caused by numerical error.
+        realVariance(i) = math.max((currM2n(i) + deltaMean(i) * deltaMean(i) * currWeightSum(i) *
+          (totalWeightSum - currWeightSum(i)) / totalWeightSum) / denominator, 0.0)
         i += 1
       }
     }
@@ -224,6 +228,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def count: Long = totalCnt
+
+  /**
+   * Sum of weights.
+   */
+  override def weightSum: Double = totalWeightSum
 
   /**
    * Number of nonzero elements in each dimension.
@@ -269,7 +278,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * L2 (Euclidian) norm of each dimension.
+   * L2 (Euclidean) norm of each dimension.
    *
    */
   @Since("1.2.0")

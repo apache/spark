@@ -119,10 +119,12 @@ if __name__ == "__main__":
         ("inputCol", "input column name.", None, "TypeConverters.toString"),
         ("inputCols", "input column names.", None, "TypeConverters.toListString"),
         ("outputCol", "output column name.", "self.uid + '__output'", "TypeConverters.toString"),
+        ("outputCols", "output column names.", None, "TypeConverters.toListString"),
         ("numFeatures", "number of features.", None, "TypeConverters.toInt"),
         ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
-         "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None,
-         "TypeConverters.toInt"),
+         "E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: " +
+         "this setting will be ignored if the checkpoint directory is not set in the SparkContext.",
+         None, "TypeConverters.toInt"),
         ("seed", "random seed.", "hash(type(self).__name__)", "TypeConverters.toInt"),
         ("tol", "the convergence tolerance for iterative algorithms (>= 0).", None,
          "TypeConverters.toFloat"),
@@ -143,6 +145,8 @@ if __name__ == "__main__":
          "The class with largest value p/t is predicted, where p is the original " +
          "probability of that class and t is the class's threshold.", None,
          "TypeConverters.toListFloat"),
+        ("threshold", "threshold in binary classification prediction, in range [0, 1]",
+         "0.5", "TypeConverters.toFloat"),
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None, "TypeConverters.toString"),
         ("solver", "the solver algorithm for optimization. If this is not set or empty, " +
@@ -150,7 +154,20 @@ if __name__ == "__main__":
         ("varianceCol", "column name for the biased sample variance of prediction.",
          None, "TypeConverters.toString"),
         ("aggregationDepth", "suggested depth for treeAggregate (>= 2).", "2",
-         "TypeConverters.toInt")]
+         "TypeConverters.toInt"),
+        ("parallelism", "the number of threads to use when running parallel algorithms (>= 1).",
+         "1", "TypeConverters.toInt"),
+        ("collectSubModels", "Param for whether to collect a list of sub-models trained during " +
+         "tuning. If set to false, then only the single best sub-model will be available after " +
+         "fitting. If set to true, then all sub-models will be available. Warning: For large " +
+         "models, collecting all sub-models can cause OOMs on the Spark driver.",
+         "False", "TypeConverters.toBoolean"),
+        ("loss", "the loss function to be optimized.", None, "TypeConverters.toString"),
+        ("distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.",
+         "'euclidean'", "TypeConverters.toString"),
+        ("validationIndicatorCol", "name of the column that indicates whether each row is for " +
+         "training or for validation. False indicates training; true indicates validation.",
+         None, "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

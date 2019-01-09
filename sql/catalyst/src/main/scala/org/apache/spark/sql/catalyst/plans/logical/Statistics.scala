@@ -17,11 +17,24 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.commons.codec.binary.Base64
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.math.{MathContext, RoundingMode}
 
+import scala.util.control.NonFatal
+
+import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+
 
 /**
  * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
@@ -38,80 +51,180 @@ import org.apache.spark.sql.types._
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
- * @param colStats Column-level statistics.
- * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
+ * @param attributeStats Statistics for Attributes.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    colStats: Map[String, ColumnStat] = Map.empty,
-    isBroadcastable: Boolean = false) {
+    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil)) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 
   /** Readable string representation for the Statistics. */
   def simpleString: String = {
-    Seq(s"sizeInBytes=$sizeInBytes",
-      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
-      s"isBroadcastable=$isBroadcastable"
+    Seq(s"sizeInBytes=${Utils.bytesToString(sizeInBytes)}",
+      if (rowCount.isDefined) {
+        // Show row count in scientific notation.
+        s"rowCount=${BigDecimal(rowCount.get, new MathContext(3, RoundingMode.HALF_UP)).toString()}"
+      } else {
+        ""
+      }
     ).filter(_.nonEmpty).mkString(", ")
   }
 }
 
+
 /**
- * Statistics for a column.
+ * Statistics collected for a column.
+ *
+ * 1. The JVM data type stored in min/max is the internal data type for the corresponding
+ *    Catalyst data type. For example, the internal type of DateType is Int, and that the internal
+ *    type of TimestampType is Long.
+ * 2. There is no guarantee that the statistics collected are accurate. Approximation algorithms
+ *    (sketches) might have been used, and the data collected can also be stale.
+ *
+ * @param distinctCount number of distinct values
+ * @param min minimum value
+ * @param max maximum value
+ * @param nullCount number of nulls
+ * @param avgLen average length of the values. For fixed-length types, this should be a constant.
+ * @param maxLen maximum length of the values. For fixed-length types, this should be a constant.
+ * @param histogram histogram of the values
  */
-case class ColumnStat(statRow: InternalRow) {
+case class ColumnStat(
+    distinctCount: Option[BigInt] = None,
+    min: Option[Any] = None,
+    max: Option[Any] = None,
+    nullCount: Option[BigInt] = None,
+    avgLen: Option[Long] = None,
+    maxLen: Option[Long] = None,
+    histogram: Option[Histogram] = None) {
 
-  def forNumeric[T <: AtomicType](dataType: T): NumericColumnStat[T] = {
-    NumericColumnStat(statRow, dataType)
+  // Are distinctCount and nullCount statistics defined?
+  val hasCountStats = distinctCount.isDefined && nullCount.isDefined
+
+  // Are min and max statistics defined?
+  val hasMinMaxStats = min.isDefined && max.isDefined
+
+  // Are avgLen and maxLen statistics defined?
+  val hasLenStats = avgLen.isDefined && maxLen.isDefined
+
+  def toCatalogColumnStat(colName: String, dataType: DataType): CatalogColumnStat =
+    CatalogColumnStat(
+      distinctCount = distinctCount,
+      min = min.map(CatalogColumnStat.toExternalString(_, colName, dataType)),
+      max = max.map(CatalogColumnStat.toExternalString(_, colName, dataType)),
+      nullCount = nullCount,
+      avgLen = avgLen,
+      maxLen = maxLen,
+      histogram = histogram)
+}
+
+/**
+ * This class is an implementation of equi-height histogram.
+ * Equi-height histogram represents the distribution of a column's values by a sequence of bins.
+ * Each bin has a value range and contains approximately the same number of rows.
+ *
+ * @param height number of rows in each bin
+ * @param bins equi-height histogram bins
+ */
+case class Histogram(height: Double, bins: Array[HistogramBin]) {
+
+  // Only for histogram equality test.
+  override def equals(other: Any): Boolean = other match {
+    case otherHgm: Histogram =>
+      height == otherHgm.height && bins.sameElements(otherHgm.bins)
+    case _ => false
   }
-  def forString: StringColumnStat = StringColumnStat(statRow)
-  def forBinary: BinaryColumnStat = BinaryColumnStat(statRow)
-  def forBoolean: BooleanColumnStat = BooleanColumnStat(statRow)
 
-  override def toString: String = {
-    // use Base64 for encoding
-    Base64.encodeBase64String(statRow.asInstanceOf[UnsafeRow].getBytes)
+  override def hashCode(): Int = {
+    val temp = java.lang.Double.doubleToLongBits(height)
+    var result = (temp ^ (temp >>> 32)).toInt
+    result = 31 * result + java.util.Arrays.hashCode(bins.asInstanceOf[Array[AnyRef]])
+    result
   }
 }
 
-object ColumnStat {
-  def apply(numFields: Int, str: String): ColumnStat = {
-    // use Base64 for decoding
-    val bytes = Base64.decodeBase64(str)
-    val unsafeRow = new UnsafeRow(numFields)
-    unsafeRow.pointTo(bytes, bytes.length)
-    ColumnStat(unsafeRow)
+/**
+ * A bin in an equi-height histogram. We use double type for lower/higher bound for simplicity.
+ *
+ * @param lo lower bound of the value range in this bin
+ * @param hi higher bound of the value range in this bin
+ * @param ndv approximate number of distinct values in this bin
+ */
+case class HistogramBin(lo: Double, hi: Double, ndv: Long)
+
+object HistogramSerializer {
+  /**
+   * Serializes a given histogram to a string. For advanced statistics like histograms, sketches,
+   * etc, we don't provide readability for their serialized formats in metastore
+   * (string-to-string table properties). This is because it's hard or unnatural for these
+   * statistics to be human readable. For example, a histogram usually cannot fit in a single,
+   * self-described property. And for count-min-sketch, it's essentially unnatural to make it
+   * a readable string.
+   */
+  final def serialize(histogram: Histogram): String = {
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(new LZ4BlockOutputStream(bos))
+    out.writeDouble(histogram.height)
+    out.writeInt(histogram.bins.length)
+    // Write data with same type together for compression.
+    var i = 0
+    while (i < histogram.bins.length) {
+      out.writeDouble(histogram.bins(i).lo)
+      i += 1
+    }
+    i = 0
+    while (i < histogram.bins.length) {
+      out.writeDouble(histogram.bins(i).hi)
+      i += 1
+    }
+    i = 0
+    while (i < histogram.bins.length) {
+      out.writeLong(histogram.bins(i).ndv)
+      i += 1
+    }
+    out.writeInt(-1)
+    out.flush()
+    out.close()
+
+    org.apache.commons.codec.binary.Base64.encodeBase64String(bos.toByteArray)
   }
-}
 
-case class NumericColumnStat[T <: AtomicType](statRow: InternalRow, dataType: T) {
-  // The indices here must be consistent with `ColumnStatStruct.numericColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val max: T#InternalType = statRow.get(1, dataType).asInstanceOf[T#InternalType]
-  val min: T#InternalType = statRow.get(2, dataType).asInstanceOf[T#InternalType]
-  val ndv: Long = statRow.getLong(3)
-}
+  /** Deserializes a given string to a histogram. */
+  final def deserialize(str: String): Histogram = {
+    val bytes = org.apache.commons.codec.binary.Base64.decodeBase64(str)
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(new LZ4BlockInputStream(bis))
+    val height = ins.readDouble()
+    val numBins = ins.readInt()
 
-case class StringColumnStat(statRow: InternalRow) {
-  // The indices here must be consistent with `ColumnStatStruct.stringColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val avgColLen: Double = statRow.getDouble(1)
-  val maxColLen: Long = statRow.getInt(2)
-  val ndv: Long = statRow.getLong(3)
-}
+    val los = new Array[Double](numBins)
+    var i = 0
+    while (i < numBins) {
+      los(i) = ins.readDouble()
+      i += 1
+    }
+    val his = new Array[Double](numBins)
+    i = 0
+    while (i < numBins) {
+      his(i) = ins.readDouble()
+      i += 1
+    }
+    val ndvs = new Array[Long](numBins)
+    i = 0
+    while (i < numBins) {
+      ndvs(i) = ins.readLong()
+      i += 1
+    }
+    ins.close()
 
-case class BinaryColumnStat(statRow: InternalRow) {
-  // The indices here must be consistent with `ColumnStatStruct.binaryColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val avgColLen: Double = statRow.getDouble(1)
-  val maxColLen: Long = statRow.getInt(2)
-}
-
-case class BooleanColumnStat(statRow: InternalRow) {
-  // The indices here must be consistent with `ColumnStatStruct.booleanColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val numTrues: Long = statRow.getLong(1)
-  val numFalses: Long = statRow.getLong(2)
+    val bins = new Array[HistogramBin](numBins)
+    i = 0
+    while (i < numBins) {
+      bins(i) = HistogramBin(los(i), his(i), ndvs(i))
+      i += 1
+    }
+    Histogram(height, bins)
+  }
 }

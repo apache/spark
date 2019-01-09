@@ -17,6 +17,7 @@
 
 package org.apache.spark.network;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import io.netty.channel.Channel;
@@ -24,11 +25,8 @@ import io.netty.channel.local.LocalChannel;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.*;
 
-import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -54,7 +52,7 @@ public class TransportResponseHandlerSuite {
     assertEquals(1, handler.numOutstandingRequests());
 
     handler.handle(new ChunkFetchSuccess(streamChunkId, new TestManagedBuffer(123)));
-    verify(callback, times(1)).onSuccess(eq(0), (ManagedBuffer) any());
+    verify(callback, times(1)).onSuccess(eq(0), any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
@@ -67,7 +65,7 @@ public class TransportResponseHandlerSuite {
     assertEquals(1, handler.numOutstandingRequests());
 
     handler.handle(new ChunkFetchFailure(streamChunkId, "some error msg"));
-    verify(callback, times(1)).onFailure(eq(0), (Throwable) any());
+    verify(callback, times(1)).onFailure(eq(0), any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
@@ -84,9 +82,9 @@ public class TransportResponseHandlerSuite {
     handler.exceptionCaught(new Exception("duh duh duhhhh"));
 
     // should fail both b2 and b3
-    verify(callback, times(1)).onSuccess(eq(0), (ManagedBuffer) any());
-    verify(callback, times(1)).onFailure(eq(1), (Throwable) any());
-    verify(callback, times(1)).onFailure(eq(2), (Throwable) any());
+    verify(callback, times(1)).onSuccess(eq(0), any());
+    verify(callback, times(1)).onFailure(eq(1), any());
+    verify(callback, times(1)).onFailure(eq(2), any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
@@ -118,7 +116,7 @@ public class TransportResponseHandlerSuite {
     assertEquals(1, handler.numOutstandingRequests());
 
     handler.handle(new RpcFailure(12345, "oh no"));
-    verify(callback, times(1)).onFailure((Throwable) any());
+    verify(callback, times(1)).onFailure(any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
@@ -130,7 +128,7 @@ public class TransportResponseHandlerSuite {
 
     StreamResponse response = new StreamResponse("stream", 1234L, null);
     StreamCallback cb = mock(StreamCallback.class);
-    handler.addStreamCallback(cb);
+    handler.addStreamCallback("stream", cb);
     assertEquals(1, handler.numOutstandingRequests());
     handler.handle(response);
     assertEquals(1, handler.numOutstandingRequests());
@@ -138,9 +136,35 @@ public class TransportResponseHandlerSuite {
     assertEquals(0, handler.numOutstandingRequests());
 
     StreamFailure failure = new StreamFailure("stream", "uh-oh");
-    handler.addStreamCallback(cb);
+    handler.addStreamCallback("stream", cb);
     assertEquals(1, handler.numOutstandingRequests());
     handler.handle(failure);
     assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void failOutstandingStreamCallbackOnClose() throws Exception {
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream-1", cb);
+    handler.channelInactive();
+
+    verify(cb).onFailure(eq("stream-1"), isA(IOException.class));
+  }
+
+  @Test
+  public void failOutstandingStreamCallbackOnException() throws Exception {
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream-1", cb);
+    handler.exceptionCaught(new IOException("Oops!"));
+
+    verify(cb).onFailure(eq("stream-1"), isA(IOException.class));
   }
 }

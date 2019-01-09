@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+# To run this example use
+# ./bin/spark-submit examples/src/main/r/RSparkSQLExample.R
+
 library(SparkR)
 
 # $example on:init_session$
@@ -110,6 +113,16 @@ write.df(namesAndAges, "namesAndAges.parquet", "parquet")
 # $example off:manual_load_options$
 
 
+# $example on:manual_load_options_csv$
+df <- read.df("examples/src/main/resources/people.csv", "csv", sep = ";", inferSchema = TRUE, header = TRUE)
+namesAndAges <- select(df, "name", "age")
+# $example off:manual_load_options_csv$
+
+# $example on:manual_save_options_orc$
+df <- read.df("examples/src/main/resources/users.orc", "orc")
+write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")
+# $example off:manual_save_options_orc$
+
 # $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
 # $example off:direct_sql$
@@ -195,7 +208,7 @@ head(teenagers)
 # $example on:spark_hive$
 # enableHiveSupport defaults to TRUE
 sparkR.session(enableHiveSupport = TRUE)
-sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) USING hive")
 sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.

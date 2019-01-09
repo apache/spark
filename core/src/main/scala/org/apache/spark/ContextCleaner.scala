@@ -18,7 +18,8 @@
 package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
-import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
+import java.util.Collections
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
 
 import scala.collection.JavaConverters._
 
@@ -58,7 +59,12 @@ private class CleanupTaskWeakReference(
  */
 private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
-  private val referenceBuffer = new ConcurrentLinkedQueue[CleanupTaskWeakReference]()
+  /**
+   * A buffer to ensure that `CleanupTaskWeakReference`s are not garbage collected as long as they
+   * have not been handled by the reference queue.
+   */
+  private val referenceBuffer =
+    Collections.newSetFromMap[CleanupTaskWeakReference](new ConcurrentHashMap)
 
   private val referenceQueue = new ReferenceQueue[AnyRef]
 
@@ -139,7 +145,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     periodicGCService.shutdown()
   }
 
-  /** Register a RDD for cleanup when it is garbage collected. */
+  /** Register an RDD for cleanup when it is garbage collected. */
   def registerRDDForCleanup(rdd: RDD[_]): Unit = {
     registerForCleanup(rdd, CleanRDD(rdd.id))
   }
@@ -176,10 +182,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
           .map(_.asInstanceOf[CleanupTaskWeakReference])
         // Synchronize here to avoid being interrupted on stop()
         synchronized {
-          reference.map(_.task).foreach { task =>
-            logDebug("Got cleaning task " + task)
-            referenceBuffer.remove(reference.get)
-            task match {
+          reference.foreach { ref =>
+            logDebug("Got cleaning task " + ref.task)
+            referenceBuffer.remove(ref)
+            ref.task match {
               case CleanRDD(rddId) =>
                 doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
               case CleanShuffle(shuffleId) =>

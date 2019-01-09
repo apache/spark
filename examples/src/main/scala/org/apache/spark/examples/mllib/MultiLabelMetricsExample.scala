@@ -64,6 +64,8 @@ object MultiLabelMetricsExample {
     // Subset accuracy
     println(s"Subset accuracy = ${metrics.subsetAccuracy}")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

@@ -26,7 +26,7 @@ Function InstallR {
   }
 
   $urlPath = ""
-  $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
+  $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest https://rversions.r-pkg.org/r-release-win).Content).version
   If ($rVer -ne $latestVer) {
     $urlPath = ("old/" + $rVer + "/")
   }
@@ -81,7 +81,7 @@ if (!(Test-Path $tools)) {
 # ========================== Maven
 Push-Location $tools
 
-$mavenVer = "3.3.9"
+$mavenVer = "3.6.0"
 Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 
 # extract
@@ -90,12 +90,13 @@ Invoke-Expression "7z.exe x maven.zip"
 # add maven to environment variables
 $env:Path += ";$tools\apache-maven-$mavenVer\bin"
 $env:M2_HOME = "$tools\apache-maven-$mavenVer"
-$env:MAVEN_OPTS = "-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+$env:MAVEN_OPTS = "-Xmx2g -XX:ReservedCodeCacheSize=512m"
 
 Pop-Location
 
 # ========================== Hadoop bin package
-$hadoopVer = "2.6.0"
+# This must match the version at https://github.com/steveloughran/winutils/tree/master/hadoop-2.7.1
+$hadoopVer = "2.7.1"
 $hadoopPath = "$tools\hadoop"
 if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null
@@ -109,12 +110,13 @@ Invoke-Expression "7z.exe x winutils-master.zip"
 
 # add hadoop bin to environment variables
 $env:HADOOP_HOME = "$hadoopPath/winutils-master/hadoop-$hadoopVer"
+$env:Path += ";$env:HADOOP_HOME\bin"
 
 Pop-Location
 
 # ========================== R
-$rVer = "3.3.1"
-$rToolsVer = "3.4.0"
+$rVer = "3.5.1"
+$rToolsVer = "3.5.1"
 
 InstallR
 InstallRtools

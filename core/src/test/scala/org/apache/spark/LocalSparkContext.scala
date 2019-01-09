@@ -22,14 +22,14 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.Suite
 
-/** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test. */
+/** Manages a local `sc` `SparkContext` variable, correctly stopping it after each test. */
 trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
 
   @transient var sc: SparkContext = _
 
   override def beforeAll() {
     super.beforeAll()
-    InternalLoggerFactory.setDefaultFactory(new Slf4JLoggerFactory())
+    InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)
   }
 
   override def afterEach() {

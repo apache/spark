@@ -67,8 +67,8 @@ class BinaryClassificationEvaluatorSuite
       evaluator.evaluate(stringDF)
     }
     assert(thrown.getMessage.replace("\n", "") contains "Column rawPrediction must be of type " +
-      "equal to one of the following types: [DoubleType, ")
-    assert(thrown.getMessage.replace("\n", "") contains "but was actually of type StringType.")
+      "equal to one of the following types: [double, ")
+    assert(thrown.getMessage.replace("\n", "") contains "but was actually of type string.")
   }
 
   test("should support all NumericType labels and not support other types") {

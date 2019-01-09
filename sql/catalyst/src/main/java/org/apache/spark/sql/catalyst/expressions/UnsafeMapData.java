@@ -28,6 +28,9 @@ import org.apache.spark.unsafe.Platform;
  * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData, with extra 8 bytes at head
  * to indicate the number of bytes of the unsafe key array.
  * [unsafe key array numBytes] [unsafe key array] [unsafe value array]
+ *
+ * Note that, user is responsible to guarantee that the key array does not have duplicated
+ * elements, otherwise the behavior is undefined.
  */
 // TODO: Use a more efficient format which doesn't depend on unsafe array.
 public final class UnsafeMapData extends MapData {
@@ -68,7 +71,8 @@ public final class UnsafeMapData extends MapData {
     // Read the numBytes of key array from the first 8 bytes.
     final long keyArraySize = Platform.getLong(baseObject, baseOffset);
     assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
-    assert keyArraySize <= Integer.MAX_VALUE : "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
+    assert keyArraySize <= Integer.MAX_VALUE :
+      "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
     final int valueArraySize = sizeInBytes - (int)keyArraySize - 8;
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 

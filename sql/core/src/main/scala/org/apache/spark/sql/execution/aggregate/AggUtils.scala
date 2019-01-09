@@ -21,31 +21,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
-
-  def planAggregateWithoutPartial(
-      groupingExpressions: Seq[NamedExpression],
-      aggregateExpressions: Seq[AggregateExpression],
-      resultExpressions: Seq[NamedExpression],
-      child: SparkPlan): Seq[SparkPlan] = {
-
-    val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
-    val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
-    SortAggregateExec(
-      requiredChildDistributionExpressions = Some(groupingExpressions),
-      groupingExpressions = groupingExpressions,
-      aggregateExpressions = completeAggregateExpressions,
-      aggregateAttributes = completeAggregateAttributes,
-      initialInputBufferOffset = 0,
-      resultExpressions = resultExpressions,
-      child = child
-    ) :: Nil
-  }
-
   private def createAggregate(
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
@@ -66,14 +47,28 @@ object AggUtils {
         resultExpressions = resultExpressions,
         child = child)
     } else {
-      SortAggregateExec(
-        requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-        groupingExpressions = groupingExpressions,
-        aggregateExpressions = aggregateExpressions,
-        aggregateAttributes = aggregateAttributes,
-        initialInputBufferOffset = initialInputBufferOffset,
-        resultExpressions = resultExpressions,
-        child = child)
+      val objectHashEnabled = child.sqlContext.conf.useObjectHashAggregation
+      val useObjectHash = ObjectHashAggregateExec.supportsAggregate(aggregateExpressions)
+
+      if (objectHashEnabled && useObjectHash) {
+        ObjectHashAggregateExec(
+          requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+          groupingExpressions = groupingExpressions,
+          aggregateExpressions = aggregateExpressions,
+          aggregateAttributes = aggregateAttributes,
+          initialInputBufferOffset = initialInputBufferOffset,
+          resultExpressions = resultExpressions,
+          child = child)
+      } else {
+        SortAggregateExec(
+          requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+          groupingExpressions = groupingExpressions,
+          aggregateExpressions = aggregateExpressions,
+          aggregateAttributes = aggregateAttributes,
+          initialInputBufferOffset = initialInputBufferOffset,
+          resultExpressions = resultExpressions,
+          child = child)
+      }
     }
   }
 
@@ -182,6 +177,10 @@ object AggUtils {
       case agg @ AggregateExpression(aggregateFunction, mode, true, _) =>
         aggregateFunction.transformDown(distinctColumnAttributeLookup)
           .asInstanceOf[AggregateFunction]
+      case agg =>
+        throw new IllegalArgumentException(
+          "Non-distinct aggregate is found in functionsWithDistinct " +
+          s"at planAggregateWithOneDistinct: $agg")
     }
 
     val partialDistinctAggregate: SparkPlan = {
@@ -261,6 +260,7 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
+      stateFormatVersion: Int,
       child: SparkPlan): Seq[SparkPlan] = {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -268,9 +268,6 @@ object AggUtils {
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      // We will group by the original grouping expression, plus an additional expression for the
-      // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
-      // expressions will be [key, value].
       createAggregate(
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
@@ -295,7 +292,8 @@ object AggUtils {
         child = partialAggregate)
     }
 
-    val restored = StateStoreRestoreExec(groupingAttributes, None, partialMerged1)
+    val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
+      partialMerged1)
 
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
@@ -313,8 +311,14 @@ object AggUtils {
     }
     // Note: stateId and returnAllStates are filled in later with preparation rules
     // in IncrementalExecution.
-    val saved = StateStoreSaveExec(
-      groupingAttributes, stateId = None, returnAllStates = None, partialMerged2)
+    val saved =
+      StateStoreSaveExec(
+        groupingAttributes,
+        stateInfo = None,
+        outputMode = None,
+        eventTimeWatermark = None,
+        stateFormatVersion = stateFormatVersion,
+        partialMerged2)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))

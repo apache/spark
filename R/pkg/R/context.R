@@ -43,7 +43,7 @@ getMinPartitions <- function(sc, minPartitions) {
 #'  lines <- textFile(sc, "myfile.txt")
 #'}
 textFile <- function(sc, path, minPartitions = NULL) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
@@ -71,7 +71,7 @@ textFile <- function(sc, path, minPartitions = NULL) {
 #'  rdd <- objectFile(sc, "myfile")
 #'}
 objectFile <- function(sc, path, minPartitions = NULL) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
@@ -87,9 +87,19 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' in the list are split into \code{numSlices} slices and distributed to nodes
 #' in the cluster.
 #'
-#' If size of serialized slices is larger than spark.r.maxAllocationLimit or (200MB), the function 
-#' will write it to disk and send the file name to JVM. Also to make sure each slice is not 
+#' If size of serialized slices is larger than spark.r.maxAllocationLimit or (200MiB), the function
+#' will write it to disk and send the file name to JVM. Also to make sure each slice is not
 #' larger than that limit, number of slices may be increased.
+#'
+#' In 2.2.0 we are changing how the numSlices are used/computed to handle
+#' 1 < (length(coll) / numSlices) << length(coll) better, and to get the exact number of slices.
+#' This change affects both createDataFrame and spark.lapply.
+#' In the specific one case that it is used to convert R native object into SparkDataFrame, it has
+#' always been kept at the default of 1. In the case the object is large, we are explicitly setting
+#' the parallism to numSlices (which is still 1).
+#'
+#' Specifically, we are changing to split positions to match the calculation in positions() of
+#' ParallelCollectionRDD in Spark.
 #'
 #' @param sc SparkContext to use
 #' @param coll collection to parallelize
@@ -107,6 +117,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
+
+  # Note, for data.frame, createDataFrame turns it into a list before it calls here.
   # nolint start
   # suppress lintr warning: Place a space before left parenthesis, except in a function call.
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
@@ -126,31 +138,59 @@ parallelize <- function(sc, coll, numSlices = 1) {
 
   sizeLimit <- getMaxAllocationLimit(sc)
   objectSize <- object.size(coll)
+  len <- length(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
-  numSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
-  if (numSlices > length(coll))
-    numSlices <- length(coll)
+  numSerializedSlices <- min(len, max(numSlices, ceiling(objectSize / sizeLimit)))
 
-  sliceLen <- ceiling(length(coll) / numSlices)
-  slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
+  # Generate the slice ids to put each row
+  # For instance, for numSerializedSlices of 22, length of 50
+  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
+  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
+  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
+  # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
+  splits <- if (numSerializedSlices > 0) {
+    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
+      # nolint start
+      start <- trunc((as.numeric(x) * len) / numSerializedSlices)
+      end <- trunc(((as.numeric(x) + 1) * len) / numSerializedSlices)
+      # nolint end
+      rep(start, end - start)
+    }))
+  } else {
+    1
+  }
+
+  slices <- split(coll, splits)
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  # The PRC backend cannot handle arguments larger than 2GB (INT_MAX)
+  # The RPC backend cannot handle arguments larger than 2GB (INT_MAX)
   # If serialized data is safely less than that threshold we send it over the PRC channel.
   # Otherwise, we write it to a file and send the file name
   if (objectSize < sizeLimit) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
   } else {
-    fileName <- writeToTempFile(serializedSlices)
-    jrdd <- tryCatch(callJStatic(
-        "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices)),
-      finally = {
-        file.remove(fileName)
-    })
+    if (callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)) {
+      # the length of slices here is the parallelism to use in the jvm's sc.parallelize()
+      parallelism <- as.integer(numSlices)
+      jserver <- newJObject("org.apache.spark.api.r.RParallelizeServer", sc, parallelism)
+      authSecret <- callJMethod(jserver, "secret")
+      port <- callJMethod(jserver, "port")
+      conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
+      doServerAuth(conn, authSecret)
+      writeToConnection(serializedSlices, conn)
+      jrdd <- callJMethod(jserver, "getResult")
+    } else {
+      fileName <- writeToTempFile(serializedSlices)
+      jrdd <- tryCatch(callJStatic(
+          "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices)),
+        finally = {
+          file.remove(fileName)
+      })
+    }
   }
 
   RDD(jrdd, "byte")
@@ -166,14 +206,21 @@ getMaxAllocationLimit <- function(sc) {
   ))
 }
 
+writeToConnection <- function(serializedSlices, conn) {
+  tryCatch({
+    for (slice in serializedSlices) {
+      writeBin(as.integer(length(slice)), conn, endian = "big")
+      writeBin(slice, conn, endian = "big")
+    }
+  }, finally = {
+    close(conn)
+  })
+}
+
 writeToTempFile <- function(serializedSlices) {
   fileName <- tempfile()
   conn <- file(fileName, "wb")
-  for (slice in serializedSlices) {
-    writeBin(as.integer(length(slice)), conn, endian = "big")
-    writeBin(slice, conn, endian = "big")
-  }
-  close(conn)
+  writeToConnection(serializedSlices, conn)
   fileName
 }
 
@@ -229,7 +276,7 @@ includePackage <- function(sc, pkg) {
 #'
 #' # Large Matrix object that we want to broadcast
 #' randomMat <- matrix(nrow=100, ncol=10, data=rnorm(1000))
-#' randomMatBr <- broadcast(sc, randomMat)
+#' randomMatBr <- broadcastRDD(sc, randomMat)
 #'
 #' # Use the broadcast variable inside the function
 #' useBroadcast <- function(x) {
@@ -237,7 +284,7 @@ includePackage <- function(sc, pkg) {
 #' }
 #' sumRDD <- lapply(rdd, useBroadcast)
 #'}
-broadcast <- function(sc, object) {
+broadcastRDD <- function(sc, object) {
   objName <- as.character(substitute(object))
   serializedObj <- serialize(object, connection = NULL)
 
@@ -262,7 +309,7 @@ broadcast <- function(sc, object) {
 #' rdd <- parallelize(sc, 1:2, 2L)
 #' checkpoint(rdd)
 #'}
-setCheckpointDir <- function(sc, dirName) {
+setCheckpointDirSC <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
@@ -276,10 +323,11 @@ setCheckpointDir <- function(sc, dirName) {
 #' Currently directories are only supported for Hadoop-supported filesystems.
 #' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
 #'
+#' Note: A path can be added only once. Subsequent additions of the same path are ignored.
+#'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added
 #' @param recursive Whether to add files recursively from the path. Default is FALSE.
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.addFile("~/myfile")
@@ -294,14 +342,19 @@ spark.addFile <- function(path, recursive = FALSE) {
 #'
 #' @rdname spark.getSparkFilesRootDirectory
 #' @return the root directory that contains files added through spark.addFile
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFilesRootDirectory()
 #'}
 #' @note spark.getSparkFilesRootDirectory since 2.1.0
-spark.getSparkFilesRootDirectory <- function() {
-  callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+spark.getSparkFilesRootDirectory <- function() { # nolint
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+  } else {
+    # Running on worker.
+    Sys.getenv("SPARKR_SPARKFILES_ROOT_DIR")
+  }
 }
 
 #' Get the absolute path of a file added through spark.addFile.
@@ -309,14 +362,19 @@ spark.getSparkFilesRootDirectory <- function() {
 #' @rdname spark.getSparkFiles
 #' @param fileName The name of the file added through spark.addFile
 #' @return the absolute path of a file added through spark.addFile.
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFiles("myfile")
 #'}
 #' @note spark.getSparkFiles since 2.1.0
 spark.getSparkFiles <- function(fileName) {
-  callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  } else {
+    # Running on worker.
+    file.path(spark.getSparkFilesRootDirectory(), as.character(fileName))
+  }
 }
 
 #' Run a function over a list of elements, distributing the computations with Spark
@@ -350,7 +408,6 @@ spark.getSparkFiles <- function(fileName) {
 #' @param list the list of elements
 #' @param func a function that takes one argument.
 #' @return a list of results (the exact type being determined by the function)
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -371,7 +428,6 @@ spark.lapply <- function(list, func) {
 #'
 #' @rdname setLogLevel
 #' @param level New log level
-#' @export
 #' @examples
 #'\dontrun{
 #' setLogLevel("ERROR")
@@ -379,5 +435,23 @@ spark.lapply <- function(list, func) {
 #' @note setLogLevel since 2.0.0
 setLogLevel <- function(level) {
   sc <- getSparkContext()
-  callJMethod(sc, "setLogLevel", level)
+  invisible(callJMethod(sc, "setLogLevel", level))
+}
+
+#' Set checkpoint directory
+#'
+#' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be
+#' a HDFS path if running on a cluster.
+#'
+#' @rdname setCheckpointDir
+#' @param directory Directory path to checkpoint to
+#' @seealso \link{checkpoint}
+#' @examples
+#'\dontrun{
+#' setCheckpointDir("/checkpoint")
+#'}
+#' @note setCheckpointDir since 2.2.0
+setCheckpointDir <- function(directory) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(directory))))
 }

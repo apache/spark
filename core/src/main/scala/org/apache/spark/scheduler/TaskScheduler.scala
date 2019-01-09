@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AccumulatorV2
@@ -51,8 +52,21 @@ private[spark] trait TaskScheduler {
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit
 
-  // Cancel a stage.
+  // Kill all the tasks in a stage and fail the stage and all the jobs that depend on the stage.
+  // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
   def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
+
+  /**
+   * Kills a task attempt.
+   * Throw UnsupportedOperationException if the backend doesn't support kill a task.
+   *
+   * @return Whether the task was successfully killed.
+   */
+  def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean
+
+  // Kill all the running task attempts in a stage.
+  // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
+  def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String): Unit
 
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
@@ -61,14 +75,15 @@ private[spark] trait TaskScheduler {
   def defaultParallelism(): Int
 
   /**
-   * Update metrics for in-progress tasks and let the master know that the BlockManager is still
-   * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
-   * indicating that the block manager should re-register.
+   * Update metrics for in-progress tasks and executor metrics, and let the master know that the
+   * BlockManager is still alive. Return true if the driver knows about the given block manager.
+   * Otherwise, return false, indicating that the block manager should re-register.
    */
   def executorHeartbeatReceived(
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
-      blockManagerId: BlockManagerId): Boolean
+      blockManagerId: BlockManagerId,
+      executorUpdates: ExecutorMetrics): Boolean
 
   /**
    * Get an application ID associated with the job.
@@ -81,6 +96,11 @@ private[spark] trait TaskScheduler {
    * Process a lost executor
    */
   def executorLost(executorId: String, reason: ExecutorLossReason): Unit
+
+  /**
+   * Process a removed worker
+   */
+  def workerRemoved(workerId: String, host: String, message: String): Unit
 
   /**
    * Get an application's attempt ID associated with the job.

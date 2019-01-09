@@ -30,7 +30,7 @@ import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
-import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClient}
 import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark.internal.Logging
@@ -40,11 +40,10 @@ import org.apache.spark.internal.Logging
  *
  * PLEASE KEEP THIS FILE UNDER src/main AS PYTHON TESTS NEED ACCESS TO THIS FILE!
  */
-private[kinesis] class KinesisTestUtils extends Logging {
+private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Logging {
 
   val endpointUrl = KinesisTestUtils.endpointUrl
-  val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
-  val streamShardCount = 2
+  val regionName = KinesisTestUtils.getRegionNameByEndpoint(endpointUrl)
 
   private val createStreamTimeoutSeconds = 300
   private val describeStreamPollTimeSeconds = 1
@@ -88,13 +87,38 @@ private[kinesis] class KinesisTestUtils extends Logging {
     logInfo(s"Creating stream ${_streamName}")
     val createStreamRequest = new CreateStreamRequest()
     createStreamRequest.setStreamName(_streamName)
-    createStreamRequest.setShardCount(2)
+    createStreamRequest.setShardCount(streamShardCount)
     kinesisClient.createStream(createStreamRequest)
 
     // The stream is now being created. Wait for it to become active.
     waitForStreamToBeActive(_streamName)
     streamCreated = true
     logInfo(s"Created stream ${_streamName}")
+  }
+
+  def getShards(): Seq[Shard] = {
+    kinesisClient.describeStream(_streamName).getStreamDescription.getShards.asScala
+  }
+
+  def splitShard(shardId: String): Unit = {
+    val splitShardRequest = new SplitShardRequest()
+    splitShardRequest.withStreamName(_streamName)
+    splitShardRequest.withShardToSplit(shardId)
+    // Set a half of the max hash value
+    splitShardRequest.withNewStartingHashKey("170141183460469231731687303715884105728")
+    kinesisClient.splitShard(splitShardRequest)
+    // Wait for the shards to become active
+    waitForStreamToBeActive(_streamName)
+  }
+
+  def mergeShard(shardToMerge: String, adjacentShardToMerge: String): Unit = {
+    val mergeShardRequest = new MergeShardsRequest
+    mergeShardRequest.withStreamName(_streamName)
+    mergeShardRequest.withShardToMerge(shardToMerge)
+    mergeShardRequest.withAdjacentShardToMerge(adjacentShardToMerge)
+    kinesisClient.mergeShards(mergeShardRequest)
+    // Wait for the shards to become active
+    waitForStreamToBeActive(_streamName)
   }
 
   /**
@@ -180,6 +204,16 @@ private[kinesis] object KinesisTestUtils {
   val envVarNameForEnablingTests = "ENABLE_KINESIS_TESTS"
   val endVarNameForEndpoint = "KINESIS_TEST_ENDPOINT_URL"
   val defaultEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+
+  def getRegionNameByEndpoint(endpoint: String): String = {
+    val uri = new java.net.URI(endpoint)
+    RegionUtils.getRegionsForService(AmazonKinesis.ENDPOINT_PREFIX)
+      .asScala
+      .find(_.getAvailableEndpoints.asScala.toSeq.contains(uri.getHost))
+      .map(_.getName)
+      .getOrElse(
+        throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
+  }
 
   lazy val shouldRunTests = {
     val isEnvSet = sys.env.get(envVarNameForEnablingTests) == Some("1")

@@ -17,40 +17,53 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{Date, Timestamp, Types}
+import java.util.TimeZone
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
 private case object OracleDialect extends JdbcDialect {
+  private[jdbc] val BINARY_FLOAT = 100
+  private[jdbc] val BINARY_DOUBLE = 101
+  private[jdbc] val TIMESTAMPTZ = -101
 
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
 
+  private def supportTimeZoneTypes: Boolean = {
+    val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
+    // TODO: support timezone types when users are not using the JVM timezone, which
+    // is the default value of SESSION_LOCAL_TIMEZONE
+    timeZone == TimeZone.getDefault
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.NUMERIC) {
-      val scale = if (null != md) md.build().getLong("scale") else 0L
-      size match {
-        // Handle NUMBER fields that have no precision/scale in special way
-        // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
-        // For more details, please see
-        // https://github.com/apache/spark/pull/8780#issuecomment-145598968
-        // and
-        // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-        case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-        // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
-        // this to NUMERIC with -127 scale
-        // Not sure if there is a more robust way to identify the field as a float (or other
-        // numeric types that do not specify a scale.
-        case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-        case 1 => Option(BooleanType)
-        case 3 | 5 | 10 => Option(IntegerType)
-        case 19 if scale == 0L => Option(LongType)
-        case 19 if scale == 4L => Option(FloatType)
-        case _ => None
-      }
-    } else {
-      None
+    sqlType match {
+      case Types.NUMERIC =>
+        val scale = if (null != md) md.build().getLong("scale") else 0L
+        size match {
+          // Handle NUMBER fields that have no precision/scale in special way
+          // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
+          // For more details, please see
+          // https://github.com/apache/spark/pull/8780#issuecomment-145598968
+          // and
+          // https://github.com/apache/spark/pull/8780#issuecomment-144541760
+          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
+          // this to NUMERIC with -127 scale
+          // Not sure if there is a more robust way to identify the field as a float (or other
+          // numeric types that do not specify a scale.
+          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case _ => None
+        }
+      case TIMESTAMPTZ if supportTimeZoneTypes
+        => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
+      case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
+      case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
+      case _ => None
     }
   }
 
@@ -68,5 +81,34 @@ private case object OracleDialect extends JdbcDialect {
     case _ => None
   }
 
+  override def compileValue(value: Any): Any = value match {
+    // The JDBC drivers support date literals in SQL statements written in the
+    // format: {d 'yyyy-mm-dd'} and timestamp literals in SQL statements written
+    // in the format: {ts 'yyyy-mm-dd hh:mm:ss.f...'}. For details, see
+    // 'Oracle Database JDBC Developer’s Guide and Reference, 11g Release 1 (11.1)'
+    // Appendix A Reference Information.
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    case dateValue: Date => "{d '" + dateValue + "'}"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  /**
+   * The SQL query used to truncate a table.
+   * @param table The table to truncate
+   * @param cascade Whether or not to cascade the truncation. Default value is the
+   *                value of isCascadingTruncateTable()
+   * @return The SQL query to use for truncating a table
+   */
+  override def getTruncateQuery(
+      table: String,
+      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade match {
+      case Some(true) => s"TRUNCATE TABLE $table CASCADE"
+      case _ => s"TRUNCATE TABLE $table"
+    }
+  }
 }

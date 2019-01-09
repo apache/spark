@@ -90,8 +90,8 @@ class SparkConf(object):
     All setter methods in this class support chaining. For example,
     you can write C{conf.setMaster("local").setAppName("My app")}.
 
-    Note that once a SparkConf object is passed to Spark, it is cloned
-    and can no longer be modified by the user.
+    .. note:: Once a SparkConf object is passed to Spark, it is cloned
+        and can no longer be modified by the user.
     """
 
     def __init__(self, loadDefaults=True, _jvm=None, _jconf=None):
@@ -217,7 +217,7 @@ def _test():
     import doctest
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

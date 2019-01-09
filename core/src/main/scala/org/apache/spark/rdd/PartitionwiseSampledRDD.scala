@@ -22,8 +22,8 @@ import java.util.Random
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.util.random.RandomSampler
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.RandomSampler
 
 private[spark]
 class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
@@ -32,7 +32,7 @@ class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
 }
 
 /**
- * A RDD sampled from its parent RDD partition-wise. For each partition of the parent RDD,
+ * An RDD sampled from its parent RDD partition-wise. For each partition of the parent RDD,
  * a user-specified [[org.apache.spark.util.random.RandomSampler]] instance is used to obtain
  * a random sample of the records in the partition. The random seeds assigned to the samplers
  * are guaranteed to have different values.

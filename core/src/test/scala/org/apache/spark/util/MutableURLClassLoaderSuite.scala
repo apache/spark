@@ -22,7 +22,6 @@ import java.net.URLClassLoader
 import scala.collection.JavaConverters._
 
 import org.scalatest.Matchers
-import org.scalatest.Matchers._
 
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TestUtils}
 
@@ -46,37 +45,45 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ChildFirstURLClassLoader(urls, parentLoader)
-    val fakeClass = classLoader.loadClass("FakeClass2").newInstance()
+    val fakeClass = classLoader.loadClass("FakeClass2").getConstructor().newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "1")
-    val fakeClass2 = classLoader.loadClass("FakeClass2").newInstance()
+    val fakeClass2 = classLoader.loadClass("FakeClass2").getConstructor().newInstance()
     assert(fakeClass.getClass === fakeClass2.getClass)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("parent first") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new MutableURLClassLoader(urls, parentLoader)
-    val fakeClass = classLoader.loadClass("FakeClass1").newInstance()
+    val fakeClass = classLoader.loadClass("FakeClass1").getConstructor().newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
-    val fakeClass2 = classLoader.loadClass("FakeClass1").newInstance()
+    val fakeClass2 = classLoader.loadClass("FakeClass1").getConstructor().newInstance()
     assert(fakeClass.getClass === fakeClass2.getClass)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("child first can fall back") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ChildFirstURLClassLoader(urls, parentLoader)
-    val fakeClass = classLoader.loadClass("FakeClass3").newInstance()
+    val fakeClass = classLoader.loadClass("FakeClass3").getConstructor().newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("child first can fail") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ChildFirstURLClassLoader(urls, parentLoader)
     intercept[java.lang.ClassNotFoundException] {
-      classLoader.loadClass("FakeClassDoesNotExist").newInstance()
+      classLoader.loadClass("FakeClassDoesNotExist").getConstructor().newInstance()
     }
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("default JDK classloader get resources") {
@@ -84,6 +91,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     val classLoader = new URLClassLoader(fileUrlsChild, parentLoader)
     assert(classLoader.getResources("resource1").asScala.size === 2)
     assert(classLoader.getResources("resource2").asScala.size === 1)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("parent first get resources") {
@@ -91,6 +100,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     val classLoader = new MutableURLClassLoader(fileUrlsChild, parentLoader)
     assert(classLoader.getResources("resource1").asScala.size === 2)
     assert(classLoader.getResources("resource2").asScala.size === 1)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("child first get resources") {
@@ -103,6 +114,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
     res1.map(scala.io.Source.fromURL(_).mkString) should contain inOrderOnly
       ("resource1Contents-child", "resource1Contents-parent")
+    classLoader.close()
+    parentLoader.close()
   }
 
 
@@ -123,7 +136,7 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
       sc.makeRDD(1 to 5, 2).mapPartitions { x =>
         val loader = Thread.currentThread().getContextClassLoader
         // scalastyle:off classforname
-        Class.forName(className, true, loader).newInstance()
+        Class.forName(className, true, loader).getConstructor().newInstance()
         // scalastyle:on classforname
         Seq().iterator
       }.count()

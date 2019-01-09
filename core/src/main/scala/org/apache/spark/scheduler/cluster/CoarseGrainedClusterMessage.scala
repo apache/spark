@@ -28,14 +28,23 @@ private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
 
-  case object RetrieveSparkProps extends CoarseGrainedClusterMessage
+  case object RetrieveSparkAppConfig extends CoarseGrainedClusterMessage
+
+  case class SparkAppConfig(
+      sparkProperties: Seq[(String, String)],
+      ioEncryptionKey: Option[Array[Byte]],
+      hadoopDelegationCreds: Option[Array[Byte]])
+    extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
 
   // Driver to executors
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
-  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
+  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean, reason: String)
+    extends CoarseGrainedClusterMessage
+
+  case class KillExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
 
   sealed trait RegisterExecutorResponse
@@ -44,6 +53,9 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
     with RegisterExecutorResponse
+
+  case class UpdateDelegationTokens(tokens: Array[Byte])
+    extends CoarseGrainedClusterMessage
 
   // Executors to driver
   case class RegisterExecutor(
@@ -77,6 +89,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
     extends CoarseGrainedClusterMessage
 
+  case class RemoveWorker(workerId: String, host: String, message: String)
+    extends CoarseGrainedClusterMessage
+
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
   // Exchanged between the driver and the AM in Yarn client mode
@@ -89,12 +104,16 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
+  // Used by YARN's client mode AM to retrieve the current set of delegation tokens.
+  object RetrieveDelegationTokens extends CoarseGrainedClusterMessage
+
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running
   case class RequestExecutors(
       requestedTotal: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int])
+      hostToLocalTaskCount: Map[String, Int],
+      nodeBlacklist: Set[String])
     extends CoarseGrainedClusterMessage
 
   // Check if an executor was force-killed but for a reason unrelated to the running tasks.

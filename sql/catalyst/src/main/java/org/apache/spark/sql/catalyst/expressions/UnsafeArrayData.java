@@ -55,7 +55,17 @@ import org.apache.spark.unsafe.types.UTF8String;
 public final class UnsafeArrayData extends ArrayData {
 
   public static int calculateHeaderPortionInBytes(int numFields) {
+    return (int)calculateHeaderPortionInBytes((long)numFields);
+  }
+
+  public static long calculateHeaderPortionInBytes(long numFields) {
     return 8 + ((numFields + 63)/ 64) * 8;
+  }
+
+  public static long calculateSizeOfUnderlyingByteArray(long numFields, int elementSize) {
+    long size = UnsafeArrayData.calculateHeaderPortionInBytes(numFields) +
+      ByteArrayMethods.roundNumberOfBytesToNearestWord(numFields * elementSize);
+    return size;
   }
 
   private Object baseObject;
@@ -72,7 +82,7 @@ public final class UnsafeArrayData extends ArrayData {
   private long elementOffset;
 
   private long getElementOffset(int ordinal, int elementSize) {
-    return elementOffset + ordinal * elementSize;
+    return elementOffset + ordinal * (long)elementSize;
   }
 
   public Object getBaseObject() { return baseObject; }
@@ -109,7 +119,8 @@ public final class UnsafeArrayData extends ArrayData {
     // Read the number of elements from the first 8 bytes.
     final long numElements = Platform.getLong(baseObject, baseOffset);
     assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
-    assert numElements <= Integer.MAX_VALUE : "numElements (" + numElements + ") should <= Integer.MAX_VALUE";
+    assert numElements <= Integer.MAX_VALUE :
+      "numElements (" + numElements + ") should <= Integer.MAX_VALUE";
 
     this.numElements = (int)numElements;
     this.baseObject = baseObject;
@@ -286,6 +297,52 @@ public final class UnsafeArrayData extends ArrayData {
     return map;
   }
 
+  @Override
+  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+
+  public void setNullAt(int ordinal) {
+    assertIndexIsValid(ordinal);
+    BitSetMethods.set(baseObject, baseOffset + 8, ordinal);
+
+    /* we assume the corresponding column was already 0 or
+       will be set to 0 later by the caller side */
+  }
+
+  public void setBoolean(int ordinal, boolean value) {
+    assertIndexIsValid(ordinal);
+    Platform.putBoolean(baseObject, getElementOffset(ordinal, 1), value);
+  }
+
+  public void setByte(int ordinal, byte value) {
+    assertIndexIsValid(ordinal);
+    Platform.putByte(baseObject, getElementOffset(ordinal, 1), value);
+  }
+
+  public void setShort(int ordinal, short value) {
+    assertIndexIsValid(ordinal);
+    Platform.putShort(baseObject, getElementOffset(ordinal, 2), value);
+  }
+
+  public void setInt(int ordinal, int value) {
+    assertIndexIsValid(ordinal);
+    Platform.putInt(baseObject, getElementOffset(ordinal, 4), value);
+  }
+
+  public void setLong(int ordinal, long value) {
+    assertIndexIsValid(ordinal);
+    Platform.putLong(baseObject, getElementOffset(ordinal, 8), value);
+  }
+
+  public void setFloat(int ordinal, float value) {
+    assertIndexIsValid(ordinal);
+    Platform.putFloat(baseObject, getElementOffset(ordinal, 4), value);
+  }
+
+  public void setDouble(int ordinal, double value) {
+    assertIndexIsValid(ordinal);
+    Platform.putDouble(baseObject, getElementOffset(ordinal, 8), value);
+  }
+
   // This `hashCode` computation could consume much processor time for large data.
   // If the computation becomes a bottleneck, we can use a light-weight logic; the first fixed bytes
   // are used to compute `hashCode` (See `Vector.hashCode`).
@@ -349,7 +406,7 @@ public final class UnsafeArrayData extends ArrayData {
   public short[] toShortArray() {
     short[] values = new short[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2);
+      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2L);
     return values;
   }
 
@@ -357,7 +414,7 @@ public final class UnsafeArrayData extends ArrayData {
   public int[] toIntArray() {
     int[] values = new int[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4);
+      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4L);
     return values;
   }
 
@@ -365,7 +422,7 @@ public final class UnsafeArrayData extends ArrayData {
   public long[] toLongArray() {
     long[] values = new long[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8);
+      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8L);
     return values;
   }
 
@@ -373,7 +430,7 @@ public final class UnsafeArrayData extends ArrayData {
   public float[] toFloatArray() {
     float[] values = new float[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4);
+      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4L);
     return values;
   }
 
@@ -381,14 +438,14 @@ public final class UnsafeArrayData extends ArrayData {
   public double[] toDoubleArray() {
     double[] values = new double[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8);
+      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8L);
     return values;
   }
 
-  private static UnsafeArrayData fromPrimitiveArray(
+  public static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
-    final long valueRegionInBytes = elementSize * length;
+    final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
@@ -398,12 +455,39 @@ public final class UnsafeArrayData extends ArrayData {
     final long[] data = new long[(int)totalSizeInLongs];
 
     Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
-    Platform.copyMemory(arr, offset, data,
-      Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    if (arr != null) {
+      Platform.copyMemory(arr, offset, data,
+        Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    }
 
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
     return result;
+  }
+
+  public static UnsafeArrayData createFreshArray(int length, int elementSize) {
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = (long)elementSize * length;
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final long[] data = new long[(int)totalSizeInLongs];
+
+    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
+    return result;
+  }
+
+  public static boolean shouldUseGenericArrayData(int elementSize, long length) {
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = elementSize * length;
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    return totalSizeInLongs > Integer.MAX_VALUE / 8;
   }
 
   public static UnsafeArrayData fromPrimitiveArray(boolean[] arr) {

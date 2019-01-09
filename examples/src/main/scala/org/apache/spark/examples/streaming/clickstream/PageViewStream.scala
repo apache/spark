@@ -104,8 +104,8 @@ object PageViewStream {
           .foreachRDD((rdd, time) => rdd.join(userList)
             .map(_._2._2)
             .take(10)
-            .foreach(u => println("Saw user %s at time %s".format(u, time))))
-      case _ => println("Invalid metric entered: " + metric)
+            .foreach(u => println(s"Saw user $u at time $time")))
+      case _ => println(s"Invalid metric entered: $metric")
     }
 
     ssc.start()

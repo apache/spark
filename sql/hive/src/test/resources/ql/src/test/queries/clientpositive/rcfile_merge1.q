@@ -1,6 +1,6 @@
 set hive.merge.rcfile.block.level=false;
 set hive.exec.dynamic.partition=true;
-set mapred.max.split.size=100;
+set mapreduce.input.fileinputformat.split.maxsize=100;
 set mapref.min.split.size=1;
 
 DROP TABLE rcfile_merge1;

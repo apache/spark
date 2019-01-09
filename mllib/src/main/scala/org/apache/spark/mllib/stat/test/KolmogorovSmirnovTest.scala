@@ -31,7 +31,8 @@ import org.apache.spark.rdd.RDD
  * distribution of the sample data and the theoretical distribution we can provide a test for the
  * the null hypothesis that the sample data comes from that theoretical distribution.
  * For more information on KS Test:
- * @see [[https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test]]
+ * @see <a href="https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test">
+ * Kolmogorov-Smirnov test (Wikipedia)</a>
  *
  * Implementation note: We seek to implement the KS test with a minimal number of distributed
  * passes. We sort the RDD, and then perform the following operations on a per-partition basis:

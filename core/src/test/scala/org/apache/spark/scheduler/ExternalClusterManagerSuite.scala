@@ -18,14 +18,14 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AccumulatorV2
 
 class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
   test("launch of backend and scheduler") {
-    val conf = new SparkConf().setMaster("myclusterManager").
-        setAppName("testcm").set("spark.driver.allowMultipleContexts", "true")
+    val conf = new SparkConf().setMaster("myclusterManager").setAppName("testcm")
     sc = new SparkContext(conf)
     // check if the scheduler components are created and initialized
     sc.schedulerBackend match {
@@ -69,22 +69,29 @@ private class DummySchedulerBackend extends SchedulerBackend {
   def stop() {}
   def reviveOffers() {}
   def defaultParallelism(): Int = 1
+  def maxNumConcurrentTasks(): Int = 0
 }
 
 private class DummyTaskScheduler extends TaskScheduler {
   var initialized = false
-  override def rootPool: Pool = null
-  override def schedulingMode: SchedulingMode = SchedulingMode.NONE
+  override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
+  override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
   override def start(): Unit = {}
   override def stop(): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {}
+  override def killTaskAttempt(
+    taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
+  override def killAllTaskAttempts(
+    stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+  override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   override def applicationAttemptId(): Option[String] = None
   def executorHeartbeatReceived(
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
-      blockManagerId: BlockManagerId): Boolean = true
+      blockManagerId: BlockManagerId,
+      executorMetrics: ExecutorMetrics): Boolean = true
 }

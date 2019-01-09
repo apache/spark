@@ -22,8 +22,6 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -41,7 +39,8 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     val driverId = Option(request.getParameter("driverId"))
     val logType = request.getParameter("logType")
     val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
+    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val logDir = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
@@ -63,7 +62,8 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     val driverId = Option(request.getParameter("driverId"))
     val logType = request.getParameter("logType")
     val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
+    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val (logDir, params, pageName) = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
@@ -114,7 +114,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
         <script>{Unparsed(jsOnload)}</script>
       </div>
 
-    UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
+    UIUtils.basicSparkPage(request, content, logType + " log page for " + pageName)
   }
 
   /** Get the part of the log files given the offset and desired length of bytes */

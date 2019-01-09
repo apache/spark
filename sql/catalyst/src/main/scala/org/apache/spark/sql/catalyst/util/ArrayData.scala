@@ -19,8 +19,49 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
+
+object ArrayData {
+  def toArrayData(input: Any): ArrayData = input match {
+    case a: Array[Boolean] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Byte] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Short] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Int] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Long] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Float] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Double] => UnsafeArrayData.fromPrimitiveArray(a)
+    case other => new GenericArrayData(other)
+  }
+
+
+  /**
+   * Allocate [[UnsafeArrayData]] or [[GenericArrayData]] based on given parameters.
+   *
+   * @param elementSize a size of an element in bytes. If less than zero, the type of an element is
+   *                    non-primitive type
+   * @param numElements the number of elements the array should contain
+   * @param additionalErrorMessage string to include in the error message
+   */
+  def allocateArrayData(
+      elementSize: Int,
+      numElements: Long,
+      additionalErrorMessage: String): ArrayData = {
+    if (elementSize >= 0 && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
+      UnsafeArrayData.createFreshArray(numElements.toInt, elementSize)
+    } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
+      new GenericArrayData(new Array[Any](numElements.toInt))
+    } else {
+      throw new RuntimeException(s"Cannot create array with $numElements " +
+        "elements of data due to exceeding the limit " +
+        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData. " +
+        additionalErrorMessage)
+    }
+  }
+}
 
 abstract class ArrayData extends SpecializedGetters with Serializable {
   def numElements(): Int
@@ -28,6 +69,22 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
   def copy(): ArrayData
 
   def array: Array[Any]
+
+  def toSeq[T](dataType: DataType): IndexedSeq[T] =
+    new ArrayDataIndexedSeq[T](this, dataType)
+
+  def setNullAt(i: Int): Unit
+
+  def update(i: Int, value: Any): Unit
+
+  // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = update(i, value)
+  def setByte(i: Int, value: Byte): Unit = update(i, value)
+  def setShort(i: Int, value: Short): Unit = update(i, value)
+  def setInt(i: Int, value: Int): Unit = update(i, value)
+  def setLong(i: Int, value: Long): Unit = update(i, value)
+  def setFloat(i: Int, value: Float): Unit = update(i, value)
+  def setDouble(i: Int, value: Double): Unit = update(i, value)
 
   def toBooleanArray(): Array[Boolean] = {
     val size = numElements()
@@ -111,30 +168,43 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
 
   def toArray[T: ClassTag](elementType: DataType): Array[T] = {
     val size = numElements()
+    val accessor = InternalRow.getAccessor(elementType)
     val values = new Array[T](size)
     var i = 0
     while (i < size) {
-      if (isNullAt(i)) {
-        values(i) = null.asInstanceOf[T]
-      } else {
-        values(i) = get(i, elementType).asInstanceOf[T]
-      }
+      values(i) = accessor(this, i).asInstanceOf[T]
       i += 1
     }
     values
   }
 
-  // todo: specialize this.
   def foreach(elementType: DataType, f: (Int, Any) => Unit): Unit = {
     val size = numElements()
+    val accessor = InternalRow.getAccessor(elementType)
     var i = 0
     while (i < size) {
-      if (isNullAt(i)) {
-        f(i, null)
-      } else {
-        f(i, get(i, elementType))
-      }
+      f(i, accessor(this, i))
       i += 1
     }
   }
+}
+
+/**
+ * Implements an `IndexedSeq` interface for `ArrayData`. Notice that if the original `ArrayData`
+ * is a primitive array and contains null elements, it is better to ask for `IndexedSeq[Any]`,
+ * instead of `IndexedSeq[Int]`, in order to keep the null elements.
+ */
+class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends IndexedSeq[T] {
+
+  private val accessor: (SpecializedGetters, Int) => Any = InternalRow.getAccessor(dataType)
+
+  override def apply(idx: Int): T =
+    if (0 <= idx && idx < arrayData.numElements()) {
+      accessor(arrayData, idx).asInstanceOf[T]
+    } else {
+      throw new IndexOutOfBoundsException(
+        s"Index $idx must be between 0 and the length of the ArrayData.")
+    }
+
+  override def length: Int = arrayData.numElements()
 }

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
  * Functions for attaching and retrieving trees that are associated with errors.

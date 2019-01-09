@@ -52,7 +52,7 @@ object SynthBenchmark {
       arg =>
         arg.dropWhile(_ == '-').split('=') match {
           case Array(opt, v) => (opt -> v)
-          case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
+          case _ => throw new IllegalArgumentException(s"Invalid argument: $arg")
         }
     }
 
@@ -76,7 +76,7 @@ object SynthBenchmark {
       case ("sigma", v) => sigma = v.toDouble
       case ("degFile", v) => degFile = v
       case ("seed", v) => seed = v.toInt
-      case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
+      case (opt, _) => throw new IllegalArgumentException(s"Invalid option: $opt")
     }
 
     val conf = new SparkConf()
@@ -86,7 +86,7 @@ object SynthBenchmark {
     val sc = new SparkContext(conf)
 
     // Create the graph
-    println(s"Creating graph...")
+    println("Creating graph...")
     val unpartitionedGraph = GraphGenerators.logNormalGraph(sc, numVertices,
       numEPart.getOrElse(sc.defaultParallelism), mu, sigma, seed)
     // Repartition the graph

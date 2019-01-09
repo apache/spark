@@ -3,8 +3,8 @@ create table orc_split_elim (userid bigint, string1 string, subtype double, deci
 load data local inpath '../../data/files/orc_split_elim.orc' into table orc_split_elim;
 
 SET hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
-SET mapred.min.split.size=1000;
-SET mapred.max.split.size=5000;
+SET mapreduce.input.fileinputformat.split.minsize=1000;
+SET mapreduce.input.fileinputformat.split.maxsize=5000;
 SET hive.optimize.index.filter=false;
 
 -- The above table will have 5 splits with the followings stats

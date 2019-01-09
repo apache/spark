@@ -18,9 +18,11 @@
 package org.apache.spark.io
 
 import java.io._
+import java.util.Locale
 
+import com.github.luben.zstd.{ZstdInputStream, ZstdOutputStream}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-import net.jpountz.lz4.LZ4BlockOutputStream
+import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
@@ -32,9 +34,8 @@ import org.apache.spark.util.Utils
  * CompressionCodec allows the customization of choosing different compression implementations
  * to be used in block storage.
  *
- * Note: The wire protocol for a codec is not guaranteed compatible across versions of Spark.
- *       This is intended for use as an internal compression utility within a single
- *       Spark application.
+ * @note The wire protocol for a codec is not guaranteed compatible across versions of Spark.
+ * This is intended for use as an internal compression utility within a single Spark application.
  */
 @DeveloperApi
 trait CompressionCodec {
@@ -42,6 +43,10 @@ trait CompressionCodec {
   def compressedOutputStream(s: OutputStream): OutputStream
 
   def compressedInputStream(s: InputStream): InputStream
+
+  private[spark] def compressedContinuousInputStream(s: InputStream): InputStream = {
+    compressedInputStream(s)
+  }
 }
 
 private[spark] object CompressionCodec {
@@ -50,13 +55,14 @@ private[spark] object CompressionCodec {
 
   private[spark] def supportsConcatenationOfSerializedStreams(codec: CompressionCodec): Boolean = {
     (codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
-      || codec.isInstanceOf[LZ4CompressionCodec])
+      || codec.isInstanceOf[LZ4CompressionCodec] || codec.isInstanceOf[ZStdCompressionCodec])
   }
 
   private val shortCompressionCodecNames = Map(
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
-    "snappy" -> classOf[SnappyCompressionCodec].getName)
+    "snappy" -> classOf[SnappyCompressionCodec].getName,
+    "zstd" -> classOf[ZStdCompressionCodec].getName)
 
   def getCodecName(conf: SparkConf): String = {
     conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
@@ -67,13 +73,13 @@ private[spark] object CompressionCodec {
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
+    val codecClass =
+      shortCompressionCodecNames.getOrElse(codecName.toLowerCase(Locale.ROOT), codecName)
     val codec = try {
       val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
       Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
     } catch {
-      case e: ClassNotFoundException => None
-      case e: IllegalArgumentException => None
+      case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
     codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
       s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
@@ -103,9 +109,9 @@ private[spark] object CompressionCodec {
  * LZ4 implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by `spark.io.compression.lz4.blockSize`.
  *
- * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
- *       of Spark. This is intended for use as an internal compression utility within a single Spark
- *       application.
+ * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+ * of Spark. This is intended for use as an internal compression utility within a single Spark
+ * application.
  */
 @DeveloperApi
 class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
@@ -115,7 +121,10 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
     new LZ4BlockOutputStream(s, blockSize)
   }
 
-  override def compressedInputStream(s: InputStream): InputStream = new LZ4BlockInputStream(s)
+  override def compressedInputStream(s: InputStream): InputStream = {
+    val disableConcatenationOfByteStream = false
+    new LZ4BlockInputStream(s, disableConcatenationOfByteStream)
+  }
 }
 
 
@@ -123,9 +132,9 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
  * :: DeveloperApi ::
  * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
  *
- * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
- *       of Spark. This is intended for use as an internal compression utility within a single Spark
- *       application.
+ * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+ * of Spark. This is intended for use as an internal compression utility within a single Spark
+ * application.
  */
 @DeveloperApi
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
@@ -143,76 +152,61 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by `spark.io.compression.snappy.blockSize`.
  *
- * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
- *       of Spark. This is intended for use as an internal compression utility within a single Spark
- *       application.
+ * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+ * of Spark. This is intended for use as an internal compression utility within a single Spark
+ * application.
  */
 @DeveloperApi
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
-  val version = SnappyCompressionCodec.version
+
+  try {
+    Snappy.getNativeLibraryVersion
+  } catch {
+    case e: Error => throw new IllegalArgumentException(e)
+  }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = conf.getSizeAsBytes("spark.io.compression.snappy.blockSize", "32k").toInt
-    new SnappyOutputStreamWrapper(new SnappyOutputStream(s, blockSize))
+    new SnappyOutputStream(s, blockSize)
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
 }
 
 /**
- * Object guards against memory leak bug in snappy-java library:
- * (https://github.com/xerial/snappy-java/issues/131).
- * Before a new version of the library, we only call the method once and cache the result.
+ * :: DeveloperApi ::
+ * ZStandard implementation of [[org.apache.spark.io.CompressionCodec]]. For more
+ * details see - http://facebook.github.io/zstd/
+ *
+ * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+ * of Spark. This is intended for use as an internal compression utility within a single Spark
+ * application.
  */
-private final object SnappyCompressionCodec {
-  private lazy val version: String = try {
-    Snappy.getNativeLibraryVersion
-  } catch {
-    case e: Error => throw new IllegalArgumentException(e)
-  }
-}
+@DeveloperApi
+class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
-/**
- * Wrapper over [[SnappyOutputStream]] which guards against write-after-close and double-close
- * issues. See SPARK-7660 for more details. This wrapping can be removed if we upgrade to a version
- * of snappy-java that contains the fix for https://github.com/xerial/snappy-java/issues/107.
- */
-private final class SnappyOutputStreamWrapper(os: SnappyOutputStream) extends OutputStream {
+  private val bufferSize = conf.getSizeAsBytes("spark.io.compression.zstd.bufferSize", "32k").toInt
+  // Default compression level for zstd compression to 1 because it is
+  // fastest of all with reasonably high compression ratio.
+  private val level = conf.getInt("spark.io.compression.zstd.level", 1)
 
-  private[this] var closed: Boolean = false
-
-  override def write(b: Int): Unit = {
-    if (closed) {
-      throw new IOException("Stream is closed")
-    }
-    os.write(b)
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
+    // Wrap the zstd output stream in a buffered output stream, so that we can
+    // avoid overhead excessive of JNI call while trying to compress small amount of data.
+    new BufferedOutputStream(new ZstdOutputStream(s, level), bufferSize)
   }
 
-  override def write(b: Array[Byte]): Unit = {
-    if (closed) {
-      throw new IOException("Stream is closed")
-    }
-    os.write(b)
+  override def compressedInputStream(s: InputStream): InputStream = {
+    // Wrap the zstd input stream in a buffered input stream so that we can
+    // avoid overhead excessive of JNI call while trying to uncompress small amount of data.
+    new BufferedInputStream(new ZstdInputStream(s), bufferSize)
   }
 
-  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
-    if (closed) {
-      throw new IOException("Stream is closed")
-    }
-    os.write(b, off, len)
-  }
-
-  override def flush(): Unit = {
-    if (closed) {
-      throw new IOException("Stream is closed")
-    }
-    os.flush()
-  }
-
-  override def close(): Unit = {
-    if (!closed) {
-      closed = true
-      os.close()
-    }
+  override def compressedContinuousInputStream(s: InputStream): InputStream = {
+    // SPARK-26283: Enable reading from open frames of zstd (for eg: zstd compressed eventLog
+    // Reading). By default `isContinuous` is false, and when we try to read from open frames,
+    // `compressedInputStream` method above throws truncated error exception. This method set
+    // `isContinuous` true to allow reading from open frames.
+    new BufferedInputStream(new ZstdInputStream(s).setContinuous(true), bufferSize)
   }
 }

@@ -11,7 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -23,6 +23,7 @@ import javax.servlet.http.HttpServletResponse
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.internal.config
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -71,7 +72,7 @@ private[rest] class StandaloneKillRequestServlet(masterEndpoint: RpcEndpointRef,
   extends KillRequestServlet {
 
   protected def handleKill(submissionId: String): KillSubmissionResponse = {
-    val response = masterEndpoint.askWithRetry[DeployMessages.KillDriverResponse](
+    val response = masterEndpoint.askSync[DeployMessages.KillDriverResponse](
       DeployMessages.RequestKillDriver(submissionId))
     val k = new KillSubmissionResponse
     k.serverSparkVersion = sparkVersion
@@ -89,7 +90,7 @@ private[rest] class StandaloneStatusRequestServlet(masterEndpoint: RpcEndpointRe
   extends StatusRequestServlet {
 
   protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val response = masterEndpoint.askWithRetry[DeployMessages.DriverStatusResponse](
+    val response = masterEndpoint.askSync[DeployMessages.DriverStatusResponse](
       DeployMessages.RequestDriverStatus(submissionId))
     val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
     val d = new SubmissionStatusResponse
@@ -132,19 +133,31 @@ private[rest] class StandaloneSubmitRequestServlet(
 
     // Optional fields
     val sparkProperties = request.sparkProperties
-    val driverMemory = sparkProperties.get("spark.driver.memory")
-    val driverCores = sparkProperties.get("spark.driver.cores")
-    val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")
-    val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
-    val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
-    val superviseDriver = sparkProperties.get("spark.driver.supervise")
+    val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
+    val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
+    val driverExtraJavaOptions = sparkProperties.get(config.DRIVER_JAVA_OPTIONS.key)
+    val driverExtraClassPath = sparkProperties.get(config.DRIVER_CLASS_PATH.key)
+    val driverExtraLibraryPath = sparkProperties.get(config.DRIVER_LIBRARY_PATH.key)
+    val superviseDriver = sparkProperties.get(config.DRIVER_SUPERVISE.key)
+    // The semantics of "spark.master" and the masterUrl are different. While the
+    // property "spark.master" could contain all registered masters, masterUrl
+    // contains only the active master. To make sure a Spark driver can recover
+    // in a multi-master setup, we use the "spark.master" property while submitting
+    // the driver.
+    val masters = sparkProperties.get("spark.master")
+    val (_, masterPort) = Utils.extractHostPortFromSparkUrl(masterUrl)
+    val masterRestPort = this.conf.getInt("spark.master.rest.port", 6066)
+    val updatedMasters = masters.map(
+      _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = request.appArgs
-    val environmentVariables = request.environmentVariables
+    // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    val environmentVariables =
+      request.environmentVariables.filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
 
     // Construct driver description
     val conf = new SparkConf(false)
       .setAll(sparkProperties)
-      .set("spark.master", masterUrl)
+      .set("spark.master", updatedMasters)
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
@@ -174,7 +187,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
         val driverDescription = buildDriverDescription(submitRequest)
-        val response = masterEndpoint.askWithRetry[DeployMessages.SubmitDriverResponse](
+        val response = masterEndpoint.askSync[DeployMessages.SubmitDriverResponse](
           DeployMessages.RequestSubmitDriver(driverDescription))
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion

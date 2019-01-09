@@ -18,6 +18,8 @@
 package org.apache.spark.memory
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.BlockId
 
 /**
@@ -143,7 +145,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
     }
 
     executionPool.acquireMemory(
-      numBytes, taskAttemptId, maybeGrowExecutionPool, computeMaxExecutionPoolSize)
+      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
   }
 
   override def acquireStorageMemory(
@@ -160,7 +162,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       case MemoryMode.OFF_HEAP => (
         offHeapExecutionMemoryPool,
         offHeapStorageMemoryPool,
-        maxOffHeapMemory)
+        maxOffHeapStorageMemory)
     }
     if (numBytes > maxMemory) {
       // Fail fast if the block simply won't fit
@@ -171,7 +173,8 @@ private[spark] class UnifiedMemoryManager private[memory] (
     if (numBytes > storagePool.memoryFree) {
       // There is not enough free memory in the storage pool, so try to borrow free memory from
       // the execution pool.
-      val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree, numBytes)
+      val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree,
+        numBytes - storagePool.memoryFree)
       executionPool.decrementPoolSize(memoryBorrowedFromExecution)
       storagePool.incrementPoolSize(memoryBorrowedFromExecution)
     }
@@ -208,22 +211,22 @@ object UnifiedMemoryManager {
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
   private def getMaxMemory(conf: SparkConf): Long = {
-    val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
-    val reservedMemory = conf.getLong("spark.testing.reservedMemory",
-      if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
+    val systemMemory = conf.get(TEST_MEMORY)
+    val reservedMemory = conf.getLong(TEST_RESERVED_MEMORY.key,
+      if (conf.contains(IS_TESTING)) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
     val minSystemMemory = (reservedMemory * 1.5).ceil.toLong
     if (systemMemory < minSystemMemory) {
       throw new IllegalArgumentException(s"System memory $systemMemory must " +
         s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
-        s"option or spark.driver.memory in Spark configuration.")
+        s"option or ${config.DRIVER_MEMORY.key} in Spark configuration.")
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
-    if (conf.contains("spark.executor.memory")) {
-      val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
+    if (conf.contains(config.EXECUTOR_MEMORY)) {
+      val executorMemory = conf.getSizeAsBytes(config.EXECUTOR_MEMORY.key)
       if (executorMemory < minSystemMemory) {
         throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
           s"$minSystemMemory. Please increase executor memory using the " +
-          s"--executor-memory option or spark.executor.memory in Spark configuration.")
+          s"--executor-memory option or ${config.EXECUTOR_MEMORY.key} in Spark configuration.")
       }
     }
     val usableMemory = systemMemory - reservedMemory

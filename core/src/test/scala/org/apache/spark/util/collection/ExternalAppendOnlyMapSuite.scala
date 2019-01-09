@@ -18,12 +18,24 @@
 package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.language.postfixOps
+import scala.ref.WeakReference
+
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
+import org.apache.spark.util.CompletionIterator
 
-class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
+class ExternalAppendOnlyMapSuite extends SparkFunSuite
+  with LocalSparkContext
+  with Eventually
+  with Matchers{
   import TestUtils.{assertNotSpilled, assertSpilled}
 
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
@@ -52,7 +64,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     conf
   }
 
-  test("single insert insert") {
+  test("single insert") {
     val conf = createSparkConf(loadDefaults = false)
     sc = new SparkContext("local", "test", conf)
     val map = createExternalMap[Int]
@@ -230,14 +242,19 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("spilling with compression and encryption") {
+    testSimpleSpilling(Some(CompressionCodec.DEFAULT_COMPRESSION_CODEC), encrypt = true)
+  }
+
   /**
    * Test spilling through simple aggregations and cogroups.
    * If a compression codec is provided, use it. Otherwise, do not compress spills.
    */
-  private def testSimpleSpilling(codec: Option[String] = None): Unit = {
+  private def testSimpleSpilling(codec: Option[String] = None, encrypt: Boolean = false): Unit = {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true, codec)  // Load defaults for Spark home
     conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 4).toString)
+    conf.set(IO_ENCRYPTION_ENABLED, encrypt)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
     assertSpilled(sc, "reduceByKey") {
@@ -275,6 +292,17 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     }
 
     sc.stop()
+  }
+
+  test("ExternalAppendOnlyMap shouldn't fail when forced to spill before calling its iterator") {
+    val size = 1000
+    val conf = createSparkConf(loadDefaults = true)
+    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
+    val map = createExternalMap[String]
+    val consumer = createExternalMap[String]
+    map.insertAll((1 to size).iterator.map(_.toString).map(i => (i, i)))
+    assert(map.spill(10000, consumer) == 0L)
   }
 
   test("spilling with hash collisions") {
@@ -397,7 +425,112 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("external aggregation updates peak execution memory") {
+  test("SPARK-22713 spill during iteration leaks internal map") {
+    val size = 1000
+    val conf = createSparkConf(loadDefaults = true)
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
+    val map = createExternalMap[Int]
+
+    map.insertAll((0 until size).iterator.map(i => (i / 10, i)))
+    assert(map.numSpills == 0, "map was not supposed to spill")
+
+    val it = map.iterator
+    assert(it.isInstanceOf[CompletionIterator[_, _]])
+    // org.apache.spark.util.collection.AppendOnlyMap.destructiveSortedIterator returns
+    // an instance of an annonymous Iterator class.
+
+    val underlyingMapRef = WeakReference(map.currentMap)
+
+    {
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      assert(!tmpIsNull)
+    }
+
+    val first50Keys = for ( _ <- 0 until 50) yield {
+      val (k, vs) = it.next
+      val sortedVs = vs.sorted
+      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      k
+    }
+    assert(map.numSpills == 0)
+    map.spill(Long.MaxValue, null)
+    // these asserts try to show that we're no longer holding references to the underlying map.
+    // it'd be nice to use something like
+    // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
+    // (lines 69-89)
+    // assert(map.currentMap == null)
+    eventually(timeout(5 seconds), interval(200 milliseconds)) {
+      System.gc()
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      assert(tmpIsNull)
+    }
+
+
+    val next50Keys = for ( _ <- 0 until 50) yield {
+      val (k, vs) = it.next
+      val sortedVs = vs.sorted
+      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      k
+    }
+    assert(!it.hasNext)
+    val keys = (first50Keys ++ next50Keys).sorted
+    assert(keys == (0 until 100))
+  }
+
+  test("drop all references to the underlying map once the iterator is exhausted") {
+    val size = 1000
+    val conf = createSparkConf(loadDefaults = true)
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
+    val map = createExternalMap[Int]
+
+    map.insertAll((0 until size).iterator.map(i => (i / 10, i)))
+    assert(map.numSpills == 0, "map was not supposed to spill")
+
+    val underlyingMapRef = WeakReference(map.currentMap)
+
+    {
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      assert(!tmpIsNull)
+    }
+
+    val it = map.iterator
+    assert( it.isInstanceOf[CompletionIterator[_, _]])
+
+
+    val keys = it.map{
+      case (k, vs) =>
+        val sortedVs = vs.sorted
+        assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+        k
+    }
+    .toList
+    .sorted
+
+    assert(it.isEmpty)
+    assert(keys == (0 until 100).toList)
+
+    assert(map.numSpills == 0)
+    // these asserts try to show that we're no longer holding references to the underlying map.
+    // it'd be nice to use something like
+    // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
+    // (lines 69-89)
+    assert(map.currentMap == null)
+
+    eventually {
+      Thread.sleep(500)
+      System.gc()
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      assert(tmpIsNull)
+    }
+
+    assert(it.toList.isEmpty)
+  }
+
+  test("SPARK-22713 external aggregation updates peak execution memory") {
     val spillThreshold = 1000
     val conf = createSparkConf(loadDefaults = false)
       .set("spark.shuffle.spill.numElementsForceSpillThreshold", spillThreshold.toString)
@@ -420,7 +553,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = false)
       .set("spark.shuffle.memoryFraction", "0.01")
       .set("spark.memory.useLegacyMode", "true")
-      .set("spark.testing.memory", "100000000")
+      .set(TEST_MEMORY, 100000000L)
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
     val N = 2e5.toInt

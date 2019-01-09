@@ -18,13 +18,11 @@ package org.apache.spark.examples.sql.streaming;
 
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.functions;
 import org.apache.spark.sql.streaming.StreamingQuery;
 import scala.Tuple2;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -86,16 +84,12 @@ public final class JavaStructuredNetworkWordCountWindowed {
     // Split the lines into words, retaining timestamps
     Dataset<Row> words = lines
       .as(Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP()))
-      .flatMap(
-        new FlatMapFunction<Tuple2<String, Timestamp>, Tuple2<String, Timestamp>>() {
-          @Override
-          public Iterator<Tuple2<String, Timestamp>> call(Tuple2<String, Timestamp> t) {
-            List<Tuple2<String, Timestamp>> result = new ArrayList<>();
-            for (String word : t._1.split(" ")) {
-              result.add(new Tuple2<>(word, t._2));
-            }
-            return result.iterator();
+      .flatMap((FlatMapFunction<Tuple2<String, Timestamp>, Tuple2<String, Timestamp>>) t -> {
+          List<Tuple2<String, Timestamp>> result = new ArrayList<>();
+          for (String word : t._1.split(" ")) {
+            result.add(new Tuple2<>(word, t._2));
           }
+          return result.iterator();
         },
         Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP())
       ).toDF("word", "timestamp");

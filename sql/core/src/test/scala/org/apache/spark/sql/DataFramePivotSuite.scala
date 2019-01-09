@@ -17,38 +17,52 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSQLContext{
+class DataFramePivotSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("pivot courses") {
+    val expected = Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("year").pivot("course", Seq("dotNET", "Java"))
         .agg(sum($"earnings")),
-      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"year").pivot($"course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings")),
+      expected)
   }
 
   test("pivot year") {
+    val expected = Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
-      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy('course).pivot('year, Seq(2012, 2013)).agg(sum('earnings)),
+      expected)
   }
 
   test("pivot courses with multiple aggregations") {
+    val expected = Row(2012, 15000.0, 7500.0, 20000.0, 20000.0) ::
+      Row(2013, 48000.0, 48000.0, 30000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy($"year")
         .pivot("course", Seq("dotNET", "Java"))
         .agg(sum($"earnings"), avg($"earnings")),
-      Row(2012, 15000.0, 7500.0, 20000.0, 20000.0) ::
-        Row(2013, 48000.0, 48000.0, 30000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"year")
+        .pivot($"course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings"), avg($"earnings")),
+      expected)
   }
 
   test("pivot year with string values (cast)") {
@@ -67,17 +81,23 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
 
   test("pivot courses with no values") {
     // Note Java comes before dotNet in sorted order
+    val expected = Row(2012, 20000.0, 15000.0) :: Row(2013, 30000.0, 48000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("year").pivot("course").agg(sum($"earnings")),
-      Row(2012, 20000.0, 15000.0) :: Row(2013, 30000.0, 48000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"year").pivot($"course").agg(sum($"earnings")),
+      expected)
   }
 
   test("pivot year with no values") {
+    val expected = Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("course").pivot("year").agg(sum($"earnings")),
-      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"course").pivot($"year").agg(sum($"earnings")),
+      expected)
   }
 
   test("pivot max values enforced") {
@@ -181,10 +201,13 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   }
 
   test("pivot with datatype not supported by PivotFirst") {
+    val expected = Row(Seq(1, 1, 1), Seq(2, 2, 2)) :: Nil
     checkAnswer(
       complexData.groupBy().pivot("b", Seq(true, false)).agg(max("a")),
-      Row(Seq(1, 1, 1), Seq(2, 2, 2)) :: Nil
-    )
+      expected)
+    checkAnswer(
+      complexData.groupBy().pivot('b, Seq(true, false)).agg(max('a)),
+      expected)
   }
 
   test("pivot with datatype not supported by PivotFirst 2") {
@@ -200,7 +223,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
 
   test("pivot preserves aliases if given") {
     assertResult(
-      Array("year", "dotNET_foo", "dotNET_avg(`earnings`)", "Java_foo", "Java_avg(`earnings`)")
+      Array("year", "dotNET_foo", "dotNET_avg(earnings)", "Java_foo", "Java_avg(earnings)")
     )(
       courseSales.groupBy($"year")
         .pivot("course", Seq("dotNET", "Java"))
@@ -208,4 +231,117 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
     )
   }
 
+  test("pivot with column definition in groupby") {
+    checkAnswer(
+      courseSales.groupBy(substring(col("course"), 0, 1).as("foo"))
+        .pivot("year", Seq(2012, 2013))
+        .sum("earnings"),
+      Row("d", 15000.0, 48000.0) :: Row("J", 20000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("pivot with null should not throw NPE") {
+    checkAnswer(
+      Seq(Tuple1(None), Tuple1(Some(1))).toDF("a").groupBy($"a").pivot("a").count(),
+      Row(null, 1, null) :: Row(1, null, 1) :: Nil)
+  }
+
+  test("pivot with null and aggregate type not supported by PivotFirst returns correct result") {
+    checkAnswer(
+      Seq(Tuple1(None), Tuple1(Some(1))).toDF("a")
+        .withColumn("b", expr("array(a, 7)"))
+        .groupBy($"a").pivot("a").agg(min($"b")),
+      Row(null, Seq(null, 7), null) :: Row(1, null, Seq(1, 7)) :: Nil)
+  }
+
+  test("pivot with timestamp and count should not print internal representation") {
+    val ts = "2012-12-31 16:00:10.011"
+    val tsWithZone = "2013-01-01 00:00:10.011"
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
+      val expected = StructType(
+        StructField("a", TimestampType) ::
+        StructField(tsWithZone, LongType) :: Nil)
+      assert(df.schema == expected)
+      // String representation of timestamp with timezone should take the time difference
+      // into account.
+      checkAnswer(df.select($"a".cast(StringType)), Row(tsWithZone))
+    }
+  }
+
+  test("SPARK-24722: pivoting nested columns") {
+    val expected = Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
+    val df = trainingSales
+      .groupBy($"sales.year")
+      .pivot(lower($"sales.course"), Seq("dotNet", "Java").map(_.toLowerCase(Locale.ROOT)))
+      .agg(sum($"sales.earnings"))
+
+    checkAnswer(df, expected)
+  }
+
+  test("SPARK-24722: references to multiple columns in the pivot column") {
+    val expected = Row(2012, 10000.0) :: Row(2013, 48000.0) :: Nil
+    val df = trainingSales
+      .groupBy($"sales.year")
+      .pivot(concat_ws("-", $"training", $"sales.course"), Seq("Experts-dotNET"))
+      .agg(sum($"sales.earnings"))
+
+    checkAnswer(df, expected)
+  }
+
+  test("SPARK-24722: pivoting by a constant") {
+    val expected = Row(2012, 35000.0) :: Row(2013, 78000.0) :: Nil
+    val df1 = trainingSales
+      .groupBy($"sales.year")
+      .pivot(lit(123), Seq(123))
+      .agg(sum($"sales.earnings"))
+
+    checkAnswer(df1, expected)
+  }
+
+  test("SPARK-24722: aggregate as the pivot column") {
+    val exception = intercept[AnalysisException] {
+      trainingSales
+        .groupBy($"sales.year")
+        .pivot(min($"training"), Seq("Experts"))
+        .agg(sum($"sales.earnings"))
+    }
+
+    assert(exception.getMessage.contains("aggregate functions are not allowed"))
+  }
+
+  test("pivoting column list with values") {
+    val expected = Row(2012, 10000.0, null) :: Row(2013, 48000.0, 30000.0) :: Nil
+    val df = trainingSales
+      .groupBy($"sales.year")
+      .pivot(struct(lower($"sales.course"), $"training"), Seq(
+        struct(lit("dotnet"), lit("Experts")),
+        struct(lit("java"), lit("Dummies")))
+      ).agg(sum($"sales.earnings"))
+
+    checkAnswer(df, expected)
+  }
+
+  test("pivoting column list") {
+    val exception = intercept[RuntimeException] {
+      trainingSales
+        .groupBy($"sales.year")
+        .pivot(struct(lower($"sales.course"), $"training"))
+        .agg(sum($"sales.earnings"))
+        .collect()
+    }
+    assert(exception.getMessage.contains("Unsupported literal type"))
+  }
+
+  test("SPARK-26403: pivoting by array column") {
+    val df = Seq(
+      (2, Seq.empty[String]),
+      (2, Seq("a", "x")),
+      (3, Seq.empty[String]),
+      (3, Seq("a", "x"))).toDF("x", "s")
+    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF
+    val actual = df.groupBy("x").pivot("s").count()
+    checkAnswer(actual, expected)
+  }
 }

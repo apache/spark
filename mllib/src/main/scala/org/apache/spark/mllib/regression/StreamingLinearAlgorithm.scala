@@ -29,7 +29,7 @@ import org.apache.spark.streaming.dstream.DStream
 /**
  * :: DeveloperApi ::
  * StreamingLinearAlgorithm implements methods for continuously
- * training a generalized linear model model on streaming data,
+ * training a generalized linear model on streaming data,
  * and using it for prediction on (possibly different) streaming data.
  *
  * This class takes as type parameters a GeneralizedLinearModel,

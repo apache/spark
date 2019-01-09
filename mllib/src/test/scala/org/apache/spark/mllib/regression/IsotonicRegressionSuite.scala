@@ -19,7 +19,7 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
@@ -163,17 +163,16 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   }
 
   test("weighted isotonic regression with negative weights") {
-    val model = runIsotonicRegression(Seq(1, 2, 3, 2, 1), Seq(-1, 1, -3, 1, -5), true)
-
-    assert(model.boundaries === Array(0.0, 1.0, 4.0))
-    assert(model.predictions === Array(1.0, 10.0/6, 10.0/6))
+    val ex = intercept[SparkException] {
+      runIsotonicRegression(Seq(1, 2, 3, 2, 1), Seq(-1, 1, -3, 1, -5), true)
+    }
+    assert(ex.getCause.isInstanceOf[IllegalArgumentException])
   }
 
   test("weighted isotonic regression with zero weights") {
-    val model = runIsotonicRegression(Seq[Double](1, 2, 3, 2, 1), Seq[Double](0, 0, 0, 1, 0), true)
-
-    assert(model.boundaries === Array(0.0, 1.0, 4.0))
-    assert(model.predictions === Array(1, 2, 2))
+    val model = runIsotonicRegression(Seq(1, 2, 3, 2, 1, 0), Seq(0, 0, 0, 1, 1, 0), true)
+    assert(model.boundaries === Array(3, 4))
+    assert(model.predictions === Array(1.5, 1.5))
   }
 
   test("SPARK-16426 isotonic regression with duplicate features that produce NaNs") {

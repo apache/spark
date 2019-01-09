@@ -36,7 +36,7 @@ import org.apache.spark.graphx._
  * self cycles and canonicalizes the graph to ensure that the following conditions hold:
  * <ul>
  * <li> There are no self edges</li>
- * <li> All edges are oriented src > dst</li>
+ * <li> All edges are oriented (src is greater than dst)</li>
  * <li> There are no duplicate edges</li>
  * </ul>
  * However, the canonicalization procedure is costly as it requires repartitioning the graph.

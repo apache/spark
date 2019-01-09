@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.1.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-unsafe_2.11</artifactId>
+  <artifactId>spark-unsafe_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Unsafe</name>
   <url>http://spark.apache.org/</url>
@@ -39,6 +39,18 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+
+    <!--
+      This spark-tags test-dep is needed even though it isn't used in this module, otherwise testing-cmds that exclude
+      them will yield errors.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill_${scala.binary.version}</artifactId>
@@ -77,33 +89,26 @@
       <artifactId>commons-lang3</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-text</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>net.alchim31.maven</groupId>
-          <artifactId>scala-maven-plugin</artifactId>
-          <configuration>
-            <javacArgs combine.children="append">
-              <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-              <javacArg>-XDignore.symbol.file</javacArg>
-            </javacArgs>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <configuration>
-            <compilerArgs combine.children="append">
-              <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-              <arg>-XDignore.symbol.file</arg>
-            </compilerArgs>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <configuration>
+          <javacArgs combine.children="append">
+            <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
+            <javacArg>-XDignore.symbol.file</javacArg>
+          </javacArgs>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
 </project>

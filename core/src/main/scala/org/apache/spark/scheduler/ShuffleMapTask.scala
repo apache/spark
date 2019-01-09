@@ -25,7 +25,6 @@ import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.ShuffleWriter
@@ -42,13 +41,16 @@ import org.apache.spark.shuffle.ShuffleWriter
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
- * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
+ * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
+ *                              and sent to executor side.
  *
  * The parameters below are optional:
  * @param jobId id of the job this task belongs to
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to
+ * @param isBarrier whether this task belongs to a barrier stage. Spark must launch all the tasks
+ *                  at the same time for a barrier stage.
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
@@ -56,18 +58,19 @@ private[spark] class ShuffleMapTask(
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
-    metrics: TaskMetrics,
     localProperties: Properties,
+    serializedTaskMetrics: Array[Byte],
     jobId: Option[Int] = None,
     appId: Option[String] = None,
-    appAttemptId: Option[String] = None)
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, metrics, localProperties, jobId,
-    appId, appAttemptId)
+    appAttemptId: Option[String] = None,
+    isBarrier: Boolean = false)
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, localProperties,
+    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null, new Properties)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, null, new Properties, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
@@ -89,24 +92,7 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
-    var writer: ShuffleWriter[Any, Any] = null
-    try {
-      val manager = SparkEnv.get.shuffleManager
-      writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
-      writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
-      writer.stop(success = true).get
-    } catch {
-      case e: Exception =>
-        try {
-          if (writer != null) {
-            writer.stop(success = false)
-          }
-        } catch {
-          case e: Exception =>
-            log.debug("Could not stop writer", e)
-        }
-        throw e
-    }
+    dep.shuffleWriterProcessor.write(rdd, dep, partitionId, context, partition)
   }
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs

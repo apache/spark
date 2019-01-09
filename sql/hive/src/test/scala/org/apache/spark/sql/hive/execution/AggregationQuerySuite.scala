@@ -20,15 +20,18 @@ package org.apache.spark.sql.hive.execution
 import scala.collection.JavaConverters._
 import scala.util.Random
 
+import test.org.apache.spark.sql.MyDoubleAvg
+import test.org.apache.spark.sql.MyDoubleSum
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+
 
 class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
 
@@ -509,6 +512,19 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, null, 110.0, null, null, 10.0) :: Nil)
   }
 
+  test("non-deterministic children expressions of UDAF") {
+    val e = intercept[AnalysisException] {
+      spark.sql(
+        """
+          |SELECT mydoublesum(value + 1.5 * key + rand())
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin)
+    }.getMessage
+    assert(Seq("nondeterministic expression",
+      "should not appear in the arguments of an aggregate function").forall(e.contains))
+  }
+
   test("interpreted aggregate function") {
     checkAnswer(
       spark.sql(
@@ -868,7 +884,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new UDT.MyDenseVectorUDT())
+      new TestUDT.MyDenseVectorUDT())
     // Right now, we will use SortAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
@@ -989,6 +1005,19 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       )
     )
   }
+
+  test("SPARK-24957: average with decimal followed by aggregation returning wrong result") {
+    val df = Seq(("a", BigDecimal("12.0")),
+      ("a", BigDecimal("12.0")),
+      ("a", BigDecimal("11.9999999988")),
+      ("a", BigDecimal("12.0")),
+      ("a", BigDecimal("12.0")),
+      ("a", BigDecimal("11.9999999988")),
+      ("a", BigDecimal("11.9999999988"))).toDF("text", "number")
+    val agg1 = df.groupBy($"text").agg(avg($"number").as("avg_res"))
+    val agg2 = agg1.groupBy($"text").agg(sum($"avg_res"))
+    checkAnswer(agg2, Row("a", BigDecimal("11.9999999994857142860000")))
+  }
 }
 
 
@@ -999,7 +1028,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     Seq("true", "false").foreach { enableTwoLevelMaps =>
-      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enable" ->
+      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enabled" ->
         enableTwoLevelMaps) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->

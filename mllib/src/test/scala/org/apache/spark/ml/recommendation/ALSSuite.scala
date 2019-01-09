@@ -20,31 +20,34 @@ package org.apache.spark.ml.recommendation
 import java.io.File
 import java.util.Random
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.recommendation.ALS._
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.types.{FloatType, IntegerType}
+import org.apache.spark.sql.{DataFrame, Encoder, Row, SparkSession}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-class ALSSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
+class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -75,7 +78,7 @@ class ALSSuite
     val k = 2
     val ne0 = new NormalEquation(k)
       .add(Array(1.0f, 2.0f), 3.0)
-      .add(Array(4.0f, 5.0f), 6.0, 2.0) // weighted
+      .add(Array(4.0f, 5.0f), 12.0, 2.0) // weighted
     assert(ne0.k === k)
     assert(ne0.triK === k * (k + 1) / 2)
     // NumPy code that computes the expected values:
@@ -204,6 +207,70 @@ class ALSSuite
     assert(decompressed.toSet === expected)
   }
 
+  test("CheckedCast") {
+    val checkedCast = new ALS().checkedCast
+    val df = spark.range(1)
+
+    withClue("Valid Integer Ids") {
+      df.select(checkedCast(lit(123))).collect()
+    }
+
+    withClue("Valid Long Ids") {
+      df.select(checkedCast(lit(1231L))).collect()
+    }
+
+    withClue("Valid Decimal Ids") {
+      df.select(checkedCast(lit(123).cast(DecimalType(15, 2)))).collect()
+    }
+
+    withClue("Valid Double Ids") {
+      df.select(checkedCast(lit(123.0))).collect()
+    }
+
+    val msg = "either out of Integer range or contained a fractional part"
+    withClue("Invalid Long: out of range") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(1231000000000L))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Decimal: out of range") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(1231000000000.0).cast(DecimalType(15, 2)))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Decimal: fractional part") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(123.1).cast(DecimalType(15, 2)))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Double: out of range") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(1231000000000.0))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Double: fractional part") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(123.1))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Type") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit("123.1"))).collect()
+      }
+      assert(e.getMessage.contains("was not numeric"))
+    }
+  }
+
   /**
    * Generates an explicit feedback dataset for testing ALS.
    * @param numUsers number of users
@@ -281,6 +348,37 @@ class ALSSuite
   }
 
   /**
+  * Train ALS using the given training set and parameters
+  * @param training training dataset
+  * @param rank rank of the matrix factorization
+  * @param maxIter max number of iterations
+  * @param regParam regularization constant
+  * @param implicitPrefs whether to use implicit preference
+  * @param numUserBlocks number of user blocks
+  * @param numItemBlocks number of item blocks
+  * @return a trained ALSModel
+  */
+  def trainALS(
+    training: RDD[Rating[Int]],
+    rank: Int,
+    maxIter: Int,
+    regParam: Double,
+    implicitPrefs: Boolean = false,
+    numUserBlocks: Int = 2,
+    numItemBlocks: Int = 3): ALSModel = {
+    val spark = this.spark
+    import spark.implicits._
+    val als = new ALS()
+      .setRank(rank)
+      .setRegParam(regParam)
+      .setImplicitPrefs(implicitPrefs)
+      .setNumUserBlocks(numUserBlocks)
+      .setNumItemBlocks(numItemBlocks)
+      .setSeed(0)
+    als.fit(training.toDF())
+  }
+
+  /**
    * Test ALS using the given training/test splits and parameters.
    * @param training training dataset
    * @param test test dataset
@@ -313,37 +411,38 @@ class ALSSuite
       .setSeed(0)
     val alpha = als.getAlpha
     val model = als.fit(training.toDF())
-    val predictions = model.transform(test.toDF()).select("rating", "prediction").rdd.map {
-      case Row(rating: Float, prediction: Float) =>
-        (rating.toDouble, prediction.toDouble)
-    }
-    val rmse =
-      if (implicitPrefs) {
-        // TODO: Use a better (rank-based?) evaluation metric for implicit feedback.
-        // We limit the ratings and the predictions to interval [0, 1] and compute the weighted RMSE
-        // with the confidence scores as weights.
-        val (totalWeight, weightedSumSq) = predictions.map { case (rating, prediction) =>
-          val confidence = 1.0 + alpha * math.abs(rating)
-          val rating01 = math.max(math.min(rating, 1.0), 0.0)
-          val prediction01 = math.max(math.min(prediction, 1.0), 0.0)
-          val err = prediction01 - rating01
-          (confidence, confidence * err * err)
-        }.reduce { case ((c0, e0), (c1, e1)) =>
-          (c0 + c1, e0 + e1)
-        }
-        math.sqrt(weightedSumSq / totalWeight)
-      } else {
-        val mse = predictions.map { case (rating, prediction) =>
-          val err = rating - prediction
-          err * err
-        }.mean()
-        math.sqrt(mse)
-      }
-    logInfo(s"Test RMSE is $rmse.")
-    assert(rmse < targetRMSE)
+    testTransformerByGlobalCheckFunc[Rating[Int]](test.toDF(), model, "rating", "prediction") {
+        case rows: Seq[Row] =>
+          val predictions = rows.map(row => (row.getFloat(0).toDouble, row.getFloat(1).toDouble))
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+          val rmse =
+            if (implicitPrefs) {
+              // TODO: Use a better (rank-based?) evaluation metric for implicit feedback.
+              // We limit the ratings and the predictions to interval [0, 1] and compute the
+              // weighted RMSE with the confidence scores as weights.
+              val (totalWeight, weightedSumSq) = predictions.map { case (rating, prediction) =>
+                val confidence = 1.0 + alpha * math.abs(rating)
+                val rating01 = math.max(math.min(rating, 1.0), 0.0)
+                val prediction01 = math.max(math.min(prediction, 1.0), 0.0)
+                val err = prediction01 - rating01
+                (confidence, confidence * err * err)
+              }.reduce[(Double, Double)] { case ((c0, e0), (c1, e1)) =>
+                (c0 + c1, e0 + e1)
+              }
+              math.sqrt(weightedSumSq / totalWeight)
+            } else {
+              val errorSquares = predictions.map { case (rating, prediction) =>
+                val err = rating - prediction
+                err * err
+              }
+              val mse = errorSquares.sum / errorSquares.length
+              math.sqrt(mse)
+            }
+          logInfo(s"Test RMSE is $rmse.")
+          assert(rmse < targetRMSE)
+    }
+
+    MLTestingUtils.checkCopyAndUids(als, model)
   }
 
   test("exact rank-1 matrix") {
@@ -389,6 +488,20 @@ class ALSSuite
       targetRMSE = 0.3)
   }
 
+  test("implicit feedback regression") {
+    val trainingWithNeg = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
+    val trainingWithZero = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
+    val modelWithNeg =
+      trainALS(trainingWithNeg, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
+    val modelWithZero =
+      trainALS(trainingWithZero, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
+    val userFactorsNeg = modelWithNeg.userFactors
+    val itemFactorsNeg = modelWithNeg.itemFactors
+    val userFactorsZero = modelWithZero.userFactors
+    val itemFactorsZero = modelWithZero.itemFactors
+    assert(userFactorsNeg.intersect(userFactorsZero).count() == 0)
+    assert(itemFactorsNeg.intersect(itemFactorsZero).count() == 0)
+  }
   test("using generic ID types") {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
 
@@ -451,37 +564,89 @@ class ALSSuite
   }
 
   test("read/write") {
-    import ALSSuite._
-    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
-    val als = new ALS()
-    allEstimatorParamSettings.foreach { case (p, v) =>
-      als.set(als.getParam(p), v)
-    }
     val spark = this.spark
     import spark.implicits._
-    val model = als.fit(ratings.toDF())
+    import ALSSuite._
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
 
-    // Test Estimator save/load
-    val als2 = testDefaultReadWrite(als)
-    allEstimatorParamSettings.foreach { case (p, v) =>
-      val param = als.getParam(p)
-      assert(als.get(param).get === als2.get(param).get)
-    }
-
-    // Test Model save/load
-    val model2 = testDefaultReadWrite(model)
-    allModelParamSettings.foreach { case (p, v) =>
-      val param = model.getParam(p)
-      assert(model.get(param).get === model2.get(param).get)
-    }
-    assert(model.rank === model2.rank)
     def getFactors(df: DataFrame): Set[(Int, Array[Float])] = {
       df.select("id", "features").collect().map { case r =>
         (r.getInt(0), r.getAs[Array[Float]](1))
       }.toSet
     }
-    assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
-    assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+
+    def checkModelData(model: ALSModel, model2: ALSModel): Unit = {
+      assert(model.rank === model2.rank)
+      assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
+      assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+    }
+
+    val als = new ALS()
+    testEstimatorAndModelReadWrite(als, ratings.toDF(), allEstimatorParamSettings,
+      allModelParamSettings, checkModelData)
+  }
+
+  private def checkNumericTypesALS(
+      estimator: ALS,
+      spark: SparkSession,
+      column: String,
+      baseType: NumericType)
+      (check: (ALSModel, ALSModel) => Unit)
+      (check2: (ALSModel, ALSModel, DataFrame, Encoder[_]) => Unit): Unit = {
+    val dfs = genRatingsDFWithNumericCols(spark, column)
+    val maybeDf = dfs.find { case (numericTypeWithEncoder, _) =>
+      numericTypeWithEncoder.numericType == baseType
+    }
+    assert(maybeDf.isDefined)
+    val df = maybeDf.get._2
+
+    val expected = estimator.fit(df)
+    val actuals = dfs.map(t => (t, estimator.fit(t._2)))
+    actuals.foreach { case (_, actual) => check(expected, actual) }
+    actuals.foreach { case (t, actual) => check2(expected, actual, t._2, t._1.encoder) }
+
+    val baseDF = dfs.find(_._1.numericType == baseType).get._2
+    val others = baseDF.columns.toSeq.diff(Seq(column)).map(col)
+    val cols = Seq(col(column).cast(StringType)) ++ others
+    val strDF = baseDF.select(cols: _*)
+    val thrown = intercept[IllegalArgumentException] {
+      estimator.fit(strDF)
+    }
+    assert(thrown.getMessage.contains(
+      s"$column must be of type numeric but was actually of type string"))
+  }
+
+  private class NumericTypeWithEncoder[A](val numericType: NumericType)
+      (implicit val encoder: Encoder[(A, Int, Double)])
+
+  private def genRatingsDFWithNumericCols(
+      spark: SparkSession,
+      column: String) = {
+
+    import testImplicits._
+
+    val df = spark.createDataFrame(Seq(
+      (0, 10, 1.0),
+      (1, 20, 2.0),
+      (2, 30, 3.0),
+      (3, 40, 4.0),
+      (4, 50, 5.0)
+    )).toDF("user", "item", "rating")
+
+    val others = df.columns.toSeq.diff(Seq(column)).map(col)
+    val types =
+      Seq(new NumericTypeWithEncoder[Short](ShortType),
+        new NumericTypeWithEncoder[Long](LongType),
+        new NumericTypeWithEncoder[Int](IntegerType),
+        new NumericTypeWithEncoder[Float](FloatType),
+        new NumericTypeWithEncoder[Byte](ByteType),
+        new NumericTypeWithEncoder[Double](DoubleType),
+        new NumericTypeWithEncoder[Decimal](DecimalType(10, 0))(ExpressionEncoder())
+      )
+    types.map { t =>
+      val cols = Seq(col(column).cast(t.numericType)) ++ others
+      t -> df.select(cols: _*)
+    }
   }
 
   test("input type validation") {
@@ -493,12 +658,16 @@ class ALSSuite
     val als = new ALS().setMaxIter(1).setRank(1)
     Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
       case (colName, sqlType) =>
-        MLTestingUtils.checkNumericTypesALS(als, spark, colName, sqlType) {
+        checkNumericTypesALS(als, spark, colName, sqlType) {
           (ex, act) =>
-            ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
-        } { (ex, act, _) =>
-          ex.transform(_: DataFrame).select("prediction").first.getFloat(0) ~==
-            act.transform(_: DataFrame).select("prediction").first.getFloat(0) absTol 1e-6
+            ex.userFactors.first().getSeq[Float](1) === act.userFactors.first().getSeq[Float](1)
+        } { (ex, act, df, enc) =>
+          val expected = ex.transform(df).selectExpr("prediction")
+            .first().getFloat(0)
+          testTransformerByGlobalCheckFunc(df, act, "prediction") {
+            case rows: Seq[Row] =>
+              expected ~== rows.head.getFloat(0) absTol 1e-6
+          }(enc)
         }
     }
     // check user/item ids falling outside of Int range
@@ -509,39 +678,278 @@ class ALSSuite
       (0, big, small, 0, big, small, 2.0),
       (1, 1L, 1d, 0, 0L, 0d, 5.0)
     ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
+    val msg = "either out of Integer range or contained a fractional part"
     withClue("fit should fail when ids exceed integer range. ") {
       assert(intercept[SparkException] {
         als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
       assert(intercept[SparkException] {
         als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
       assert(intercept[SparkException] {
         als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
       assert(intercept[SparkException] {
         als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
     }
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)
-      assert(intercept[SparkException] {
-        model.transform(df.select(df("user_big").as("user"), df("item"))).first
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[SparkException] {
-        model.transform(df.select(df("user_small").as("user"), df("item"))).first
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[SparkException] {
-        model.transform(df.select(df("item_big").as("item"), df("user"))).first
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[SparkException] {
-        model.transform(df.select(df("item_small").as("item"), df("user"))).first
-      }.getMessage.contains("was out of Integer range"))
+      def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
+        assert(intercept[SparkException] {
+          model.transform(dataFrame).first
+        }.getMessage.contains(msg))
+        assert(intercept[StreamingQueryException] {
+          testTransformer[A](dataFrame, model, "prediction") { _ => }
+        }.getMessage.contains(msg))
+      }
+      testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
+        df("item")))
+      testTransformIdExceedsIntRange[(Double, Int)](df.select(df("user_small").as("user"),
+        df("item")))
+      testTransformIdExceedsIntRange[(Long, Int)](df.select(df("item_big").as("item"),
+        df("user")))
+      testTransformIdExceedsIntRange[(Double, Int)](df.select(df("item_small").as("item"),
+        df("user")))
+    }
+  }
+
+  test("SPARK-18268: ALS with empty RDD should fail with better message") {
+    val ratings = sc.parallelize(Array.empty[Rating[Int]])
+    intercept[IllegalArgumentException] {
+      ALS.train(ratings)
+    }
+  }
+
+  test("ALS cold start user/item prediction strategy") {
+    val spark = this.spark
+    import spark.implicits._
+    import org.apache.spark.sql.functions._
+
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    val data = ratings.toDF
+    val knownUser = data.select(max("user")).as[Int].first()
+    val unknownUser = knownUser + 10
+    val knownItem = data.select(max("item")).as[Int].first()
+    val unknownItem = knownItem + 20
+    val test = Seq(
+      (unknownUser, unknownItem, true),
+      (knownUser, unknownItem, true),
+      (unknownUser, knownItem, true),
+      (knownUser, knownItem, false)
+    ).toDF("user", "item", "expectedIsNaN")
+
+    val als = new ALS().setMaxIter(1).setRank(1)
+    // default is 'nan'
+    val defaultModel = als.fit(data)
+    testTransformer[(Int, Int, Boolean)](test, defaultModel, "expectedIsNaN", "prediction") {
+      case Row(expectedIsNaN: Boolean, prediction: Float) =>
+        assert(prediction.isNaN === expectedIsNaN)
+    }
+
+    // check 'drop' strategy should filter out rows with unknown users/items
+    val defaultPrediction = defaultModel.transform(test).select("prediction")
+      .as[Float].filter(!_.isNaN).first()
+    testTransformerByGlobalCheckFunc[(Int, Int, Boolean)](test,
+      defaultModel.setColdStartStrategy("drop"), "prediction") {
+      case rows: Seq[Row] =>
+        val dropPredictions = rows.map(_.getFloat(0))
+        assert(dropPredictions.length == 1)
+        assert(!dropPredictions.head.isNaN)
+        assert(dropPredictions.head ~== defaultPrediction relTol 1e-14)
+    }
+  }
+
+  test("case insensitive cold start param value") {
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS().fit(data)
+    Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
+      testTransformer[Rating[Int]](data, model.setColdStartStrategy(s), "prediction") { _ => }
+    }
+  }
+
+  private def getALSModel = {
+    val spark = this.spark
+    import spark.implicits._
+
+    val userFactors = Seq(
+      (0, Array(6.0f, 4.0f)),
+      (1, Array(3.0f, 4.0f)),
+      (2, Array(3.0f, 6.0f))
+    ).toDF("id", "features")
+    val itemFactors = Seq(
+      (3, Array(5.0f, 6.0f)),
+      (4, Array(6.0f, 2.0f)),
+      (5, Array(3.0f, 6.0f)),
+      (6, Array(4.0f, 1.0f))
+    ).toDF("id", "features")
+    val als = new ALS().setRank(2)
+    new ALSModel(als.uid, als.getRank, userFactors, itemFactors)
+      .setUserCol("user")
+      .setItemCol("item")
+  }
+
+  test("recommendForAllUsers with k <, = and > num_items") {
+    val model = getALSModel
+    val numUsers = model.userFactors.count
+    val numItems = model.itemFactors.count
+    val expected = Map(
+      0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
+      1 -> Seq((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
+      2 -> Seq((3, 51f), (5, 45f), (4, 30f), (6, 18f))
+    )
+
+    Seq(2, 4, 6).foreach { k =>
+      val n = math.min(k, numItems).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topItems = model.recommendForAllUsers(k)
+      assert(topItems.count() == numUsers)
+      assert(topItems.columns.contains("user"))
+      checkRecommendations(topItems, expectedUpToN, "item")
+    }
+  }
+
+  test("recommendForAllItems with k <, = and > num_users") {
+    val model = getALSModel
+    val numUsers = model.userFactors.count
+    val numItems = model.itemFactors.count
+    val expected = Map(
+      3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
+      4 -> Seq((0, 44f), (2, 30f), (1, 26f)),
+      5 -> Seq((2, 45f), (0, 42f), (1, 33f)),
+      6 -> Seq((0, 28f), (2, 18f), (1, 16f))
+    )
+
+    Seq(2, 3, 4).foreach { k =>
+      val n = math.min(k, numUsers).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topUsers = getALSModel.recommendForAllItems(k)
+      assert(topUsers.count() == numItems)
+      assert(topUsers.columns.contains("item"))
+      checkRecommendations(topUsers, expectedUpToN, "user")
+    }
+  }
+
+  test("recommendForUserSubset with k <, = and > num_items") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val numItems = model.itemFactors.count
+    val expected = Map(
+      0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
+      2 -> Seq((3, 51f), (5, 45f), (4, 30f), (6, 18f))
+    )
+    val userSubset = expected.keys.toSeq.toDF("user")
+    val numUsersSubset = userSubset.count
+
+    Seq(2, 4, 6).foreach { k =>
+      val n = math.min(k, numItems).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topItems = model.recommendForUserSubset(userSubset, k)
+      assert(topItems.count() == numUsersSubset)
+      assert(topItems.columns.contains("user"))
+      checkRecommendations(topItems, expectedUpToN, "item")
+    }
+  }
+
+  test("recommendForItemSubset with k <, = and > num_users") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val numUsers = model.userFactors.count
+    val expected = Map(
+      3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
+      6 -> Seq((0, 28f), (2, 18f), (1, 16f))
+    )
+    val itemSubset = expected.keys.toSeq.toDF("item")
+    val numItemsSubset = itemSubset.count
+
+    Seq(2, 3, 4).foreach { k =>
+      val n = math.min(k, numUsers).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topUsers = model.recommendForItemSubset(itemSubset, k)
+      assert(topUsers.count() == numItemsSubset)
+      assert(topUsers.columns.contains("item"))
+      checkRecommendations(topUsers, expectedUpToN, "user")
+    }
+  }
+
+  test("subset recommendations eliminate duplicate ids, returns same results as unique ids") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val k = 2
+
+    val users = Seq(0, 1).toDF("user")
+    val dupUsers = Seq(0, 1, 0, 1).toDF("user")
+    val singleUserRecs = model.recommendForUserSubset(users, k)
+    val dupUserRecs = model.recommendForUserSubset(dupUsers, k)
+      .as[(Int, Seq[(Int, Float)])].collect().toMap
+    assert(singleUserRecs.count == dupUserRecs.size)
+    checkRecommendations(singleUserRecs, dupUserRecs, "item")
+
+    val items = Seq(3, 4, 5).toDF("item")
+    val dupItems = Seq(3, 4, 5, 4, 5).toDF("item")
+    val singleItemRecs = model.recommendForItemSubset(items, k)
+    val dupItemRecs = model.recommendForItemSubset(dupItems, k)
+      .as[(Int, Seq[(Int, Float)])].collect().toMap
+    assert(singleItemRecs.count == dupItemRecs.size)
+    checkRecommendations(singleItemRecs, dupItemRecs, "user")
+  }
+
+  test("subset recommendations on full input dataset equivalent to recommendForAll") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val k = 2
+
+    val userSubset = model.userFactors.withColumnRenamed("id", "user").drop("features")
+    val userSubsetRecs = model.recommendForUserSubset(userSubset, k)
+    val allUserRecs = model.recommendForAllUsers(k).as[(Int, Seq[(Int, Float)])].collect().toMap
+    checkRecommendations(userSubsetRecs, allUserRecs, "item")
+
+    val itemSubset = model.itemFactors.withColumnRenamed("id", "item").drop("features")
+    val itemSubsetRecs = model.recommendForItemSubset(itemSubset, k)
+    val allItemRecs = model.recommendForAllItems(k).as[(Int, Seq[(Int, Float)])].collect().toMap
+    checkRecommendations(itemSubsetRecs, allItemRecs, "user")
+  }
+
+  private def checkRecommendations(
+      topK: DataFrame,
+      expected: Map[Int, Seq[(Int, Float)]],
+      dstColName: String): Unit = {
+    val spark = this.spark
+    import spark.implicits._
+
+    assert(topK.columns.contains("recommendations"))
+    topK.as[(Int, Seq[(Int, Float)])].collect().foreach { case (id: Int, recs: Seq[(Int, Float)]) =>
+      assert(recs === expected(id))
+    }
+    topK.collect().foreach { row =>
+      val recs = row.getAs[WrappedArray[Row]]("recommendations")
+      assert(recs(0).fieldIndex(dstColName) == 0)
+      assert(recs(0).fieldIndex("rating") == 1)
     }
   }
 }
 
-class ALSCleanerSuite extends SparkFunSuite {
+class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // Once `Utils.getOrCreateLocalRootDirs` is called, it is cached in `Utils.localRootDirs`.
+    // Unless this is manually cleared before and after a test, it returns the same directory
+    // set before even if 'spark.local.dir' is configured afterwards.
+    Utils.clearLocalRootDirs()
+  }
+
+  override def afterEach(): Unit = {
+    Utils.clearLocalRootDirs()
+    super.afterEach()
+  }
+
   test("ALS shuffle cleanup standalone") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
@@ -582,15 +990,13 @@ class ALSCleanerSuite extends SparkFunSuite {
       FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
-      val sc = new SparkContext("local[2]", "test", conf)
+      val sc = new SparkContext("local[2]", "ALSCleanerSuite", conf)
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
         val spark = SparkSession.builder
-          .master("local[2]")
-          .appName("ALSCleanerSuite")
           .sparkContext(sc)
           .getOrCreate()
         import spark.implicits._
@@ -650,7 +1056,7 @@ class ALSStorageSuite
     // check final factor RDD default storage levels
     val defaultFactorRDDs = sc.getPersistentRDDs.collect {
       case (id, rdd) if rdd.name == "userFactors" || rdd.name == "itemFactors" =>
-        rdd.name -> (id, rdd.getStorageLevel)
+        rdd.name -> ((id, rdd.getStorageLevel))
     }.toMap
     defaultFactorRDDs.foreach { case (_, (id, level)) =>
       assert(level == StorageLevel.MEMORY_AND_DISK)

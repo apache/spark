@@ -20,6 +20,8 @@ package org.apache.spark.memory
 import org.mockito.Mockito.when
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
 
@@ -47,8 +49,8 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     new StaticMemoryManager(
       conf.clone
         .set("spark.memory.fraction", "1")
-        .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
-        .set("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString),
+        .set(TEST_MEMORY, maxOnHeapExecutionMemory)
+        .set(MEMORY_OFFHEAP_SIZE, maxOffHeapExecutionMemory),
       maxOnHeapExecutionMemory = maxOnHeapExecutionMemory,
       maxOnHeapStorageMemory = 0,
       numCores = 1)

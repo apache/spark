@@ -36,6 +36,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.expressions.UserDefinedFunction;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.util.sketch.BloomFilter;
@@ -133,6 +134,8 @@ public class JavaDataFrameSuite {
     private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
     private List<String> d = Arrays.asList("floppy", "disk");
     private BigInteger e = new BigInteger("1234567");
+    private NestedBean f = new NestedBean();
+    private NestedBean g = null;
 
     public double getA() {
       return a;
@@ -151,6 +154,22 @@ public class JavaDataFrameSuite {
     }
 
     public BigInteger getE() { return e; }
+
+    public NestedBean getF() {
+      return f;
+    }
+
+    public NestedBean getG() {
+      return g;
+    }
+
+    public static class NestedBean implements Serializable {
+      private int a = 1;
+
+      public int getA() {
+        return a;
+      }
+    }
   }
 
   void validateDataFrameWithBeans(Bean bean, Dataset<Row> df) {
@@ -170,7 +189,14 @@ public class JavaDataFrameSuite {
       schema.apply("d"));
     Assert.assertEquals(new StructField("e", DataTypes.createDecimalType(38,0), true,
       Metadata.empty()), schema.apply("e"));
-    Row first = df.select("a", "b", "c", "d", "e").first();
+    StructType nestedBeanType =
+      DataTypes.createStructType(Collections.singletonList(new StructField(
+        "a", IntegerType$.MODULE$, false, Metadata.empty())));
+    Assert.assertEquals(new StructField("f", nestedBeanType, true, Metadata.empty()),
+      schema.apply("f"));
+    Assert.assertEquals(new StructField("g", nestedBeanType, true, Metadata.empty()),
+      schema.apply("g"));
+    Row first = df.select("a", "b", "c", "d", "e", "f", "g").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -189,8 +215,11 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < d.length(); i++) {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
-    // Java.math.BigInteger is equavient to Spark Decimal(38,0)
+    // Java.math.BigInteger is equivalent to Spark Decimal(38,0)
     Assert.assertEquals(new BigDecimal(bean.getE()), first.getDecimal(4));
+    Row nested = first.getStruct(5);
+    Assert.assertEquals(bean.getF().getA(), nested.getInt(0));
+    Assert.assertTrue(first.isNullAt(6));
   }
 
   @Test
@@ -231,13 +260,10 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
 
-  private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
-    @Override
-    public int compare(Row row1, Row row2) {
-      String item1 = row1.getString(0);
-      String item2 = row2.getString(0);
-      return item1.compareTo(item2);
-    }
+  private static final Comparator<Row> crosstabRowComparator = (row1, row2) -> {
+    String item1 = row1.getString(0);
+    String item2 = row2.getString(0);
+    return item1.compareTo(item2);
   };
 
   @Test
@@ -249,7 +275,7 @@ public class JavaDataFrameSuite {
     Assert.assertEquals("1", columnNames[1]);
     Assert.assertEquals("2", columnNames[2]);
     List<Row> rows = crosstab.collectAsList();
-    Collections.sort(rows, crosstabRowComparator);
+    rows.sort(crosstabRowComparator);
     Integer count = 1;
     for (Row row : rows) {
       Assert.assertEquals(row.get(0).toString(), count.toString());
@@ -284,7 +310,18 @@ public class JavaDataFrameSuite {
   @Test
   public void testSampleBy() {
     Dataset<Row> df = spark.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
-    Dataset<Row> sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Dataset<Row> sampled = df.stat().sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
+    Assert.assertEquals(0, actual.get(0).getLong(0));
+    Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
+    Assert.assertEquals(1, actual.get(1).getLong(0));
+    Assert.assertTrue(2 <= actual.get(1).getLong(1) && actual.get(1).getLong(1) <= 13);
+  }
+
+  @Test
+  public void testSampleByColumn() {
+    Dataset<Row> df = spark.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
+    Dataset<Row> sampled = df.stat().sampleBy(col("key"), ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
     Assert.assertEquals(0, actual.get(0).getLong(0));
     Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
@@ -296,7 +333,23 @@ public class JavaDataFrameSuite {
   public void pivot() {
     Dataset<Row> df = spark.table("courseSales");
     List<Row> actual = df.groupBy("year")
-      .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
+      .pivot("course", Arrays.asList("dotNET", "Java"))
+      .agg(sum("earnings")).orderBy("year").collectAsList();
+
+    Assert.assertEquals(2012, actual.get(0).getInt(0));
+    Assert.assertEquals(15000.0, actual.get(0).getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual.get(0).getDouble(2), 0.01);
+
+    Assert.assertEquals(2013, actual.get(1).getInt(0));
+    Assert.assertEquals(48000.0, actual.get(1).getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
+  }
+
+  @Test
+  public void pivotColumnValues() {
+    Dataset<Row> df = spark.table("courseSales");
+    List<Row> actual = df.groupBy("year")
+      .pivot(col("course"), Arrays.asList(lit("dotNET"), lit("Java")))
       .agg(sum("earnings")).orderBy("year").collectAsList();
 
     Assert.assertEquals(2012, actual.get(0).getInt(0));
@@ -352,24 +405,24 @@ public class JavaDataFrameSuite {
     Dataset<Long> df = spark.range(1000);
 
     CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
-    Assert.assertEquals(sketch1.totalCount(), 1000);
-    Assert.assertEquals(sketch1.depth(), 10);
-    Assert.assertEquals(sketch1.width(), 20);
+    Assert.assertEquals(1000, sketch1.totalCount());
+    Assert.assertEquals(10, sketch1.depth());
+    Assert.assertEquals(20, sketch1.width());
 
     CountMinSketch sketch2 = df.stat().countMinSketch(col("id"), 10, 20, 42);
-    Assert.assertEquals(sketch2.totalCount(), 1000);
-    Assert.assertEquals(sketch2.depth(), 10);
-    Assert.assertEquals(sketch2.width(), 20);
+    Assert.assertEquals(1000, sketch2.totalCount());
+    Assert.assertEquals(10, sketch2.depth());
+    Assert.assertEquals(20, sketch2.width());
 
     CountMinSketch sketch3 = df.stat().countMinSketch("id", 0.001, 0.99, 42);
-    Assert.assertEquals(sketch3.totalCount(), 1000);
-    Assert.assertEquals(sketch3.relativeError(), 0.001, 1e-4);
-    Assert.assertEquals(sketch3.confidence(), 0.99, 5e-3);
+    Assert.assertEquals(1000, sketch3.totalCount());
+    Assert.assertEquals(0.001, sketch3.relativeError(), 1.0e-4);
+    Assert.assertEquals(0.99, sketch3.confidence(), 5.0e-3);
 
     CountMinSketch sketch4 = df.stat().countMinSketch(col("id"), 0.001, 0.99, 42);
-    Assert.assertEquals(sketch4.totalCount(), 1000);
-    Assert.assertEquals(sketch4.relativeError(), 0.001, 1e-4);
-    Assert.assertEquals(sketch4.confidence(), 0.99, 5e-3);
+    Assert.assertEquals(1000, sketch4.totalCount());
+    Assert.assertEquals(0.001, sketch4.relativeError(), 1.0e-4);
+    Assert.assertEquals(0.99, sketch4.confidence(), 5.0e-3);
   }
 
   @Test
@@ -389,15 +442,84 @@ public class JavaDataFrameSuite {
     }
 
     BloomFilter filter3 = df.stat().bloomFilter("id", 1000, 64 * 5);
-    Assert.assertTrue(filter3.bitSize() == 64 * 5);
+    Assert.assertEquals(64 * 5, filter3.bitSize());
     for (int i = 0; i < 1000; i++) {
       Assert.assertTrue(filter3.mightContain(i));
     }
 
     BloomFilter filter4 = df.stat().bloomFilter(col("id").multiply(3), 1000, 64 * 5);
-    Assert.assertTrue(filter4.bitSize() == 64 * 5);
+    Assert.assertEquals(64 * 5, filter4.bitSize());
     for (int i = 0; i < 1000; i++) {
       Assert.assertTrue(filter4.mightContain(i * 3));
     }
+  }
+
+  public static class BeanWithoutGetter implements Serializable {
+    private String a;
+
+    public void setA(String a) {
+      this.a = a;
+    }
+  }
+
+  @Test
+  public void testBeanWithoutGetter() {
+    BeanWithoutGetter bean = new BeanWithoutGetter();
+    List<BeanWithoutGetter> data = Arrays.asList(bean);
+    Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
+    Assert.assertEquals(df.schema().length(), 0);
+    Assert.assertEquals(df.collectAsList().size(), 1);
+  }
+
+  @Test
+  public void testJsonRDDToDataFrame() {
+    // This is a test for the deprecated API in SPARK-15615.
+    JavaRDD<String> rdd = jsc.parallelize(Arrays.asList("{\"a\": 2}"));
+    Dataset<Row> df = spark.read().json(rdd);
+    Assert.assertEquals(1L, df.count());
+    Assert.assertEquals(2L, df.collectAsList().get(0).getLong(0));
+  }
+
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
+
+    public CircularReference2Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
+      this.child = child;
+    }
+  }
+
+  // Checks a simple case for DataFrame here and put exhaustive tests for the issue
+  // of circular references in `JavaDatasetSuite`.
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class);
+  }
+
+  @Test
+  public void testUDF() {
+    UserDefinedFunction foo = udf((Integer i, String s) -> i.toString() + s, DataTypes.StringType);
+    Dataset<Row> df = spark.table("testData").select(foo.apply(col("key"), col("value")));
+    String[] result = df.collectAsList().stream().map(row -> row.getString(0))
+      .toArray(String[]::new);
+    String[] expected = spark.table("testData").collectAsList().stream()
+      .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
+    Assert.assertArrayEquals(expected, result);
   }
 }

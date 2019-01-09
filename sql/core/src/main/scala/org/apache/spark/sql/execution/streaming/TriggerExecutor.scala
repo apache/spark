@@ -30,27 +30,39 @@ trait TriggerExecutor {
 }
 
 /**
+ * A trigger executor that runs a single batch only, then terminates.
+ */
+case class OneTimeExecutor() extends TriggerExecutor {
+
+  /**
+   * Execute a single batch using `batchRunner`.
+   */
+  override def execute(batchRunner: () => Boolean): Unit = batchRunner()
+}
+
+/**
  * A trigger executor that runs a batch every `intervalMs` milliseconds.
  */
 case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock = new SystemClock())
   extends TriggerExecutor with Logging {
 
   private val intervalMs = processingTime.intervalMs
+  require(intervalMs >= 0)
 
-  override def execute(batchRunner: () => Boolean): Unit = {
+  override def execute(triggerHandler: () => Boolean): Unit = {
     while (true) {
-      val batchStartTimeMs = clock.getTimeMillis()
-      val terminated = !batchRunner()
+      val triggerTimeMs = clock.getTimeMillis
+      val nextTriggerTimeMs = nextBatchTime(triggerTimeMs)
+      val terminated = !triggerHandler()
       if (intervalMs > 0) {
-        val batchEndTimeMs = clock.getTimeMillis()
-        val batchElapsedTimeMs = batchEndTimeMs - batchStartTimeMs
+        val batchElapsedTimeMs = clock.getTimeMillis - triggerTimeMs
         if (batchElapsedTimeMs > intervalMs) {
           notifyBatchFallingBehind(batchElapsedTimeMs)
         }
         if (terminated) {
           return
         }
-        clock.waitTillTime(nextBatchTime(batchEndTimeMs))
+        clock.waitTillTime(nextTriggerTimeMs)
       } else {
         if (terminated) {
           return
@@ -59,7 +71,7 @@ case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock =
     }
   }
 
-  /** Called when a batch falls behind. Expose for test only */
+  /** Called when a batch falls behind */
   def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
     logWarning("Current batch is falling behind. The trigger interval is " +
       s"${intervalMs} milliseconds, but spent ${realElapsedTimeMs} milliseconds")
@@ -72,6 +84,6 @@ case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock =
    * an interval of `100 ms`, `nextBatchTime(nextBatchTime(0)) = 200` rather than `0`).
    */
   def nextBatchTime(now: Long): Long = {
-    now / intervalMs * intervalMs + intervalMs
+    if (intervalMs == 0) now else now / intervalMs * intervalMs + intervalMs
   }
 }

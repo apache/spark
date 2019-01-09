@@ -42,10 +42,12 @@ object PrefixSpanExample {
     val model = prefixSpan.run(sequences)
     model.freqSequences.collect().foreach { freqSequence =>
       println(
-        freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]") +
-          ", " + freqSequence.freq)
+        s"${freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]")}," +
+          s" ${freqSequence.freq}")
     }
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:off println

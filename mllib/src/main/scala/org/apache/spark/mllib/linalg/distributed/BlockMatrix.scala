@@ -17,9 +17,8 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 import scala.collection.mutable.ArrayBuffer
-
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -27,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+
 
 /**
  * A grid partitioner, which uses a regular grid to partition coordinates.
@@ -273,29 +273,44 @@ class BlockMatrix @Since("1.3.0") (
     require(cols < Int.MaxValue, s"The number of columns should be less than Int.MaxValue ($cols).")
 
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
-      mat.rowIter.zipWithIndex.map {
+      mat.rowIter.zipWithIndex.filter(_._1.size > 0).map {
         case (vector, rowIdx) =>
-          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.asBreeze)
+          blockRowIdx * rowsPerBlock + rowIdx -> ((blockColIdx, vector))
       }
     }.groupByKey().map { case (rowIdx, vectors) =>
-      val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
+      val numberNonZero = vectors.map(_._2.numActives).sum
+      val numberNonZeroPerRow = numberNonZero.toDouble / cols.toDouble
 
-      val wholeVector = if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
-        BSV.zeros[Double](cols)
-      } else {
-        BDV.zeros[Double](cols)
-      }
+      val wholeVector =
+        if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
+          val arrBufferIndices = new ArrayBuffer[Int](numberNonZero)
+          val arrBufferValues = new ArrayBuffer[Double](numberNonZero)
 
-      vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
-        val offset = colsPerBlock * blockColIdx
-        wholeVector(offset until Math.min(cols, offset + colsPerBlock)) := vec
-      }
-      new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
+          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
+              val offset = colsPerBlock * blockColIdx
+              vec.foreachActive { case (colIdx: Int, value: Double) =>
+                arrBufferIndices += offset + colIdx
+                arrBufferValues  += value
+              }
+          }
+          Vectors.sparse(cols, arrBufferIndices.toArray, arrBufferValues.toArray)
+        } else {
+          val wholeVectorBuf = BDV.zeros[Double](cols)
+          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
+            val offset = colsPerBlock * blockColIdx
+            wholeVectorBuf(offset until Math.min(cols, offset + colsPerBlock)) := vec.asBreeze
+          }
+          Vectors.fromBreeze(wholeVectorBuf)
+        }
+
+      IndexedRow(rowIdx, wholeVector)
     }
     new IndexedRowMatrix(rows)
   }
 
-  /** Collect the distributed matrix on the driver as a `DenseMatrix`. */
+  /**
+   * Collect the distributed matrix on the driver as a `DenseMatrix`.
+   */
   @Since("1.3.0")
   def toLocalMatrix(): Matrix = {
     require(numRows() < Int.MaxValue, "The number of rows of this matrix should be less than " +
@@ -307,7 +322,7 @@ class BlockMatrix @Since("1.3.0") (
     val m = numRows().toInt
     val n = numCols().toInt
     val mem = m * n / 125000
-    if (mem > 500) logWarning(s"Storing this matrix will require $mem MB of memory!")
+    if (mem > 500) logWarning(s"Storing this matrix will require $mem MiB of memory!")
     val localBlocks = blocks.collect()
     val values = new Array[Double](m * n)
     localBlocks.foreach { case ((blockRowIndex, blockColIndex), submat) =>
@@ -385,10 +400,10 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Adds the given block matrix `other` to `this` block matrix: `this + other`.
    * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
-   * values. If one of the blocks that are being added are instances of [[SparseMatrix]],
-   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being added
-   * to a [[DenseMatrix]]. If two dense matrices are added, the output will also be a
-   * [[DenseMatrix]].
+   * values. If one of the blocks that are being added are instances of `SparseMatrix`,
+   * the resulting sub matrix will also be a `SparseMatrix`, even if it is being added
+   * to a `DenseMatrix`. If two dense matrices are added, the output will also be a
+   * `DenseMatrix`.
    */
   @Since("1.3.0")
   def add(other: BlockMatrix): BlockMatrix =
@@ -397,10 +412,10 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Subtracts the given block matrix `other` from `this` block matrix: `this - other`.
    * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
-   * values. If one of the blocks that are being subtracted are instances of [[SparseMatrix]],
-   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being subtracted
-   * from a [[DenseMatrix]]. If two dense matrices are subtracted, the output will also be a
-   * [[DenseMatrix]].
+   * values. If one of the blocks that are being subtracted are instances of `SparseMatrix`,
+   * the resulting sub matrix will also be a `SparseMatrix`, even if it is being subtracted
+   * from a `DenseMatrix`. If two dense matrices are subtracted, the output will also be a
+   * `DenseMatrix`.
    */
   @Since("2.0.0")
   def subtract(other: BlockMatrix): BlockMatrix =
@@ -423,22 +438,27 @@ class BlockMatrix @Since("1.3.0") (
    */
   private[distributed] def simulateMultiply(
       other: BlockMatrix,
-      partitioner: GridPartitioner): (BlockDestinations, BlockDestinations) = {
-    val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
-    val rightMatrix = other.blocks.keys.collect()
+      partitioner: GridPartitioner,
+      midDimSplitNum: Int): (BlockDestinations, BlockDestinations) = {
+    val leftMatrix = blockInfo.keys.collect()
+    val rightMatrix = other.blockInfo.keys.collect()
 
     val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
-      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array())
+      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.empty[Int])
       val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
-      ((rowIndex, colIndex), partitions.toSet)
+      val midDimSplitIndex = colIndex % midDimSplitNum
+      ((rowIndex, colIndex),
+        partitions.toSet.map((pid: Int) => pid * midDimSplitNum + midDimSplitIndex))
     }.toMap
 
     val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
-      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array())
+      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.empty[Int])
       val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))
-      ((rowIndex, colIndex), partitions.toSet)
+      val midDimSplitIndex = rowIndex % midDimSplitNum
+      ((rowIndex, colIndex),
+        partitions.toSet.map((pid: Int) => pid * midDimSplitNum + midDimSplitIndex))
     }.toMap
 
     (leftDestinations, rightDestinations)
@@ -447,24 +467,49 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
    * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
-   * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
-   * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
+   * `SparseMatrix`, they will have to be converted to a `DenseMatrix`. The output
+   * [[BlockMatrix]] will only consist of blocks of `DenseMatrix`. This may cause
    * some performance issues until support for multiplying two sparse matrices is added.
    *
-   * Note: The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
+   * @note The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
    * there were blocks with duplicate indices. Now, the blocks with duplicate indices will be added
    * with each other.
    */
   @Since("1.3.0")
   def multiply(other: BlockMatrix): BlockMatrix = {
+    multiply(other, 1)
+  }
+
+  /**
+   * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
+   * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
+   * `SparseMatrix`, they will have to be converted to a `DenseMatrix`. The output
+   * [[BlockMatrix]] will only consist of blocks of `DenseMatrix`. This may cause
+   * some performance issues until support for multiplying two sparse matrices is added.
+   * Blocks with duplicate indices will be added with each other.
+   *
+   * @param other Matrix `B` in `A * B = C`
+   * @param numMidDimSplits Number of splits to cut on the middle dimension when doing
+   *                        multiplication. For example, when multiplying a Matrix `A` of
+   *                        size `m x n` with Matrix `B` of size `n x k`, this parameter
+   *                        configures the parallelism to use when grouping the matrices. The
+   *                        parallelism will increase from `m x k` to `m x k x numMidDimSplits`,
+   *                        which in some cases also reduces total shuffled data.
+   */
+  @Since("2.2.0")
+  def multiply(
+      other: BlockMatrix,
+      numMidDimSplits: Int): BlockMatrix = {
     require(numCols() == other.numRows(), "The number of columns of A and the number of rows " +
       s"of B must be equal. A.numCols: ${numCols()}, B.numRows: ${other.numRows()}. If you " +
       "think they should be equal, try setting the dimensions of A and B explicitly while " +
       "initializing them.")
+    require(numMidDimSplits > 0, "numMidDimSplits should be a positive integer.")
     if (colsPerBlock == other.rowsPerBlock) {
       val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
         math.max(blocks.partitions.length, other.blocks.partitions.length))
-      val (leftDestinations, rightDestinations) = simulateMultiply(other, resultPartitioner)
+      val (leftDestinations, rightDestinations)
+        = simulateMultiply(other, resultPartitioner, numMidDimSplits)
       // Each block of A must be multiplied with the corresponding blocks in the columns of B.
       val flatA = blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
         val destinations = leftDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
@@ -475,7 +520,11 @@ class BlockMatrix @Since("1.3.0") (
         val destinations = rightDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
         destinations.map(j => (j, (blockRowIndex, blockColIndex, block)))
       }
-      val newBlocks = flatA.cogroup(flatB, resultPartitioner).flatMap { case (pId, (a, b)) =>
+      val intermediatePartitioner = new Partitioner {
+        override def numPartitions: Int = resultPartitioner.numPartitions * numMidDimSplits
+        override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+      }
+      val newBlocks = flatA.cogroup(flatB, intermediatePartitioner).flatMap { case (pId, (a, b)) =>
         a.flatMap { case (leftRowIndex, leftColIndex, leftBlock) =>
           b.filter(_._1 == leftColIndex).map { case (rightRowIndex, rightColIndex, rightBlock) =>
             val C = rightBlock match {

@@ -80,7 +80,7 @@ class GaussianMixtureModel @Since("1.3.0") (
   }
 
   /**
-   * Java-friendly version of [[predict()]]
+   * Java-friendly version of `predict()`
    */
   @Since("1.4.0")
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
@@ -154,7 +154,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val dataArray = Array.tabulate(weights.length) { i =>
         Data(weights(i), gaussians(i).mu, gaussians(i).sigma)
       }
-      spark.createDataFrame(dataArray).repartition(1).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(sc.makeRDD(dataArray, 1)).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {

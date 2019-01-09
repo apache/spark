@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * @since 1.3.0
  */
 @Experimental
-@InterfaceStability.Unstable
+@Unstable
 class ExperimentalMethods private[sql]() {
 
   /**
@@ -46,4 +46,10 @@ class ExperimentalMethods private[sql]() {
 
   @volatile var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
 
+  override def clone(): ExperimentalMethods = {
+    val result = new ExperimentalMethods
+    result.extraStrategies = extraStrategies
+    result.extraOptimizations = extraOptimizations
+    result
+  }
 }

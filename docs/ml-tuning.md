@@ -55,6 +55,8 @@ for multiclass problems. The default metric used to choose the best `ParamMap` c
 method in each of these evaluators.
 
 To help construct the parameter grid, users can use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridBuilder) utility.
+By default, sets of parameters from the parameter grid are evaluated in serial. Parameter evaluation can be done in parallel by setting `parallelism` with a value of 2 or more (a value of 1 will be serial) before running model selection with `CrossValidator` or `TrainValidationSplit`.
+The value of `parallelism` should be chosen carefully to maximize parallelism without exceeding cluster resources, and larger values may not always lead to improved performance.  Generally speaking, a value up to 10 should be sufficient for most clusters.
 
 # Cross-Validation
 
@@ -62,7 +64,7 @@ To help construct the parameter grid, users can use the [`ParamGridBuilder`](api
 
 After identifying the best `ParamMap`, `CrossValidator` finally re-fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-## Example: model selection via cross-validation
+**Examples: model selection via cross-validation**
 
 The following example demonstrates using `CrossValidator` to select from a grid of parameters.
 
@@ -74,15 +76,23 @@ However, it is also a well-established method for choosing parameters which is m
 
 <div class="codetabs">
 
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+
+Refer to the [`CrossValidator` Scala docs](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaCrossValidationExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
+
+Refer to the [`CrossValidator` Java docs](api/java/org/apache/spark/ml/tuning/CrossValidator.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaCrossValidationExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+
+Refer to the [`CrossValidator` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.CrossValidator) for more details on the API.
 
 {% include_example python/ml/cross_validator.py %}
 </div>
@@ -93,7 +103,7 @@ However, it is also a well-established method for choosing parameters which is m
 
 In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
 `TrainValidationSplit` only evaluates each combination of parameters once, as opposed to k times in
- the case of `CrossValidator`. It is therefore less expensive,
+ the case of `CrossValidator`. It is, therefore, less expensive,
  but will not produce as reliable results when the training dataset is not sufficiently large.
 
 Unlike `CrossValidator`, `TrainValidationSplit` creates a single (training, test) dataset pair.
@@ -102,19 +112,28 @@ It splits the dataset into these two parts using the `trainRatio` parameter. For
 
 Like `CrossValidator`, `TrainValidationSplit` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-## Example: model selection via train validation split
+**Examples: model selection via train validation split**
 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+
+Refer to the [`TrainValidationSplit` Scala docs](api/scala/index.html#org.apache.spark.ml.tuning.TrainValidationSplit) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaTrainValidationSplitExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [`TrainValidationSplit` Java docs](api/java/org/apache/spark/ml/tuning/TrainValidationSplit.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaTrainValidationSplitExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+
+Refer to the [`TrainValidationSplit` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.TrainValidationSplit) for more details on the API.
+
 {% include_example python/ml/train_validation_split.py %}
 </div>
 

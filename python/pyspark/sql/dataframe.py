@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import random
 
 if sys.version >= '3':
@@ -26,16 +25,21 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
-from pyspark import copy_func, since
+import warnings
+
+from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
+    UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.streaming import DataStreamWriter
+from pyspark.sql.types import IntegralType
 from pyspark.sql.types import *
+from pyspark.util import _exception_message
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
@@ -44,9 +48,9 @@ class DataFrame(object):
     """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
-    and can be created using various functions in :class:`SQLContext`::
+    and can be created using various functions in :class:`SparkSession`::
 
-        people = sqlContext.read.parquet("...")
+        people = spark.read.parquet("...")
 
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
@@ -57,9 +61,9 @@ class DataFrame(object):
 
     A more concrete example::
 
-        # To create DataFrame using SQLContext
-        people = sqlContext.read.parquet("...")
-        department = sqlContext.read.parquet("...")
+        # To create DataFrame using SparkSession
+        people = spark.read.parquet("...")
+        department = spark.read.parquet("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
@@ -74,6 +78,9 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
+        # by __repr__ and _repr_html_ while eager evaluation opened.
+        self._support_repr_html = False
 
     @property
     @since(1.3)
@@ -111,23 +118,6 @@ class DataFrame(object):
         """
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
-
-    @since(1.3)
-    def registerTempTable(self, name):
-        """Registers this RDD as a temporary table using the given name.
-
-        The lifetime of this temporary table is tied to the :class:`SQLContext`
-        that was used to create this :class:`DataFrame`.
-
-        >>> df.registerTempTable("people")
-        >>> df2 = spark.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-
-        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
-        """
-        self._jdf.createOrReplaceTempView(name)
 
     @since(2.0)
     def createTempView(self, name):
@@ -190,6 +180,23 @@ class DataFrame(object):
         """
         self._jdf.createGlobalTempView(name)
 
+    @since(2.2)
+    def createOrReplaceGlobalTempView(self, name):
+        """Creates or replaces a global temporary view using the given name.
+
+        The lifetime of this temporary view is tied to this Spark application.
+
+        >>> df.createOrReplaceGlobalTempView("people")
+        >>> df2 = df.filter(df.age > 3)
+        >>> df2.createOrReplaceGlobalTempView("people")
+        >>> df3 = spark.sql("select * from global_temp.people")
+        >>> sorted(df3.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropGlobalTempView("people")
+
+        """
+        self._jdf.createOrReplaceGlobalTempView(name)
+
     @property
     @since(1.4)
     def write(self):
@@ -208,7 +215,7 @@ class DataFrame(object):
         Interface for saving the content of the streaming :class:`DataFrame` out into external
         storage.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`DataStreamWriter`
         """
@@ -250,7 +257,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        *(1) Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -266,6 +273,31 @@ class DataFrame(object):
             print(self._jdf.queryExecution().toString())
         else:
             print(self._jdf.queryExecution().simpleString())
+
+    @since(2.4)
+    def exceptAll(self, other):
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
+        not in another :class:`DataFrame` while preserving duplicates.
+
+        This is equivalent to `EXCEPT ALL` in SQL.
+
+        >>> df1 = spark.createDataFrame(
+        ...         [("a", 1), ("a", 1), ("a", 1), ("a", 2), ("b",  3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.exceptAll(df2).show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  a|  1|
+        |  a|  1|
+        |  a|  2|
+        |  c|  4|
+        +---+---+
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
+        return DataFrame(self._jdf.exceptAll(other._jdf), self.sql_ctx)
 
     @since(1.3)
     def isLocal(self):
@@ -284,18 +316,20 @@ class DataFrame(object):
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
 
-        .. note:: Experimental
+        .. note:: Evolving
         """
         return self._jdf.isStreaming()
 
     @since(1.3)
-    def show(self, n=20, truncate=True):
+    def show(self, n=20, truncate=True, vertical=False):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
         :param truncate: If set to True, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
+        :param vertical: If set to True, print output rows vertically (one line
+            per column value).
 
         >>> df
         DataFrame[age: int, name: string]
@@ -313,14 +347,153 @@ class DataFrame(object):
         |  2| Ali|
         |  5| Bob|
         +---+----+
+        >>> df.show(vertical=True)
+        -RECORD 0-----
+         age  | 2
+         name | Alice
+        -RECORD 1-----
+         age  | 5
+         name | Bob
         """
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20))
+            print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate)))
+            print(self._jdf.showString(n, int(truncate), vertical))
 
     def __repr__(self):
-        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+        if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
+            vertical = False
+            return self._jdf.showString(
+                self.sql_ctx._conf.replEagerEvalMaxNumRows(),
+                self.sql_ctx._conf.replEagerEvalTruncate(), vertical)
+        else:
+            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self):
+        """Returns a dataframe with html code when you enabled eager evaluation
+        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
+        using support eager evaluation with HTML.
+        """
+        import cgi
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        if self.sql_ctx._conf.isReplEagerEvalEnabled():
+            max_num_rows = max(self.sql_ctx._conf.replEagerEvalMaxNumRows(), 0)
+            sock_info = self._jdf.getRowsToPython(
+                max_num_rows, self.sql_ctx._conf.replEagerEvalTruncate())
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            head = rows[0]
+            row_data = rows[1:]
+            has_more_data = len(row_data) > max_num_rows
+            row_data = row_data[:max_num_rows]
+
+            html = "<table border='1'>\n"
+            # generate table head
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            # generate table rows
+            for row in row_data:
+                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
+                    map(lambda x: cgi.escape(x), row))
+            html += "</table>\n"
+            if has_more_data:
+                html += "only showing top %d %s\n" % (
+                    max_num_rows, "row" if max_num_rows == 1 else "rows")
+            return html
+        else:
+            return None
+
+    @since(2.1)
+    def checkpoint(self, eager=True):
+        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+        logical plan of this DataFrame, which is especially useful in iterative algorithms where the
+        plan may grow exponentially. It will be saved to files inside the checkpoint
+        directory set with L{SparkContext.setCheckpointDir()}.
+
+        :param eager: Whether to checkpoint this DataFrame immediately
+
+        .. note:: Experimental
+        """
+        jdf = self._jdf.checkpoint(eager)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.3)
+    def localCheckpoint(self, eager=True):
+        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
+        truncate the logical plan of this DataFrame, which is especially useful in iterative
+        algorithms where the plan may grow exponentially. Local checkpoints are stored in the
+        executors using the caching subsystem and therefore they are not reliable.
+
+        :param eager: Whether to checkpoint this DataFrame immediately
+
+        .. note:: Experimental
+        """
+        jdf = self._jdf.localCheckpoint(eager)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.1)
+    def withWatermark(self, eventTime, delayThreshold):
+        """Defines an event time watermark for this :class:`DataFrame`. A watermark tracks a point
+        in time before which we assume no more late data is going to arrive.
+
+        Spark will use this watermark for several purposes:
+          - To know when a given time window aggregation can be finalized and thus can be emitted
+            when using output modes that do not allow updates.
+
+          - To minimize the amount of state that we need to keep for on-going aggregations.
+
+        The current watermark is computed by looking at the `MAX(eventTime)` seen across
+        all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
+        of coordinating this value across partitions, the actual watermark used is only guaranteed
+        to be at least `delayThreshold` behind the actual event time.  In some cases we may still
+        process records that arrive more than `delayThreshold` late.
+
+        :param eventTime: the name of the column that contains the event time of the row.
+        :param delayThreshold: the minimum delay to wait to data to arrive late, relative to the
+            latest record that has been processed in the form of an interval
+            (e.g. "1 minute" or "5 hours").
+
+        .. note:: Evolving
+
+        >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
+        DataFrame[name: string, time: timestamp]
+        """
+        if not eventTime or type(eventTime) is not str:
+            raise TypeError("eventTime should be provided as a string")
+        if not delayThreshold or type(delayThreshold) is not str:
+            raise TypeError("delayThreshold should be provided as a string interval")
+        jdf = self._jdf.withWatermark(eventTime, delayThreshold)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.2)
+    def hint(self, name, *parameters):
+        """Specifies some hint on the current DataFrame.
+
+        :param name: A name of the hint.
+        :param parameters: Optional parameters.
+        :return: :class:`DataFrame`
+
+        >>> df.join(df2.hint("broadcast"), "name").show()
+        +----+---+------+
+        |name|age|height|
+        +----+---+------+
+        | Bob|  5|    85|
+        +----+---+------+
+        """
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]
+
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+
+        allowed_types = (basestring, list, float, int)
+        for p in parameters:
+            if not isinstance(p, allowed_types):
+                raise TypeError(
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)))
+
+        jdf = self._jdf.hint(name, self._jseq(parameters))
+        return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
     def count(self):
@@ -340,8 +513,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+            sock_info = self._jdf.collectToPython()
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -354,8 +527,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.toPythonIterator()
-        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+            sock_info = self._jdf.toPythonIterator()
+        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -409,7 +582,7 @@ class DataFrame(object):
     def cache(self):
         """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
@@ -422,7 +595,7 @@ class DataFrame(object):
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
         If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -465,10 +638,20 @@ class DataFrame(object):
         """
         Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
 
+        :param numPartitions: int, to specify the target number of partitions
+
         Similar to coalesce defined on an :class:`RDD`, this operation results in a
         narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
         there will not be a shuffle, instead each of the 100 new partitions will
-        claim 10 of the current partitions.
+        claim 10 of the current partitions. If a larger number of partitions is requested,
+        it will stay at the current number of partitions.
+
+        However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+        this may result in your computation taking place on fewer nodes than
+        you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+        you can call repartition(). This will add a shuffle step, but means the
+        current upstream partitions will be executed in parallel (per whatever
+        the current partitioning is).
 
         >>> df.coalesce(1).rdd.getNumPartitions()
         1
@@ -481,9 +664,10 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
-        If it is a Column, it will be used as the first partitioning column. If not specified,
-        the default number of partitions is used.
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
 
         .. versionchanged:: 1.6
            Added optional arguments to specify the partitioning columns. Also made numPartitions
@@ -536,6 +720,57 @@ class DataFrame(object):
         else:
             raise TypeError("numPartitions should be an int or Column")
 
+    @since("2.4.0")
+    def repartitionByRange(self, numPartitions, *cols):
+        """
+        Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
+        resulting DataFrame is range partitioned.
+
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
+
+        At least one partition-by expression must be specified.
+        When no explicit sort order is specified, "ascending nulls first" is assumed.
+
+        Note that due to performance reasons this method uses sampling to estimate the ranges.
+        Hence, the output may not be consistent, since sampling can return different values.
+        The sample size can be controlled by the config
+        `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
+
+        >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
+        2
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        >>> df.repartitionByRange(1, "age").rdd.getNumPartitions()
+        1
+        >>> data = df.repartitionByRange("age")
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        """
+        if isinstance(numPartitions, int):
+            if len(cols) == 0:
+                return ValueError("At least one partition-by expression must be specified.")
+            else:
+                return DataFrame(
+                    self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)), self.sql_ctx)
+        elif isinstance(numPartitions, (basestring, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sql_ctx)
+        else:
+            raise TypeError("numPartitions should be an int, string or Column")
+
     @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
@@ -546,16 +781,69 @@ class DataFrame(object):
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
     @since(1.3)
-    def sample(self, withReplacement, fraction, seed=None):
+    def sample(self, withReplacement=None, fraction=None, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
-        >>> df.sample(False, 0.5, 42).count()
-        2
+        :param withReplacement: Sample with replacement or not (default False).
+        :param fraction: Fraction of rows to generate, range [0.0, 1.0].
+        :param seed: Seed for sampling (default a random seed).
+
+        .. note:: This is not guaranteed to provide exactly the fraction specified of the total
+            count of the given :class:`DataFrame`.
+
+        .. note:: `fraction` is required and, `withReplacement` and `seed` are optional.
+
+        >>> df = spark.range(10)
+        >>> df.sample(0.5, 3).count()
+        4
+        >>> df.sample(fraction=0.5, seed=3).count()
+        4
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
+        1
+        >>> df.sample(1.0).count()
+        10
+        >>> df.sample(fraction=1.0).count()
+        10
+        >>> df.sample(False, fraction=1.0).count()
+        10
         """
-        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd = self._jdf.sample(withReplacement, fraction, long(seed))
-        return DataFrame(rdd, self.sql_ctx)
+
+        # For the cases below:
+        #   sample(True, 0.5 [, seed])
+        #   sample(True, fraction=0.5 [, seed])
+        #   sample(withReplacement=False, fraction=0.5 [, seed])
+        is_withReplacement_set = \
+            type(withReplacement) == bool and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(faction=0.5 [, seed])
+        is_withReplacement_omitted_kwargs = \
+            withReplacement is None and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(0.5 [, seed])
+        is_withReplacement_omitted_args = isinstance(withReplacement, float)
+
+        if not (is_withReplacement_set
+                or is_withReplacement_omitted_kwargs
+                or is_withReplacement_omitted_args):
+            argtypes = [
+                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None]
+            raise TypeError(
+                "withReplacement (optional), fraction (required) and seed (optional)"
+                " should be a bool, float and number; however, "
+                "got [%s]." % ", ".join(argtypes))
+
+        if is_withReplacement_omitted_args:
+            if fraction is not None:
+                seed = fraction
+            fraction = withReplacement
+            withReplacement = None
+
+        seed = long(seed) if seed is not None else None
+        args = [arg for arg in [withReplacement, fraction, seed] if arg is not None]
+        jdf = self._jdf.sample(*args)
+        return DataFrame(jdf, self.sql_ctx)
 
     @since(1.5)
     def sampleBy(self, col, fractions, seed=None):
@@ -580,16 +868,23 @@ class DataFrame(object):
         |  0|    5|
         |  1|    9|
         +---+-----+
+        >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
+        33
 
+        .. versionchanged:: 3.0
+           Added sampling by a column of :class:`Column`
         """
-        if not isinstance(col, str):
-            raise ValueError("col must be a string, but got %r" % type(col))
+        if isinstance(col, basestring):
+            col = Column(col)
+        elif not isinstance(col, Column):
+            raise ValueError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
             if not isinstance(k, (float, int, long, basestring)):
                 raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
             fractions[k] = float(v)
+        col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
 
@@ -635,10 +930,35 @@ class DataFrame(object):
         """
         return [f.name for f in self.schema.fields]
 
+    @since(2.3)
+    def colRegex(self, colName):
+        """
+        Selects column based on the column name specified as a regex and returns it
+        as :class:`Column`.
+
+        :param colName: string, column name specified as a regex.
+
+        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+        >>> df.select(df.colRegex("`(Col1)?+.+`")).show()
+        +----+
+        |Col2|
+        +----+
+        |   1|
+        |   2|
+        |   3|
+        +----+
+        """
+        if not isinstance(colName, basestring):
+            raise ValueError("colName should be provided as string")
+        jc = self._jdf.colRegex(colName)
+        return Column(jc)
+
     @ignore_unicode_prefix
     @since(1.3)
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
+
+        :param alias: string, an alias name to be set for the DataFrame.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
@@ -679,8 +999,9 @@ class DataFrame(object):
             a join expression (Column), or a list of Columns.
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
-        :param how: str, default 'inner'.
-            One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+        :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
+            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
+            ``left_semi``, and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
@@ -717,6 +1038,8 @@ class DataFrame(object):
         else:
             if how is None:
                 how = "inner"
+            if on is None:
+                on = self._jseq([])
             assert isinstance(how, basestring), "how should be basestring"
             jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
@@ -808,13 +1131,13 @@ class DataFrame(object):
 
     @since("1.3.1")
     def describe(self, *cols):
-        """Computes statistics for numeric and string columns.
+        """Computes basic statistics for numeric and string columns.
 
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
 
-        .. note:: This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         >>> df.describe(['age']).show()
         +-------+------------------+
@@ -836,10 +1159,69 @@ class DataFrame(object):
         |    min|                 2|Alice|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
+
+        Use summary for expanded statistics and control over which statistics to compute.
         """
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since("2.3.0")
+    def summary(self, *statistics):
+        """Computes specified statistics for numeric and string columns. Available statistics are:
+        - count
+        - mean
+        - stddev
+        - min
+        - max
+        - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+
+        If no statistics are given, this function computes count, mean, stddev, min,
+        approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+
+        >>> df.summary().show()
+        +-------+------------------+-----+
+        |summary|               age| name|
+        +-------+------------------+-----+
+        |  count|                 2|    2|
+        |   mean|               3.5| null|
+        | stddev|2.1213203435596424| null|
+        |    min|                 2|Alice|
+        |    25%|                 2| null|
+        |    50%|                 2| null|
+        |    75%|                 5| null|
+        |    max|                 5|  Bob|
+        +-------+------------------+-----+
+
+        >>> df.summary("count", "min", "25%", "75%", "max").show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |    min|  2|Alice|
+        |    25%|  2| null|
+        |    75%|  5| null|
+        |    max|  5|  Bob|
+        +-------+---+-----+
+
+        To do a summary for specific columns first select them:
+
+        >>> df.select("age", "name").summary("count").show()
+        +-------+---+----+
+        |summary|age|name|
+        +-------+---+----+
+        |  count|  2|   2|
+        +-------+---+----+
+
+        See also describe for basic statistics.
+        """
+        if len(statistics) == 1 and isinstance(statistics[0], list):
+            statistics = statistics[0]
+        jdf = self._jdf.summary(self._jseq(statistics))
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
@@ -847,8 +1229,8 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
@@ -998,7 +1380,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def rollup(self, *cols):
@@ -1019,7 +1401,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def cube(self, *cols):
@@ -1042,7 +1424,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.cube(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.3)
     def agg(self, *exprs):
@@ -1059,22 +1441,47 @@ class DataFrame(object):
 
     @since(2.0)
     def union(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this
-        frame and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by a distinct.
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
         """
         return DataFrame(self._jdf.union(other._jdf), self.sql_ctx)
 
     @since(1.3)
     def unionAll(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this
-        frame and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
 
-        .. note:: Deprecated in 2.0, use union instead.
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
         """
         return self.union(other)
+
+    @since(2.3)
+    def unionByName(self, other):
+        """ Returns a new :class:`DataFrame` containing union of rows in this and another frame.
+
+        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
+        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        The difference between this function and :func:`union` is that this function
+        resolves columns by name (not by position):
+
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
+        >>> df1.unionByName(df2).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   6|   4|   5|
+        +----+----+----+
+        """
+        return DataFrame(self._jdf.unionByName(other._jdf), self.sql_ctx)
 
     @since(1.3)
     def intersect(self, other):
@@ -1085,12 +1492,35 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
+    @since(2.4)
+    def intersectAll(self, other):
+        """ Return a new :class:`DataFrame` containing rows in both this dataframe and other
+        dataframe while preserving duplicates.
+
+        This is equivalent to `INTERSECT ALL` in SQL.
+        >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.intersectAll(df2).sort("C1", "C2").show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  a|  1|
+        |  a|  1|
+        |  b|  3|
+        +---+---+
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
+        return DataFrame(self._jdf.intersectAll(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def subtract(self, other):
         """ Return a new :class:`DataFrame` containing rows in this frame
         but not in another frame.
 
-        This is equivalent to `EXCEPT` in SQL.
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
@@ -1098,6 +1528,12 @@ class DataFrame(object):
     def dropDuplicates(self, subset=None):
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
+
+        For a static batch :class:`DataFrame`, it just drops duplicate rows. For a streaming
+        :class:`DataFrame`, it will keep all data across triggers as intermediate state to drop
+        duplicates rows. You can use :func:`withWatermark` to limit how late the duplicate data can
+        be and system will accordingly limit the state. In addition, too late data older than
+        watermark will be dropped to avoid any possibility of duplicates.
 
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
@@ -1167,11 +1603,11 @@ class DataFrame(object):
         """Replace null values, alias for ``na.fill()``.
         :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
-        :param value: int, long, float, string, or dict.
+        :param value: int, long, float, string, bool or dict.
             Value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
-            an int, long, float, or string.
+            an int, long, float, boolean, or string.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -1187,6 +1623,15 @@ class DataFrame(object):
         | 50|    50| null|
         +---+------+-----+
 
+        >>> df5.na.fill(False).show()
+        +----+-------+-----+
+        | age|   name|  spy|
+        +----+-------+-----+
+        |  10|  Alice|false|
+        |   5|    Bob|false|
+        |null|Mallory| true|
+        +----+-------+-----+
+
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+
         |age|height|   name|
@@ -1197,10 +1642,13 @@ class DataFrame(object):
         | 50|  null|unknown|
         +---+------+-------+
         """
-        if not isinstance(value, (float, int, long, basestring, dict)):
-            raise ValueError("value should be a float, int, long, string, or dict")
+        if not isinstance(value, (float, int, long, basestring, bool, dict)):
+            raise ValueError("value should be a float, int, long, string, bool or dict")
 
-        if isinstance(value, (int, long)):
+        # Note that bool validates isinstance(int), but we don't want to
+        # convert bools to floats
+
+        if not isinstance(value, bool) and isinstance(value, (int, long)):
             value = float(value)
 
         if isinstance(value, dict):
@@ -1216,20 +1664,26 @@ class DataFrame(object):
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
     @since(1.4)
-    def replace(self, to_replace, value, subset=None):
+    def replace(self, to_replace, value=_NoValue, subset=None):
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
+        Values to_replace and value must have the same type and can only be numerics, booleans,
+        or strings. Value can have None. When replacing, the new value will be cast
+        to the type of the existing column.
+        For numeric replacements all values to be replaced should have unique
+        floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
+        and arbitrary replacement will be used.
 
-        :param to_replace: int, long, float, string, or list.
+        :param to_replace: bool, int, long, float, string, list or dict.
             Value to be replaced.
-            If the value is a dict, then `value` is ignored and `to_replace` must be a
-            mapping from column name (string) to replacement value. The value to be
-            replaced must be an int, long, float, or string.
-        :param value: int, long, float, string, or list.
-            Value to use to replace holes.
-            The replacement value must be an int, long, float, or string. If `value` is a
-            list or tuple, `value` should be of the same length with `to_replace`.
+            If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
+            must be a mapping between a value and a replacement.
+        :param value: bool, int, long, float, string, list or None.
+            The replacement value must be a bool, int, long, float, string or None. If `value` is a
+            list, `value` should be of the same length and type as `to_replace`.
+            If `value` is a scalar and `to_replace` is a sequence, then `value` is
+            used as a replacement for each item in `to_replace`.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -1245,6 +1699,26 @@ class DataFrame(object):
         |null|  null| null|
         +----+------+-----+
 
+        >>> df4.na.replace('Alice', None).show()
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
+
+        >>> df4.na.replace({'Alice': None}).show()
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
+
         >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
@@ -1255,48 +1729,84 @@ class DataFrame(object):
         |null|  null|null|
         +----+------+----+
         """
-        if not isinstance(to_replace, (float, int, long, basestring, list, tuple, dict)):
+        if value is _NoValue:
+            if isinstance(to_replace, dict):
+                value = None
+            else:
+                raise TypeError("value argument is required when to_replace is not a dictionary.")
+
+        # Helper functions
+        def all_of(types):
+            """Given a type or tuple of types and a sequence of xs
+            check if each x is instance of type(s)
+
+            >>> all_of(bool)([True, False])
+            True
+            >>> all_of(basestring)(["a", 1])
+            False
+            """
+            def all_of_(xs):
+                return all(isinstance(x, types) for x in xs)
+            return all_of_
+
+        all_of_bool = all_of(bool)
+        all_of_str = all_of(basestring)
+        all_of_numeric = all_of((float, int, long))
+
+        # Validate input types
+        valid_types = (bool, float, int, long, basestring, list, tuple)
+        if not isinstance(to_replace, valid_types + (dict, )):
             raise ValueError(
-                "to_replace should be a float, int, long, string, list, tuple, or dict")
+                "to_replace should be a bool, float, int, long, string, list, tuple, or dict. "
+                "Got {0}".format(type(to_replace)))
 
-        if not isinstance(value, (float, int, long, basestring, list, tuple)):
-            raise ValueError("value should be a float, int, long, string, list, or tuple")
+        if not isinstance(value, valid_types) and value is not None \
+                and not isinstance(to_replace, dict):
+            raise ValueError("If to_replace is not a dict, value should be "
+                             "a bool, float, int, long, string, list, tuple or None. "
+                             "Got {0}".format(type(value)))
 
-        rep_dict = dict()
+        if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
+            if len(to_replace) != len(value):
+                raise ValueError("to_replace and value lists should be of the same length. "
+                                 "Got {0} and {1}".format(len(to_replace), len(value)))
 
+        if not (subset is None or isinstance(subset, (list, tuple, basestring))):
+            raise ValueError("subset should be a list or tuple of column names, "
+                             "column name or None. Got {0}".format(type(subset)))
+
+        # Reshape input arguments if necessary
         if isinstance(to_replace, (float, int, long, basestring)):
             to_replace = [to_replace]
 
-        if isinstance(to_replace, tuple):
-            to_replace = list(to_replace)
-
-        if isinstance(value, tuple):
-            value = list(value)
-
-        if isinstance(to_replace, list) and isinstance(value, list):
-            if len(to_replace) != len(value):
-                raise ValueError("to_replace and value lists should be of the same length")
-            rep_dict = dict(zip(to_replace, value))
-        elif isinstance(to_replace, list) and isinstance(value, (float, int, long, basestring)):
-            rep_dict = dict([(tr, value) for tr in to_replace])
-        elif isinstance(to_replace, dict):
+        if isinstance(to_replace, dict):
             rep_dict = to_replace
+            if value is not None:
+                warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
+        else:
+            if isinstance(value, (float, int, long, basestring)) or value is None:
+                value = [value for _ in range(len(to_replace))]
+            rep_dict = dict(zip(to_replace, value))
+
+        if isinstance(subset, basestring):
+            subset = [subset]
+
+        # Verify we were not passed in mixed type generics.
+        if not any(all_of_type(rep_dict.keys())
+                   and all_of_type(x for x in rep_dict.values() if x is not None)
+                   for all_of_type in [all_of_bool, all_of_str, all_of_numeric]):
+            raise ValueError("Mixed type replacements are not supported")
 
         if subset is None:
             return DataFrame(self._jdf.na().replace('*', rep_dict), self.sql_ctx)
-        elif isinstance(subset, basestring):
-            subset = [subset]
-
-        if not isinstance(subset, (list, tuple)):
-            raise ValueError("subset should be a list or tuple of column names")
-
-        return DataFrame(
-            self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)), self.sql_ctx)
+        else:
+            return DataFrame(
+                self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)), self.sql_ctx)
 
     @since(2.0)
     def approxQuantile(self, col, probabilities, relativeError):
         """
-        Calculates the approximate quantiles of a numerical column of a
+        Calculates the approximate quantiles of numerical columns of a
         DataFrame.
 
         The result of this algorithm has the following deterministic bound:
@@ -1309,11 +1819,15 @@ class DataFrame(object):
 
         This method implements a variation of the Greenwald-Khanna
         algorithm (with some speed optimizations). The algorithm was first
-        present in [[http://dx.doi.org/10.1145/375663.375670
+        present in [[https://doi.org/10.1145/375663.375670
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        :param col: the name of the numerical column
+        Note that null values will be ignored in numerical columns before calculation.
+        For columns only containing null values, an empty list is returned.
+
+        :param col: str, list.
+          Can be a single column name, or a list of names for multiple columns.
         :param probabilities: a list of quantile probabilities
           Each number must belong to [0, 1].
           For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
@@ -1321,10 +1835,30 @@ class DataFrame(object):
           (>= 0). If set to zero, the exact quantiles are computed, which
           could be very expensive. Note that values greater than 1 are
           accepted but give the same result as 1.
-        :return:  the approximate quantiles at the given probabilities
+        :return:  the approximate quantiles at the given probabilities. If
+          the input `col` is a string, the output is a list of floats. If the
+          input `col` is a list or tuple of strings, the output is also a
+          list, but each element in it is a list of floats, i.e., the output
+          is a list of list of floats.
+
+        .. versionchanged:: 2.2
+           Added support for multiple columns.
         """
-        if not isinstance(col, str):
-            raise ValueError("col should be a string.")
+
+        if not isinstance(col, (basestring, list, tuple)):
+            raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
+
+        isStr = isinstance(col, basestring)
+
+        if isinstance(col, tuple):
+            col = list(col)
+        elif isStr:
+            col = [col]
+
+        for c in col:
+            if not isinstance(c, basestring):
+                raise ValueError("columns should be strings, but got %r" % type(c))
+        col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
             raise ValueError("probabilities should be a list or tuple")
@@ -1340,7 +1874,8 @@ class DataFrame(object):
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
-        return list(jaq)
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
@@ -1353,9 +1888,9 @@ class DataFrame(object):
         :param col2: The name of the second column
         :param method: The correlation method. Currently only supports "pearson"
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         if not method:
             method = "pearson"
@@ -1373,9 +1908,9 @@ class DataFrame(object):
         :param col1: The name of the first column
         :param col2: The name of the second column
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
@@ -1395,9 +1930,9 @@ class DataFrame(object):
         :param col2: The name of the second column. Distinct items will make the column names
             of the DataFrame.
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
@@ -1406,11 +1941,11 @@ class DataFrame(object):
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
-        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        "https://doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
-        .. note::  This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1432,11 +1967,15 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
 
+        The column expression must be an expression over this DataFrame; attempting to add
+        a column from some other dataframe will raise an error.
+
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
 
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
+
         """
         assert isinstance(col, Column), "col should be Column"
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
@@ -1448,7 +1987,7 @@ class DataFrame(object):
         This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
-        :param col: string, new name of the column.
+        :param new: string, new name of the column.
 
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
@@ -1509,20 +2048,134 @@ class DataFrame(object):
 
     @since(1.3)
     def toPandas(self):
-        """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
-
-        Note that this method should only be used if the resulting Pandas's DataFrame is expected
-        to be small, as all the data is loaded into the driver's memory.
+        """
+        Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
         This is only available if Pandas is installed and available.
+
+        .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
+            to be small, as all the data is loaded into the driver's memory.
+
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
         1    5    Bob
         """
+        from pyspark.sql.utils import require_minimum_pandas_version
+        require_minimum_pandas_version()
+
         import pandas as pd
-        return pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        if self.sql_ctx._conf.pandasRespectSessionTimeZone():
+            timezone = self.sql_ctx._conf.sessionLocalTimeZone()
+        else:
+            timezone = None
+
+        if self.sql_ctx._conf.arrowEnabled():
+            use_arrow = True
+            try:
+                from pyspark.sql.types import to_arrow_schema
+                from pyspark.sql.utils import require_minimum_pyarrow_version
+
+                require_minimum_pyarrow_version()
+                to_arrow_schema(self.schema)
+            except Exception as e:
+
+                if self.sql_ctx._conf.arrowFallbackEnabled():
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                        "failed by the reason below:\n  %s\n"
+                        "Attempting non-optimization as "
+                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                        "true." % _exception_message(e))
+                    warnings.warn(msg)
+                    use_arrow = False
+                else:
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "false.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+            # Try to use Arrow optimization when the schema is supported and the required version
+            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
+            if use_arrow:
+                try:
+                    from pyspark.sql.types import _check_dataframe_convert_date, \
+                        _check_dataframe_localize_timestamps
+                    import pyarrow
+                    batches = self._collectAsArrow()
+                    if len(batches) > 0:
+                        table = pyarrow.Table.from_batches(batches)
+                        pdf = table.to_pandas()
+                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        return _check_dataframe_localize_timestamps(pdf, timezone)
+                    else:
+                        return pd.DataFrame.from_records([], columns=self.columns)
+                except Exception as e:
+                    # We might have to allow fallback here as well but multiple Spark jobs can
+                    # be executed. So, simply fail in this case for now.
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
+                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+        # Below is toPandas without Arrow optimization.
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        dtype = {}
+        for field in self.schema:
+            pandas_type = _to_corrected_pandas_type(field.dataType)
+            # SPARK-21766: if an integer field is nullable and has null values, it can be
+            # inferred by pandas as float column. Once we convert the column with NaN back
+            # to integer type e.g., np.int16, we will hit exception. So we use the inferred
+            # float type, not the corrected type from the schema in this case.
+            if pandas_type is not None and \
+                not(isinstance(field.dataType, IntegralType) and field.nullable and
+                    pdf[field.name].isnull().any()):
+                dtype[field.name] = pandas_type
+
+        for f, t in dtype.items():
+            pdf[f] = pdf[f].astype(t, copy=False)
+
+        if timezone is None:
+            return pdf
+        else:
+            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
+            for field in self.schema:
+                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                if isinstance(field.dataType, TimestampType):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+            return pdf
+
+    def _collectAsArrow(self):
+        """
+        Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
+        and available on driver and worker Python environments.
+
+        .. note:: Experimental.
+        """
+        with SCCallSiteSync(self._sc) as css:
+            sock_info = self._jdf.collectAsArrowToPython()
+
+        # Collect list of un-ordered batches where last element is a list of correct order indices
+        results = list(_load_from_socket(sock_info, ArrowCollectSerializer()))
+        batches = results[:-1]
+        batch_order = results[-1]
+
+        # Re-order the batch list using the correct order
+        return [batches[i] for i in batch_order]
 
     ##########################################################################################
     # Pandas compatibility
@@ -1551,6 +2204,24 @@ def _to_scala_map(sc, jm):
     return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
+def _to_corrected_pandas_type(dt):
+    """
+    When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
+    This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
+    """
+    import numpy as np
+    if type(dt) == ByteType:
+        return np.int8
+    elif type(dt) == ShortType:
+        return np.int16
+    elif type(dt) == IntegerType:
+        return np.int32
+    elif type(dt) == FloatType:
+        return np.float32
+    else:
+        return None
+
+
 class DataFrameNaFunctions(object):
     """Functionality for working with missing data in :class:`DataFrame`.
 
@@ -1570,7 +2241,7 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
-    def replace(self, to_replace, value, subset=None):
+    def replace(self, to_replace, value=_NoValue, subset=None):
         return self.df.replace(to_replace, value, subset)
 
     replace.__doc__ = DataFrame.replace.__doc__
@@ -1621,6 +2292,7 @@ def _test():
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
+    from pyspark.sql.functions import from_unixtime
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
@@ -1633,16 +2305,21 @@ def _test():
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
                                    Row(name='Bob', age=5)]).toDF()
     globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
-                                  Row(name='Bob', age=5, height=None),
-                                  Row(name='Tom', age=None, height=None),
-                                  Row(name=None, age=None, height=None)]).toDF()
+                                   Row(name='Bob', age=5, height=None),
+                                   Row(name='Tom', age=None, height=None),
+                                   Row(name=None, age=None, height=None)]).toDF()
+    globs['df5'] = sc.parallelize([Row(name='Alice', spy=False, age=10),
+                                   Row(name='Bob', spy=None, age=5),
+                                   Row(name='Mallory', spy=True, age=None)]).toDF()
+    globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
+                                   Row(name='Bob', time=1479442946)]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

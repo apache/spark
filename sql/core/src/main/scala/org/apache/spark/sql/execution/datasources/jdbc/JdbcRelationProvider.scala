@@ -30,19 +30,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
-    val partitionColumn = jdbcOptions.partitionColumn
-    val lowerBound = jdbcOptions.lowerBound
-    val upperBound = jdbcOptions.upperBound
-    val numPartitions = jdbcOptions.numPartitions
-
-    val partitionInfo = if (partitionColumn == null) {
-      null
-    } else {
-      JDBCPartitioningInfo(
-        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
-    }
-    val parts = JDBCRelation.columnPartition(partitionInfo)
-    JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
+    val resolver = sqlContext.conf.resolver
+    val timeZoneId = sqlContext.conf.sessionLocalTimeZone
+    val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
+    val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
+    JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
   }
 
   override def createRelation(
@@ -50,35 +42,35 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
-    val jdbcOptions = new JDBCOptions(parameters)
-    val url = jdbcOptions.url
-    val table = jdbcOptions.table
-    val createTableOptions = jdbcOptions.createTableOptions
-    val isTruncate = jdbcOptions.isTruncate
+    val options = new JdbcOptionsInWrite(parameters)
+    val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
-    val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
+    val conn = JdbcUtils.createConnectionFactory(options)()
     try {
-      val tableExists = JdbcUtils.tableExists(conn, url, table)
+      val tableExists = JdbcUtils.tableExists(conn, options)
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
-            if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
+            if (options.isTruncate && isCascadingTruncateTable(options.url) == Some(false)) {
               // In this case, we should truncate table and then load.
-              truncateTable(conn, table)
-              saveTable(df, url, table, jdbcOptions)
+              truncateTable(conn, options)
+              val tableSchema = JdbcUtils.getSchemaOption(conn, options)
+              saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
-              dropTable(conn, table)
-              createTable(df.schema, url, table, createTableOptions, conn)
-              saveTable(df, url, table, jdbcOptions)
+              dropTable(conn, options.table, options)
+              createTable(conn, df, options)
+              saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
 
           case SaveMode.Append =>
-            saveTable(df, url, table, jdbcOptions)
+            val tableSchema = JdbcUtils.getSchemaOption(conn, options)
+            saveTable(df, tableSchema, isCaseSensitive, options)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
-              s"Table or view '$table' already exists. SaveMode: ErrorIfExists.")
+              s"Table or view '${options.table}' already exists. " +
+                s"SaveMode: ErrorIfExists.")
 
           case SaveMode.Ignore =>
             // With `SaveMode.Ignore` mode, if table already exists, the save operation is expected
@@ -86,8 +78,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        createTable(df.schema, url, table, createTableOptions, conn)
-        saveTable(df, url, table, jdbcOptions)
+        createTable(conn, df, options)
+        saveTable(df, Some(df.schema), isCaseSensitive, options)
       }
     } finally {
       conn.close()

@@ -20,161 +20,271 @@ package org.apache.spark.sql.execution.command
 import scala.collection.mutable
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStat, LogicalPlan, Statistics}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
 /**
  * Analyzes the given columns of the given table to generate statistics, which will be used in
- * query optimizations.
+ * query optimizations. Parameter `allColumns` may be specified to generate statistics of all the
+ * columns of a given table.
  */
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
-    columnNames: Seq[String]) extends RunnableCommand {
+    columnNames: Option[Seq[String]],
+    allColumns: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    require((columnNames.isDefined ^ allColumns), "Parameter `columnNames` or `allColumns` are " +
+      "mutually exclusive. Only one of them should be specified.")
     val sessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
-
-    relation match {
-      case catalogRel: CatalogRelation =>
-        updateStats(catalogRel.catalogTable,
-          AnalyzeTableCommand.calculateTotalSize(sessionState, catalogRel.catalogTable))
-
-      case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
-        updateStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
-
-      case otherRelation =>
-        throw new AnalysisException("ANALYZE TABLE is not supported for " +
-          s"${otherRelation.nodeName}.")
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
+    val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+    val relation = sparkSession.table(tableIdent).logicalPlan
+    val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
 
-    def updateStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      val (rowCount, columnStats) = computeColStats(sparkSession, relation)
-      // We also update table-level stats in order to keep them consistent with column-level stats.
-      val statistics = Statistics(
-        sizeInBytes = newTotalSize,
-        rowCount = Some(rowCount),
-        // Newly computed column stats should override the existing ones.
-        colStats = catalogTable.stats.map(_.colStats).getOrElse(Map()) ++ columnStats)
-      sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
-      // Refresh the cached data source table in the catalog.
-      sessionState.catalog.refreshTable(tableIdentWithDB)
-    }
+    // Compute stats for the computed list of columns.
+    val (rowCount, newColStats) =
+      computeColumnStats(sparkSession, relation, columnsToAnalyze)
+
+    // We also update table-level stats in order to keep them consistent with column-level stats.
+    val statistics = CatalogStatistics(
+      sizeInBytes = sizeInBytes,
+      rowCount = Some(rowCount),
+      // Newly computed column stats should override the existing ones.
+      colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColStats)
+
+    sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
 
     Seq.empty[Row]
   }
 
-  def computeColStats(
-      sparkSession: SparkSession,
-      relation: LogicalPlan): (Long, Map[String, ColumnStat]) = {
-
-    // check correctness of column names
-    val attributesToAnalyze = mutable.MutableList[Attribute]()
-    val duplicatedColumns = mutable.MutableList[String]()
-    val resolver = sparkSession.sessionState.conf.resolver
-    columnNames.foreach { col =>
-      val exprOption = relation.output.find(attr => resolver(attr.name, col))
-      val expr = exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
-      // do deduplication
-      if (!attributesToAnalyze.contains(expr)) {
-        attributesToAnalyze += expr
-      } else {
-        duplicatedColumns += col
+  private def getColumnsToAnalyze(
+      tableIdent: TableIdentifier,
+      relation: LogicalPlan,
+      columnNames: Option[Seq[String]],
+      allColumns: Boolean = false): Seq[Attribute] = {
+    val columnsToAnalyze = if (allColumns) {
+      relation.output
+    } else {
+      columnNames.get.map { col =>
+        val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
+        exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
       }
     }
-    if (duplicatedColumns.nonEmpty) {
-      logWarning("Duplicate column names were deduplicated in `ANALYZE TABLE` statement. " +
-        s"Input columns: ${columnNames.mkString("(", ", ", ")")}. " +
-        s"Duplicate columns: ${duplicatedColumns.mkString("(", ", ", ")")}.")
+    // Make sure the column types are supported for stats gathering.
+    columnsToAnalyze.foreach { attr =>
+      if (!supportsType(attr.dataType)) {
+        throw new AnalysisException(
+          s"Column ${attr.name} in table $tableIdent is of type ${attr.dataType}, " +
+            "and Spark does not support statistics collection on this column type.")
+      }
     }
+    columnsToAnalyze
+  }
+
+  /**
+   * Compute stats for the given columns.
+   * @return (row count, map from column name to CatalogColumnStats)
+   */
+  private def computeColumnStats(
+      sparkSession: SparkSession,
+      relation: LogicalPlan,
+      columns: Seq[Attribute]): (Long, Map[String, CatalogColumnStat]) = {
+    val conf = sparkSession.sessionState.conf
 
     // Collect statistics per column.
+    // If no histogram is required, we run a job to compute basic column stats such as
+    // min, max, ndv, etc. Otherwise, besides basic column stats, histogram will also be
+    // generated. Currently we only support equi-height histogram.
+    // To generate an equi-height histogram, we need two jobs:
+    // 1. compute percentiles p(0), p(1/n) ... p((n-1)/n), p(1).
+    // 2. use the percentiles as value intervals of bins, e.g. [p(0), p(1/n)],
+    // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bin.
+    // Basic column stats will be computed together in the second job.
+    val attributePercentiles = computePercentiles(columns, sparkSession, relation)
+
     // The first element in the result will be the overall row count, the following elements
     // will be structs containing all column stats.
     // The layout of each struct follows the layout of the ColumnStats.
-    val ndvMaxErr = sparkSession.sessionState.conf.ndvMaxError
     val expressions = Count(Literal(1)).toAggregateExpression() +:
-      attributesToAnalyze.map(ColumnStatStruct(_, ndvMaxErr))
-    val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
-      .queryExecution.toRdd.collect().head
+      columns.map(statExprs(_, conf, attributePercentiles))
 
-    // unwrap the result
+    val namedExpressions = expressions.map(e => Alias(e, e.toString)())
+    val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
+      .executedPlan.executeTake(1).head
+
     val rowCount = statsRow.getLong(0)
-    val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-      val numFields = ColumnStatStruct.numStatFields(expr.dataType)
-      (expr.name, ColumnStat(statsRow.getStruct(i + 1, numFields)))
+    val columnStats = columns.zipWithIndex.map { case (attr, i) =>
+      // according to `statExprs`, the stats struct always have 7 fields.
+      (attr.name, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
+        attributePercentiles.get(attr)).toCatalogColumnStat(attr.name, attr.dataType))
     }.toMap
     (rowCount, columnStats)
   }
-}
 
-object ColumnStatStruct {
-  private val zero = Literal(0, LongType)
-  private val one = Literal(1, LongType)
+  /** Computes percentiles for each attribute. */
+  private def computePercentiles(
+      attributesToAnalyze: Seq[Attribute],
+      sparkSession: SparkSession,
+      relation: LogicalPlan): AttributeMap[ArrayData] = {
+    val attrsToGenHistogram = if (conf.histogramEnabled) {
+      attributesToAnalyze.filter(a => supportsHistogram(a.dataType))
+    } else {
+      Nil
+    }
+    val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
+    if (attrsToGenHistogram.nonEmpty) {
+      val percentiles = (0 to conf.histogramNumBins)
+        .map(i => i.toDouble / conf.histogramNumBins).toArray
 
-  private def numNulls(e: Expression): Expression = {
-    if (e.nullable) Sum(If(IsNull(e), one, zero)) else zero
-  }
-  private def max(e: Expression): Expression = Max(e)
-  private def min(e: Expression): Expression = Min(e)
-  private def ndv(e: Expression, relativeSD: Double): Expression = {
-    // the approximate ndv should never be larger than the number of rows
-    Least(Seq(HyperLogLogPlusPlus(e, relativeSD), Count(one)))
-  }
-  private def avgLength(e: Expression): Expression = Average(Length(e))
-  private def maxLength(e: Expression): Expression = Max(Length(e))
-  private def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
-  private def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
-
-  private def getStruct(exprs: Seq[Expression]): CreateStruct = {
-    CreateStruct(exprs.map { expr: Expression =>
-      expr.transformUp {
-        case af: AggregateFunction => af.toAggregateExpression()
+      val namedExprs = attrsToGenHistogram.map { attr =>
+        val aggFunc =
+          new ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
+        val expr = aggFunc.toAggregateExpression()
+        Alias(expr, expr.toString)()
       }
+
+      val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
+        .executedPlan.executeTake(1).head
+      attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
+        val percentiles = percentilesRow.getArray(i)
+        // When there is no non-null value, `percentiles` is null. In such case, there is no
+        // need to generate histogram.
+        if (percentiles != null) {
+          attributePercentiles += attr -> percentiles
+        }
+      }
+    }
+    AttributeMap(attributePercentiles.toSeq)
+  }
+
+  /** Returns true iff the we support gathering column statistics on column of the given type. */
+  private def supportsType(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType => true
+    case _: DecimalType => true
+    case DoubleType | FloatType => true
+    case BooleanType => true
+    case DateType => true
+    case TimestampType => true
+    case BinaryType | StringType => true
+    case _ => false
+  }
+
+  /** Returns true iff the we support gathering histogram on column of the given type. */
+  private def supportsHistogram(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType => true
+    case _: DecimalType => true
+    case DoubleType | FloatType => true
+    case DateType => true
+    case TimestampType => true
+    case _ => false
+  }
+
+  /**
+   * Constructs an expression to compute column statistics for a given column.
+   *
+   * The expression should create a single struct column with the following schema:
+   * distinctCount: Long, min: T, max: T, nullCount: Long, avgLen: Long, maxLen: Long,
+   * distinctCountsForIntervals: Array[Long]
+   *
+   * Together with [[rowToColumnStat]], this function is used to create [[ColumnStat]] and
+   * as a result should stay in sync with it.
+   */
+  private def statExprs(
+    col: Attribute,
+    conf: SQLConf,
+    colPercentiles: AttributeMap[ArrayData]): CreateNamedStruct = {
+    def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
+      expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
     })
-  }
+    val one = Literal(1L, LongType)
 
-  private def numericColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
-    Seq(numNulls(e), max(e), min(e), ndv(e, relativeSD))
-  }
+    // the approximate ndv (num distinct value) should never be larger than the number of rows
+    val numNonNulls = if (col.nullable) Count(col) else Count(one)
+    val ndv = Least(Seq(HyperLogLogPlusPlus(col, conf.ndvMaxError), numNonNulls))
+    val numNulls = Subtract(Count(one), numNonNulls)
+    val defaultSize = Literal(col.dataType.defaultSize.toLong, LongType)
+    val nullArray = Literal(null, ArrayType(LongType))
 
-  private def stringColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
-    Seq(numNulls(e), avgLength(e), maxLength(e), ndv(e, relativeSD))
-  }
+    def fixedLenTypeStruct: CreateNamedStruct = {
+      val genHistogram =
+        supportsHistogram(col.dataType) && colPercentiles.contains(col)
+      val intervalNdvsExpr = if (genHistogram) {
+        ApproxCountDistinctForIntervals(col,
+          Literal(colPercentiles(col), ArrayType(col.dataType)), conf.ndvMaxError)
+      } else {
+        nullArray
+      }
+      // For fixed width types, avg size should be the same as max size.
+      struct(ndv, Cast(Min(col), col.dataType), Cast(Max(col), col.dataType), numNulls,
+        defaultSize, defaultSize, intervalNdvsExpr)
+    }
 
-  private def binaryColumnStat(e: Expression): Seq[Expression] = {
-    Seq(numNulls(e), avgLength(e), maxLength(e))
-  }
-
-  private def booleanColumnStat(e: Expression): Seq[Expression] = {
-    Seq(numNulls(e), numTrues(e), numFalses(e))
-  }
-
-  def numStatFields(dataType: DataType): Int = {
-    dataType match {
-      case BinaryType | BooleanType => 3
-      case _ => 4
+    col.dataType match {
+      case _: IntegralType => fixedLenTypeStruct
+      case _: DecimalType => fixedLenTypeStruct
+      case DoubleType | FloatType => fixedLenTypeStruct
+      case BooleanType => fixedLenTypeStruct
+      case DateType => fixedLenTypeStruct
+      case TimestampType => fixedLenTypeStruct
+      case BinaryType | StringType =>
+        // For string and binary type, we don't compute min, max or histogram
+        val nullLit = Literal(null, col.dataType)
+        struct(
+          ndv, nullLit, nullLit, numNulls,
+          // Set avg/max size to default size if all the values are null or there is no value.
+          Coalesce(Seq(Ceil(Average(Length(col))), defaultSize)),
+          Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)),
+          nullArray)
+      case _ =>
+        throw new AnalysisException("Analyzing column statistics is not supported for column " +
+          s"${col.name} of data type: ${col.dataType}.")
     }
   }
 
-  def apply(attr: Attribute, relativeSD: Double): CreateStruct = attr.dataType match {
-    // Use aggregate functions to compute statistics we need.
-    case _: NumericType | TimestampType | DateType => getStruct(numericColumnStat(attr, relativeSD))
-    case StringType => getStruct(stringColumnStat(attr, relativeSD))
-    case BinaryType => getStruct(binaryColumnStat(attr))
-    case BooleanType => getStruct(booleanColumnStat(attr))
-    case otherType =>
-      throw new AnalysisException("Analyzing columns is not supported for column " +
-        s"${attr.name} of data type: ${attr.dataType}.")
+  /** Convert a struct for column stats (defined in `statExprs`) into [[ColumnStat]]. */
+  private def rowToColumnStat(
+    row: InternalRow,
+    attr: Attribute,
+    rowCount: Long,
+    percentiles: Option[ArrayData]): ColumnStat = {
+    // The first 6 fields are basic column stats, the 7th is ndvs for histogram bins.
+    val cs = ColumnStat(
+      distinctCount = Option(BigInt(row.getLong(0))),
+      // for string/binary min/max, get should return null
+      min = Option(row.get(1, attr.dataType)),
+      max = Option(row.get(2, attr.dataType)),
+      nullCount = Option(BigInt(row.getLong(3))),
+      avgLen = Option(row.getLong(4)),
+      maxLen = Option(row.getLong(5))
+    )
+    if (row.isNullAt(6) || cs.nullCount.isEmpty) {
+      cs
+    } else {
+      val ndvs = row.getArray(6).toLongArray()
+      assert(percentiles.get.numElements() == ndvs.length + 1)
+      val endpoints = percentiles.get.toArray[Any](attr.dataType).map(_.toString.toDouble)
+      // Construct equi-height histogram
+      val bins = ndvs.zipWithIndex.map { case (ndv, i) =>
+        HistogramBin(endpoints(i), endpoints(i + 1), ndv)
+      }
+      val nonNullRows = rowCount - cs.nullCount.get
+      val histogram = Histogram(nonNullRows.toDouble / ndvs.length, bins)
+      cs.copy(histogram = Some(histogram))
+    }
   }
+
 }

@@ -16,15 +16,23 @@ limitations under the License.
 -->
 
 <script id="executors-summary-template" type="text/html">
-  <h4 style="clear: left; display: inline-block;">Summary</h4>
+  <h4 class="title-table">Summary</h4>
   <div class="container-fluid">
     <div class="container-fluid">
-      <table id="summary-execs-table" class="table table-striped compact">
+      <table id="summary-execs-table" class="table table-striped compact cell-border">
         <thead>
         <th></th>
         <th>RDD Blocks</th>
         <th><span data-toggle="tooltip"
-                  title="Memory used / total available memory for storage of data like RDD partitions cached in memory. ">Storage Memory</span>
+                  title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">Storage Memory</span>
+        </th>
+        <th class="on_heap_memory">
+          <span data-toggle="tooltip"
+                title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">On Heap Storage Memory</span>
+        </th>
+        <th class="off_heap_memory">
+          <span data-toggle="tooltip"
+                title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">Off Heap Storage Memory</span>
         </th>
         <th>Disk Used</th>
         <th>Cores</th>
@@ -45,16 +53,21 @@ limitations under the License.
                 title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
             Shuffle Write</span>
         </th>
+        <th>
+          <span data-toggle="tooltip" data-placement="left"
+                title="Number of executors blacklisted by the scheduler due to task failures.">
+            Blacklisted</span>
+        </th>
         </thead>
         <tbody>
         </tbody>
       </table>
     </div>
   </div>
-  <h4 style="clear: left; display: inline-block;">Executors</h4>
+  <h4 class="title-table">Executors</h4>
   <div class="container-fluid">
     <div class="container-fluid">
-      <table id="active-executors-table" class="table table-striped compact">
+      <table id="active-executors-table" class="table table-striped compact cell-border">
         <thead>
         <tr>
           <th>
@@ -68,6 +81,14 @@ limitations under the License.
             <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">
               Storage Memory</span></th>
+          <th class="on_heap_memory">
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">
+              On Heap Storage Memory</span></th>
+          <th class="off_heap_memory">
+            <span data-toggle="tooltip"
+                  title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">
+              Off Heap Storage Memory</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Disk Used">Disk Used</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Cores">Cores</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Active Tasks">Active Tasks</span></th>

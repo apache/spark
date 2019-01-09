@@ -17,62 +17,90 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.locks.ReentrantLock
+import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.nio.channels.ClosedByInterruptException
+import java.util.UUID
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.{Condition, ReentrantLock}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{Map => MutableMap}
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
+
+/** States for [[StreamExecution]]'s lifecycle. */
+trait State
+case object INITIALIZING extends State
+case object ACTIVE extends State
+case object TERMINATED extends State
+case object RECONFIGURING extends State
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
  * Unlike a standard query, a streaming query executes repeatedly each time new data arrives at any
  * [[Source]] present in the query plan. Whenever new data arrives, a [[QueryExecution]] is created
  * and the results are committed transactionally to the given [[Sink]].
+ *
+ * @param deleteCheckpointOnStop whether to delete the checkpoint if the query is stopped without
+ *                               errors
  */
-class StreamExecution(
+abstract class StreamExecution(
     override val sparkSession: SparkSession,
-    override val id: Long,
     override val name: String,
-    checkpointRoot: String,
-    val logicalPlan: LogicalPlan,
-    val sink: Sink,
+    private val checkpointRoot: String,
+    analyzedPlan: LogicalPlan,
+    val sink: BaseStreamingSink,
     val trigger: Trigger,
     val triggerClock: Clock,
-    val outputMode: OutputMode)
-  extends StreamingQuery with Logging {
+    val outputMode: OutputMode,
+    deleteCheckpointOnStop: Boolean)
+  extends StreamingQuery with ProgressReporter with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
-  import StreamMetrics._
 
-  private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
+  protected val pollingDelayMs: Long = sparkSession.sessionState.conf.streamingPollingDelay
+
+  protected val minLogEntriesToMaintain: Int = sparkSession.sessionState.conf.minBatchesToRetain
+  require(minLogEntriesToMaintain > 0, "minBatchesToRetain has to be positive")
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
    */
-  private val awaitBatchLock = new ReentrantLock(true)
-  private val awaitBatchLockCondition = awaitBatchLock.newCondition()
+  protected val awaitProgressLock = new ReentrantLock(true)
+  protected val awaitProgressLockCondition = awaitProgressLock.newCondition()
 
+  private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
+
+  val resolvedCheckpointRoot = {
+    val checkpointPath = new Path(checkpointRoot)
+    val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    fs.mkdirs(checkpointPath)
+    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
+  }
+
+  def logicalPlan: LogicalPlan
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
    * input source.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   var committedOffsets = new StreamProgress
@@ -80,60 +108,91 @@ class StreamExecution(
   /**
    * Tracks the offsets that are available to be processed, but have not yet be committed to the
    * sink.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
-  private var availableOffsets = new StreamProgress
+  var availableOffsets = new StreamProgress
+
+  @volatile
+  var sinkCommitProgress: Option[StreamWriterCommitProgress] = None
 
   /** The current batchId or -1 if execution has not yet been initialized. */
-  private var currentBatchId: Long = -1
+  protected var currentBatchId: Long = -1
 
-  /** All stream sources present in the query plan. */
-  private val sources =
-    logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
-
-  /** A list of unique sources in the query plan. */
-  private val uniqueSources = sources.distinct
-
-  private val triggerExecutor = trigger match {
-    case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
+  /** Metadata associated with the whole query */
+  protected val streamMetadata: StreamMetadata = {
+    val metadataPath = new Path(checkpointFile("metadata"))
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
+      val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
+      StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
+      newMetadata
+    }
   }
 
+  /** Metadata associated with the offset seq of a batch in the query. */
+  protected var offsetSeqMetadata = OffsetSeqMetadata(
+    batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
+
+  /**
+   * A map of current watermarks, keyed by the position of the watermark operator in the
+   * physical plan.
+   *
+   * This state is 'soft state', which does not affect the correctness and semantics of watermarks
+   * and is not persisted across query restarts.
+   * The fault-tolerant watermark state is in offsetSeqMetadata.
+   */
+  protected val watermarkMsMap: MutableMap[Int, Long] = MutableMap()
+
+  override val id: UUID = UUID.fromString(streamMetadata.id)
+
+  override val runId: UUID = UUID.randomUUID
+
+  /**
+   * Pretty identified string of printing in logs. Format is
+   * If name is set "queryName [id = xyz, runId = abc]" else "[id = xyz, runId = abc]"
+   */
+  protected val prettyIdString =
+    Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
+
+  /**
+   * A list of unique sources in the query plan. This will be set when generating logical plan.
+   */
+  @volatile protected var uniqueSources: Seq[BaseStreamingSource] = Seq.empty
+
   /** Defines the internal state of execution */
-  @volatile
-  private var state: State = INITIALIZED
+  protected val state = new AtomicReference[State](INITIALIZING)
 
   @volatile
-  var lastExecution: QueryExecution = null
+  var lastExecution: IncrementalExecution = _
+
+  /** Holds the most recent input data for each source. */
+  protected var newData: Map[BaseStreamingSource, LogicalPlan] = _
 
   @volatile
-  private var streamDeathCause: StreamingQueryException = null
+  protected var streamDeathCause: StreamingQueryException = null
 
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
-  /** Metrics for this query */
-  private val streamMetrics =
-    new StreamMetrics(uniqueSources.toSet, triggerClock, s"StructuredStreaming.$name")
-
-  @volatile
-  private var currentStatus: StreamingQueryStatus = null
-
-  /** Flag that signals whether any error with input metrics have already been logged */
-  @volatile
-  private var metricWarningLogged: Boolean = false
+  /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
+  lazy val streamMetrics = new MetricsReporter(
+    this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
-   * [[org.apache.spark.util.UninterruptibleThread]] to avoid potential deadlocks in using
-   * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
+   * [[org.apache.spark.util.UninterruptibleThread]] to workaround KAFKA-1894: interrupting a
+   * running `KafkaConsumer` may cause endless loop.
    */
-  val microBatchThread =
-    new StreamExecutionThread(s"stream execution thread for $name") {
+  val queryExecutionThread: QueryExecutionThread =
+    new QueryExecutionThread(s"stream execution thread for $prettyIdString") {
       override def run(): Unit = {
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        runBatches()
+        runStream()
       }
     }
 
@@ -143,55 +202,63 @@ class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  val offsetLog = new HDFSMetadataLog[CompositeOffset](sparkSession, checkpointFile("offsets"))
+  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
+
+  /**
+   * A log that records the batch ids that have completed. This is used to check if a batch was
+   * fully processed, and its output was committed to the sink, hence no need to process it again.
+   * This is used (for instance) during restart, to help identify which batch to run next.
+   */
+  val commitLog = new CommitLog(sparkSession, checkpointFile("commits"))
+
+  /** Whether all fields of the query have been initialized */
+  private def isInitialized: Boolean = state.get != INITIALIZING
 
   /** Whether the query is currently active or not */
-  override def isActive: Boolean = state == ACTIVE
-
-  /** Returns the current status of the query. */
-  override def status: StreamingQueryStatus = currentStatus
-
-  /** Returns current status of all the sources. */
-  override def sourceStatuses: Array[SourceStatus] = currentStatus.sourceStatuses.toArray
-
-  /** Returns current status of the sink. */
-  override def sinkStatus: SinkStatus = currentStatus.sinkStatus
+  override def isActive: Boolean = state.get != TERMINATED
 
   /** Returns the [[StreamingQueryException]] if the query was terminated by an exception. */
   override def exception: Option[StreamingQueryException] = Option(streamDeathCause)
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
-  private def checkpointFile(name: String): String =
-    new Path(new Path(checkpointRoot), name).toUri.toString
+  protected def checkpointFile(name: String): String =
+    new Path(new Path(resolvedCheckpointRoot), name).toUri.toString
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
    * has been posted to all the listeners.
    */
   def start(): Unit = {
-    microBatchThread.setDaemon(true)
-    microBatchThread.start()
+    logInfo(s"Starting $prettyIdString. Use $resolvedCheckpointRoot to store the query checkpoint.")
+    queryExecutionThread.setDaemon(true)
+    queryExecutionThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
   }
 
   /**
-   * Repeatedly attempts to run batches as data arrives.
+   * Run the activated stream until stopped.
+   */
+  protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit
+
+  /**
+   * Activate the stream and then wrap a callout to runActivatedStream, handling start and stop.
    *
    * Note that this method ensures that [[QueryStartedEvent]] and [[QueryTerminatedEvent]] are
    * posted such that listeners are guaranteed to get a start event before a termination.
    * Furthermore, this method also ensures that [[QueryStartedEvent]] event is posted before the
    * `start()` method returns.
    */
-  private def runBatches(): Unit = {
+  private def runStream(): Unit = {
     try {
-      // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
-      // so must mark this as ACTIVE first.
-      state = ACTIVE
+      sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
+        interruptOnCancel = true)
+      sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
-      updateStatus()
-      postEvent(new QueryStartedEvent(currentStatus)) // Assumption: Does not throw exception.
+
+      // `postEvent` does not throw non fatal exception.
+      postEvent(new QueryStartedEvent(id, runId, name))
 
       // Unblock starting thread
       startLatch.countDown()
@@ -199,309 +266,210 @@ class StreamExecution(
       // While active, repeatedly attempt to run batches.
       SparkSession.setActiveSession(sparkSession)
 
-      triggerExecutor.execute(() => {
-        streamMetrics.reportTriggerStarted(currentBatchId)
-        streamMetrics.reportTriggerDetail(STATUS_MESSAGE, "Finding new data from sources")
-        updateStatus()
-        val isTerminated = reportTimeTaken(TRIGGER_LATENCY) {
-          if (isActive) {
-            if (currentBatchId < 0) {
-              // We'll do this initialization only once
-              populateStartOffsets()
-              logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-            } else {
-              constructNextBatch()
-            }
-            if (dataAvailable) {
-              streamMetrics.reportTriggerDetail(IS_DATA_PRESENT_IN_TRIGGER, true)
-              streamMetrics.reportTriggerDetail(STATUS_MESSAGE, "Processing new data")
-              updateStatus()
-              runBatch()
-              // We'll increase currentBatchId after we complete processing current batch's data
-              currentBatchId += 1
-            } else {
-              streamMetrics.reportTriggerDetail(IS_DATA_PRESENT_IN_TRIGGER, false)
-              streamMetrics.reportTriggerDetail(STATUS_MESSAGE, "No new data")
-              updateStatus()
-              Thread.sleep(pollingDelayMs)
-            }
-            true
-          } else {
-            false
-          }
-        }
-        // Update metrics and notify others
-        streamMetrics.reportTriggerFinished()
-        updateStatus()
-        postEvent(new QueryProgressEvent(currentStatus))
-        isTerminated
-      })
+      updateStatusMessage("Initializing sources")
+      // force initialization of the logical plan so that the sources can be created
+      logicalPlan
+
+      // Isolated spark session to run the batches with.
+      val sparkSessionForStream = sparkSession.cloneSession()
+      // Adaptive execution can change num shuffle partitions, disallow
+      sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      // Disable cost-based join optimization as we do not want stateful operations to be rearranged
+      sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
+      offsetSeqMetadata = OffsetSeqMetadata(
+        batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
+
+      if (state.compareAndSet(INITIALIZING, ACTIVE)) {
+        // Unblock `awaitInitialization`
+        initializationLatch.countDown()
+        runActivatedStream(sparkSessionForStream)
+        updateStatusMessage("Stopped")
+      } else {
+        // `stop()` is already called. Let `finally` finish the cleanup.
+      }
     } catch {
-      case _: InterruptedException if state == TERMINATED => // interrupted by stop()
+      case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
+        // interrupted by stop()
+        updateStatusMessage("Stopped")
+      case e: IOException if e.getMessage != null
+        && e.getMessage.startsWith(classOf[InterruptedException].getName)
+        && state.get == TERMINATED =>
+        // This is a workaround for HADOOP-12074: `Shell.runCommand` converts `InterruptedException`
+        // to `new IOException(ie.toString())` before Hadoop 2.8.
+        updateStatusMessage("Stopped")
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
-          this,
-          s"Query $name terminated with exception: ${e.getMessage}",
+          toDebugString(includeLogicalPlan = isInitialized),
+          s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
-          Some(committedOffsets.toCompositeOffset(sources)))
-        logError(s"Query $name terminated with error", e)
+          committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
+          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
+        logError(s"Query $prettyIdString terminated with error", e)
+        updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
         if (!NonFatal(e)) {
           throw e
         }
-    } finally {
-      state = TERMINATED
+    } finally queryExecutionThread.runUninterruptibly {
+      // The whole `finally` block must run inside `runUninterruptibly` to avoid being interrupted
+      // when a query is stopped by the user. We need to make sure the following codes finish
+      // otherwise it may throw `InterruptedException` to `UncaughtExceptionHandler` (SPARK-21248).
 
-      // Update metrics and status
-      streamMetrics.stop()
-      sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
-      updateStatus()
+      // Release latches to unblock the user codes since exception can happen in any place and we
+      // may not get a chance to release them
+      startLatch.countDown()
+      initializationLatch.countDown()
 
-      // Notify others
-      sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(
-        new QueryTerminatedEvent(currentStatus, exception.map(_.cause).map(Utils.exceptionString)))
-      terminationLatch.countDown()
-    }
-  }
-
-  /**
-   * Populate the start offsets to start the execution at the current offsets stored in the sink
-   * (i.e. avoid reprocessing data that we have already processed). This function must be called
-   * before any processing occurs and will populate the following fields:
-   *  - currentBatchId
-   *  - committedOffsets
-   *  - availableOffsets
-   */
-  private def populateStartOffsets(): Unit = {
-    offsetLog.getLatest() match {
-      case Some((batchId, nextOffsets)) =>
-        logInfo(s"Resuming streaming query, starting with batch $batchId")
-        currentBatchId = batchId
-        availableOffsets = nextOffsets.toStreamProgress(sources)
-        logDebug(s"Found possibly uncommitted offsets $availableOffsets")
-
-        offsetLog.get(batchId - 1).foreach {
-          case lastOffsets =>
-            committedOffsets = lastOffsets.toStreamProgress(sources)
-            logDebug(s"Resuming with committed offsets: $committedOffsets")
-        }
-      case None => // We are starting this stream for the first time.
-        logInfo(s"Starting new streaming query.")
-        currentBatchId = 0
-        constructNextBatch()
-    }
-  }
-
-  /**
-   * Returns true if there is any new data available to be processed.
-   */
-  private def dataAvailable: Boolean = {
-    availableOffsets.exists {
-      case (source, available) =>
-        committedOffsets
-            .get(source)
-            .map(committed => committed != available)
-            .getOrElse(true)
-    }
-  }
-
-  /**
-   * Queries all of the sources to see if any new data is available. When there is new data the
-   * batchId counter is incremented and a new log entry is written with the newest offsets.
-   */
-  private def constructNextBatch(): Unit = {
-    // Check to see what new data is available.
-    val hasNewData = {
-      awaitBatchLock.lock()
       try {
-        reportTimeTaken(GET_OFFSET_LATENCY) {
-          val latestOffsets: Map[Source, Option[Offset]] = uniqueSources.map { s =>
-            reportTimeTaken(s, SOURCE_GET_OFFSET_LATENCY) {
-              (s, s.getOffset)
-            }
-          }.toMap
-          availableOffsets ++= latestOffsets.filter { case (s, o) => o.nonEmpty }.mapValues(_.get)
-        }
+        stopSources()
+        state.set(TERMINATED)
+        currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
 
-        if (dataAvailable) {
-          true
-        } else {
-          noNewData = true
-          false
-        }
-      } finally {
-        awaitBatchLock.unlock()
-      }
-    }
-    if (hasNewData) {
-      reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
-        assert(
-          offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
-          s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
-        logInfo(s"Committed offsets for batch $currentBatchId.")
+        // Update metrics and status
+        sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
 
-        // Now that we have logged the new batch, no further processing will happen for
-        // the previous batch, and it is safe to discard the old metadata.
-        // Note that purge is exclusive, i.e. it purges everything before currentBatchId.
-        // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
-        // flight at the same time), this cleanup logic will need to change.
-        offsetLog.purge(currentBatchId)
-      }
-    } else {
-      awaitBatchLock.lock()
-      try {
-        // Wake up any threads that are waiting for the stream to progress.
-        awaitBatchLockCondition.signalAll()
-      } finally {
-        awaitBatchLock.unlock()
-      }
-    }
-    reportTimestamp(GET_OFFSET_TIMESTAMP)
-  }
+        // Notify others
+        sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+        postEvent(
+          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
 
-  /**
-   * Processes any data available between `availableOffsets` and `committedOffsets`.
-   */
-  private def runBatch(): Unit = {
-    // TODO: Move this to IncrementalExecution.
-
-    // Request unprocessed data from all sources.
-    val newData = reportTimeTaken(GET_BATCH_LATENCY) {
-      availableOffsets.flatMap {
-        case (source, available)
-          if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
-          val current = committedOffsets.get(source)
-          val batch = reportTimeTaken(source, SOURCE_GET_BATCH_LATENCY) {
-            source.getBatch(current, available)
+        // Delete the temp checkpoint only when the query didn't fail
+        if (deleteCheckpointOnStop && exception.isEmpty) {
+          val checkpointPath = new Path(resolvedCheckpointRoot)
+          try {
+            val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+            fs.delete(checkpointPath, true)
+          } catch {
+            case NonFatal(e) =>
+              // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
+              // when we cannot delete them.
+              logWarning(s"Cannot delete $checkpointPath", e)
           }
-          logDebug(s"Retrieving data from $source: $current -> $available")
-          Some(source -> batch)
-        case _ => None
+        }
+      } finally {
+        awaitProgressLock.lock()
+        try {
+          // Wake up any threads that are waiting for the stream to progress.
+          awaitProgressLockCondition.signalAll()
+        } finally {
+          awaitProgressLock.unlock()
+        }
+        terminationLatch.countDown()
       }
     }
-    reportTimestamp(GET_BATCH_TIMESTAMP)
-
-    // A list of attributes that will need to be updated.
-    var replacements = new ArrayBuffer[(Attribute, Attribute)]
-    // Replace sources in the logical plan with data that has arrived since the last batch.
-    val withNewSources = logicalPlan transform {
-      case StreamingExecutionRelation(source, output) =>
-        newData.get(source).map { data =>
-          val newPlan = data.logicalPlan
-          assert(output.size == newPlan.output.size,
-            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
-            s"${Utils.truncatedString(newPlan.output, ",")}")
-          replacements ++= output.zip(newPlan.output)
-          newPlan
-        }.getOrElse {
-          LocalRelation(output)
-        }
-    }
-
-    // Rewire the plan to use the new attributes that were returned by the source.
-    val replacementMap = AttributeMap(replacements)
-    val triggerLogicalPlan = withNewSources transformAllExpressions {
-      case a: Attribute if replacementMap.contains(a) => replacementMap(a)
-    }
-
-    val executedPlan = reportTimeTaken(OPTIMIZER_LATENCY) {
-      lastExecution = new IncrementalExecution(
-        sparkSession,
-        triggerLogicalPlan,
-        outputMode,
-        checkpointFile("state"),
-        currentBatchId)
-      lastExecution.executedPlan // Force the lazy generation of execution plan
-    }
-
-    val nextBatch =
-      new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
-    sink.addBatch(currentBatchId, nextBatch)
-    reportNumRows(executedPlan, triggerLogicalPlan, newData)
-
-    awaitBatchLock.lock()
-    try {
-      // Wake up any threads that are waiting for the stream to progress.
-      awaitBatchLockCondition.signalAll()
-    } finally {
-      awaitBatchLock.unlock()
-    }
-
-    // Update committed offsets.
-    committedOffsets ++= availableOffsets
   }
 
-  private def postEvent(event: StreamingQueryListener.Event) {
+  private def isInterruptedByStop(e: Throwable, sc: SparkContext): Boolean = {
+    if (state.get == TERMINATED) {
+      StreamExecution.isInterruptionException(e, sc)
+    } else {
+      false
+    }
+  }
+
+  override protected def postEvent(event: StreamingQueryListener.Event): Unit = {
     sparkSession.streams.postListenerEvent(event)
   }
 
-  /**
-   * Signals to the thread executing micro-batches that it should stop running after the next
-   * batch. This method blocks until the thread stops running.
-   */
-  override def stop(): Unit = {
-    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
-    // intentionally
-    state = TERMINATED
-    if (microBatchThread.isAlive) {
-      microBatchThread.interrupt()
-      microBatchThread.join()
+  /** Stops all streaming sources safely. */
+  protected def stopSources(): Unit = {
+    uniqueSources.foreach { source =>
+      try {
+        source.stop()
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
+      }
     }
-    uniqueSources.foreach(_.stop())
-    logInfo(s"Query $name was stopped")
   }
 
   /**
    * Blocks the current thread until processing for data from the given `source` has reached at
-   * least the given `Offset`. This method is indented for use primarily when writing tests.
+   * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
-  private[sql] def awaitOffset(source: Source, newOffset: Offset): Unit = {
+  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset, timeoutMs: Long): Unit = {
+    assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
-      !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+      if (sources == null) {
+        // sources might not be initialized yet
+        false
+      } else {
+        val source = sources(sourceIndex)
+        !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+      }
     }
 
     while (notDone) {
-      awaitBatchLock.lock()
+      awaitProgressLock.lock()
       try {
-        awaitBatchLockCondition.await(100, TimeUnit.MILLISECONDS)
+        awaitProgressLockCondition.await(timeoutMs, TimeUnit.MILLISECONDS)
         if (streamDeathCause != null) {
           throw streamDeathCause
         }
       } finally {
-        awaitBatchLock.unlock()
+        awaitProgressLock.unlock()
       }
     }
-    logDebug(s"Unblocked at $newOffset for $source")
+    logDebug(s"Unblocked at $newOffset for ${sources(sourceIndex)}")
   }
 
   /** A flag to indicate that a batch has completed with no new data available. */
-  @volatile private var noNewData = false
+  @volatile protected var noNewData = false
+
+  /**
+   * Assert that the await APIs should not be called in the stream thread. Otherwise, it may cause
+   * dead-lock, e.g., calling any await APIs in `StreamingQueryListener.onQueryStarted` will block
+   * the stream thread forever.
+   */
+  private def assertAwaitThread(): Unit = {
+    if (queryExecutionThread eq Thread.currentThread) {
+      throw new IllegalStateException(
+        "Cannot wait for a query state from the same thread that is running the query")
+    }
+  }
+
+  /**
+   * Await until all fields of the query have been initialized.
+   */
+  def awaitInitialization(timeoutMs: Long): Unit = {
+    assertAwaitThread()
+    require(timeoutMs > 0, "Timeout has to be positive")
+    if (streamDeathCause != null) {
+      throw streamDeathCause
+    }
+    initializationLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    if (streamDeathCause != null) {
+      throw streamDeathCause
+    }
+  }
 
   override def processAllAvailable(): Unit = {
-    awaitBatchLock.lock()
+    assertAwaitThread()
+    if (streamDeathCause != null) {
+      throw streamDeathCause
+    }
+    if (!isActive) return
+    awaitProgressLock.lock()
     try {
       noNewData = false
       while (true) {
-        awaitBatchLockCondition.await(10000, TimeUnit.MILLISECONDS)
+        awaitProgressLockCondition.await(10000, TimeUnit.MILLISECONDS)
         if (streamDeathCause != null) {
           throw streamDeathCause
         }
-        if (noNewData) {
+        if (noNewData || !isActive) {
           return
         }
       }
     } finally {
-      awaitBatchLock.unlock()
+      awaitProgressLock.unlock()
     }
   }
 
   override def awaitTermination(): Unit = {
-    if (state == INITIALIZED) {
-      throw new IllegalStateException("Cannot wait for termination on a query that has not started")
-    }
+    assertAwaitThread()
     terminationLatch.await()
     if (streamDeathCause != null) {
       throw streamDeathCause
@@ -509,9 +477,7 @@ class StreamExecution(
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
-    if (state == INITIALIZED) {
-      throw new IllegalStateException("Cannot wait for termination on a query that has not started")
-    }
+    assertAwaitThread()
     require(timeoutMs > 0, "Timeout has to be positive")
     terminationLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
     if (streamDeathCause != null) {
@@ -526,7 +492,7 @@ class StreamExecution(
     if (lastExecution == null) {
       "No physical plan. Waiting for data."
     } else {
-      val explain = ExplainCommand(lastExecution.logical, extended = extended)
+      val explain = StreamingExplainCommand(lastExecution, extended = extended)
       sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect()
         .map(_.getString(0)).mkString("\n")
     }
@@ -541,169 +507,70 @@ class StreamExecution(
   override def explain(): Unit = explain(extended = false)
 
   override def toString: String = {
-    s"Streaming Query - $name [state = $state]"
+    s"Streaming Query $prettyIdString [state = $state]"
   }
 
-  def toDebugString: String = {
-    val deathCauseStr = if (streamDeathCause != null) {
-      "Error:\n" + stackTraceToString(streamDeathCause.cause)
-    } else ""
-    s"""
-       |=== Streaming Query ===
-       |Name: $name
-       |Current Offsets: $committedOffsets
-       |
-       |Current State: $state
-       |Thread State: ${microBatchThread.getState}
-       |
-       |Logical Plan:
-       |$logicalPlan
-       |
-       |$deathCauseStr
-     """.stripMargin
-  }
-
-  /**
-   * Report row metrics of the executed trigger
-   * @param triggerExecutionPlan Execution plan of the trigger
-   * @param triggerLogicalPlan Logical plan of the trigger, generated from the query logical plan
-   * @param sourceToDF Source to DataFrame returned by the source.getBatch in this trigger
-   */
-  private def reportNumRows(
-      triggerExecutionPlan: SparkPlan,
-      triggerLogicalPlan: LogicalPlan,
-      sourceToDF: Map[Source, DataFrame]): Unit = {
-    // We want to associate execution plan leaves to sources that generate them, so that we match
-    // the their metrics (e.g. numOutputRows) to the sources. To do this we do the following.
-    // Consider the translation from the streaming logical plan to the final executed plan.
-    //
-    //  streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
-    //
-    // 1. We keep track of streaming sources associated with each leaf in the trigger's logical plan
-    //    - Each logical plan leaf will be associated with a single streaming source.
-    //    - There can be multiple logical plan leaves associated with a streaming source.
-    //    - There can be leaves not associated with any streaming source, because they were
-    //      generated from a batch source (e.g. stream-batch joins)
-    //
-    // 2. Assuming that the executed plan has same number of leaves in the same order as that of
-    //    the trigger logical plan, we associate executed plan leaves with corresponding
-    //    streaming sources.
-    //
-    // 3. For each source, we sum the metrics of the associated execution plan leaves.
-    //
-    val logicalPlanLeafToSource = sourceToDF.flatMap { case (source, df) =>
-      df.logicalPlan.collectLeaves().map { leaf => leaf -> source }
+  private def toDebugString(includeLogicalPlan: Boolean): String = {
+    val debugString =
+      s"""|=== Streaming Query ===
+          |Identifier: $prettyIdString
+          |Current Committed Offsets: $committedOffsets
+          |Current Available Offsets: $availableOffsets
+          |
+          |Current State: $state
+          |Thread State: ${queryExecutionThread.getState}""".stripMargin
+    if (includeLogicalPlan) {
+      debugString + s"\n\nLogical Plan:\n$logicalPlan"
+    } else {
+      debugString
     }
-    val allLogicalPlanLeaves = triggerLogicalPlan.collectLeaves() // includes non-streaming sources
-    val allExecPlanLeaves = triggerExecutionPlan.collectLeaves()
-    val sourceToNumInputRows: Map[Source, Long] =
-      if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
-        val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
-          case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
-        }
-        val sourceToNumInputRows = execLeafToSource.map { case (execLeaf, source) =>
-          val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          source -> numRows
-        }
-        sourceToNumInputRows.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
-      } else {
-        if (!metricWarningLogged) {
-          def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
-          logWarning(
-            "Could not report metrics as number leaves in trigger logical plan did not match that" +
-              s" of the execution plan:\n" +
-              s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
-              s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
-          metricWarningLogged = true
-        }
-        Map.empty
-      }
-    val numOutputRows = triggerExecutionPlan.metrics.get("numOutputRows").map(_.value)
-    val stateNodes = triggerExecutionPlan.collect {
-      case p if p.isInstanceOf[StateStoreSaveExec] => p
-    }
-
-    streamMetrics.reportNumInputRows(sourceToNumInputRows)
-    stateNodes.zipWithIndex.foreach { case (s, i) =>
-      streamMetrics.reportTriggerDetail(
-        NUM_TOTAL_STATE_ROWS(i + 1),
-        s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
-      streamMetrics.reportTriggerDetail(
-        NUM_UPDATED_STATE_ROWS(i + 1),
-        s.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
-    }
-    updateStatus()
   }
 
-  private def reportTimeTaken[T](triggerDetailKey: String)(body: => T): T = {
-    val startTime = triggerClock.getTimeMillis()
-    val result = body
-    val endTime = triggerClock.getTimeMillis()
-    val timeTaken = math.max(endTime - startTime, 0)
-    streamMetrics.reportTriggerDetail(triggerDetailKey, timeTaken)
-    updateStatus()
-    if (triggerDetailKey == TRIGGER_LATENCY) {
-      logInfo(s"Completed up to $availableOffsets in $timeTaken ms")
-    }
-    result
+  protected def getBatchDescriptionString: String = {
+    val batchDescription = if (currentBatchId < 0) "init" else currentBatchId.toString
+    Option(name).map(_ + "<br/>").getOrElse("") +
+      s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
   }
-
-  private def reportTimeTaken[T](source: Source, triggerDetailKey: String)(body: => T): T = {
-    val startTime = triggerClock.getTimeMillis()
-    val result = body
-    val endTime = triggerClock.getTimeMillis()
-    streamMetrics.reportSourceTriggerDetail(
-      source, triggerDetailKey, math.max(endTime - startTime, 0))
-    updateStatus()
-    result
-  }
-
-  private def reportTimestamp(triggerDetailKey: String): Unit = {
-    streamMetrics.reportTriggerDetail(triggerDetailKey, triggerClock.getTimeMillis)
-    updateStatus()
-  }
-
-  private def updateStatus(): Unit = {
-    val localAvailableOffsets = availableOffsets
-    val sourceStatuses = sources.map { s =>
-      SourceStatus(
-        s.toString,
-        localAvailableOffsets.get(s).map(_.toString).getOrElse("-"), // TODO: use json if available
-        streamMetrics.currentSourceInputRate(s),
-        streamMetrics.currentSourceProcessingRate(s),
-        streamMetrics.currentSourceTriggerDetails(s))
-    }.toArray
-    val sinkStatus = SinkStatus(
-      sink.toString,
-      committedOffsets.toCompositeOffset(sources).toString)
-
-    currentStatus =
-      StreamingQueryStatus(
-        name = name,
-        id = id,
-        timestamp = triggerClock.getTimeMillis(),
-        inputRate = streamMetrics.currentInputRate(),
-        processingRate = streamMetrics.currentProcessingRate(),
-        latency = streamMetrics.currentLatency(),
-        sourceStatuses = sourceStatuses,
-        sinkStatus = sinkStatus,
-        triggerDetails = streamMetrics.currentTriggerDetails())
-  }
-
-  trait State
-  case object INITIALIZED extends State
-  case object ACTIVE extends State
-  case object TERMINATED extends State
 }
 
 object StreamExecution {
-  private val _nextId = new AtomicLong(0)
+  val QUERY_ID_KEY = "sql.streaming.queryId"
+  val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
 
-  def nextId: Long = _nextId.getAndIncrement()
+  def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = e match {
+    // InterruptedIOException - thrown when an I/O operation is interrupted
+    // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
+    case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
+      true
+    // The cause of the following exceptions may be one of the above exceptions:
+    //
+    // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
+    //                        BiFunction.apply
+    // ExecutionException - thrown by codes running in a thread pool and these codes throw an
+    //                      exception
+    // UncheckedExecutionException - thrown by codes that cannot throw a checked
+    //                               ExecutionException, such as BiFunction.apply
+    case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+        if e2.getCause != null =>
+      isInterruptionException(e2.getCause, sc)
+    case se: SparkException =>
+      val jobGroup = sc.getLocalProperty("spark.jobGroup.id")
+      if (jobGroup == null) return false
+      val errorMsg = se.getMessage
+      if (errorMsg.contains("cancelled") && errorMsg.contains(jobGroup) && se.getCause == null) {
+        true
+      } else if (se.getCause != null) {
+        isInterruptionException(se.getCause, sc)
+      } else {
+        false
+      }
+    case _ =>
+      false
+  }
 }
 
 /**
- * A special thread to run the stream query. Some codes require to run in the StreamExecutionThread
- * and will use `classOf[StreamExecutionThread]` to check.
+ * A special thread to run the stream query. Some codes require to run in the QueryExecutionThread
+ * and will use `classOf[QueryxecutionThread]` to check.
  */
-abstract class StreamExecutionThread(name: String) extends UninterruptibleThread(name)
+abstract class QueryExecutionThread(name: String) extends UninterruptibleThread(name)

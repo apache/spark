@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.tree.impurity.{EntropyAggregator, GiniAggregator}
 
 /**
- * Test suites for [[GiniAggregator]] and [[EntropyAggregator]].
+ * Test suites for `GiniAggregator` and `EntropyAggregator`.
  */
 class ImpuritySuite extends SparkFunSuite {
   test("Gini impurity does not support negative labels") {

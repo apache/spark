@@ -13,8 +13,7 @@ and Spark Streaming for stream processing.
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the [project web page](http://spark.apache.org/documentation.html)
-and [project wiki](https://cwiki.apache.org/confluence/display/SPARK).
+guide, on the [project web page](http://spark.apache.org/documentation.html).
 This README file only contains basic setup instructions.
 
 ## Building Spark
@@ -29,8 +28,8 @@ To build Spark and its example programs, run:
 You can build Spark using more than one thread by using the -T option with Maven, see ["Parallel builds in Maven 3"](https://cwiki.apache.org/confluence/display/MAVEN/Parallel+builds+in+Maven+3).
 More detailed documentation is available from the project site, at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
-For developing Spark using an IDE, see [Eclipse](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-Eclipse)
-and [IntelliJ](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IntelliJ).
+
+For general development tips, including info on developing Spark using an IDE, see ["Useful Developer Tools"](http://spark.apache.org/developer-tools.html).
 
 ## Interactive Scala Shell
 
@@ -80,7 +79,9 @@ can be run using:
     ./dev/run-tests
 
 Please see the guidance on how to
-[run tests for a module, or individual tests](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools).
+[run tests for a module, or individual tests](http://spark.apache.org/developer-tools.html#individual-tests).
+
+There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
 
 ## A Note About Hadoop Versions
 
@@ -89,7 +90,7 @@ storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
 
 Please refer to the build documentation at
-["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
+["Specifying the Hadoop Version and Enabling YARN"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version-and-enabling-yarn)
 for detailed guidance on building for a particular distribution of Hadoop, including
 building for particular Hive and Hive Thriftserver distributions.
 
@@ -98,7 +99,7 @@ building for particular Hive and Hive Thriftserver distributions.
 Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
 
-## Contributing
+## Contributing
 
-Please review the [Contribution to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
-wiki for information on how to get started contributing to the project.
+Please review the [Contribution to Spark guide](http://spark.apache.org/contributing.html)
+for information on how to get started contributing to the project.

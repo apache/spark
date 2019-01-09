@@ -17,56 +17,48 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.CharArrayWriter
+import java.nio.charset.{Charset, StandardCharsets}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
-import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
+  override val shortName: String = "json"
 
-  override def shortName(): String = "json"
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    val parsedOptions = new JSONOptionsInRead(
+      options,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val jsonDataSource = JsonDataSource(parsedOptions)
+    jsonDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
+  }
 
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    if (files.isEmpty) {
-      None
-    } else {
-      val parsedOptions: JSONOptions = new JSONOptions(options)
-      val columnNameOfCorruptRecord =
-        parsedOptions.columnNameOfCorruptRecord
-          .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-      val jsonFiles = files.filterNot { status =>
-        val name = status.getPath.getName
-        (name.startsWith("_") && !name.contains("=")) || name.startsWith(".")
-      }.toArray
-
-      val jsonSchema = InferSchema.infer(
-        createBaseRdd(sparkSession, jsonFiles),
-        columnNameOfCorruptRecord,
-        parsedOptions)
-      checkConstraints(jsonSchema)
-
-      Some(jsonSchema)
-    }
+    val parsedOptions = new JSONOptionsInRead(
+      options,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    JsonDataSource(parsedOptions).inferSchema(
+      sparkSession, files, parsedOptions)
   }
 
   override def prepareWrite(
@@ -75,18 +67,24 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val parsedOptions: JSONOptions = new JSONOptions(options)
+    val parsedOptions = new JSONOptions(
+      options,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(stagingDir, parsedOptions, fileNamePrefix, dataSchema, context)
+        new JsonOutputWriter(path, parsedOptions, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".json" + CodecStreams.getCompressionExtension(context)
       }
     }
   }
@@ -102,46 +100,37 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val parsedOptions: JSONOptions = new JSONOptions(options)
-    val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
-      .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val parsedOptions = new JSONOptionsInRead(
+      options,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+
+    val actualSchema =
+      StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    // Check a field requirement for corrupt records here to throw an exception in a driver side
+    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
+
+    if (requiredSchema.length == 1 &&
+      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      throw new AnalysisException(
+        "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
+        "referenced columns only include the internal corrupt record column\n" +
+        s"(named _corrupt_record by default). For example:\n" +
+        "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
+        "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().\n" +
+        "Instead, you can cache or save the parsed results and then send the same query.\n" +
+        "For example, val df = spark.read.schema(schema).json(file).cache() and then\n" +
+        "df.filter($\"_corrupt_record\".isNotNull).count()."
+      )
+    }
 
     (file: PartitionedFile) => {
-      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
-      val lines = linesReader.map(_.toString)
-      val parser = new JacksonParser(requiredSchema, columnNameOfCorruptRecord, parsedOptions)
-      lines.flatMap(parser.parse)
-    }
-  }
-
-  private def createBaseRdd(
-      sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus]): RDD[String] = {
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
-    val conf = job.getConfiguration
-
-    val paths = inputPaths.map(_.getPath)
-
-    if (paths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, paths: _*)
-    }
-
-    sparkSession.sparkContext.hadoopRDD(
-      conf.asInstanceOf[JobConf],
-      classOf[TextInputFormat],
-      classOf[LongWritable],
-      classOf[Text]).map(_._2.toString) // get the text line
-  }
-
-  /** Constraints to be imposed on schema to be stored. */
-  private def checkConstraints(schema: StructType): Unit = {
-    if (schema.fieldNames.length != schema.fieldNames.distinct.length) {
-      val duplicateColumns = schema.fieldNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }.mkString(", ")
-      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
-          s"cannot save to JSON format")
+      val parser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
+      JsonDataSource(parsedOptions).readFile(
+        broadcastedHadoopConf.value.value,
+        file,
+        parser,
+        requiredSchema)
     }
   }
 
@@ -150,43 +139,56 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType, isReadPath)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType, isReadPath) && supportDataType(valueType, isReadPath)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
+
+    case _: NullType => true
+
+    case _ => false
+  }
 }
 
 private[json] class JsonOutputWriter(
-    stagingDir: String,
+    path: String,
     options: JSONOptions,
-    fileNamePrefix: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private[this] val writer = new CharArrayWriter()
-  // create the Generator without separator inserted between 2 records
-  private[this] val gen = new JacksonGenerator(dataSchema, writer, options)
-  private[this] val result = new Text()
-
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(stagingDir, s"$fileNamePrefix.json$extension")
-      }
-    }.getRecordWriter(context)
+  private val encoding = options.encoding match {
+    case Some(charsetName) => Charset.forName(charsetName)
+    case None => StandardCharsets.UTF_8
   }
 
-  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+  if (JSONOptionsInRead.blacklist.contains(encoding)) {
+    logWarning(s"The JSON file ($path) was written in the encoding ${encoding.displayName()}" +
+         " which can be read back by Spark only if multiLine is enabled.")
+  }
 
-  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+  private var jacksonGenerator: Option[JacksonGenerator] = None
+
+  override def write(row: InternalRow): Unit = {
+    val gen = jacksonGenerator.getOrElse {
+      val os = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)
+      // create the Generator without separator inserted between 2 records
+      val newGen = new JacksonGenerator(dataSchema, os, options)
+      jacksonGenerator = Some(newGen)
+      newGen
+    }
+
     gen.write(row)
-    gen.flush()
-
-    result.set(writer.toString)
-    writer.reset()
-
-    recordWriter.write(NullWritable.get(), result)
+    gen.writeLineEnding()
   }
 
-  override def close(): Unit = {
-    gen.close()
-    recordWriter.close(context)
-  }
+  override def close(): Unit = jacksonGenerator.foreach(_.close())
 }

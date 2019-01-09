@@ -27,6 +27,7 @@ import scala.util.Try
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.R._
 import org.apache.spark.util.Utils
 
 /**
@@ -74,14 +75,19 @@ private[spark] class RRunner[U](
 
     // the socket used to send out the input of task
     serverSocket.setSoTimeout(10000)
-    val inSocket = serverSocket.accept()
-    startStdinThread(inSocket.getOutputStream(), inputIterator, partitionIndex)
+    dataStream = try {
+      val inSocket = serverSocket.accept()
+      RRunner.authHelper.authClient(inSocket)
+      startStdinThread(inSocket.getOutputStream(), inputIterator, partitionIndex)
 
-    // the socket used to receive the output of task
-    val outSocket = serverSocket.accept()
-    val inputStream = new BufferedInputStream(outSocket.getInputStream)
-    dataStream = new DataInputStream(inputStream)
-    serverSocket.close()
+      // the socket used to receive the output of task
+      val outSocket = serverSocket.accept()
+      RRunner.authHelper.authClient(outSocket)
+      val inputStream = new BufferedInputStream(outSocket.getInputStream)
+      new DataInputStream(inputStream)
+    } finally {
+      serverSocket.close()
+    }
 
     try {
       return new Iterator[U] {
@@ -152,7 +158,7 @@ private[spark] class RRunner[U](
           dataOut.writeInt(mode)
 
           if (isDataFrame) {
-            SerDe.writeObject(dataOut, colNames)
+            SerDe.writeObject(dataOut, colNames, jvmObjectTracker = null)
           }
 
           if (!iter.hasNext) {
@@ -315,6 +321,11 @@ private[r] object RRunner {
   private[this] var errThread: BufferedStreamThread = _
   private[this] var daemonChannel: DataOutputStream = _
 
+  private lazy val authHelper = {
+    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+    new RAuthHelper(conf)
+  }
+
   /**
    * Start a thread to print the process's stderr to ours
    */
@@ -330,9 +341,10 @@ private[r] object RRunner {
     // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
     // but kept here for backward compatibility.
     val sparkConf = SparkEnv.get.conf
-    var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
-    rCommand = sparkConf.get("spark.r.command", rCommand)
+    var rCommand = sparkConf.get(SPARKR_COMMAND)
+    rCommand = sparkConf.get(R_COMMAND).orElse(Some(rCommand)).get
 
+    val rConnectionTimeout = sparkConf.get(R_BACKEND_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
@@ -344,6 +356,10 @@ private[r] object RRunner {
     pb.environment().put("R_TESTS", "")
     pb.environment().put("SPARKR_RLIBDIR", rLibDir.mkString(","))
     pb.environment().put("SPARKR_WORKER_PORT", port.toString)
+    pb.environment().put("SPARKR_BACKEND_CONNECTION_TIMEOUT", rConnectionTimeout.toString)
+    pb.environment().put("SPARKR_SPARKFILES_ROOT_DIR", SparkFiles.getRootDirectory())
+    pb.environment().put("SPARKR_IS_RUNNING_ON_WORKER", "TRUE")
+    pb.environment().put("SPARKR_WORKER_SECRET", authHelper.secret)
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
     val errThread = startStdoutThread(proc)
@@ -365,8 +381,12 @@ private[r] object RRunner {
           // the socket used to send out the input of task
           serverSocket.setSoTimeout(10000)
           val sock = serverSocket.accept()
-          daemonChannel = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
-          serverSocket.close()
+          try {
+            authHelper.authClient(sock)
+            daemonChannel = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+          } finally {
+            serverSocket.close()
+          }
         }
         try {
           daemonChannel.writeInt(port)

@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 
+import sys
+import warnings
+
 import numpy as np
 from numpy import array
-import warnings
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
@@ -44,7 +46,7 @@ class LabeledPoint(object):
       Vector of features for this point (NumPy array, list,
       pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix).
 
-    Note: 'label' and 'features' are accessible as class attributes.
+    .. note:: 'label' and 'features' are accessible as class attributes.
 
     .. versionadded:: 1.0.0
     """
@@ -278,7 +280,8 @@ class LinearRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
-        warnings.warn("Deprecated in 2.0.0. Use ml.regression.LinearRegression.")
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression.", DeprecationWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
@@ -421,7 +424,8 @@ class LassoWithSGD(object):
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0. "
-            "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.")
+            "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.",
+            DeprecationWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
@@ -566,7 +570,7 @@ class RidgeRegressionWithSGD(object):
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0. "
             "Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for "
-            "LinearRegression.")
+            "LinearRegression.", DeprecationWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
@@ -835,7 +839,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

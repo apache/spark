@@ -17,23 +17,13 @@
 
 package org.apache.spark.sql
 
-import java.util.{ArrayDeque, Locale, TimeZone}
+import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.streaming.MemoryPlan
-import org.apache.spark.sql.types.{Metadata, ObjectType}
 
 
 abstract class QueryTest extends PlanTest {
@@ -142,6 +132,13 @@ abstract class QueryTest extends PlanTest {
       a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Iterable[_], b: Iterable[_]) =>
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a: Product, b: Product) =>
+      compare(a.productIterator.toSeq, b.productIterator.toSeq)
+    // 0.0 == -0.0, turn float/double to binary before comparison, to distinguish 0.0 and -0.0.
+    case (a: Double, b: Double) =>
+      java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
+    case (a: Float, b: Float) =>
+      java.lang.Float.floatToRawIntBits(a) == java.lang.Float.floatToRawIntBits(b)
     case (a, b) => a == b
   }
 
@@ -299,12 +296,60 @@ object QueryTest {
   def prepareRow(row: Row): Row = {
     Row.fromSeq(row.toSeq.map {
       case null => null
-      case d: java.math.BigDecimal => BigDecimal(d)
+      case bd: java.math.BigDecimal => BigDecimal(bd)
+      // Equality of WrappedArray differs for AnyVal and AnyRef in Scala 2.12.2+
+      case seq: Seq[_] => seq.map {
+        case b: java.lang.Byte => b.byteValue
+        case s: java.lang.Short => s.shortValue
+        case i: java.lang.Integer => i.intValue
+        case l: java.lang.Long => l.longValue
+        case f: java.lang.Float => f.floatValue
+        case d: java.lang.Double => d.doubleValue
+        case x => x
+      }
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
+      // spark treats -0.0 as 0.0
+      case d: Double if d == -0.0d => 0.0d
+      case f: Float if f == -0.0f => 0.0f
       case o => o
     })
+  }
+
+  private def genError(
+      expectedAnswer: Seq[Row],
+      sparkAnswer: Seq[Row],
+      isSorted: Boolean = false): String = {
+    val getRowType: Option[Row] => String = row =>
+      row.map(row =>
+        if (row.schema == null) {
+          "struct<>"
+        } else {
+          s"${row.schema.catalogString}"
+        }).getOrElse("struct<>")
+
+    s"""
+       |== Results ==
+       |${
+      sideBySide(
+        s"== Correct Answer - ${expectedAnswer.size} ==" +:
+          getRowType(expectedAnswer.headOption) +:
+          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+          getRowType(sparkAnswer.headOption) +:
+          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")
+    }
+    """.stripMargin
+  }
+
+  def includesRows(
+      expectedRows: Seq[Row],
+      sparkAnswer: Seq[Row]): Option[String] = {
+    if (!prepareAnswer(expectedRows, true).toSet.subsetOf(prepareAnswer(sparkAnswer, true).toSet)) {
+      return Some(genError(expectedRows, sparkAnswer, true))
+    }
+    None
   }
 
   def sameRows(
@@ -312,16 +357,7 @@ object QueryTest {
       sparkAnswer: Seq[Row],
       isSorted: Boolean = false): Option[String] = {
     if (prepareAnswer(expectedAnswer, isSorted) != prepareAnswer(sparkAnswer, isSorted)) {
-      val errorMessage =
-        s"""
-         |== Results ==
-         |${sideBySide(
-        s"== Correct Answer - ${expectedAnswer.size} ==" +:
-         prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
-        s"== Spark Answer - ${sparkAnswer.size} ==" +:
-         prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
-        """.stripMargin
-      return Some(errorMessage)
+      return Some(genError(expectedAnswer, sparkAnswer, isSorted))
     }
     None
   }

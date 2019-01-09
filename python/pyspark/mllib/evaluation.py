@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 
 from pyspark import since
@@ -116,9 +117,9 @@ class RegressionMetrics(JavaModelWrapper):
     @property
     @since('1.4.0')
     def explainedVariance(self):
-        """
+        r"""
         Returns the explained variance regression score.
-        explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+        explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
         """
         return self.call("explainedVariance")
 
@@ -228,46 +229,28 @@ class MulticlassMetrics(JavaModelWrapper):
         return self.call("falsePositiveRate", label)
 
     @since('1.4.0')
-    def precision(self, label=None):
+    def precision(self, label):
         """
-        Returns precision or precision for a given label (category) if specified.
+        Returns precision.
         """
-        if label is None:
-            # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
-            return self.call("precision")
-        else:
-            return self.call("precision", float(label))
+        return self.call("precision", float(label))
 
     @since('1.4.0')
-    def recall(self, label=None):
+    def recall(self, label):
         """
-        Returns recall or recall for a given label (category) if specified.
+        Returns recall.
         """
-        if label is None:
-            # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
-            return self.call("recall")
-        else:
-            return self.call("recall", float(label))
+        return self.call("recall", float(label))
 
     @since('1.4.0')
-    def fMeasure(self, label=None, beta=None):
+    def fMeasure(self, label, beta=None):
         """
-        Returns f-measure or f-measure for a given label (category) if specified.
+        Returns f-measure.
         """
         if beta is None:
-            if label is None:
-                # note:: Deprecated in 2.0.0. Use accuracy.
-                warnings.warn("Deprecated in 2.0.0. Use accuracy.")
-                return self.call("fMeasure")
-            else:
-                return self.call("fMeasure", label)
+            return self.call("fMeasure", label)
         else:
-            if label is None:
-                raise Exception("If the beta parameter is specified, label can not be none")
-            else:
-                return self.call("fMeasure", label, beta)
+            return self.call("fMeasure", label, beta)
 
     @property
     @since('2.0.0')
@@ -531,8 +514,14 @@ class MultilabelMetrics(JavaModelWrapper):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
     import pyspark.mllib.evaluation
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.evaluation.__dict__.copy()
     spark = SparkSession.builder\
         .master("local[4]")\
@@ -542,7 +531,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

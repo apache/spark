@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.UUID;
 
 import com.google.common.io.Closeables;
 import com.google.common.io.Files;
@@ -91,6 +92,20 @@ public class TestShuffleDataContext {
     } finally {
       Closeables.close(dataStream, suppressExceptionsDuringClose);
       Closeables.close(indexStream, suppressExceptionsDuringClose);
+    }
+  }
+
+  /** Creates spill file(s) within the local dirs. */
+  public void insertSpillData() throws IOException {
+    String filename = "temp_local_" + UUID.randomUUID();
+    OutputStream dataStream = null;
+
+    try {
+      dataStream = new FileOutputStream(
+        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename));
+      dataStream.write(42);
+    } finally {
+      Closeables.close(dataStream, false);
     }
   }
 

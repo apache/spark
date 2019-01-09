@@ -89,7 +89,7 @@ public final class HttpAuthUtils {
    * @param clientUserName Client User name.
    * @return An unsigned cookie token generated from input parameters.
    * The final cookie generated is of the following format :
-   * cu=<username>&rn=<randomNumber>&s=<cookieSignature>
+   * {@code cu=<username>&rn=<randomNumber>&s=<cookieSignature>}
    */
   public static String createCookieToken(String clientUserName) {
     StringBuffer sb = new StringBuffer();

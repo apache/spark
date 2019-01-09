@@ -20,7 +20,7 @@ package org.apache.spark.util.logging
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
@@ -94,7 +94,7 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
 
   /** Open the file output stream */
   protected def openFile() {
-    outputStream = new FileOutputStream(file, false)
+    outputStream = new FileOutputStream(file, true)
     logDebug(s"Opened file $file")
   }
 
@@ -115,26 +115,24 @@ private[spark] object FileAppender extends Logging {
   /** Create the right appender based on Spark configuration */
   def apply(inputStream: InputStream, file: File, conf: SparkConf): FileAppender = {
 
-    import RollingFileAppender._
-
-    val rollingStrategy = conf.get(STRATEGY_PROPERTY, STRATEGY_DEFAULT)
-    val rollingSizeBytes = conf.get(SIZE_PROPERTY, STRATEGY_DEFAULT)
-    val rollingInterval = conf.get(INTERVAL_PROPERTY, INTERVAL_DEFAULT)
+    val rollingStrategy = conf.get(config.EXECUTOR_LOGS_ROLLING_STRATEGY)
+    val rollingSizeBytes = conf.get(config.EXECUTOR_LOGS_ROLLING_MAX_SIZE)
+    val rollingInterval = conf.get(config.EXECUTOR_LOGS_ROLLING_TIME_INTERVAL)
 
     def createTimeBasedAppender(): FileAppender = {
       val validatedParams: Option[(Long, String)] = rollingInterval match {
         case "daily" =>
           logInfo(s"Rolling executor logs enabled for $file with daily rolling")
-          Some(24 * 60 * 60 * 1000L, "--yyyy-MM-dd")
+          Some((24 * 60 * 60 * 1000L, "--yyyy-MM-dd"))
         case "hourly" =>
           logInfo(s"Rolling executor logs enabled for $file with hourly rolling")
-          Some(60 * 60 * 1000L, "--yyyy-MM-dd--HH")
+          Some((60 * 60 * 1000L, "--yyyy-MM-dd--HH"))
         case "minutely" =>
           logInfo(s"Rolling executor logs enabled for $file with rolling every minute")
-          Some(60 * 1000L, "--yyyy-MM-dd--HH-mm")
+          Some((60 * 1000L, "--yyyy-MM-dd--HH-mm"))
         case IntParam(seconds) =>
           logInfo(s"Rolling executor logs enabled for $file with rolling $seconds seconds")
-          Some(seconds * 1000L, "--yyyy-MM-dd--HH-mm-ss")
+          Some((seconds * 1000L, "--yyyy-MM-dd--HH-mm-ss"))
         case _ =>
           logWarning(s"Illegal interval for rolling executor logs [$rollingInterval], " +
               s"rolling logs not enabled")

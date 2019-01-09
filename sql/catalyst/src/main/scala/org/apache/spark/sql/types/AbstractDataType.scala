@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
@@ -79,18 +79,6 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 private[sql] object TypeCollection {
 
   /**
-   * Types that can be ordered/compared. In the long run we should probably make this a trait
-   * that can be mixed into each data type, and perhaps create an [[AbstractDataType]].
-   */
-  // TODO: Should we consolidate this with RowOrdering.isOrderable?
-  val Ordered = TypeCollection(
-    BooleanType,
-    ByteType, ShortType, IntegerType, LongType,
-    FloatType, DoubleType, DecimalType,
-    TimestampType, DateType,
-    StringType, BinaryType)
-
-  /**
    * Types that include numeric types and interval type. They are only used in unary_minus,
    * unary_positive, add and subtract operations.
    */
@@ -106,9 +94,9 @@ private[sql] object TypeCollection {
 
 
 /**
- * An [[AbstractDataType]] that matches any concrete data types.
+ * An `AbstractDataType` that matches any concrete data types.
  */
-protected[sql] object AnyDataType extends AbstractDataType {
+protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
@@ -129,13 +117,24 @@ protected[sql] abstract class AtomicType extends DataType {
   private[sql] val ordering: Ordering[InternalType]
 }
 
+object AtomicType {
+  /**
+   * Enables matching against AtomicType for expressions:
+   * {{{
+   *   case Cast(child @ AtomicType(), StringType) =>
+   *     ...
+   * }}}
+   */
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[AtomicType]
+}
+
 
 /**
  * Numeric data types.
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 abstract class NumericType extends AtomicType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
@@ -146,7 +145,7 @@ abstract class NumericType extends AtomicType {
 }
 
 
-private[sql] object NumericType extends AbstractDataType {
+private[spark] object NumericType extends AbstractDataType {
   /**
    * Enables matching against NumericType for expressions:
    * {{{
@@ -156,11 +155,12 @@ private[sql] object NumericType extends AbstractDataType {
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 
-  override private[sql] def defaultConcreteType: DataType = DoubleType
+  override private[spark] def defaultConcreteType: DataType = DoubleType
 
-  override private[sql] def simpleString: String = "numeric"
+  override private[spark] def simpleString: String = "numeric"
 
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[NumericType]
+  override private[spark] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[NumericType]
 }
 
 

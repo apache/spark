@@ -15,12 +15,17 @@
 # limitations under the License.
 #
 
-import os
-import sys
 import gc
+import os
+import socket
+import sys
 from tempfile import NamedTemporaryFile
+import threading
 
 from pyspark.cloudpickle import print_exec
+from pyspark.java_gateway import local_connect_and_auth
+from pyspark.serializers import ChunkedStream
+from pyspark.util import _exception_message
 
 if sys.version < '3':
     import cPickle as pickle
@@ -62,19 +67,46 @@ class Broadcast(object):
     >>> large_broadcast = sc.broadcast(range(10000))
     """
 
-    def __init__(self, sc=None, value=None, pickle_registry=None, path=None):
+    def __init__(self, sc=None, value=None, pickle_registry=None, path=None,
+                 sock_file=None):
         """
         Should not be called directly by users -- use L{SparkContext.broadcast()}
         instead.
         """
         if sc is not None:
+            # we're on the driver.  We want the pickled data to end up in a file (maybe encrypted)
             f = NamedTemporaryFile(delete=False, dir=sc._temp_dir)
-            self._path = self.dump(value, f)
-            self._jbroadcast = sc._jvm.PythonRDD.readBroadcastFromFile(sc._jsc, self._path)
+            self._path = f.name
+            self._sc = sc
+            self._python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)
+            if sc._encryption_enabled:
+                # with encryption, we ask the jvm to do the encryption for us, we send it data
+                # over a socket
+                port, auth_secret = self._python_broadcast.setupEncryptionServer()
+                (encryption_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                broadcast_out = ChunkedStream(encryption_sock_file, 8192)
+            else:
+                # no encryption, we can just write pickled data directly to the file from python
+                broadcast_out = f
+            self.dump(value, broadcast_out)
+            if sc._encryption_enabled:
+                self._python_broadcast.waitTillDataReceived()
+            self._jbroadcast = sc._jsc.broadcast(self._python_broadcast)
             self._pickle_registry = pickle_registry
         else:
+            # we're on an executor
             self._jbroadcast = None
-            self._path = path
+            self._sc = None
+            self._python_broadcast = None
+            if sock_file is not None:
+                # the jvm is doing decryption for us.  Read the value
+                # immediately from the sock_file
+                self._value = self.load(sock_file)
+            else:
+                # the jvm just dumps the pickled data in path -- we'll unpickle lazily when
+                # the value is requested
+                assert(path is not None)
+                self._path = path
 
     def dump(self, value, f):
         try:
@@ -82,28 +114,38 @@ class Broadcast(object):
         except pickle.PickleError:
             raise
         except Exception as e:
-            msg = "Could not serialize broadcast: " + e.__class__.__name__ + ": " + e.message
+            msg = "Could not serialize broadcast: %s: %s" \
+                  % (e.__class__.__name__, _exception_message(e))
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()
-        return f.name
 
-    def load(self, path):
+    def load_from_path(self, path):
         with open(path, 'rb', 1 << 20) as f:
-            # pickle.load() may create lots of objects, disable GC
-            # temporary for better performance
-            gc.disable()
-            try:
-                return pickle.load(f)
-            finally:
-                gc.enable()
+            return self.load(f)
+
+    def load(self, file):
+        # "file" could also be a socket
+        gc.disable()
+        try:
+            return pickle.load(file)
+        finally:
+            gc.enable()
 
     @property
     def value(self):
         """ Return the broadcasted value
         """
         if not hasattr(self, "_value") and self._path is not None:
-            self._value = self.load(self._path)
+            # we only need to decrypt it here when encryption is enabled and
+            # if its on the driver, since executor decryption is handled already
+            if self._sc is not None and self._sc._encryption_enabled:
+                port, auth_secret = self._python_broadcast.setupDecryptionServer()
+                (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                self._python_broadcast.waitTillBroadcastDataSent()
+                return self.load(decrypted_sock_file)
+            else:
+                self._value = self.load_from_path(self._path)
         return self._value
 
     def unpersist(self, blocking=False):
@@ -137,8 +179,26 @@ class Broadcast(object):
         return _from_id, (self._jbroadcast.id(),)
 
 
+class BroadcastPickleRegistry(threading.local):
+    """ Thread-local registry for broadcast variables that have been pickled
+    """
+
+    def __init__(self):
+        self.__dict__.setdefault("_registry", set())
+
+    def __iter__(self):
+        for bcast in self._registry:
+            yield bcast
+
+    def add(self, bcast):
+        self._registry.add(bcast)
+
+    def clear(self):
+        self._registry.clear()
+
+
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

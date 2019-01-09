@@ -17,20 +17,20 @@
 
 package org.apache.spark.sql.expressions.scalalang
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate._
 
 /**
  * :: Experimental ::
- * Type-safe functions available for [[Dataset]] operations in Scala.
+ * Type-safe functions available for `Dataset` operations in Scala.
  *
  * Java users should use [[org.apache.spark.sql.expressions.javalang.typed]].
  *
  * @since 2.0.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 // scalastyle:off
 object typed {
   // scalastyle:on
@@ -80,7 +80,7 @@ object typed {
   // TODO:
   // stddevOf: Double
   // varianceOf: Double
-  // approxCountDistinct: Long
+  // approx_count_distinct: Long
 
   // minOf: T
   // maxOf: T

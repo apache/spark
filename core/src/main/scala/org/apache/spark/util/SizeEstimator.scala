@@ -28,6 +28,7 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -126,8 +127,8 @@ object SizeEstimator extends Logging {
   private def getIsCompressedOops: Boolean = {
     // This is only used by tests to override the detection of compressed oops. The test
     // actually uses a system property instead of a SparkConf, so we'll stick with that.
-    if (System.getProperty("spark.test.useCompressedOops") != null) {
-      return System.getProperty("spark.test.useCompressedOops").toBoolean
+    if (System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY) != null) {
+      return System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY).toBoolean
     }
 
     // java.vm.info provides compressed ref info for IBM JDKs
@@ -350,7 +351,7 @@ object SizeEstimator extends Logging {
     // 3. consistent fields layouts throughout the hierarchy: This means we should layout
     // superclass first. And we can use superclass's shellSize as a starting point to layout the
     // other fields in this class.
-    // 4. class alignment: HotSpot rounds field blocks up to to HeapOopSize not 4 bytes, confirmed
+    // 4. class alignment: HotSpot rounds field blocks up to HeapOopSize not 4 bytes, confirmed
     // with Aleksey. see https://bugs.openjdk.java.net/browse/CODETOOLS-7901322
     //
     // The real world field layout is much more complicated. There are three kinds of fields

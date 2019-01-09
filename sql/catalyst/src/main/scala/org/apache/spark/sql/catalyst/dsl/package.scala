@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
+import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -71,6 +72,7 @@ package object dsl {
     def - (other: Expression): Expression = Subtract(expr, other)
     def * (other: Expression): Expression = Multiply(expr, other)
     def / (other: Expression): Expression = Divide(expr, other)
+    def div (other: Expression): Expression = IntegralDivide(expr, other)
     def % (other: Expression): Expression = Remainder(expr, other)
     def & (other: Expression): Expression = BitwiseAnd(expr, other)
     def | (other: Expression): Expression = BitwiseOr(expr, other)
@@ -87,7 +89,13 @@ package object dsl {
     def <=> (other: Expression): Predicate = EqualNullSafe(expr, other)
     def =!= (other: Expression): Predicate = Not(EqualTo(expr, other))
 
-    def in(list: Expression*): Expression = In(expr, list)
+    def in(list: Expression*): Expression = list match {
+      case Seq(l: ListQuery) => expr match {
+          case c: CreateNamedStruct => InSubquery(c.valExprs, l)
+          case other => InSubquery(Seq(other), l)
+        }
+      case _ => In(expr, list)
+    }
 
     def like(other: Expression): Expression = Like(expr, other)
     def rlike(other: Expression): Expression = RLike(expr, other)
@@ -109,9 +117,9 @@ package object dsl {
     def cast(to: DataType): Expression = Cast(expr, to)
 
     def asc: SortOrder = SortOrder(expr, Ascending)
-    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast)
+    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
-    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst)
+    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
@@ -128,7 +136,7 @@ package object dsl {
     implicit def longToLiteral(l: Long): Literal = Literal(l)
     implicit def floatToLiteral(f: Float): Literal = Literal(f)
     implicit def doubleToLiteral(d: Double): Literal = Literal(d)
-    implicit def stringToLiteral(s: String): Literal = Literal(s)
+    implicit def stringToLiteral(s: String): Literal = Literal.create(s, StringType)
     implicit def dateToLiteral(d: Date): Literal = Literal(d)
     implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d.underlying())
     implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
@@ -148,6 +156,7 @@ package object dsl {
       }
     }
 
+    def rand(e: Long): Expression = Rand(e)
     def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
     def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
     def count(e: Expression): Expression = Count(e).toAggregateExpression()
@@ -159,15 +168,21 @@ package object dsl {
     def first(e: Expression): Expression = new First(e).toAggregateExpression()
     def last(e: Expression): Expression = new Last(e).toAggregateExpression()
     def min(e: Expression): Expression = Min(e).toAggregateExpression()
+    def minDistinct(e: Expression): Expression = Min(e).toAggregateExpression(isDistinct = true)
     def max(e: Expression): Expression = Max(e).toAggregateExpression()
+    def maxDistinct(e: Expression): Expression = Max(e).toAggregateExpression(isDistinct = true)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
+    def coalesce(args: Expression*): Expression = Coalesce(args)
+    def greatest(args: Expression*): Expression = Greatest(args)
+    def least(args: Expression*): Expression = Least(args)
     def sqrt(e: Expression): Expression = Sqrt(e)
     def abs(e: Expression): Expression = Abs(e)
     def star(names: String*): Expression = names match {
       case Seq() => UnresolvedStar(None)
       case target => UnresolvedStar(Option(target))
     }
+    def namedStruct(e: Expression*): Expression = CreateNamedStruct(e)
 
     def callFunction[T, U](
         func: T => U,
@@ -280,11 +295,10 @@ package object dsl {
   object expressions extends ExpressionConversions  // scalastyle:ignore
 
   object plans {  // scalastyle:ignore
-    def table(ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref), None)
+    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
 
     def table(db: String, ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref, Option(db)), None)
+      UnresolvedRelation(TableIdentifier(ref, Option(db)))
 
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) {
       def select(exprs: Expression*): LogicalPlan = {
@@ -299,6 +313,8 @@ package object dsl {
 
       def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
+      def filter[T : Encoder](func: FilterFunction[T]): LogicalPlan = TypedFilter(func, logicalPlan)
+
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
       def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
@@ -309,7 +325,7 @@ package object dsl {
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
-        Join(logicalPlan, otherPlan, joinType, condition)
+        Join(logicalPlan, otherPlan, joinType, condition, JoinHint.NONE)
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,
@@ -347,41 +363,46 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan, None)
+      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
 
-      def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
+      def except(otherPlan: LogicalPlan, isAll: Boolean): LogicalPlan =
+        Except(logicalPlan, otherPlan, isAll)
 
-      def intersect(otherPlan: LogicalPlan): LogicalPlan = Intersect(logicalPlan, otherPlan)
+      def intersect(otherPlan: LogicalPlan, isAll: Boolean): LogicalPlan =
+        Intersect(logicalPlan, otherPlan, isAll)
 
       def union(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
       def generate(
         generator: Generator,
-        join: Boolean = false,
+        unrequiredChildIndex: Seq[Int] = Nil,
         outer: Boolean = false,
         alias: Option[String] = None,
         outputNames: Seq[String] = Nil): LogicalPlan =
-        Generate(generator, join = join, outer = outer, alias,
-          outputNames.map(UnresolvedAttribute(_)), logicalPlan)
+        Generate(generator, unrequiredChildIndex, outer,
+          alias, outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(
           analysis.UnresolvedRelation(TableIdentifier(tableName)),
-          Map.empty, logicalPlan, overwrite, false)
+          Map.empty, logicalPlan, overwrite, ifPartitionNotExists = false)
 
-      def as(alias: String): LogicalPlan = logicalPlan match {
-        case UnresolvedRelation(tbl, _) => UnresolvedRelation(tbl, Option(alias))
-        case plan => SubqueryAlias(alias, plan, None)
-      }
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
+
+      def coalesce(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = false, logicalPlan)
 
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
 
-      def distribute(exprs: Expression*)(n: Int = -1): LogicalPlan =
-        RepartitionByExpression(exprs, logicalPlan, numPartitions = if (n < 0) None else Some(n))
+      def distribute(exprs: Expression*)(n: Int): LogicalPlan =
+        RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
+
+      def hint(name: String, parameters: Any*): LogicalPlan =
+        UnresolvedHint(name, parameters, logicalPlan)
     }
   }
 }

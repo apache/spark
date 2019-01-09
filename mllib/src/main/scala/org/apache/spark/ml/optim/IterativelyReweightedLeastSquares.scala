@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.optim
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
 
 /**
@@ -43,26 +43,30 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * find M-estimator in robust regression and other optimization problems.
  *
  * @param initialModel the initial guess model.
- * @param reweightFunc the reweight function which is used to update offsets and weights
+ * @param reweightFunc the reweight function which is used to update working labels and weights
  *                     at each iteration.
  * @param fitIntercept whether to fit intercept.
  * @param regParam L2 regularization parameter used by WLS.
  * @param maxIter maximum number of iterations.
  * @param tol the convergence tolerance.
  *
- * @see [[http://www.jstor.org/stable/2345503 P. J. Green, Iteratively Reweighted Least Squares
- *     for Maximum Likelihood Estimation, and some Robust and Resistant Alternatives,
- *     Journal of the Royal Statistical Society. Series B, 1984.]]
+ * @see <a href="http://www.jstor.org/stable/2345503">P. J. Green, Iteratively
+ * Reweighted Least Squares for Maximum Likelihood Estimation, and some Robust
+ * and Resistant Alternatives, Journal of the Royal Statistical Society.
+ * Series B, 1984.</a>
  */
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,
-    val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double),
+    val reweightFunc: (OffsetInstance, WeightedLeastSquaresModel) => (Double, Double),
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
-    val tol: Double) extends Logging with Serializable {
+    val tol: Double) extends Serializable {
 
-  def fit(instances: RDD[Instance]): IterativelyReweightedLeastSquaresModel = {
+  def fit(
+      instances: RDD[OffsetInstance],
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(
+        classOf[IterativelyReweightedLeastSquares])): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false
     var iter = 0
@@ -74,35 +78,36 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       oldModel = model
 
-      // Update offsets and weights using reweightFunc
+      // Update working labels and weights using reweightFunc
       val newInstances = instances.map { instance =>
-        val (newOffset, newWeight) = reweightFunc(instance, oldModel)
-        Instance(newOffset, newWeight, instance.features)
+        val (newLabel, newWeight) = reweightFunc(instance, oldModel)
+        Instance(newLabel, newWeight, instance.features)
       }
 
       // Estimate new model
-      model = new WeightedLeastSquares(fitIntercept, regParam, standardizeFeatures = false,
-        standardizeLabel = false).fit(newInstances)
+      model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
+        standardizeFeatures = false, standardizeLabel = false)
+        .fit(newInstances, instr = instr)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients
       val coefficients = model.coefficients
       BLAS.axpy(-1.0, coefficients, oldCoefficients)
-      val maxTolOfCoefficients = oldCoefficients.toArray.reduce { (x, y) =>
+      val maxTolOfCoefficients = oldCoefficients.toArray.foldLeft(0.0) { (x, y) =>
         math.max(math.abs(x), math.abs(y))
       }
       val maxTol = math.max(maxTolOfCoefficients, math.abs(oldModel.intercept - model.intercept))
 
       if (maxTol < tol) {
         converged = true
-        logInfo(s"IRLS converged in $iter iterations.")
+        instr.logInfo(s"IRLS converged in $iter iterations.")
       }
 
-      logInfo(s"Iteration $iter : relative tolerance = $maxTol")
+      instr.logInfo(s"Iteration $iter : relative tolerance = $maxTol")
       iter = iter + 1
 
       if (iter == maxIter) {
-        logInfo(s"IRLS reached the max number of iterations: $maxIter.")
+        instr.logInfo(s"IRLS reached the max number of iterations: $maxIter.")
       }
 
     }

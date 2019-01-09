@@ -15,26 +15,25 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-# $example on:spark_hive$
-from os.path import expanduser, join
-
-from pyspark.sql import SparkSession
-from pyspark.sql import Row
-# $example off:spark_hive$
-
 """
 A simple example demonstrating Spark SQL Hive integration.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/hive.py
 """
+from __future__ import print_function
+
+# $example on:spark_hive$
+from os.path import expanduser, join, abspath
+
+from pyspark.sql import SparkSession
+from pyspark.sql import Row
+# $example off:spark_hive$
 
 
 if __name__ == "__main__":
     # $example on:spark_hive$
     # warehouse_location points to the default location for managed databases and tables
-    warehouse_location = 'file:${system:user.dir}/spark-warehouse'
+    warehouse_location = abspath('spark-warehouse')
 
     spark = SparkSession \
         .builder \
@@ -44,7 +43,7 @@ if __name__ == "__main__":
         .getOrCreate()
 
     # spark is an existing SparkSession
-    spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) USING hive")
     spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
     # Queries are expressed in HiveQL
@@ -68,7 +67,7 @@ if __name__ == "__main__":
     # The results of SQL queries are themselves DataFrames and support all normal functions.
     sqlDF = spark.sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
-    # The items in DaraFrames are of type Row, which allows you to access each column by ordinal.
+    # The items in DataFrames are of type Row, which allows you to access each column by ordinal.
     stringsDS = sqlDF.rdd.map(lambda row: "Key: %d, Value: %s" % (row.key, row.value))
     for record in stringsDS.collect():
         print(record)

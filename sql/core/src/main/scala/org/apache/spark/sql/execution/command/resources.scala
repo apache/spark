@@ -37,8 +37,8 @@ case class AddJarCommand(path: String) extends RunnableCommand {
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.addJar(path)
-    Seq(Row(0))
+    sparkSession.sessionState.resourceLoader.addJar(path)
+    Seq.empty[Row]
   }
 }
 

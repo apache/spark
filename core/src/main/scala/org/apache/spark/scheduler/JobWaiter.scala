@@ -50,7 +50,7 @@ private[spark] class JobWaiter[T](
    * will fail this job with a SparkException.
    */
   def cancel() {
-    dagScheduler.cancelJob(jobId)
+    dagScheduler.cancelJob(jobId, None)
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = {

@@ -47,10 +47,9 @@ class WorkerWebUI(
     val logPage = new LogPage(this)
     attachPage(logPage)
     attachPage(new WorkerPage(this))
-    attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))
+    addStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE)
     attachHandler(createServletHandler("/log",
       (request: HttpServletRequest) => logPage.renderLog(request),
-      worker.securityMgr,
       worker.conf))
   }
 }

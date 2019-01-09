@@ -41,7 +41,7 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
 
   /**
    * If `partitionsRDD` already has a partitioner, use it. Otherwise assume that the
-   * [[PartitionID]]s in `partitionsRDD` correspond to the actual partitions and create a new
+   * `PartitionID`s in `partitionsRDD` correspond to the actual partitions and create a new
    * partitioner that allows co-partitioning with `partitionsRDD`.
    */
   override val partitioner =
@@ -63,7 +63,9 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
-  /** Persists the edge partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
+  /**
+   * Persists the edge partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY.
+   */
   override def cache(): this.type = {
     partitionsRDD.persist(targetStorageLevel)
     this

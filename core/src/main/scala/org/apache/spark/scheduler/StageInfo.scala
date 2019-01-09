@@ -30,7 +30,7 @@ import org.apache.spark.storage.RDDInfo
 @DeveloperApi
 class StageInfo(
     val stageId: Int,
-    val attemptId: Int,
+    private val attemptId: Int,
     val name: String,
     val numTasks: Int,
     val rddInfos: Seq[RDDInfo],
@@ -55,6 +55,10 @@ class StageInfo(
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
   }
+
+  // This would just be the second constructor arg, except we need to maintain this method
+  // with parentheses for compatibility
+  def attemptNumber(): Int = attemptId
 
   private[spark] def getStatusString: String = {
     if (completionTime.isDefined) {
