@@ -920,16 +920,13 @@ package object config {
       .createWithDefault(65536)
 
   private[spark] val LOCALITY_WAIT_PROCESS = ConfigBuilder("spark.locality.wait.process")
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefaultString(LOCALITY_WAIT.defaultValueString)
+    .fallbackConf(LOCALITY_WAIT)
 
   private[spark] val LOCALITY_WAIT_NODE = ConfigBuilder("spark.locality.wait.node")
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefaultString(LOCALITY_WAIT.defaultValueString)
+    .fallbackConf(LOCALITY_WAIT)
 
   private[spark] val LOCALITY_WAIT_RACK = ConfigBuilder("spark.locality.wait.rack")
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefaultString(LOCALITY_WAIT.defaultValueString)
+    .fallbackConf(LOCALITY_WAIT)
 
     private[spark] val REDUCER_MAX_SIZE_IN_FLIGHT = ConfigBuilder("spark.reducer.maxSizeInFlight")
     .doc("Maximum size of map outputs to fetch simultaneously from each reduce task, " +

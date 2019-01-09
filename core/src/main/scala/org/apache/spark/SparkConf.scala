@@ -538,7 +538,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
       }
     }
-    
+
     if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
       val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
         "instead use \"yarn\" with specified deploy mode."

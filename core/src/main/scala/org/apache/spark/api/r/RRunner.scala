@@ -126,7 +126,7 @@ private[spark] class RRunner[U](
     val env = SparkEnv.get
     val taskContext = TaskContext.get()
     val bufferSize = System.getProperty(BUFFER_SIZE.key,
-      BUFFER_SIZE.defaultValue.get.toString).toInt
+      BUFFER_SIZE.defaultValueString).toInt
     val stream = new BufferedOutputStream(output, bufferSize)
 
     new Thread("writer for R") {

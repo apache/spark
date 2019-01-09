@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.config.{RDD_PARALLEL_LISTING_THRESHOLD}
+import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.util.Utils
 
 /**
