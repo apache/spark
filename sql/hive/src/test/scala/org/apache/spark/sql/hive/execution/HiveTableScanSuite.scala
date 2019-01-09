@@ -193,7 +193,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
     }.get
   }
 
-  test("HiveTableScanExec canonicalization for different orders of partition filters") {
+  test("Test the InputFormat optimizer") {
     withTable("table_old", "table_pt_old", "table_new", "table_pt_new") {
       sql("set spark.sql.hive.fileInputFormat.enabled=true")
       sql("set spark.sql.hive.fileInputFormat.split.maxsize=134217728")
