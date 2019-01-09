@@ -16,27 +16,38 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import scala.collection.JavaConverters._
+
 import org.apache.orc.mapreduce.OrcInputFormat
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.Scan
 import org.apache.spark.sql.types.StructType
 
 case class OrcScanBuilder(
+    sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
-    dataSchema: StructType) extends FileScanBuilder(fileIndex, schema) {
-  override def build(): Scan = OrcScan(fileIndex, schema, dataSchema, readSchema)
+    dataSchema: StructType,
+    options: DataSourceOptions) extends FileScanBuilder(schema) {
+  lazy val hadoopConf =
+    sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
+
+  override def build(): Scan = {
+    OrcScan(sparkSession, hadoopConf, fileIndex, schema, dataSchema, readSchema)
+  }
 
   private var _pushedFilters: Array[Filter] = Array.empty
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    if (fileIndex.getSparkSession.sessionState.conf.orcFilterPushDown) {
+    if (sparkSession.sessionState.conf.orcFilterPushDown) {
       OrcFilters.createFilter(schema, filters).foreach { f =>
-        OrcInputFormat.setSearchArgument(fileIndex.hadoopConf, f, schema.fieldNames)
+        OrcInputFormat.setSearchArgument(hadoopConf, f, schema.fieldNames)
       }
       _pushedFilters = OrcFilters.convertibleFilters(schema, filters).toArray
     }

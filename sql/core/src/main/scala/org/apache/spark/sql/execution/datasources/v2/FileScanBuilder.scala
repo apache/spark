@@ -16,11 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.sources.v2.reader.{ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.types.StructType
 
-abstract class FileScanBuilder(fileIndex: PartitioningAwareFileIndex, schema: StructType)
+abstract class FileScanBuilder(schema: StructType)
   extends ScanBuilder
   with SupportsPushDownRequiredColumns
   with SupportsPushDownFilters {

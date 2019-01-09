@@ -16,22 +16,17 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, Scan}
 import org.apache.spark.sql.types.StructType
 
 abstract class FileScan(
-    fileIndex: PartitioningAwareFileIndex,
-    schema: StructType,
-    readSchema: StructType) extends Scan with Batch {
+    sparkSession: SparkSession,
+    fileIndex: PartitioningAwareFileIndex) extends Scan with Batch {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -40,7 +35,6 @@ abstract class FileScan(
   }
 
   protected def partitions: Seq[FilePartition] = {
-    val sparkSession = fileIndex.getSparkSession
     val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
     val maxSplitBytes = PartitionedFileUtil.maxSplitBytes(sparkSession, selectedPartitions)
     val splitFiles = selectedPartitions.flatMap { partition =>

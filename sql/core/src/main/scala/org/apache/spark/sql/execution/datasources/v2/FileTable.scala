@@ -18,17 +18,16 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.fs.FileStatus
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.{SupportsBatchRead, Table}
 import org.apache.spark.sql.types.StructType
 
 abstract class FileTable(
+    sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     userSpecifiedSchema: Option[StructType]) extends Table with SupportsBatchRead {
   def getFileIndex: PartitioningAwareFileIndex = this.fileIndex
-
-  override def name(): String = fileIndex.dataSourceOptions().paths().mkString(";")
 
   lazy val dataSchema: StructType = userSpecifiedSchema.orElse {
     inferSchema(fileIndex.allFiles())
@@ -38,7 +37,7 @@ abstract class FileTable(
   }.asNullable
 
   override def schema(): StructType = {
-    val caseSensitive = fileIndex.getSparkSession.sessionState.conf.caseSensitiveAnalysis
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
       fileIndex.partitionSchema, caseSensitive)._1
   }
@@ -49,6 +48,4 @@ abstract class FileTable(
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
-
-  def withNewFileIndex(newFileIndex: PartitioningAwareFileIndex): FileTable
 }

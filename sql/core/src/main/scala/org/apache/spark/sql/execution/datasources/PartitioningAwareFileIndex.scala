@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -28,7 +27,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -51,11 +49,7 @@ abstract class PartitioningAwareFileIndex(
 
   override def partitionSchema: StructType = partitionSpec().partitionColumns
 
-  def dataSourceOptions(): DataSourceOptions = new DataSourceOptions(parameters.asJava)
-
-  def getSparkSession: SparkSession = this.sparkSession
-
-  val hadoopConf: Configuration =
+  protected val hadoopConf: Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]

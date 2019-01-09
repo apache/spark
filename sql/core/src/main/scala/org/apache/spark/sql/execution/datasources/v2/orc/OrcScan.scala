@@ -16,8 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory
@@ -25,16 +27,17 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 case class OrcScan(
+    sparkSession: SparkSession,
+    hadoopConf: Configuration,
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
     dataSchema: StructType,
-    readSchema: StructType)
-  extends FileScan(fileIndex, schema, readSchema) {
+    readSchema: StructType) extends FileScan(sparkSession, fileIndex) {
   override def isSplitable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    val broadcastedConf = fileIndex.getSparkSession.sparkContext.broadcast(
-        new SerializableConfiguration(fileIndex.hadoopConf))
+    val broadcastedConf = sparkSession.sparkContext.broadcast(
+        new SerializableConfiguration(hadoopConf))
     OrcPartitionReaderFactory(broadcastedConf, schema,
       dataSchema, readSchema, fileIndex.partitionSchema)
   }
