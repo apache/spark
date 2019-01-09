@@ -40,6 +40,12 @@ trait DateTimeFormatterHelper {
     Instant.from(zonedDateTime)
   }
 
+  // Gets a formatter from the cache or creates new one. The buildFormatter method can be called
+  // a few times with the same parameters in parallel if the cache does not contain values
+  // associated to those parameters. Since the formatter is immutable, it does not matter.
+  // In this way, synchronised is intentionally omitted in this method to make parallel calls
+  // less synchronised.
+  // The Cache.get method is not used here to avoid creation of additional instances of Callable.
   protected def getOrCreateFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     val key = (pattern, locale)
     var formatter = cache.getIfPresent(key)
