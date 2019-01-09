@@ -552,13 +552,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // The execution plan only has 1 FileScan node.
       val df = spark.sql(
         "SELECT * FROM testDataForScan WHERE p = 1")
-      df.collect()
-      val plan = df.queryExecution.executedPlan.collectLeaves().head
-      val metrics = plan.metrics
-      val driverMetrics = plan.driverMetrics
-      // Check deterministic metrics.
-      assert(driverMetrics("numFiles").value == 2)
-      assert(metrics("numOutputRows").value == 3)
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> (("Scan parquet default.testdataforscan", Map(
+          "number of output rows" -> 3L,
+          "number of files" -> 2L))))
+      )
     }
   }
 }

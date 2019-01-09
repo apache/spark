@@ -83,7 +83,7 @@ case class BroadcastExchangeExec(
           }
 
           val beforeBuild = System.nanoTime()
-          longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+          driverMetrics("collectTime") += (beforeBuild - beforeCollect) / 1000000
 
           // Construct the relation.
           val relation = mode.transform(input, Some(numRows))
@@ -98,18 +98,18 @@ case class BroadcastExchangeExec(
                   relation.getClass.getName)
           }
 
-          longMetric("dataSize") += dataSize
+          driverMetrics("dataSize") += dataSize
           if (dataSize >= (8L << 30)) {
             throw new SparkException(
               s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
           }
 
           val beforeBroadcast = System.nanoTime()
-          longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
+          driverMetrics("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
 
           // Broadcast the relation
           val broadcasted = sparkContext.broadcast(relation)
-          longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+          driverMetrics("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
 
           SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
           broadcasted

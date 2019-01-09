@@ -79,9 +79,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def metrics: Map[String, SQLMetric] = Map.empty
 
   /**
-   * @return Driver side metrics of this SparkPlan.
+   * @return Driver side metrics of this SparkPlan which no need to send them to executor.
    */
-  @transient def driverMetrics: Map[String, SQLMetric] = Map.empty
+  def driverMetrics: Map[String, SQLMetric] = Map.empty
 
   /**
    * @return All metrics of this SparkPlan.
@@ -98,7 +98,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * @return [[SQLMetric]] for the `name`.
    */
-  def longMetric(name: String): SQLMetric = allMetrics(name)
+  def longMetric(name: String): SQLMetric = metrics(name)
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */

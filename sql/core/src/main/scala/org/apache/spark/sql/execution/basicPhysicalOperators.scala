@@ -681,9 +681,9 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val rows: Array[InternalRow] = child.executeCollect()
         val beforeBuild = System.nanoTime()
-        longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+        driverMetrics("collectTime") += (beforeBuild - beforeCollect) / 1000000
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
-        longMetric("dataSize") += dataSize
+        driverMetrics("dataSize") += dataSize
 
         SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
         rows
