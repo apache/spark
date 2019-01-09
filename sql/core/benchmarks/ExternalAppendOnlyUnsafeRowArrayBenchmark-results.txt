@@ -2,49 +2,44 @@
 WITHOUT SPILL
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Array with 100000 rows:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-ArrayBuffer                                   4810 / 5120         21.3          47.0       1.0X
-ExternalAppendOnlyUnsafeRowArray              4996 / 5043         20.5          48.8       1.0X
+ArrayBuffer                                   6378 / 6550         16.1          62.3       1.0X
+ExternalAppendOnlyUnsafeRowArray              6196 / 6242         16.5          60.5       1.0X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Array with 1000 rows:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-ArrayBuffer                                   8839 / 8951         29.7          33.7       1.0X
-ExternalAppendOnlyUnsafeRowArray              9884 / 9888         26.5          37.7       0.9X
+ArrayBuffer                                 11988 / 12027         21.9          45.7       1.0X
+ExternalAppendOnlyUnsafeRowArray            37480 / 37574          7.0         143.0       0.3X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Array with 30000 rows:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-ArrayBuffer                                 19980 / 20061         24.6          40.6       1.0X
-ExternalAppendOnlyUnsafeRowArray            21630 / 21645         22.7          44.0       0.9X
+ArrayBuffer                                 23536 / 23538         20.9          47.9       1.0X
+ExternalAppendOnlyUnsafeRowArray            31275 / 31277         15.7          63.6       0.8X
 
 
 ================================================================================================
 WITH SPILL
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Spilling with 1000 rows:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                        15829 / 15845         16.6          60.4       1.0X
-ExternalAppendOnlyUnsafeRowArray            10158 / 10174         25.8          38.7       1.6X
+UnsafeExternalSorter                        29241 / 29279          9.0         111.5       1.0X
+ExternalAppendOnlyUnsafeRowArray            14309 / 14313         18.3          54.6       2.0X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Spilling with 10000 rows:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                             6 /    6         28.3          35.3       1.0X
-ExternalAppendOnlyUnsafeRowArray                 6 /    7         27.7          36.1       1.0X
+UnsafeExternalSorter                            11 /   11         14.8          67.4       1.0X
+ExternalAppendOnlyUnsafeRowArray                 9 /    9         17.6          56.8       1.2X
 
 
