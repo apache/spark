@@ -245,7 +245,7 @@ class ArrowStreamSerializer(Serializer):
         return "ArrowStreamSerializer"
 
 
-def _create_batch(series, timezone, runner_conf):
+def _create_batch(series, timezone, safecheck):
     """
     Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
 
@@ -285,10 +285,8 @@ def _create_batch(series, timezone, runner_conf):
             # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
             return pa.Array.from_pandas(s, mask=mask, type=t)
 
-        enabledArrowSafeTypeCheck = \
-            runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion", "true") == 'true'
         try:
-            array = pa.Array.from_pandas(s, mask=mask, type=t, safe=enabledArrowSafeTypeCheck)
+            array = pa.Array.from_pandas(s, mask=mask, type=t, safe=safecheck)
         except pa.ArrowException as e:
             error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
                         "Array (%s). It can be caused by overflows or other unsafe " + \
@@ -307,10 +305,10 @@ class ArrowStreamPandasSerializer(Serializer):
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
-    def __init__(self, timezone, runner_conf):
+    def __init__(self, timezone, safecheck):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
-        self._runner_conf = runner_conf
+        self._safecheck = safecheck
 
     def arrow_to_pandas(self, arrow_column):
         from pyspark.sql.types import from_arrow_type, \
@@ -330,7 +328,7 @@ class ArrowStreamPandasSerializer(Serializer):
         writer = None
         try:
             for series in iterator:
-                batch = _create_batch(series, self._timezone, self._runner_conf)
+                batch = _create_batch(series, self._timezone, self._safecheck)
                 if writer is None:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)

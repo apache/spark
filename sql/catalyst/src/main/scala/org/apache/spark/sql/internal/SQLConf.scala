@@ -1334,9 +1334,9 @@ object SQLConf {
   val PANDAS_ARROW_SAFE_TYPE_CONVERSION =
     buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion")
       .internal()
-      .doc("When true, enabling Arrow do safe type conversion check when converting" +
-        "Pandas.Series to Arrow Array during serialization. Arrow will raise errors " +
-        "when detecting unsafe type conversion. When false, disabling Arrow's type " +
+      .doc("When true, Arrow will perform safe type conversion when converting " +
+        "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
+        "when detecting unsafe type conversion like overflow. When false, disabling Arrow's type " +
         "check and do type conversions anyway.")
       .booleanConf
       .createWithDefault(true)

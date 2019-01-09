@@ -556,10 +556,9 @@ class SparkSession(object):
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
         # Create Arrow record batches
-        runner_conf = {"spark.sql.execution.pandas.arrowSafeTypeConversion":
-                       self._wrapped._conf.arrowSafeTypeConversion()}
+        safecheck = self._wrapped._conf.arrowSafeTypeConversion()
         batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)],
-                                 timezone, runner_conf)
+                                 timezone, safecheck)
                    for pdf_slice in pdf_slices]
 
         # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)

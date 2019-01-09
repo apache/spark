@@ -288,8 +288,10 @@ class ArrowTests(ReusedSQLTestCase):
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.ix[1, '2_int_t'] = None
         pdf_copy = pdf.copy(deep=True)
-        self.spark.createDataFrame(pdf, schema=self.schema)
-        self.assertTrue(pdf.equals(pdf_copy))
+        with self.sql_conf({
+                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
+            self.spark.createDataFrame(pdf, schema=self.schema)
+            self.assertTrue(pdf.equals(pdf_copy))
 
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.types import from_arrow_schema, to_arrow_schema
