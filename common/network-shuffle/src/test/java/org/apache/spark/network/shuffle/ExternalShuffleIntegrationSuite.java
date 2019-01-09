@@ -116,7 +116,14 @@ public class ExternalShuffleIntegrationSuite {
 
   // Fetch a set of blocks from a pre-registered executor.
   private FetchResult fetchBlocks(String execId, String[] blockIds) throws Exception {
-    return fetchBlocks(execId, blockIds, conf, server.getPort());
+    return fetchBlocks(execId, blockIds, conf, server.getPort(), false);
+  }
+
+  private FetchResult fetchBlocks(
+      String execId,
+      String[] blockIds,
+      boolean shuffleBlockBatchFetch) throws Exception {
+    return fetchBlocks(execId, blockIds, conf, server.getPort(), shuffleBlockBatchFetch);
   }
 
   // Fetch a set of blocks from a pre-registered executor. Connects to the server on the given port,
@@ -125,7 +132,8 @@ public class ExternalShuffleIntegrationSuite {
       String execId,
       String[] blockIds,
       TransportConf clientConf,
-      int port) throws Exception {
+      int port,
+      boolean shuffleBlockBatchFetch) throws Exception {
     final FetchResult res = new FetchResult();
     res.successBlocks = Collections.synchronizedSet(new HashSet<String>());
     res.failedBlocks = Collections.synchronizedSet(new HashSet<String>());
@@ -140,11 +148,11 @@ public class ExternalShuffleIntegrationSuite {
           @Override
           public void onBlockFetchSuccess(String[] blockIds, ManagedBuffer data) {
             synchronized (this) {
+              data.retain();
+              res.buffers.add(data);
               for (String blockId : blockIds) {
                 if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
-                  data.retain();
                   res.successBlocks.add(blockId);
-                  res.buffers.add(data);
                   requestsRemaining.release();
                 }
               }
@@ -160,7 +168,7 @@ public class ExternalShuffleIntegrationSuite {
               }
             }
           }
-        }, null, false);
+        }, null, shuffleBlockBatchFetch);
 
       if (!requestsRemaining.tryAcquire(blockIds.length, 5, TimeUnit.SECONDS)) {
         fail("Timeout getting response from the server");
@@ -237,9 +245,37 @@ public class ExternalShuffleIntegrationSuite {
       new MapConfigProvider(ImmutableMap.of("spark.shuffle.io.maxRetries", "0")));
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
-      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
+      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */, false);
     assertTrue(execFetch.successBlocks.isEmpty());
     assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+  }
+
+  private byte[] mergeBlockData(byte[][] blocks) {
+    int totalLength = 0;
+    for (byte[] block : blocks) {
+      totalLength += block.length;
+    }
+
+    byte[] data = new byte[totalLength];
+    int pos = 0;
+    for (byte[] block : blocks) {
+      System.arraycopy(block, 0, data, pos, block.length);
+      pos += block.length;
+    }
+
+    return data;
+  }
+
+  @Test
+  public void testBatchFetchThreeSort() throws Exception {
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    FetchResult exec0Fetch = fetchBlocks("exec-0",
+      new String[] { "shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2" }, true);
+    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
+      exec0Fetch.successBlocks);
+    assertTrue(exec0Fetch.failedBlocks.isEmpty());
+    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(mergeBlockData(exec0Blocks)));
+    exec0Fetch.releaseBuffers();
   }
 
   private static void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
