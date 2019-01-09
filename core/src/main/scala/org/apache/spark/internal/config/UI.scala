@@ -46,7 +46,8 @@ private[spark] object UI {
   val UI_FILTERS = ConfigBuilder("spark.ui.filters")
     .doc("Comma separated list of filter class names to apply to the Spark Web UI.")
     .stringConf
-    .createOptional
+    .toSequence
+    .createWithDefault(Nil)
 
   val UI_ALLOW_FRAMING_FROM = ConfigBuilder("spark.ui.allowFramingFrom")
     .stringConf

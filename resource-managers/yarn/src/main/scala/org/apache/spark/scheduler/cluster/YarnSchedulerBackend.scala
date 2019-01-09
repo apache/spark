@@ -176,7 +176,7 @@ private[spark] abstract class YarnSchedulerBackend(
       filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
       // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
-      val allFilters = filterName + "," + conf.get(UI_FILTERS).orElse(Some("")).get
+      val allFilters = Seq(filterName) ++ conf.get(UI_FILTERS)
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
 
       // For already installed handlers, prepend the filter.

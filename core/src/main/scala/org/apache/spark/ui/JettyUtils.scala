@@ -500,7 +500,7 @@ private[spark] case class ServerInfo(
    * of the chain to perform security-related functions.
    */
   private def addFilters(handler: ServletContextHandler, securityMgr: SecurityManager): Unit = {
-    conf.get(UI_FILTERS).toSeq.flatMap(Utils.stringToSeq).foreach { filter =>
+    conf.get(UI_FILTERS).foreach { filter =>
       logInfo(s"Adding filter to ${handler.getContextPath()}: $filter")
       val oldParams = conf.getOption(s"spark.$filter.params").toSeq
         .flatMap(Utils.stringToSeq)
