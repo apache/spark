@@ -82,7 +82,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       extensions.injectParser((_: SparkSession, _: ParserInterface) => CatalystSqlParser)
     }
     withSession(extension) { session =>
-      assert(session.sessionState.sqlParser == CatalystSqlParser)
+      assert(session.sessionState.sqlParser === CatalystSqlParser)
     }
   }
 
@@ -102,7 +102,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
     withSession(extension) { session =>
       val parser = MyParser(session, MyParser(session, CatalystSqlParser))
-      assert(session.sessionState.sqlParser == parser)
+      assert(session.sessionState.sqlParser === parser)
     }
   }
 
@@ -153,7 +153,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(session.sessionState.analyzer.extendedCheckRules.containsSlice(orderedCheckRules))
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).filter(orderedRules.contains)
         .containsSlice(orderedRules ++ orderedRules)) // The optimizer rules are duplicated
-      assert(session.sessionState.sqlParser == parser)
+      assert(session.sessionState.sqlParser === parser)
       assert(session.sessionState.functionRegistry
         .lookupFunction(MyExtensions.myFunction._1).isDefined)
       assert(session.sessionState.functionRegistry
@@ -171,12 +171,15 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         classOf[MyExtensions].getCanonicalName).mkString(","))
       .getOrCreate()
     try {
-      assert(session.sessionState.planner.strategies.count(_ == MySparkStrategy(session)) == 2)
-      assert(session.sessionState.analyzer.extendedResolutionRules.count(_ == MyRule(session)) == 2)
-      assert(session.sessionState.analyzer.postHocResolutionRules.count(_ == MyRule(session)) == 2)
-      assert(session.sessionState.analyzer.extendedCheckRules.count(_ == MyCheckRule(session)) == 2)
+      assert(session.sessionState.planner.strategies.count(_ === MySparkStrategy(session)) === 2)
+      assert(session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) ===
+        2)
+      assert(session.sessionState.analyzer.postHocResolutionRules.count(_ === MyRule(session)) ===
+        2)
+      assert(session.sessionState.analyzer.extendedCheckRules.count(_ === MyCheckRule(session)) ===
+        2)
       assert(session.sessionState.optimizer.batches.flatMap(_.rules)
-        .count(_ == MyRule(session)) == 4) // The optimizer rules are duplicated
+        .count(_ === MyRule(session)) === 4) // The optimizer rules are duplicated
       val outerParser = session.sessionState.sqlParser
       assert(outerParser.isInstanceOf[MyParser])
       assert(outerParser.asInstanceOf[MyParser].delegate.isInstanceOf[MyParser])
@@ -198,8 +201,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       val lastRegistered = session.sessionState.functionRegistry
         .lookupFunction(FunctionIdentifier("myFunction2"))
       assert(lastRegistered.isDefined)
-      assert(lastRegistered.get != MyExtensions2.myFunction._2)
-      assert(lastRegistered.get == MyExtensions2Duplicate.myFunction._2)
+      assert(lastRegistered.get !== MyExtensions2.myFunction._2)
+      assert(lastRegistered.get === MyExtensions2Duplicate.myFunction._2)
     } finally {
       stop(session)
     }
