@@ -232,26 +232,6 @@ class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[Logica
       val relation = HadoopFsRelation(table.getFileIndex, table.getFileIndex.partitionSchema,
         table.schema(), None, v1FileFormat, d.options)(sparkSession)
       i.copy(table = LogicalRelation(relation))
-
-    case c @CreateTable(tableDesc, _, _) if DDLUtils.isDatasourceTable(tableDesc) =>
-      val cls = DataSource.lookupDataSource(tableDesc.provider.get, sparkSession.sessionState.conf)
-      // Here `providingClass` is supposed to be V1 file format. Currently [[FileDataSourceV2]]
-      // doesn't support catalog, so creating tables with V2 file format still uses this code path.
-      // As a temporary hack to avoid failure, [[FileDataSourceV2]] is falled back to [[FileFormat]]
-      cls.newInstance() match {
-        case f: FileDataSourceV2 =>
-          val newTableDesc = tableDesc.copy(provider = Some(f.fallBackFileFormat.getCanonicalName))
-          c.copy(tableDesc = newTableDesc)
-        case _ => c
-      }
-
-    case c: CreateTempViewUsing =>
-      val cls = DataSource.lookupDataSource(c.provider, sparkSession.sessionState.conf)
-      cls.newInstance() match {
-        case f: FileDataSourceV2 =>
-          c.copy(provider = f.fallBackFileFormat.getCanonicalName)
-        case _ => c
-      }
   }
 }
 

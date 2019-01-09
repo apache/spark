@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
-import javax.activation.FileDataSource
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
@@ -94,8 +93,18 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-  lazy val providingClass: Class[_] =
-    DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+  lazy val providingClass: Class[_] = {
+    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    // `providingClass` is used for resolving data source relation for catalog tables.
+    // As now catalog for data source V2 is under development, here we fall back all the
+    // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
+    // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
+    // [[DataFrameReader]]/[[DataFrameWriter]].
+    cls.newInstance() match {
+      case f: FileDataSourceV2 => f.fallBackFileFormat
+      case _ => cls
+    }
+  }
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver

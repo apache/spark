@@ -217,21 +217,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _: SupportsBatchRead =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
 
-        case _ => loadV1Source(cls.getCanonicalName, paths: _*)
+        case _ => loadV1Source(paths: _*)
       }
     } else {
-      loadV1Source(cls.getCanonicalName, paths: _*)
+      loadV1Source(paths: _*)
     }
   }
 
-  private def loadV1Source(className: String, paths: String*) = {
+  private def loadV1Source(paths: String*) = {
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = paths,
         userSpecifiedSchema = userSpecifiedSchema,
-        className = className,
+        className = source,
         options = extraOptions.toMap).resolveRelation())
   }
 

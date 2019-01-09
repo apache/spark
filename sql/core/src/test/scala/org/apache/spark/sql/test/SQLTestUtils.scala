@@ -24,7 +24,6 @@ import java.util.{Locale, UUID}
 
 import scala.concurrent.duration._
 import scala.language.implicitConversions
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -40,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{FilterExec, SQLExecution}
+import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils

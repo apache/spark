@@ -277,27 +277,22 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             }
           }
 
-        // Since the FileDataSourceV2 doesn't implement write path, fall back to FileFormat.
-        // TODO: remove this when FileDataSourceV2 write path is implemented.
-        case fileSource: FileDataSourceV2 =>
-          saveToV1Source(fileSource.fallBackFileFormat.getCanonicalName)
-
         // Streaming also uses the data source V2 API. So it may be that the data source implements
         // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
         // as though it's a V1 source.
-        case _ => saveToV1Source(cls.getCanonicalName)
+        case _ => saveToV1Source()
       }
     } else {
-      saveToV1Source(cls.getCanonicalName)
+      saveToV1Source()
     }
   }
 
-  private def saveToV1Source(className: String): Unit = {
+  private def saveToV1Source(): Unit = {
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
         sparkSession = df.sparkSession,
-        className = className,
+        className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
         options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
     }

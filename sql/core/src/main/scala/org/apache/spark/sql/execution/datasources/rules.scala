@@ -19,21 +19,15 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
-import com.fasterxml.jackson.databind.ObjectMapper
-
-import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchRead, TableProvider}
 import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -56,41 +50,13 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
         // will catch it and return the original plan, so that the analyzer can report table not
         // found later.
-        val message = "Unsupported data source type for direct query on files: " +
-          s"${u.tableIdentifier.database.get}"
-        if (dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-          throw new AnalysisException(message)
+        val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+        if (!isFileFormat ||
+            dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
+          throw new AnalysisException("Unsupported data source type for direct query on files: " +
+            s"${u.tableIdentifier.database.get}")
         }
-        if (classOf[TableProvider].isAssignableFrom(dataSource.providingClass)) {
-          // TODO: refacotor and reduce duplicated code with DataFrameReader.load().
-          val provider =
-            dataSource.providingClass.getConstructor().newInstance().asInstanceOf[TableProvider]
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            ds = provider, conf = sparkSession.sessionState.conf)
-          val pathsOption = {
-            val objectMapper = new ObjectMapper()
-            DataSourceOptions.PATHS_KEY ->
-              objectMapper.writeValueAsString(Array(u.tableIdentifier.table))
-          }
-          val finalOptions = sessionOptions + pathsOption
-          val dsOptions = new DataSourceOptions(finalOptions.asJava)
-          val table = provider.getTable(dsOptions)
-          table match {
-            case s: SupportsBatchRead =>
-              DataSourceV2Relation.create(provider, s, finalOptions, userSpecifiedSchema = None)
-
-            // If the FileDataSourceV2 doesn't implement read path, fall back to FileFormat.
-            case fileSource: FileDataSourceV2 =>
-              LogicalRelation(dataSource.copy(className =
-                fileSource.fallBackFileFormat.getCanonicalName).resolveRelation())
-
-            case _ => throw new AnalysisException(message)
-          }
-        } else if (classOf[FileFormat].isAssignableFrom(dataSource.providingClass)) {
-          LogicalRelation(dataSource.resolveRelation())
-        } else {
-          throw new AnalysisException(message)
-        }
+        LogicalRelation(dataSource.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
         case e: Exception =>
