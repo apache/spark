@@ -1097,7 +1097,7 @@ private[spark] class TaskSetManager(
     recomputeLocality()
   }
 
-  def markPartitionIdAsCompletedForTaskAttempt(index: Int): Unit = {
+  def markPartitionCompletedForRedundantTaskAttempts(index: Int): Unit = {
     successful(index) = true
     maybeFinishTaskSet()
   }

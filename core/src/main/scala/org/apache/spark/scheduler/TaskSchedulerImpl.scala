@@ -297,7 +297,7 @@ private[spark] class TaskSchedulerImpl(
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.partitionToIndex.get(partitionId) match {
         case Some(index) =>
-          tsm.markPartitionIdAsCompletedForTaskAttempt(index)
+          tsm.markPartitionCompletedForRedundantTaskAttempts(index)
           if (killTasks) {
             val taskInfoList = tsm.taskAttempts(index)
             taskInfoList.filter(_.running).foreach { taskInfo =>
@@ -307,7 +307,9 @@ private[spark] class TaskSchedulerImpl(
           }
 
         case None =>
-          logError(s"No corresponding index found for partition ID $partitionId")
+          throw new SparkException(s"No corresponding index found for" +
+            s" partition ID $partitionId. This is likely a bug in the Spark Scheduler" +
+            s" implementation. Please file a bug report")
       }
     }
   }
