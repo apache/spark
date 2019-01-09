@@ -93,7 +93,8 @@ private[kafka010] class KafkaMicroBatchReader(
     endPartitionOffsets = Option(end.orElse(null))
         .map(_.asInstanceOf[KafkaSourceOffset].partitionToOffsets)
         .getOrElse {
-          val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets()
+          val latestPartitionOffsets =
+            kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
           maxOffsetsPerTrigger.map { maxOffsets =>
             rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
           }.getOrElse {
@@ -132,10 +133,21 @@ private[kafka010] class KafkaMicroBatchReader(
     }.toSeq
     logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
+    val fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets
+    val untilOffsets = endPartitionOffsets
+    untilOffsets.foreach { case (tp, untilOffset) =>
+      fromOffsets.get(tp).foreach { fromOffset =>
+        if (untilOffset < fromOffset) {
+          reportDataLoss(s"Partition $tp's offset was changed from " +
+            s"$fromOffset to $untilOffset, some data may have been missed")
+        }
+      }
+    }
+
     // Calculate offset ranges
     val offsetRanges = rangeCalculator.getRanges(
-      fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets,
-      untilOffsets = endPartitionOffsets,
+      fromOffsets = fromOffsets,
+      untilOffsets = untilOffsets,
       executorLocations = getSortedExecutorList())
 
     // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
@@ -192,7 +204,7 @@ private[kafka010] class KafkaMicroBatchReader(
         case EarliestOffsetRangeLimit =>
           KafkaSourceOffset(kafkaOffsetReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit =>
-          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets())
+          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) =>
           kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
       }
