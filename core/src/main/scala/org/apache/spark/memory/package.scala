@@ -63,7 +63,7 @@ package org.apache.spark
  *
  * There is one implementation of [[org.apache.spark.memory.MemoryManager]]:
  *
- *  - [[org.apache.spark.memory.UnifiedMemoryManager]], the default in Spark 1.6+, enforces soft
+ *  - [[org.apache.spark.memory.UnifiedMemoryManager]] enforces soft
  *    boundaries between storage and execution memory, allowing requests for memory in one region
  *    to be fulfilled by borrowing memory from the other.
  */
