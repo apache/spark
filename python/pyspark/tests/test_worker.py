@@ -22,7 +22,7 @@ import time
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.testing.utils import ReusedPySparkTestCase, QuietTest
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
 
 if sys.version_info[0] >= 3:
     xrange = range
@@ -143,6 +143,16 @@ class WorkerTests(ReusedPySparkTestCase):
                 self.assertRaises(Py4JJavaError, lambda: rdd.count())
         finally:
             self.sc.pythonVer = version
+
+
+class WorkerReuseTest(PySparkTestCase):
+
+    def test_reuse_worker_of_parallelize_xrange(self):
+        rdd = self.sc.parallelize(xrange(20), 8)
+        previous_pids = rdd.map(lambda x: os.getpid()).collect()
+        current_pids = rdd.map(lambda x: os.getpid()).collect()
+        for pid in current_pids:
+            self.assertTrue(pid in previous_pids)
 
 
 if __name__ == "__main__":

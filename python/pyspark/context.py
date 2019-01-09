@@ -498,6 +498,14 @@ class SparkContext(object):
                 return start0 + int((split * size / numSlices)) * step
 
             def f(split, iterator):
+                # it's an empty iterator here but we need this line for triggering the
+                # logic of signal handling in FramedSerializer.load_stream, for instance,
+                # SpecialLengths.END_OF_DATA_SECTION in _read_with_length. Since
+                # FramedSerializer.load_stream produces a generator, the control should
+                # at least be in that function once. Here we do it by explicitly converting
+                # the empty iterator to a list, thus make sure worker reuse takes effect.
+                # See more details in SPARK-26549.
+                assert len(list(iterator)) == 0
                 return xrange(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
