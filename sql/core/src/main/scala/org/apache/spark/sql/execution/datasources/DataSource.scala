@@ -99,7 +99,8 @@ case class DataSource(
     // As now catalog for data source V2 is under development, here we fall back all the
     // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
     // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
-    // [[DataFrameReader]]/[[DataFrameWriter]].
+    // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
+    // instead of `providingClass`.
     cls.newInstance() match {
       case f: FileDataSourceV2 => f.fallBackFileFormat
       case _ => cls
@@ -614,7 +615,7 @@ object DataSource extends Logging {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
-            classOf[OrcDataSourceV2].getCanonicalName
+        classOf[OrcDataSourceV2].getCanonicalName
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"

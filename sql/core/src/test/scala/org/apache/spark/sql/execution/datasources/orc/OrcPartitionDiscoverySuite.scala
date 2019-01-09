@@ -76,7 +76,7 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
             ps <- Seq("foo", "bar")
           } yield Row(i, i.toString, pi, ps))
 
-          checkAnswer(
+        checkAnswer(
           sql("SELECT intField, pi FROM t"),
           for {
             i <- 1 to 10
