@@ -109,7 +109,7 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
     functionBuilders.put(normalizedName, newFunction) match {
       case Some(previousFunction) if previousFunction != newFunction =>
         logWarning(s"The function $normalizedName replaced a previously registered function.")
-      case _ => Unit
+      case _ =>
     }
   }
 

@@ -79,7 +79,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
   test("inject parser") {
     val extension = create { extensions =>
-      extensions.injectParser((_, _) => CatalystSqlParser)
+      extensions.injectParser((_: SparkSession, _: ParserInterface) => CatalystSqlParser)
     }
     withSession(extension) { session =>
       assert(session.sessionState.sqlParser == CatalystSqlParser)
@@ -88,7 +88,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
   test("inject multiple rules") {
     withSession(Seq(_.injectOptimizerRule(MyRule),
-      _.injectPlannerStrategy(MySparkStrategy))) { session =>
+        _.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
     }
@@ -96,7 +96,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
   test("inject stacked parsers") {
     val extension = create { extensions =>
-      extensions.injectParser((_, _) => CatalystSqlParser)
+      extensions.injectParser((_: SparkSession, _: ParserInterface) => CatalystSqlParser)
       extensions.injectParser(MyParser)
       extensions.injectParser(MyParser)
     }
@@ -198,8 +198,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       val lastRegistered = session.sessionState.functionRegistry
         .lookupFunction(FunctionIdentifier("myFunction2"))
       assert(lastRegistered.isDefined)
-      assert(lastRegistered.get.getExtended != MyExtensions2.myFunction._2.getExtended)
-      assert(lastRegistered.get.getExtended == MyExtensions2Duplicate.myFunction._2.getExtended)
+      assert(lastRegistered.get != MyExtensions2.myFunction._2)
+      assert(lastRegistered.get == MyExtensions2Duplicate.myFunction._2)
     } finally {
       stop(session)
     }
@@ -242,8 +242,7 @@ object MyExtensions {
 
   val myFunction = (FunctionIdentifier("myFunction"),
     new ExpressionInfo("noClass", "myDb", "myFunction", "usage", "extended usage"),
-    (myArgs: Seq[Expression]) => Literal(5, IntegerType))
-
+    (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
 class MyExtensions extends (SparkSessionExtensions => Unit) {
@@ -273,7 +272,7 @@ case class MySparkStrategy2(spark: SparkSession) extends SparkStrategy {
 object MyExtensions2 {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage" ),
+    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -284,7 +283,7 @@ class MyExtensions2 extends (SparkSessionExtensions => Unit) {
     e.injectPostHocResolutionRule(MyRule2)
     e.injectCheckRule(MyCheckRule2)
     e.injectOptimizerRule(MyRule2)
-    e.injectParser((_, _) => CatalystSqlParser)
+    e.injectParser((_: SparkSession, _: ParserInterface) => CatalystSqlParser)
     e.injectFunction(MyExtensions2.myFunction)
   }
 }
@@ -292,7 +291,7 @@ class MyExtensions2 extends (SparkSessionExtensions => Unit) {
 object MyExtensions2Duplicate {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "last wins" ),
+    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
