@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * <li>(External) Catalog listeners.</li>
  * </ul>
  *
- * The extensions can be used by calling `withExtension` on the [[SparkSession.Builder]], for
+ * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
  * example:
  * {{{
  *   SparkSession.builder()
