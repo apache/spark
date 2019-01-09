@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -43,31 +43,53 @@ import org.apache.spark.sql.types._
  *    condition.
  */
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
-  private def dedupJoin(joinPlan: LogicalPlan): LogicalPlan = joinPlan match {
+
+  private def buildJoin(
+      outerPlan: LogicalPlan,
+      subplan: LogicalPlan,
+      joinType: JoinType,
+      condition: Option[Expression]): Join = {
+    // Deduplicate conflicting attributes if any.
+    val dedupSubplan = dedupSubqueryOnSelfJoin(outerPlan, subplan, None, condition)
+    Join(outerPlan, dedupSubplan, joinType, condition)
+  }
+
+  private def dedupSubqueryOnSelfJoin(
+      outerPlan: LogicalPlan,
+      subplan: LogicalPlan,
+      valuesOpt: Option[Seq[Expression]],
+      condition: Option[Expression] = None): LogicalPlan = {
     // SPARK-21835: It is possibly that the two sides of the join have conflicting attributes,
     // the produced join then becomes unresolved and break structural integrity. We should
-    // de-duplicate conflicting attributes. We don't use transformation here because we only
-    // care about the most top join converted from correlated predicate subquery.
-    case j @ Join(left, right, joinType @ (LeftSemi | LeftAnti | ExistenceJoin(_)), joinCond) =>
-      val duplicates = right.outputSet.intersect(left.outputSet)
-      if (duplicates.nonEmpty) {
-        val aliasMap = AttributeMap(duplicates.map { dup =>
-          dup -> Alias(dup, dup.toString)()
-        }.toSeq)
-        val aliasedExpressions = right.output.map { ref =>
-          aliasMap.getOrElse(ref, ref)
-        }
-        val newRight = Project(aliasedExpressions, right)
-        val newJoinCond = joinCond.map { condExpr =>
-          condExpr transform {
-            case a: Attribute => aliasMap.getOrElse(a, a).toAttribute
+    // de-duplicate conflicting attributes.
+    // SPARK-26078: it may also happen that the subquery has conflicting attributes with the outer
+    // values. In this case, the resulting join would contain trivially true conditions (eg.
+    // id#3 = id#3) which cannot be de-duplicated after. In this method, if there are conflicting
+    // attributes in the join condition, the subquery's conflicting attributes are changed using
+    // a projection which aliases them and resolves the problem.
+    val outerReferences = valuesOpt.map(values =>
+      AttributeSet(values.flatMap(_.references))).getOrElse(AttributeSet.empty)
+    val outerRefs = outerPlan.outputSet ++ outerReferences
+    val duplicates = outerRefs.intersect(subplan.outputSet)
+    if (duplicates.nonEmpty) {
+      condition.foreach { e =>
+          val conflictingAttrs = e.references.intersect(duplicates)
+          if (conflictingAttrs.nonEmpty) {
+            throw new AnalysisException("Found conflicting attributes " +
+              s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
+              s"$outerPlan\nand subplan:\n  $subplan")
           }
-        }
-        Join(left, newRight, joinType, newJoinCond)
-      } else {
-        j
       }
-    case _ => joinPlan
+      val rewrites = AttributeMap(duplicates.map { dup =>
+        dup -> Alias(dup, dup.toString)()
+      }.toSeq)
+      val aliasedExpressions = subplan.output.map { ref =>
+        rewrites.getOrElse(ref, ref)
+      }
+      Project(aliasedExpressions, subplan)
+    } else {
+      subplan
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -85,17 +107,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, conditions, _)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftSemi, joinCond))
+          buildJoin(outerPlan, sub, LeftSemi, joinCond)
         case (p, Not(Exists(sub, conditions, _))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftAnti, joinCond))
+          buildJoin(outerPlan, sub, LeftAnti, joinCond)
         case (p, InSubquery(values, ListQuery(sub, conditions, _, _))) =>
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
-          val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftSemi, joinCond))
+          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
+          val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
+          Join(outerPlan, newSub, LeftSemi, joinCond)
         case (p, Not(InSubquery(values, ListQuery(sub, conditions, _, _)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
@@ -103,7 +124,10 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join.
           // Use EXISTS if performance matters to you.
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
+
+          // Deduplicate conflicting attributes if any.
+          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -118,8 +142,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // will have the final conditions in the LEFT ANTI as
           // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
-          // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftAnti, Option(finalJoinCond)))
+          Join(outerPlan, newSub, LeftAnti, Option(finalJoinCond))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
@@ -140,16 +163,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       e transformUp {
         case Exists(sub, conditions, _) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          // Deduplicate conflicting attributes if any.
-          newPlan = dedupJoin(
-            Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And)))
+          newPlan =
+            buildJoin(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
           exists
         case InSubquery(values, ListQuery(sub, conditions, _, _)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
-          val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
           // Deduplicate conflicting attributes if any.
-          newPlan = dedupJoin(Join(newPlan, sub, ExistenceJoin(exists), newConditions))
+          val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
+          val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
+          newPlan = Join(newPlan, newSub, ExistenceJoin(exists), newConditions)
           exists
       }
     }
