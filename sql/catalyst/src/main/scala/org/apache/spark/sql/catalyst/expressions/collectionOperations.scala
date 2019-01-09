@@ -516,7 +516,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
-       {1:"a",2:"c",3:"d"}
+       {1:"a",2:"b",2:"c",3:"d"}
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
