@@ -299,12 +299,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
   }
 
   test("zero-sized blocks should be excluded when getMapSizesByExecutorId") {
-    val newConf = new SparkConf
-    newConf.set("spark.shuffle.continuousBlockBatchFetch", "false")
     val rpcEnv = createRpcEnv("test")
-    val tracker = newTrackerMaster(newConf)
+    val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
-      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
     tracker.registerShuffle(10, 2)
 
     val size0 = MapStatus.decompressSize(MapStatus.compressSize(0L))
@@ -315,7 +313,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(size10000, size0, size1000, size0)))
     assert(tracker.containsShuffle(10))
-    assert(tracker.getMapSizesByExecutorId(10, 0, 4, "c", true).toSeq ===
+    assert(tracker.getMapSizesByExecutorId(10, 0, 4, "a", shuffleBlockBatchFetch = false).toSeq ===
       Seq(
         (BlockManagerId("a", "hostA", 1000),
           Seq((ShuffleBlockId(10, 0, 1), size1000), (ShuffleBlockId(10, 0, 3), size10000))),
@@ -329,7 +327,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("fetch contiguous partitions") {
+  test("batch fetch contiguous partitions") {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
@@ -343,7 +341,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(1000L, 10000L, 2000L)))
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(10000L, 2000L, 1000L)))
-    val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2, "a", true)
+    val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2, "a", shuffleBlockBatchFetch = true)
     assert(statuses1.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockBatchId(10, 0, 0, 2), size1000 + size10000))),
@@ -351,7 +349,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
           ArrayBuffer((ShuffleBlockId(10, 1, 0), size10000),
             (ShuffleBlockId(10, 1, 1), size2000))))
         .toSet)
-    val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3, "a", true)
+    val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3, "a", shuffleBlockBatchFetch = false)
     assert(statuses2.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockId(10, 0, 2), size2000))),

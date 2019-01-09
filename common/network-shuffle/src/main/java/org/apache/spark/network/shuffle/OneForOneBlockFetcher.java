@@ -50,7 +50,7 @@ public class OneForOneBlockFetcher {
   private final TransportClient client;
   private final OpenBlocks openMessage;
   private final String[] blockIds;
-  private int[] blockIdIndexes = null;
+  private int[] blockIdIndices = null;
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
   private final TransportConf transportConf;
@@ -91,14 +91,14 @@ public class OneForOneBlockFetcher {
     @Override
     public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
       // On receipt of a chunk, pass it upwards as a block.
-      listener.onBlockFetchSuccess(Arrays.copyOfRange(blockIds, blockIdIndexes[chunkIndex],
-        blockIdIndexes[chunkIndex + 1]), buffer);
+      listener.onBlockFetchSuccess(Arrays.copyOfRange(blockIds, blockIdIndices[chunkIndex],
+        blockIdIndices[chunkIndex + 1]), buffer);
     }
 
     @Override
     public void onFailure(int chunkIndex, Throwable e) {
       // On receipt of a failure, fail every block from chunkIndex onwards.
-      String[] remainingBlockIds = Arrays.copyOfRange(blockIds, blockIdIndexes[chunkIndex],
+      String[] remainingBlockIds = Arrays.copyOfRange(blockIds, blockIdIndices[chunkIndex],
         blockIds.length);
       failRemainingBlocks(remainingBlockIds, e);
     }
@@ -121,19 +121,19 @@ public class OneForOneBlockFetcher {
           streamHandle = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
           logger.trace("Successfully opened blocks {}, preparing to fetch chunks.", streamHandle);
 
-          // initiate blockIdIndexes
-          blockIdIndexes = new int[streamHandle.numChunks + 1];
-          blockIdIndexes[0] = 0;
+          // initiate blockIdIndices
+          blockIdIndices = new int[streamHandle.numChunks + 1];
+          blockIdIndices[0] = 0;
           if (streamHandle.chunkSizes.length == 0) {
-            for (int i = 1; i < blockIdIndexes.length; i++) {
-              blockIdIndexes[i] = i;
+            for (int i = 1; i < blockIdIndices.length; i++) {
+              blockIdIndices[i] = i;
             }
           } else {
-            for (int i = 1; i < blockIdIndexes.length; i++) {
-              blockIdIndexes[i] = blockIdIndexes[i - 1] + streamHandle.chunkSizes[i - 1];
+            for (int i = 1; i < blockIdIndices.length; i++) {
+              blockIdIndices[i] = blockIdIndices[i - 1] + streamHandle.chunkSizes[i - 1];
             }
           }
-          assert blockIdIndexes[blockIdIndexes.length - 1] == blockIds.length;
+          assert blockIdIndices[blockIdIndices.length - 1] == blockIds.length;
 
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
@@ -192,7 +192,7 @@ public class OneForOneBlockFetcher {
     @Override
     public void onComplete(String streamId) throws IOException {
       listener.onBlockFetchSuccess(Arrays.copyOfRange(
-        blockIds, blockIdIndexes[chunkIndex], blockIdIndexes[chunkIndex + 1]), channel.closeAndRead());
+        blockIds, blockIdIndices[chunkIndex], blockIdIndices[chunkIndex + 1]), channel.closeAndRead());
       if (!downloadFileManager.registerTempFileToClean(targetFile)) {
         targetFile.delete();
       }
@@ -203,7 +203,7 @@ public class OneForOneBlockFetcher {
       channel.close();
       // On receipt of a failure, fail every block from chunkIndex onwards.
       String[] remainingBlockIds =
-        Arrays.copyOfRange(blockIds, blockIdIndexes[chunkIndex], blockIds.length);
+        Arrays.copyOfRange(blockIds, blockIdIndices[chunkIndex], blockIds.length);
       failRemainingBlocks(remainingBlockIds, cause);
       targetFile.delete();
     }
