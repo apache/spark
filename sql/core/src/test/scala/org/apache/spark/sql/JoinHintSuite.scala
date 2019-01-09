@@ -190,4 +190,13 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         Some(HintInfo(broadcast = true))) :: Nil
     )
   }
+
+  test("nested hint") {
+    verifyJoinHint(
+      df.hint("broadcast").hint("broadcast").filter('id > 2).join(df, "id"),
+      JoinHint(
+        Some(HintInfo(broadcast = true)),
+        None) :: Nil
+    )
+  }
 }
