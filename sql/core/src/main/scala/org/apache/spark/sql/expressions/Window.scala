@@ -214,6 +214,15 @@ object Window {
     spec.rangeBetween(start, end)
   }
 
+  /**
+   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
+   * @since 2.3.0
+   */
+  @deprecated("Use the version with Long parameter types", "2.4.0")
+  def rangeBetween(start: Column, end: Column): WindowSpec = {
+    spec.rangeBetween(start, end)
+  }
+
   private[sql] def spec: WindowSpec = {
     new WindowSpec(Seq.empty, Seq.empty, UnspecifiedFrame)
   }
