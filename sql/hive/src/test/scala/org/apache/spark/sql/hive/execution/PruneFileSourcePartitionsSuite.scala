@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.Matchers._
+
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -25,8 +27,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -95,13 +99,13 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
 
   test("SPARK-26576 Broadcast hint not applied to partitioned table") {
     withTable("tbl") {
-      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
-
-      val df = spark.table("tbl")
-      val hints = df.join(broadcast(df), "p").queryExecution.optimizedPlan.collect {
-        case h: ResolvedHint => h
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+        val df = spark.table("tbl")
+        val qe = df.join(broadcast(df), "p").queryExecution
+        qe.optimizedPlan.collect { case _: ResolvedHint => } should have size 1
+        qe.sparkPlan.collect { case j: BroadcastHashJoinExec => j } should have size 1
       }
-      assert(hints.size === 1, "ResolvedHint removed in optimized plan")
     }
   }
 }
