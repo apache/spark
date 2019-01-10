@@ -42,12 +42,12 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
 
 case class OrcPartitionReaderFactory(
+    sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     schema: StructType,
     dataSchema: StructType,
     readSchema: StructType,
     partitionSchema: StructType) extends FilePartitionReaderFactory {
-  private val sqlConf = SQLConf.get
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
   private val copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)

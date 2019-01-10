@@ -37,8 +37,8 @@ case class OrcScan(
 
   override def createReaderFactory(): PartitionReaderFactory = {
     val broadcastedConf = sparkSession.sparkContext.broadcast(
-        new SerializableConfiguration(hadoopConf))
-    OrcPartitionReaderFactory(broadcastedConf, schema,
+      new SerializableConfiguration(hadoopConf))
+    OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf, schema,
       dataSchema, readSchema, fileIndex.partitionSchema)
   }
 }
