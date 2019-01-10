@@ -36,7 +36,6 @@
     <dependency>
       <groupId>com.thoughtworks.paranamer</groupId>
       <artifactId>paranamer</artifactId>
-      <version>${paranamer.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>
