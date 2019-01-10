@@ -29,7 +29,7 @@ public class TaskMemoryManagerSuite {
   @Test
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new StaticMemoryManager(
+      new UnifiedMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MAX_VALUE,
         Long.MAX_VALUE,
