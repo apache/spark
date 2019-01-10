@@ -23,10 +23,7 @@ import io.netty.buffer.ByteBuf;
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
-/**
- * Identifier for a fixed number of chunks to read from a stream created by an "open blocks"
- * message. This is used by {@link org.apache.spark.network.shuffle.OneForOneBlockFetcher}.
- */
+/** TestStreamHandle is used to test StreamHandle backward compatibility only */
 public class TestStreamHandle extends BlockTransferMessage {
   public final long streamId;
   public final int numChunks;

@@ -47,7 +47,7 @@ public class BlockTransferMessagesSuite {
     assertEquals(msg.toString(), msg2.toString());
   }
 
-  private BlockTransferMessage testFromByteBuffer(ByteBuffer msg) {
+  private BlockTransferMessage fromByteBuffer(ByteBuffer msg) {
     ByteBuf buf = Unpooled.wrappedBuffer(msg);
     byte type = buf.readByte();
     switch (type) {
@@ -65,14 +65,14 @@ public class BlockTransferMessagesSuite {
 
   @Test
   public void checkOpenBlocksBackwardCompatibility() {
-    TestOpenBlocks ob1 = new TestOpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" });
-    OpenBlocks ob2 = (OpenBlocks)BlockTransferMessage.Decoder.fromByteBuffer(ob1.toByteBuffer());
-    checkOpenBlocks(ob2, ob1);
-    assertEquals(ob2.shuffleBlockBatchFetch, false);
+    TestOpenBlocks testOpenBlocks = new TestOpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" });
+    OpenBlocks openBlocks = (OpenBlocks)BlockTransferMessage.Decoder.fromByteBuffer(testOpenBlocks.toByteBuffer());
+    checkOpenBlocks(openBlocks, testOpenBlocks);
+    assertEquals(openBlocks.shuffleBlockBatchFetch, false);
 
-    OpenBlocks ob3 = new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true);
-    TestOpenBlocks ob4 = (TestOpenBlocks)testFromByteBuffer(ob3.toByteBuffer());
-    checkOpenBlocks(ob3, ob4);
+    openBlocks = new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true);
+    testOpenBlocks = (TestOpenBlocks)fromByteBuffer(openBlocks.toByteBuffer());
+    checkOpenBlocks(openBlocks, testOpenBlocks);
   }
 
   private void checkStreamHandle(StreamHandle sh1, TestStreamHandle sh2) {
@@ -82,14 +82,14 @@ public class BlockTransferMessagesSuite {
 
   @Test
   public void checkStreamHandleBackwardCompatibility() {
-    TestStreamHandle sh1 = new TestStreamHandle(12345, 16);
-    StreamHandle sh2 = (StreamHandle)BlockTransferMessage.Decoder.fromByteBuffer(sh1.toByteBuffer());
-    checkStreamHandle(sh2, sh1);
-    assertArrayEquals(sh2.chunkSizes, new int[0]);
+    TestStreamHandle testStreamHandle = new TestStreamHandle(12345, 16);
+    StreamHandle streamHandle = (StreamHandle)BlockTransferMessage.Decoder.fromByteBuffer(testStreamHandle.toByteBuffer());
+    checkStreamHandle(streamHandle, testStreamHandle);
+    assertArrayEquals(streamHandle.chunkSizes, new int[0]);
 
-    StreamHandle sh3 = new StreamHandle(12345, 16, new int[0]);
-    TestStreamHandle sh4 = (TestStreamHandle)testFromByteBuffer(sh3.toByteBuffer());
-    checkStreamHandle(sh3, sh4);
+    streamHandle = new StreamHandle(12345, 16, new int[0]);
+    testStreamHandle = (TestStreamHandle) fromByteBuffer(streamHandle.toByteBuffer());
+    checkStreamHandle(streamHandle, testStreamHandle);
   }
 
 }

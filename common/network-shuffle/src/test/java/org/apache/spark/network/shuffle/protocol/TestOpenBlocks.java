@@ -27,7 +27,7 @@ import org.apache.spark.network.protocol.Encoders;
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
-/** Request to read a set of blocks. Returns {@link StreamHandle}. */
+/** TestOpenBlocks is used to test OpenBlocks backward compatibility only */
 public class TestOpenBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
