@@ -17,9 +17,10 @@
 
 package org.apache.spark.deploy.security
 
-import java.{ util => ju }
+import java.{util => ju}
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
@@ -76,6 +77,19 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private def resetGlobalConfig(): Unit = {
     Configuration.setConfiguration(null)
+  }
+
+  test("checkProxyUser with proxy current user should throw exception") {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val savedAuthenticationMethod = currentUser.getAuthenticationMethod()
+    try {
+      currentUser.setAuthenticationMethod(UserGroupInformation.AuthenticationMethod.PROXY)
+      intercept[IllegalArgumentException] {
+        KafkaTokenUtil.checkProxyUser()
+      }
+    } finally {
+      currentUser.setAuthenticationMethod(savedAuthenticationMethod)
+    }
   }
 
   test("createAdminClientProperties without bootstrap servers should throw exception") {
