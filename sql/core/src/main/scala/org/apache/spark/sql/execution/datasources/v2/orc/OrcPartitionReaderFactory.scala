@@ -49,8 +49,6 @@ case class OrcPartitionReaderFactory(
     readSchema: StructType,
     partitionSchema: StructType) extends FilePartitionReaderFactory {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-  private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
-  private val copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
@@ -130,10 +128,7 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val taskContext = Option(TaskContext.get())
-
-      val batchReader = new OrcColumnarBatchReader(
-        enableOffHeapColumnVector && taskContext.isDefined, copyToSpark, capacity)
+      val batchReader = new OrcColumnarBatchReader(capacity)
       batchReader.initialize(fileSplit, taskAttemptContext)
       val columnNameMap = partitionSchema.fields.map(
         PartitioningUtils.getColName(_, isCaseSensitive)).zipWithIndex.toMap
