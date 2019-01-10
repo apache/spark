@@ -128,6 +128,23 @@ private[spark] object HiveUtils extends Logging {
     .toSequence
     .createWithDefault(jdbcPrefixes)
 
+  val HIVE_FILE_INPUT_FORMAT_ENABLED = buildConf("spark.sql.hive.fileInputFormat.enabled")
+    .doc("When true, enable optimizing the `fileInputFormat` in Spark SQL.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val HIVE_FILE_INPUT_FORMAT_SPLIT_MAXSIZE =
+    buildConf("spark.sql.hive.fileInputFormat.split.maxsize")
+      .doc("The maxsize of per split while reading Hive tables.")
+      .longConf
+      .createWithDefault(128 * 1024 * 1024)
+
+  val HIVE_FILE_INPUT_FORMAT_SPLIT_MINSIZE =
+    buildConf("spark.sql.hive.fileInputFormat.split.minsize")
+      .doc("The minsize of per split while reading Hive tables.")
+      .longConf
+      .createWithDefault(32 * 1024 * 1024)
+
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
