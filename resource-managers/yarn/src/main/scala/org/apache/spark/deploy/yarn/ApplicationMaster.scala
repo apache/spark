@@ -308,27 +308,14 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  def runUnmanaged(clientRpcEnv: RpcEnv,
+  def runUnmanaged(
+      clientRpcEnv: RpcEnv,
       appAttemptId: ApplicationAttemptId,
       stagingDir: Path): Unit = {
     try {
       new CallerContext(
         "APPMASTER", sparkConf.get(APP_CALLER_CONTEXT),
         Option(appAttemptId.getApplicationId.toString), None).setCurrentContext()
-
-      // This shutdown hook should run *after* the SparkContext is shut down.
-      val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
-      ShutdownHookManager.addShutdownHook(priority) { () =>
-        if (!finished) {
-          finish(finalStatus, ApplicationMaster.EXIT_EARLY,
-            "Shutdown hook called before final status was reported.")
-        }
-
-        if (!unregistered) {
-            unregister(finalStatus, finalMsg)
-            cleanupStagingDir(stagingDir)
-        }
-      }
 
       val driverRef = clientRpcEnv.setupEndpointRef(
         RpcAddress(sparkConf.get("spark.driver.host"),
@@ -340,7 +327,6 @@ private[spark] class ApplicationMaster(
       addAmIpFilter(Some(driverRef), ProxyUriUtils.getPath(appAttemptId.getApplicationId))
       createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId)
       reporterThread.join()
-
     } catch {
       case e: Exception =>
         // catch everything else if not specifically handled
@@ -348,6 +334,10 @@ private[spark] class ApplicationMaster(
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
+        if (!unregistered) {
+          unregister(finalStatus, finalMsg)
+          cleanupStagingDir(stagingDir)
+        }
     } finally {
       try {
         metricsSystem.foreach { ms =>
@@ -358,6 +348,16 @@ private[spark] class ApplicationMaster(
         case e: Exception =>
           logWarning("Exception during stopping of the metric system: ", e)
       }
+    }
+  }
+
+  def stopUnmanaged(stagingDir: Path): Unit = {
+    if (!finished) {
+      finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+    }
+    if (!unregistered) {
+      unregister(finalStatus, finalMsg)
+      cleanupStagingDir(stagingDir)
     }
   }
 
@@ -801,7 +801,7 @@ private[spark] class ApplicationMaster(
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       // In cluster mode, do not rely on the disassociated event to exit
       // This avoids potentially reporting incorrect exit codes if the driver fails
-      if (!isClusterMode) {
+      if (!(isClusterMode || sparkConf.get(YARN_UNMANAGED_AM))) {
         logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
         finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
       }

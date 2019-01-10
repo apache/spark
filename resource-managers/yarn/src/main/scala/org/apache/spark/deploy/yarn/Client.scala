@@ -74,6 +74,8 @@ private[spark] class Client(
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private var amServiceStarted = false
+  private var appMaster: ApplicationMaster = _
+  private var unManagedAMStagingDirPath: Path = _
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -148,6 +150,9 @@ private[spark] class Client(
   }
 
   def stop(): Unit = {
+    if (appMaster != null) {
+      appMaster.stopUnmanaged(unManagedAMStagingDirPath)
+    }
     launcherBackend.close()
     yarnClient.stop()
   }
@@ -1109,7 +1114,7 @@ private[spark] class Client(
       if (state == YarnApplicationState.ACCEPTED && isClientUnmanagedAMEnabled &&
           !amServiceStarted && report.getAMRMToken != null) {
         amServiceStarted = true
-        startApplicationMasterService(report)
+        appMaster = startApplicationMasterService(report)
       }
       lastState = state
     }
@@ -1118,7 +1123,7 @@ private[spark] class Client(
     throw new SparkException("While loop is depleted! This should never happen...")
   }
 
-  private def startApplicationMasterService(report: ApplicationReport) = {
+  private def startApplicationMasterService(report: ApplicationReport): ApplicationMaster = {
     // Add AMRMToken to establish connection between RM and AM
     val token = report.getAMRMToken
     val amRMToken: org.apache.hadoop.security.token.Token[AMRMTokenIdentifier] =
@@ -1129,16 +1134,19 @@ private[spark] class Client(
     currentUGI.addToken(amRMToken)
 
     // Start Application Service in a separate thread and continue with application monitoring
+    val appMaster = new ApplicationMaster(
+      new ApplicationMasterArguments(Array.empty), sparkConf, hadoopConf)
+    unManagedAMStagingDirPath =
+      new Path(appStagingBaseDir, getAppStagingDir(report.getApplicationId))
     val amService = new Thread("Unmanaged Application Master Service") {
       override def run(): Unit = {
-        val appMaster = new ApplicationMaster(
-          new ApplicationMasterArguments(Array.empty), sparkConf, hadoopConf)
         appMaster.runUnmanaged(rpcEnv, report.getCurrentApplicationAttemptId,
-          new Path(appStagingBaseDir, getAppStagingDir(report.getApplicationId)))
+          unManagedAMStagingDirPath)
       }
     }
     amService.setDaemon(true)
     amService.start()
+    appMaster
   }
 
   private def formatReportDetails(report: ApplicationReport): String = {
