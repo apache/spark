@@ -311,11 +311,12 @@ class HadoopTableReader(
   }
 
   /**
-    * If `spark.sql.hive.fileInputFormat.enabled` is true, this function will optimize the input
-    * method(including format and the size of splits) while reading Hive tables.
-    */
+   * If `spark.sql.hive.fileInputFormat.enabled` is true, this function will optimize the input
+   * method(including format and the size of splits) while reading Hive tables.
+   */
   private def getAndOptimizeInput(
-                               inputClassName: String): Class[InputFormat[Writable, Writable]] = {
+    inputClassName: String): Class[InputFormat[Writable, Writable]] = {
+
     var ifc = Utils.classForName(inputClassName)
       .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
     if (conf.getConf(HiveUtils.HIVE_FILE_INPUT_FORMAT_ENABLED)) {
