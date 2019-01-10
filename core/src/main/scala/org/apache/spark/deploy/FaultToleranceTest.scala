@@ -34,7 +34,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -77,7 +77,7 @@ private object FaultToleranceTest extends App with Logging {
   private val containerSparkHome = "/opt/spark"
   private val dockerMountDir = "%s:%s".format(sparkHome, containerSparkHome)
 
-  System.setProperty("spark.driver.host", "172.17.42.1") // default docker host ip
+  System.setProperty(config.DRIVER_HOST_ADDRESS.key, "172.17.42.1") // default docker host ip
 
   private def afterEach() {
     if (sc != null) {
@@ -216,7 +216,7 @@ private object FaultToleranceTest extends App with Logging {
     if (sc != null) { sc.stop() }
     // Counter-hack: Because of a hack in SparkEnv#create() that changes this
     // property, we need to reset it.
-    System.setProperty("spark.driver.port", "0")
+    System.setProperty(config.DRIVER_PORT.key, "0")
     sc = new SparkContext(getMasterUrls(masters), "fault-tolerance", containerSparkHome)
   }
 

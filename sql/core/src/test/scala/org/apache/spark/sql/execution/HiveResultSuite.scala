@@ -14,20 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.hadooputils
 
-import io.fabric8.kubernetes.api.model.Secret
+package org.apache.spark.sql.execution
 
-/**
- * Represents a given configuration of the Kerberos Configuration logic
- * <p>
- * - The secret containing a DT, either previously specified or built on the fly
- * - The name of the secret where the DT will be stored
- * - The data item-key on the secret which correlates with where the current DT data is stored
- * - The Job User's username
- */
-private[spark] case class KerberosConfigSpec(
-    dtSecret: Option[Secret],
-    dtSecretName: String,
-    dtSecretItemKey: String,
-    jobUserName: String)
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
+
+class HiveResultSuite extends SparkFunSuite {
+
+  test("toHiveString correctly handles UDTs") {
+    val point = new ExamplePoint(50.0, 50.0)
+    val tpe = new ExamplePointUDT()
+    assert(HiveResult.toHiveString((point, tpe)) === "(50.0, 50.0)")
+  }
+}

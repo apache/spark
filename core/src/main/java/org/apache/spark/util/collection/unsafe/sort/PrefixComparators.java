@@ -69,6 +69,8 @@ public class PrefixComparators {
      * details see http://stereopsis.com/radix.html.
      */
     public static long computePrefix(double value) {
+      // normalize -0.0 to 0.0, as they should be equal
+      value = value == -0.0 ? 0.0 : value;
       // Java's doubleToLongBits already canonicalizes all NaN values to the smallest possible
       // positive NaN, so there's nothing special we need to do for NaNs.
       long bits = Double.doubleToLongBits(value);

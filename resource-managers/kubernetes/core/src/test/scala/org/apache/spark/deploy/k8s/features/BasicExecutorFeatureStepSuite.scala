@@ -29,7 +29,8 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Python._
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -73,8 +74,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, RESOURCE_NAME_PREFIX)
       .set(CONTAINER_IMAGE, EXECUTOR_IMAGE)
       .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
-      .set(DRIVER_HOST_ADDRESS, DRIVER_HOSTNAME)
-      .set("spark.driver.port", DRIVER_PORT.toString)
+      .set(config.DRIVER_HOST_ADDRESS, DRIVER_HOSTNAME)
+      .set(config.DRIVER_PORT, DRIVER_PORT)
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
       .set("spark.kubernetes.resource.type", "java")
   }
@@ -124,8 +125,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("classpath and extra java options get translated into environment variables") {
-    baseConf.set(EXECUTOR_JAVA_OPTIONS, "foo=bar")
-    baseConf.set(EXECUTOR_CLASS_PATH, "bar=baz")
+    baseConf.set(config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
+    baseConf.set(config.EXECUTOR_CLASS_PATH, "bar=baz")
     val kconf = newExecutorConf(environment = Map("qux" -> "quux"))
     val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
@@ -149,7 +150,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("auth secret propagation") {
     val conf = baseConf.clone()
-      .set(NETWORK_AUTH_ENABLED, true)
+      .set(config.NETWORK_AUTH_ENABLED, true)
       .set("spark.master", "k8s://127.0.0.1")
 
     val secMgr = new SecurityManager(conf)
@@ -167,8 +168,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val secretFile = new File(secretDir, "secret-file.txt")
     Files.write(secretFile.toPath, "some-secret".getBytes(StandardCharsets.UTF_8))
     val conf = baseConf.clone()
-      .set(NETWORK_AUTH_ENABLED, true)
-      .set(AUTH_SECRET_FILE, secretFile.getAbsolutePath)
+      .set(config.NETWORK_AUTH_ENABLED, true)
+      .set(config.AUTH_SECRET_FILE, secretFile.getAbsolutePath)
       .set("spark.master", "k8s://127.0.0.1")
     val secMgr = new SecurityManager(conf)
     secMgr.initializeAuth()
@@ -200,7 +201,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_MEMORY -> "1g",
       ENV_APPLICATION_ID -> KubernetesTestConf.APP_ID,
       ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
-      ENV_EXECUTOR_POD_IP -> null) ++ additionalEnvVars
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_SPARK_USER -> Utils.getCurrentUserName())
 
     val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))
     val extraJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
@@ -208,9 +210,11 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       s"$ENV_JAVA_OPT_PREFIX${ind + extraJavaOptsStart}" -> opt
     }.toMap
 
-    val mapEnvs = executorPod.container.getEnv.asScala.map {
+    val containerEnvs = executorPod.container.getEnv.asScala.map {
       x => (x.getName, x.getValue)
     }.toMap
-    assert((defaultEnvs ++ extraJavaOptsEnvs) === mapEnvs)
+
+    val expectedEnvs = defaultEnvs ++ additionalEnvVars ++ extraJavaOptsEnvs
+    assert(containerEnvs === expectedEnvs)
   }
 }

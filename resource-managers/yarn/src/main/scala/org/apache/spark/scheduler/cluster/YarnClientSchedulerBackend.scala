@@ -24,9 +24,10 @@ import org.apache.hadoop.yarn.api.records.YarnApplicationState
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnAppReport}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 
 private[spark] class YarnClientSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -42,10 +43,10 @@ private[spark] class YarnClientSchedulerBackend(
    * This waits until the application is running.
    */
   override def start() {
-    val driverHost = conf.get("spark.driver.host")
-    val driverPort = conf.get("spark.driver.port")
+    val driverHost = conf.get(config.DRIVER_HOST_ADDRESS)
+    val driverPort = conf.get(config.DRIVER_PORT)
     val hostport = driverHost + ":" + driverPort
-    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.webUrl) }
+    sc.ui.foreach { ui => conf.set(DRIVER_APP_UI_ADDRESS, ui.webUrl) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += ("--arg", hostport)
@@ -164,6 +165,11 @@ private[spark] class YarnClientSchedulerBackend(
     super.stop()
     client.stop()
     logInfo("Stopped")
+  }
+
+  override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
+    super.updateDelegationTokens(tokens)
+    amEndpoint.foreach(_.send(UpdateDelegationTokens(tokens)))
   }
 
 }

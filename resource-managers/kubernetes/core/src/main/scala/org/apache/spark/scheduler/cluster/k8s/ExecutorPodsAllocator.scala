@@ -136,7 +136,8 @@ private[spark] class ExecutorPodsAllocator(
             newExecutorId.toString,
             applicationId,
             driverPod)
-          val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr)
+          val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr,
+            kubernetesClient)
           val podWithAttachedContainer = new PodBuilder(executorPod.pod)
             .editOrNewSpec()
             .addToContainers(executorPod.container)

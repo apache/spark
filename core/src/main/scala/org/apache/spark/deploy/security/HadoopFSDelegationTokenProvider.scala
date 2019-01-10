@@ -19,6 +19,7 @@ package org.apache.spark.deploy.security
 
 import scala.collection.JavaConverters._
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
@@ -44,28 +45,34 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: () => Set[Fil
       hadoopConf: Configuration,
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
-    val fsToGetTokens = fileSystems()
-    val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fsToGetTokens, creds)
+    try {
+      val fsToGetTokens = fileSystems()
+      val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fsToGetTokens, creds)
 
-    // Get the token renewal interval if it is not set. It will only be called once.
-    if (tokenRenewalInterval == null) {
-      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf, fsToGetTokens)
+      // Get the token renewal interval if it is not set. It will only be called once.
+      if (tokenRenewalInterval == null) {
+        tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf, fsToGetTokens)
+      }
+
+      // Get the time of next renewal.
+      val nextRenewalDate = tokenRenewalInterval.flatMap { interval =>
+        val nextRenewalDates = fetchCreds.getAllTokens.asScala
+          .filter(_.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier])
+          .map { token =>
+            val identifier = token
+              .decodeIdentifier()
+              .asInstanceOf[AbstractDelegationTokenIdentifier]
+            identifier.getIssueDate + interval
+          }
+        if (nextRenewalDates.isEmpty) None else Some(nextRenewalDates.min)
+      }
+
+      nextRenewalDate
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to get token from service $serviceName", e)
+        None
     }
-
-    // Get the time of next renewal.
-    val nextRenewalDate = tokenRenewalInterval.flatMap { interval =>
-      val nextRenewalDates = fetchCreds.getAllTokens.asScala
-        .filter(_.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier])
-        .map { token =>
-          val identifier = token
-            .decodeIdentifier()
-            .asInstanceOf[AbstractDelegationTokenIdentifier]
-          identifier.getIssueDate + interval
-        }
-      if (nextRenewalDates.isEmpty) None else Some(nextRenewalDates.min)
-    }
-
-    nextRenewalDate
   }
 
   override def delegationTokensRequired(

@@ -42,7 +42,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
   // CPU settings
-  private val driverCpuCores = conf.get("spark.driver.cores", "1")
+  private val driverCpuCores = conf.get(DRIVER_CORES.key, "1")
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
@@ -85,7 +85,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
-    val driverPort = conf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT)
+    val driverPort = conf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
     val driverBlockManagerPort = conf.sparkConf.getInt(
       DRIVER_BLOCK_MANAGER_PORT.key,
       DEFAULT_BLOCKMANAGER_PORT
@@ -110,6 +110,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .withContainerPort(driverUIPort)
         .withProtocol("TCP")
         .endPort()
+      .addNewEnv()
+        .withName(ENV_SPARK_USER)
+        .withValue(Utils.getCurrentUserName())
+        .endEnv()
       .addAllToEnv(driverCustomEnvs.asJava)
       .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
