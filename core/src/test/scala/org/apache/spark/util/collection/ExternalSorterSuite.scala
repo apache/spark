@@ -638,12 +638,11 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   test("force to spill for external sorter") {
     val conf = createSparkConf(loadDefaults = false, kryo = false)
-      .set("spark.shuffle.memoryFraction", "0.01")
-      .set("spark.memory.useLegacyMode", "true")
-      .set(TEST_MEMORY, 100000000L)
+      .set("spark.memory.storageFraction", "0.999")
+      .set(TEST_MEMORY, 471859200L)
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
-    val N = 2e5.toInt
+    val N = 200000
     val p = new org.apache.spark.HashPartitioner(2)
     val p2 = new org.apache.spark.HashPartitioner(3)
     sc.parallelize(1 to N, 3)
