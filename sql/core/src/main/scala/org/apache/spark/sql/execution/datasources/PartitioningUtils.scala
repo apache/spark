@@ -557,18 +557,6 @@ object PartitioningUtils {
     }).asNullable
   }
 
-  def partitionColumns(
-      output: Seq[AttributeReference],
-      partitionSchema: StructType,
-      caseSensitive: Boolean): Seq[AttributeReference] = {
-    val equality = columnNameEquality(caseSensitive)
-    partitionSchema.fields.map { col =>
-      output.find(a => equality(a.name, col.name)).getOrElse {
-        throw new AnalysisException(s"Partition column `$col` not found in $output")
-      }
-    }
-  }
-
   def mergeDataAndPartitionSchema(
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -590,32 +578,7 @@ object PartitioningUtils {
     (fullSchema, overlappedPartCols.toMap)
   }
 
-  def requestedPartitionColumnIds(
-      partitionSchema: StructType,
-      requiredSchema: StructType,
-      caseSensitive: Boolean): Array[Int] = {
-    val columnNameMap =
-      partitionSchema.fields.map(getColName(_, caseSensitive)).zipWithIndex.toMap
-    requiredSchema.fields.map { field =>
-      columnNameMap.getOrElse(getColName(field, caseSensitive), -1)
-    }
-  }
-
-  /**
-   * Returns a new StructType that is a copy of the original StructType, removing any items that
-   * also appear in other StructType. The order is preserved from the original StructType.
-   */
-  def subtractSchema(original: StructType, other: StructType, isCaseSensitive: Boolean)
-  : StructType = {
-    val otherNameSet = other.fields.map(getColName(_, isCaseSensitive)).toSet
-    val fields = original.fields.filterNot { field =>
-      otherNameSet.contains(getColName(field, isCaseSensitive))
-    }
-
-    StructType(fields)
-  }
-
-  private def getColName(f: StructField, caseSensitive: Boolean): String = {
+  def getColName(f: StructField, caseSensitive: Boolean): String = {
     if (caseSensitive) {
       f.name
     } else {

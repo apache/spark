@@ -85,8 +85,7 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val requiredDataSchema =
-        PartitioningUtils.subtractSchema(readSchema, partitionSchema, isCaseSensitive)
+      val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
       val orcRecordReader = new OrcInputFormat[OrcStruct]
         .createRecordReader(fileSplit, taskAttemptContext)
 
@@ -136,16 +135,33 @@ case class OrcPartitionReaderFactory(
       val batchReader = new OrcColumnarBatchReader(
         enableOffHeapColumnVector && taskContext.isDefined, copyToSpark, capacity)
       batchReader.initialize(fileSplit, taskAttemptContext)
-      val partitionColIds = PartitioningUtils.requestedPartitionColumnIds(
-        partitionSchema, readSchema, isCaseSensitive)
+      val columnNameMap = partitionSchema.fields.map(
+        PartitioningUtils.getColName(_, isCaseSensitive)).zipWithIndex.toMap
+      val requestedPartitionColIds = readSchema.fields.map { field =>
+        columnNameMap.getOrElse(PartitioningUtils.getColName(field, isCaseSensitive), -1)
+      }
 
       batchReader.initBatch(
         reader.getSchema,
         readSchema.fields,
         requestedColIds,
-        partitionColIds,
+        requestedPartitionColIds,
         file.partitionValues)
       new PartitionRecordReader(batchReader)
     }
   }
+
+  /**
+   * Returns a new StructType that is a copy of the original StructType, removing any items that
+   * also appear in other StructType. The order is preserved from the original StructType.
+   */
+  private def subtractSchema(original: StructType, other: StructType): StructType = {
+    val otherNameSet = other.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+    val fields = original.fields.filterNot { field =>
+      otherNameSet.contains(PartitioningUtils.getColName(field, isCaseSensitive))
+    }
+
+    StructType(fields)
+  }
+
 }
