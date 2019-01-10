@@ -184,7 +184,9 @@ if [[ "$1" == "package" ]]; then
   rm -r spark-$SPARK_VERSION/licenses-binary
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
 
-  if [ -z "$AMPLAB_JENKINS" ]; then
+  if [ -n "$AMPLAB_JENKINS" ]; then
+    echo "Skipping signing of Spark source"
+  else
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
                                 --detach-sig spark-$SPARK_VERSION.tgz
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
@@ -240,7 +242,9 @@ if [[ "$1" == "package" ]]; then
       -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
-    if [ -z "$AMPLAB_JENKINS" ]; then
+    if [ -n "$AMPLAB_JENKINS" ]; then
+      echo "Skipping signing of R source package"
+    else
       if [[ -n $R_FLAG ]]; then
         echo "Copying and signing R source package"
         R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
@@ -255,7 +259,9 @@ if [[ "$1" == "package" ]]; then
       fi
     fi
 
-    if [ -z "$AMPLAB_JENKINS" ]; then
+    if [ -n "$AMPLAB_JENKINS" ]; then
+      echo "Skipping signing of python distribution"
+    else
       if [[ -n $PIP_FLAG ]]; then
         echo "Copying and signing python distribution"
         PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
@@ -270,7 +276,9 @@ if [[ "$1" == "package" ]]; then
       fi
     fi
 
-    if [ -z "$AMPLAB_JENKINS" ]; then
+    if [ -n "$AMPLAB_JENKINS" ]; then
+      echo "Skipping signing of regular binary distribution"
+    else
       echo "Copying and signing regular binary distribution"
       cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
@@ -325,7 +333,9 @@ if [[ "$1" == "package" ]]; then
 
   rm -rf spark-$SPARK_VERSION-bin-*/
 
-  if [ -z "$AMPLAB_JENKINS" ]; then
+  if [ -n "$AMPLAB_JENKINS" ]; then
+    echo "Skipping SVN push of release tarballs"
+  else
     if ! is_dry_run; then
       svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
       rm -rf "svn-spark/${DEST_DIR_NAME}-bin"
