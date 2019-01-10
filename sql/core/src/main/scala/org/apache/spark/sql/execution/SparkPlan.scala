@@ -74,19 +74,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * @return Executor side metrics of this SparkPlan.
+   * @return Executor side metrics of this SparkPlan, which needs to be serialized and sent
+   *         to executors.
    */
   def metrics: Map[String, SQLMetric] = Map.empty
 
   /**
-   * @return Driver side metrics of this SparkPlan which no need to send them to executor.
+   * @return Driver side metrics of this SparkPlan, which only create, update and display
+   *         on driver side, no need to be serialized and sent to executors.
    */
   def driverMetrics: Map[String, SQLMetric] = Map.empty
 
   /**
    * @return All metrics of this SparkPlan.
    */
-  def allMetrics: Map[String, SQLMetric] = metrics ++ driverMetrics
+  @inline def allMetrics: Map[String, SQLMetric] = metrics ++ driverMetrics
 
   /**
    * Resets all the metrics.
