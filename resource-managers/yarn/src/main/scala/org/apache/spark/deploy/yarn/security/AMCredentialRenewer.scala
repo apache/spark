@@ -86,6 +86,16 @@ private[yarn] class AMCredentialRenewer(
     val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
     val ugi = doLogin()
 
+    ugi.doAs(new PrivilegedExceptionAction[Unit]() {
+      override def run(): Unit = {
+        startInternal(ugi, originalCreds)
+      }
+    })
+
+    ugi
+  }
+
+  private def startInternal(ugi: UserGroupInformation, originalCreds: Credentials): Unit = {
     val tgtRenewalTask = new Runnable() {
       override def run(): Unit = {
         ugi.checkTGTAndReloginFromKeytab()
@@ -104,8 +114,6 @@ private[yarn] class AMCredentialRenewer(
     val existing = ugi.getCredentials()
     existing.mergeAll(originalCreds)
     ugi.addCredentials(existing)
-
-    ugi
   }
 
   def stop(): Unit = {
@@ -136,8 +144,8 @@ private[yarn] class AMCredentialRenewer(
         // This shouldn't really happen, since the driver should register way before tokens expire
         // (or the AM should time out the application).
         logWarning("Delegation tokens close to expiration but no driver has registered yet.")
-        SparkHadoopUtil.get.addDelegationTokens(tokens, sparkConf)
       }
+      SparkHadoopUtil.get.addDelegationTokens(tokens, sparkConf)
     } catch {
       case e: Exception =>
         val delay = TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
