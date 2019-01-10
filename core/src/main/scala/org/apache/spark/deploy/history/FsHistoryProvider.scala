@@ -45,6 +45,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, History}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -267,7 +268,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     // Disable the background thread during tests.
-    if (!conf.contains("spark.testing")) {
+    if (!conf.contains(IS_TESTING)) {
       // A task that periodically checks for event log updates on disk.
       logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
       pool.scheduleWithFixedDelay(

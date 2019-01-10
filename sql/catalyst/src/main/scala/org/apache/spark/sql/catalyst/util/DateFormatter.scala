@@ -36,7 +36,7 @@ class Iso8601DateFormatter(
     locale: Locale) extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
-  private lazy val formatter = buildFormatter(pattern, locale)
+  private lazy val formatter = getOrCreateFormatter(pattern, locale)
   private val UTC = ZoneId.of("UTC")
 
   private def toInstant(s: String): Instant = {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.SparkContext
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 
@@ -38,7 +38,7 @@ object SQLExecution {
     executionIdToQueryExecution.get(executionId)
   }
 
-  private val testing = sys.props.contains("spark.testing")
+  private val testing = sys.props.contains(IS_TESTING.key)
 
   private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
     val sc = sparkSession.sparkContext

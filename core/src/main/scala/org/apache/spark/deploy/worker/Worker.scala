@@ -37,6 +37,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SignalUtils, SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -108,7 +109,6 @@ private[deploy] class Worker(
   private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
     conf.getBoolean("spark.storage.cleanupFilesAfterExecutorExit", true)
 
-  private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None
 
   /**
@@ -133,7 +133,7 @@ private[deploy] class Worker(
   private var decommissioned = false
   private val workerId = generateWorkerId()
   private val sparkHome =
-    if (testing) {
+    if (sys.props.contains(IS_TESTING.key)) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {

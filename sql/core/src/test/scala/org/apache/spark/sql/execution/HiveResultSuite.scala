@@ -14,23 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1
 
-import javax.ws.rs.container.{ContainerRequestContext, ContainerRequestFilter}
-import javax.ws.rs.core.Response
-import javax.ws.rs.ext.Provider
+package org.apache.spark.sql.execution
 
-@Provider
-private[v1] class SecurityFilter extends ContainerRequestFilter with ApiRequestContext {
-  override def filter(req: ContainerRequestContext): Unit = {
-    val user = httpRequest.getRemoteUser()
-    if (!uiRoot.securityManager.checkUIViewPermissions(user)) {
-      req.abortWith(
-        Response
-          .status(Response.Status.FORBIDDEN)
-          .entity(raw"""user "$user" is not authorized""")
-          .build()
-      )
-    }
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
+
+class HiveResultSuite extends SparkFunSuite {
+
+  test("toHiveString correctly handles UDTs") {
+    val point = new ExamplePoint(50.0, 50.0)
+    val tpe = new ExamplePointUDT()
+    assert(HiveResult.toHiveString((point, tpe)) === "(50.0, 50.0)")
   }
 }

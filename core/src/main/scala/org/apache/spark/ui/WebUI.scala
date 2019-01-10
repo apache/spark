@@ -58,7 +58,6 @@ private[spark] abstract class WebUI(
   def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs
   def getHandlers: Seq[ServletContextHandler] = handlers
-  def getSecurityManager: SecurityManager = securityManager
 
   /** Attaches a tab to this UI, along with all of its attached pages. */
   def attachTab(tab: WebUITab): Unit = {
@@ -81,9 +80,9 @@ private[spark] abstract class WebUI(
   def attachPage(page: WebUIPage): Unit = {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
-      (request: HttpServletRequest) => page.render(request), securityManager, conf, basePath)
+      (request: HttpServletRequest) => page.render(request), conf, basePath)
     val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
-      (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
+      (request: HttpServletRequest) => page.renderJson(request), conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
     val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
@@ -91,13 +90,13 @@ private[spark] abstract class WebUI(
   }
 
   /** Attaches a handler to this UI. */
-  def attachHandler(handler: ServletContextHandler): Unit = {
+  def attachHandler(handler: ServletContextHandler): Unit = synchronized {
     handlers += handler
-    serverInfo.foreach(_.addHandler(handler))
+    serverInfo.foreach(_.addHandler(handler, securityManager))
   }
 
   /** Detaches a handler from this UI. */
-  def detachHandler(handler: ServletContextHandler): Unit = {
+  def detachHandler(handler: ServletContextHandler): Unit = synchronized {
     handlers -= handler
     serverInfo.foreach(_.removeHandler(handler))
   }
@@ -129,7 +128,9 @@ private[spark] abstract class WebUI(
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-      serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
+      val server = startJettyServer(host, port, sslOptions, conf, name)
+      handlers.foreach(server.addHandler(_, securityManager))
+      serverInfo = Some(server)
       logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
       case e: Exception =>

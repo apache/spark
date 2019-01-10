@@ -80,22 +80,19 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
+    val parameterAttempt = request.getParameter("attempt")
     require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
-    val parameterTaskPage = UIUtils.stripXSS(request.getParameter("task.page"))
-    val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
-    val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
-    val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
+    val parameterTaskPage = request.getParameter("task.page")
+    val parameterTaskSortColumn = request.getParameter("task.sort")
+    val parameterTaskSortDesc = request.getParameter("task.desc")
+    val parameterTaskPageSize = request.getParameter("task.pageSize")
 
-    val eventTimelineParameterTaskPage = UIUtils.stripXSS(
-      request.getParameter("task.eventTimelinePageNumber"))
-    val eventTimelineParameterTaskPageSize = UIUtils.stripXSS(
-      request.getParameter("task.eventTimelinePageSize"))
+    val eventTimelineParameterTaskPage = request.getParameter("task.eventTimelinePageNumber")
+    val eventTimelineParameterTaskPageSize = request.getParameter("task.eventTimelinePageSize")
     var eventTimelineTaskPage = Option(eventTimelineParameterTaskPage).map(_.toInt).getOrElse(1)
     var eventTimelineTaskPageSize = Option(
       eventTimelineParameterTaskPageSize).map(_.toInt).getOrElse(100)
@@ -188,11 +185,11 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           }}
           {if (hasBytesSpilled(stageData)) {
             <li>
-              <strong>Shuffle Spill (Memory): </strong>
+              <strong>Spill (Memory): </strong>
               {Utils.bytesToString(stageData.memoryBytesSpilled)}
             </li>
             <li>
-              <strong>Shuffle Spill (Disk): </strong>
+              <strong>Spill (Disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
           }}
@@ -797,8 +794,8 @@ private[spark] object ApiHelper {
   val HEADER_SHUFFLE_REMOTE_READS = "Shuffle Remote Reads"
   val HEADER_SHUFFLE_WRITE_TIME = "Write Time"
   val HEADER_SHUFFLE_WRITE_SIZE = "Shuffle Write Size / Records"
-  val HEADER_MEM_SPILL = "Shuffle Spill (Memory)"
-  val HEADER_DISK_SPILL = "Shuffle Spill (Disk)"
+  val HEADER_MEM_SPILL = "Spill (Memory)"
+  val HEADER_DISK_SPILL = "Spill (Disk)"
   val HEADER_ERROR = "Errors"
 
   private[ui] val COLUMN_TO_INDEX = Map(

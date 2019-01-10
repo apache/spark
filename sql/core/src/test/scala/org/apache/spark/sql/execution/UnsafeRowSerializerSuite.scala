@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.util.Properties
 
 import org.apache.spark._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{LocalSparkSession, Row, SparkSession}
@@ -99,7 +100,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     val conf = new SparkConf()
       .set("spark.shuffle.spill.initialMemoryThreshold", "1")
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
-      .set("spark.testing.memory", "80000")
+      .set(TEST_MEMORY, 80000L)
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
     val outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
     outputFile.deleteOnExit()
