@@ -43,7 +43,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SQLTestUtils with Share
         requestedDataColIds: Array[Int],
         requestedPartitionColIds: Array[Int],
         resultFields: Array[StructField]): OrcColumnarBatchReader = {
-      val reader = new OrcColumnarBatchReader(false, false, 4096)
+      val reader = new OrcColumnarBatchReader(false, 4096)
       reader.initBatch(
         orcFileSchema,
         resultFields,
