@@ -132,8 +132,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       millisToDays(c.getTimeInMillis))
     c.set(1, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
+    val localDate = LocalDate.of(1, 1, 1)
+      .atStartOfDay(TimeZoneUTC.toZoneId)
     assert(stringToDate(UTF8String.fromString("0001")).get ===
-      millisToDays(c.getTimeInMillis))
+      TimeUnit.SECONDS.toDays(localDate.toEpochSecond))
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)

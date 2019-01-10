@@ -183,7 +183,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDateType("2017-01-01", 17167)
 
     // boundary cases
-    checkHiveHashForDateType("0000-01-01", -719530)
+    checkHiveHashForDateType("0000-01-01", -719528)
     checkHiveHashForDateType("9999-12-31", 2932896)
 
     // epoch

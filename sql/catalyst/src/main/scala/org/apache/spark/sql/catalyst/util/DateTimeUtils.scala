@@ -86,13 +86,6 @@ object DateTimeUtils {
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
-  // Reuse the Calendar object in each thread as it is expensive to create in each method call.
-  private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
-    override protected def initialValue: Calendar = {
-      Calendar.getInstance(TimeZoneGMT)
-    }
-  }
-
   // `SimpleDateFormat` is not thread-safe.
   private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
@@ -453,6 +446,12 @@ object DateTimeUtils {
     result
   }
 
+  def instantToDays(instant: Instant): Int = {
+    val seconds = instant.getEpochSecond
+    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
+    days.toInt
+  }
+
   /**
    * Trim and parse a given UTF8 date string to a corresponding [[Int]] value.
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
@@ -503,11 +502,9 @@ object DateTimeUtils {
       return None
     }
 
-    val c = threadLocalGmtCalendar.get()
-    c.clear()
-    c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
-    Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
+    val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+    val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
+    Some(instantToDays(instant))
   }
 
   /**
@@ -1174,7 +1171,6 @@ object DateTimeUtils {
    * Re-initialize the current thread's thread locals. Exposed for testing.
    */
   private[util] def resetThreadLocals(): Unit = {
-    threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
   }
