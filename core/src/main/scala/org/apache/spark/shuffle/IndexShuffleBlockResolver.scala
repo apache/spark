@@ -190,11 +190,22 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def getBlockData(blockId: ShuffleBlockIdBase): ManagedBuffer = {
-    logDebug(s"blockId: $blockId")
+  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+    blockId match {
+      case ShuffleBlockBatchId(shuffleId, mapId, reduceId, numBlocks) =>
+        getBlockData(shuffleId, mapId, reduceId, numBlocks)
+      case ShuffleBlockId(shuffleId, mapId, reduceId) =>
+        getBlockData(shuffleId, mapId, reduceId, 1)
+      case _ =>
+        throw new IllegalArgumentException("unexpected shuffle block id format: " + blockId);
+    }
+  }
+
+  private def getBlockData(shuffleId: Int, mapId: Int, reduceId: Int, numBlocks: Int)
+      : ManagedBuffer = {
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
-    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+    val indexFile = getIndexFile(shuffleId, mapId)
 
     // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
     // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
@@ -203,28 +214,22 @@ private[spark] class IndexShuffleBlockResolver(
     // class of issue from re-occurring in the future which is why they are left here even though
     // SPARK-22982 is fixed.
     val channel = Files.newByteChannel(indexFile.toPath)
+    channel.position(reduceId * 8L)
     val in = new DataInputStream(Channels.newInputStream(channel))
     try {
-      channel.position(blockId.reduceId * 8)
       val offset = in.readLong()
-      var expectedPosition = 0
-      blockId match {
-        case bid: ShuffleBlockBatchId =>
-          val tempId = blockId.reduceId + bid.numBlocks
-          channel.position(tempId * 8)
-          expectedPosition = tempId * 8 + 8
-        case _ =>
-          expectedPosition = blockId.reduceId * 8 + 16
-      }
+      val endReduceId = reduceId + numBlocks
+      channel.position(endReduceId * 8L)
       val nextOffset = in.readLong()
       val actualPosition = channel.position()
+      val expectedPosition = endReduceId * 8 + 8
       if (actualPosition != expectedPosition) {
         throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
           s"expected $expectedPosition but actual position was $actualPosition.")
       }
       new FileSegmentManagedBuffer(
         transportConf,
-        getDataFile(blockId.shuffleId, blockId.mapId),
+        getDataFile(shuffleId, mapId),
         offset,
         nextOffset - offset)
     } finally {

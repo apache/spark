@@ -38,7 +38,7 @@ sealed abstract class BlockId {
   // convenience methods
   def asRDDId: Option[RDDBlockId] = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
   def isRDD: Boolean = isInstanceOf[RDDBlockId]
-  def isShuffle: Boolean = isInstanceOf[ShuffleBlockIdBase]
+  def isShuffle: Boolean = isInstanceOf[ShuffleBlockId] || isInstanceOf[ShuffleBlockBatchId]
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
 
   override def toString: String = name
@@ -51,21 +51,14 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
-trait ShuffleBlockIdBase extends BlockId {
-  def shuffleId: Int
-  def mapId: Int
-  def reduceId: Int
-}
-
 @DeveloperApi
-case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int)
-  extends ShuffleBlockIdBase {
+case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
 @DeveloperApi
 case class ShuffleBlockBatchId(shuffleId: Int, mapId: Int, reduceId: Int, numBlocks: Int)
-  extends ShuffleBlockIdBase {
+  extends BlockId {
   override def name: String =
     "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + numBlocks
 }
