@@ -32,8 +32,8 @@ interface SupportsWrite extends Table {
    * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
    * this method to configure each data source write.
    *
-   * @param queryId A unique string for the writing query. It's possible that there are many
-   *                writing queries running at the same time, or a query is restarted.
+   * @param queryId A unique string of the writing query. It's possible that there are many
+   *                writing queries running at the same time, or a query is restarted and resumed.
    *                {@link BatchWrite} can use this id to identify the query.
    * @param schema The schema of the data to write.
    * @param options The options for writing, which is an immutable case-insensitive
