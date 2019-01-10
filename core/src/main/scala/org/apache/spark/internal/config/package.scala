@@ -551,9 +551,7 @@ package object config {
       .doc("Remote block will be fetched to disk when size of the block is above this threshold " +
         "in bytes. This is to avoid a giant request takes too much memory. We can enable this " +
         "config by setting a specific value(e.g. 200m). Note this configuration will affect " +
-        "both shuffle fetch and block manager remote block fetch. For users who enabled " +
-        "external shuffle service, this feature can only be worked when external shuffle" +
-        "service is newer than Spark 2.2.")
+        "both shuffle fetch and block manager remote block fetch.")
       .bytesConf(ByteUnit.BYTE)
       // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
       // as well use fetch-to-disk in that case.  The message includes some metadata in addition

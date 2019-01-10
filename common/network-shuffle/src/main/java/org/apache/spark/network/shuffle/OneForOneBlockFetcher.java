@@ -29,7 +29,6 @@ import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
@@ -120,12 +119,13 @@ public class OneForOneBlockFetcher {
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
           for (int i = 0; i < streamHandle.numChunks; i++) {
+            StreamCallback streamCallback;
             if (downloadFileManager != null) {
-              client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
-                new DownloadCallback(i));
+              streamCallback = new DownloadCallback(i);
             } else {
-              client.fetchChunk(streamHandle.streamId, i, chunkCallback);
+              streamCallback = null;
             }
+            client.fetchChunk(streamHandle.streamId, i, chunkCallback, streamCallback);
           }
         } catch (Exception e) {
           logger.error("Failed while starting block fetches after success", e);

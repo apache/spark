@@ -31,14 +31,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.protocol.ChunkFetchFailure;
-import org.apache.spark.network.protocol.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.ResponseMessage;
-import org.apache.spark.network.protocol.RpcFailure;
-import org.apache.spark.network.protocol.RpcResponse;
-import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.StreamFailure;
-import org.apache.spark.network.protocol.StreamResponse;
+import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.server.MessageHandler;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportFrameDecoder;
@@ -56,6 +49,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Map<StreamChunkId, ChunkReceivedCallback> outstandingFetches;
 
+  private final Map<StreamChunkId, StreamCallback> outstandingFetchAsStreams;
+
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
   private final Queue<Pair<String, StreamCallback>> streamCallbacks;
@@ -67,6 +62,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   public TransportResponseHandler(Channel channel) {
     this.channel = channel;
     this.outstandingFetches = new ConcurrentHashMap<>();
+    this.outstandingFetchAsStreams = new ConcurrentHashMap<>();
     this.outstandingRpcs = new ConcurrentHashMap<>();
     this.streamCallbacks = new ConcurrentLinkedQueue<>();
     this.timeOfLastRequestNs = new AtomicLong(0);
@@ -79,6 +75,17 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   public void removeFetchRequest(StreamChunkId streamChunkId) {
     outstandingFetches.remove(streamChunkId);
+  }
+
+  public void addFetchAsStreamRequest(
+    StreamChunkId streamChunkId,
+    StreamCallback callback) {
+    updateTimeOfLastRequest();
+    outstandingFetchAsStreams.put(streamChunkId, callback);
+  }
+
+  public void removeFetchAsStreamRequest(StreamChunkId streamChunkId) {
+    outstandingFetchAsStreams.remove(streamChunkId);
   }
 
   public void addRpcRequest(long requestId, RpcResponseCallback callback) {
@@ -112,6 +119,13 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
       }
     }
+    for (Map.Entry<StreamChunkId, StreamCallback> entry : outstandingFetchAsStreams.entrySet()) {
+      try {
+        entry.getValue().onFailure(entry.getKey().toString(), cause);
+      } catch (Exception e) {
+        logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
+      }
+    }
     for (Map.Entry<Long, RpcResponseCallback> entry : outstandingRpcs.entrySet()) {
       try {
         entry.getValue().onFailure(cause);
@@ -129,6 +143,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
     // It's OK if new fetches appear, as they will fail immediately.
     outstandingFetches.clear();
+    outstandingFetchAsStreams.clear();
     outstandingRpcs.clear();
     streamCallbacks.clear();
   }
@@ -171,6 +186,21 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         listener.onSuccess(resp.streamChunkId.chunkIndex, resp.body());
         resp.body().release();
       }
+      // The response is `ChunkFetchSuccess`. It's either because the request was a normal chunk
+      // fetch request, or the server side is an old version that doesn't support fetch chunk as
+      // stream. So the next line is either a no-op, or remove the callback that will never be
+      // called later.
+      outstandingFetchAsStreams.remove(resp.streamChunkId);
+    } else if (message instanceof ChunkFetchStreamResponse) {
+      ChunkFetchStreamResponse resp = (ChunkFetchStreamResponse) message;
+      StreamCallback callback = outstandingFetchAsStreams.get(resp.streamChunkId);
+      if (callback == null) {
+        logger.warn("Ignoring response for block {} from {} since it is not outstanding",
+          resp.streamChunkId, getRemoteAddress(channel));
+        resp.body().release();
+      } else {
+        readStream(resp.streamChunkId.toString(), resp.byteCount, callback);
+      }
     } else if (message instanceof ChunkFetchFailure) {
       ChunkFetchFailure resp = (ChunkFetchFailure) message;
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
@@ -211,25 +241,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
-        if (resp.byteCount > 0) {
-          StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
-            this, resp.streamId, resp.byteCount, callback);
-          try {
-            TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
-              channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
-            frameDecoder.setInterceptor(interceptor);
-            streamActive = true;
-          } catch (Exception e) {
-            logger.error("Error installing stream handler.", e);
-            deactivateStream();
-          }
-        } else {
-          try {
-            callback.onComplete(resp.streamId);
-          } catch (Exception e) {
-            logger.warn("Error in stream handler onComplete().", e);
-          }
-        }
+        readStream(resp.streamId, resp.byteCount, callback);
       } else {
         logger.error("Could not find callback for StreamResponse.");
       }
@@ -251,10 +263,32 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     }
   }
 
+  private void readStream(String streamId, long byteCount, StreamCallback callback) {
+    if (byteCount > 0) {
+      StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
+        this, streamId, byteCount, callback);
+      try {
+        TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
+          channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
+        frameDecoder.setInterceptor(interceptor);
+        streamActive = true;
+      } catch (Exception e) {
+        logger.error("Error installing stream handler.", e);
+        deactivateStream();
+      }
+    } else {
+      try {
+        callback.onComplete(streamId);
+      } catch (Exception e) {
+        logger.warn("Error in stream handler onComplete().", e);
+      }
+    }
+  }
+
   /** Returns total number of outstanding requests (fetch requests + rpcs) */
   public int numOutstandingRequests() {
-    return outstandingFetches.size() + outstandingRpcs.size() + streamCallbacks.size() +
-      (streamActive ? 1 : 0);
+    return outstandingFetches.size() + outstandingFetchAsStreams.size() + outstandingRpcs.size() +
+      streamCallbacks.size() + (streamActive ? 1 : 0);
   }
 
   /** Returns the time in nanoseconds of when the last request was sent out. */

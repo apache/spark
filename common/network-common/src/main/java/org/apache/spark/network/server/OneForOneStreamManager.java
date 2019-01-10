@@ -99,14 +99,12 @@ public class OneForOneStreamManager extends StreamManager {
     return nextChunk;
   }
 
+  // This is needed for clients of Spark 2.2, 2.3, 2.4, which will send stream request to fetch
+  // block chunks.
   @Override
   public ManagedBuffer openStream(String streamChunkId) {
     Pair<Long, Integer> streamChunkIdPair = parseStreamChunkId(streamChunkId);
     return getChunk(streamChunkIdPair.getLeft(), streamChunkIdPair.getRight());
-  }
-
-  public static String genStreamChunkId(long streamId, int chunkId) {
-    return String.format("%d_%d", streamId, chunkId);
   }
 
   // Parse streamChunkId to be stream id and chunk id. This is used when fetch remote chunk as a

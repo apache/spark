@@ -30,10 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.protocol.ChunkFetchFailure;
-import org.apache.spark.network.protocol.ChunkFetchRequest;
-import org.apache.spark.network.protocol.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.Encodable;
+import org.apache.spark.network.protocol.*;
 
 import static org.apache.spark.network.util.NettyUtils.*;
 
@@ -101,7 +98,13 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
     }
 
     streamManager.chunkBeingSent(msg.streamChunkId.streamId);
-    respond(channel, new ChunkFetchSuccess(msg.streamChunkId, buf)).addListener(
+    AbstractResponseMessage response;
+    if (msg.fetchAsStream) {
+      response = new ChunkFetchStreamResponse(msg.streamChunkId, buf.size(), buf);
+    } else {
+      response = new ChunkFetchSuccess(msg.streamChunkId, buf);
+    }
+    respond(channel, response).addListener(
       (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
   }
 

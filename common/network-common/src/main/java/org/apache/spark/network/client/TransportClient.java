@@ -128,11 +128,15 @@ public class TransportClient implements Closeable {
    *                 be agreed upon by client and server beforehand.
    * @param chunkIndex 0-based index of the chunk to fetch
    * @param callback Callback invoked upon successful receipt of chunk, or upon any failure.
+   * @param streamCallback If it's not null, we will send a `ChunkFetchRequest` with
+   *                       `fetchAsStream=true`, and this callback will be used to handle the stream
+   *                       response.
    */
   public void fetchChunk(
       long streamId,
       int chunkIndex,
-      ChunkReceivedCallback callback) {
+      ChunkReceivedCallback callback,
+      StreamCallback streamCallback) {
     if (logger.isDebugEnabled()) {
       logger.debug("Sending fetch chunk request {} to {}", chunkIndex, getRemoteAddress(channel));
     }
@@ -142,12 +146,27 @@ public class TransportClient implements Closeable {
       @Override
       void handleFailure(String errorMsg, Throwable cause) {
         handler.removeFetchRequest(streamChunkId);
+        handler.removeFetchAsStreamRequest(streamChunkId);
         callback.onFailure(chunkIndex, new IOException(errorMsg, cause));
       }
     };
-    handler.addFetchRequest(streamChunkId, callback);
 
-    channel.writeAndFlush(new ChunkFetchRequest(streamChunkId)).addListener(listener);
+    boolean fetchAsStream = streamCallback != null;
+    handler.addFetchRequest(streamChunkId, callback);
+    if (fetchAsStream) {
+      handler.addFetchAsStreamRequest(streamChunkId, streamCallback);
+    }
+
+    ChunkFetchRequest request = new ChunkFetchRequest(streamChunkId, fetchAsStream);
+    channel.writeAndFlush(request).addListener(listener);
+  }
+
+  // This is only used in tests.
+  public void fetchChunk(
+      long streamId,
+      int chunkIndex,
+      ChunkReceivedCallback callback) {
+    fetchChunk(streamId, chunkIndex, callback, null);
   }
 
   /**
