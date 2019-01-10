@@ -242,14 +242,14 @@ if [[ "$1" == "package" ]]; then
       -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
+    R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
+    cp spark-$SPARK_VERSION-bin-$NAME/R/$R_DIST_NAME .
+
     if [ -n "$AMPLAB_JENKINS" ]; then
       echo "Skipping signing of R source package"
     else
       if [[ -n $R_FLAG ]]; then
-        echo "Copying and signing R source package"
-        R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
-        cp spark-$SPARK_VERSION-bin-$NAME/R/$R_DIST_NAME .
-
+        echo "Signing R source package"
         echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
                                     --output $R_DIST_NAME.asc \
                                     --detach-sig $R_DIST_NAME
@@ -259,14 +259,14 @@ if [[ "$1" == "package" ]]; then
       fi
     fi
 
+    PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
+    cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .
+
     if [ -n "$AMPLAB_JENKINS" ]; then
       echo "Skipping signing of python distribution"
     else
       if [[ -n $PIP_FLAG ]]; then
-        echo "Copying and signing python distribution"
-        PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
-        cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .
-
+        echo "Signing python distribution"
         echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
                                     --output $PYTHON_DIST_NAME.asc \
                                     --detach-sig $PYTHON_DIST_NAME
@@ -276,11 +276,12 @@ if [[ "$1" == "package" ]]; then
       fi
     fi
 
+    cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
+
     if [ -n "$AMPLAB_JENKINS" ]; then
       echo "Skipping signing of regular binary distribution"
     else
-      echo "Copying and signing regular binary distribution"
-      cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
+      echo "Signing regular binary distribution"
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
                                   --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
                                   --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
