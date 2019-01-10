@@ -41,7 +41,7 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
     store
       .environmentInfo()
       .sparkProperties
-      .contains((SCHEDULER_MODE, SchedulingMode.FAIR.toString))
+      .contains((SCHEDULER_MODE.key, SchedulingMode.FAIR.toString))
   }
 
   def handleKillRequest(request: HttpServletRequest): Unit = {

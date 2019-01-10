@@ -38,7 +38,7 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
     store
       .environmentInfo()
       .sparkProperties
-      .contains((SCHEDULER_MODE, SchedulingMode.FAIR.toString))
+      .contains((SCHEDULER_MODE.key, SchedulingMode.FAIR.toString))
   }
 
   def getSparkUser: String = parent.getSparkUser

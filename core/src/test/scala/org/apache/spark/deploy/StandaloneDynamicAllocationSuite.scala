@@ -31,7 +31,6 @@ import org.apache.spark.deploy.master.ApplicationInfo
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
@@ -458,9 +457,9 @@ class StandaloneDynamicAllocationSuite
   test("initial executor limit") {
     val initialExecutorLimit = 1
     val myConf = appConf
-      .set(DYN_ALLOCATION_ENABLED, true)
-      .set(SHUFFLE_SERVICE_ENABLED, true)
-      .set(DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutorLimit)
+      .set(config.DYN_ALLOCATION_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutorLimit)
     sc = new SparkContext(myConf)
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
