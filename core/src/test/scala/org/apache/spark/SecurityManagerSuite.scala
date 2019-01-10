@@ -47,7 +47,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set(NETWORK_AUTH_ENABLED, true)
     conf.set(AUTH_SECRET, "good")
     conf.set(ACLS_ENABLE, true)
-    conf.set(UI_VIEW_ACLS, "user1,user2")
+    conf.set(UI_VIEW_ACLS, Seq("user1", "user2"))
     val securityManager = new SecurityManager(conf)
     assert(securityManager.isAuthenticationEnabled() === true)
     assert(securityManager.aclsEnabled() === true)
@@ -61,7 +61,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set(NETWORK_AUTH_ENABLED, true)
     conf.set(AUTH_SECRET, "good")
     conf.set(ACLS_ENABLE, true)
-    conf.set(UI_VIEW_ACLS_GROUPS, "group1,group2")
+    conf.set(UI_VIEW_ACLS_GROUPS, Seq("group1", "group2"))
     // default ShellBasedGroupsMappingProvider is used to resolve user groups
     val securityManager = new SecurityManager(conf);
     // assuming executing user does not belong to group1,group2
@@ -72,7 +72,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     conf2.set(NETWORK_AUTH_ENABLED, true)
     conf2.set(AUTH_SECRET, "good")
     conf2.set(ACLS_ENABLE, true)
-    conf2.set(UI_VIEW_ACLS_GROUPS, "group1,group2")
+    conf2.set(UI_VIEW_ACLS_GROUPS, Seq("group1", "group2"))
     // explicitly specify a custom GroupsMappingServiceProvider
     conf2.set(USER_GROUPS_MAPPING, "org.apache.spark.DummyGroupMappingServiceProvider")
 
@@ -85,7 +85,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     conf3.set(NETWORK_AUTH_ENABLED, true)
     conf3.set(AUTH_SECRET, "good")
     conf3.set(ACLS_ENABLE, true)
-    conf3.set(UI_VIEW_ACLS_GROUPS, "group4,group5")
+    conf3.set(UI_VIEW_ACLS_GROUPS, Seq("group4", "group5"))
     // explicitly specify a bogus GroupsMappingServiceProvider
     conf3.set(USER_GROUPS_MAPPING, "BogusServiceProvider")
 
@@ -97,7 +97,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with api") {
     val conf = new SparkConf
-    conf.set(UI_VIEW_ACLS, "user1,user2")
+    conf.set(UI_VIEW_ACLS, Seq("user1", "user2"))
     val securityManager = new SecurityManager(conf);
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled() === true)
@@ -109,7 +109,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled() === true)
-    securityManager.setViewAcls(Set[String]("user5"), "user6,user7")
+    securityManager.setViewAcls(Set[String]("user5"), Seq("user6", "user7"))
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user5") === true)
     assert(securityManager.checkUIViewPermissions("user6") === true)
@@ -124,14 +124,14 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
-    securityManager.setViewAclsGroups("group1,group2")
+    securityManager.setViewAclsGroups(Seq("group1", "group2"))
 
     // group1,group2 match
     assert(securityManager.checkUIViewPermissions("user1") === true)
     assert(securityManager.checkUIViewPermissions("user2") === true)
 
     // change groups so they do not match
-    securityManager.setViewAclsGroups("group4,group5")
+    securityManager.setViewAclsGroups(Seq("group4", "group5"))
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
 
@@ -140,21 +140,21 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     val securityManager2 = new SecurityManager(conf2)
     securityManager2.setAcls(true)
-    securityManager2.setViewAclsGroups("group1,group2")
+    securityManager2.setViewAclsGroups(Seq("group1", "group2"))
 
     // group1,group2 do not match because of BogusServiceProvider
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
 
     // setting viewAclsGroups to empty should still not match because of BogusServiceProvider
-    securityManager2.setViewAclsGroups("")
+    securityManager2.setViewAclsGroups(Nil)
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
   }
 
   test("set security modify acls") {
     val conf = new SparkConf
-    conf.set(MODIFY_ACLS, "user1,user2")
+    conf.set(MODIFY_ACLS, Seq("user1", "user2"))
 
     val securityManager = new SecurityManager(conf);
     securityManager.setAcls(true)
@@ -167,7 +167,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled() === true)
-    securityManager.setModifyAcls(Set("user5"), "user6,user7")
+    securityManager.setModifyAcls(Set("user5"), Seq("user6", "user7"))
     assert(securityManager.checkModifyPermissions("user1") === false)
     assert(securityManager.checkModifyPermissions("user5") === true)
     assert(securityManager.checkModifyPermissions("user6") === true)
@@ -180,30 +180,31 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     val conf = new SparkConf
     conf.set(USER_GROUPS_MAPPING, "org.apache.spark.DummyGroupMappingServiceProvider")
 
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
-    securityManager.setModifyAclsGroups("group1,group2")
+    securityManager.setModifyAclsGroups(Seq("group1", "group2"))
 
     // group1,group2 match
     assert(securityManager.checkModifyPermissions("user1") === true)
     assert(securityManager.checkModifyPermissions("user2") === true)
 
     // change groups so they do not match
-    securityManager.setModifyAclsGroups("group4,group5")
+    securityManager.setModifyAclsGroups(Seq("group4", "group5"))
     assert(securityManager.checkModifyPermissions("user1") === false)
     assert(securityManager.checkModifyPermissions("user2") === false)
 
     // change so they match again
-    securityManager.setModifyAclsGroups("group2,group3")
+    securityManager.setModifyAclsGroups(Seq("group2", "group3"))
+
     assert(securityManager.checkModifyPermissions("user1") === true)
     assert(securityManager.checkModifyPermissions("user2") === true)
   }
 
   test("set security admin acls") {
     val conf = new SparkConf
-    conf.set(ADMIN_ACLS, "user1,user2")
-    conf.set(UI_VIEW_ACLS, "user3")
-    conf.set(MODIFY_ACLS, "user4")
+    conf.set(ADMIN_ACLS, Seq("user1", "user2"))
+    conf.set(UI_VIEW_ACLS, Seq("user3"))
+    conf.set(MODIFY_ACLS, Seq("user4"))
 
     val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
@@ -222,9 +223,9 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkUIViewPermissions("user5") === false)
     assert(securityManager.checkUIViewPermissions(null) === true)
 
-    securityManager.setAdminAcls("user6")
-    securityManager.setViewAcls(Set[String]("user8"), "user9")
-    securityManager.setModifyAcls(Set("user11"), "user9")
+    securityManager.setAdminAcls(Seq("user6"))
+    securityManager.setViewAcls(Set[String]("user8"), Seq("user9"))
+    securityManager.setModifyAcls(Set("user11"), Seq("user9"))
     assert(securityManager.checkModifyPermissions("user6") === true)
     assert(securityManager.checkModifyPermissions("user11") === true)
     assert(securityManager.checkModifyPermissions("user9") === true)
@@ -241,9 +242,9 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security admin acls for groups") {
     val conf = new SparkConf
-    conf.set(ADMIN_ACLS_GROUPS, "group1")
-    conf.set(UI_VIEW_ACLS_GROUPS, "group2")
-    conf.set(MODIFY_ACLS_GROUPS, "group3")
+    conf.set(ADMIN_ACLS_GROUPS, Seq("group1"))
+    conf.set(UI_VIEW_ACLS_GROUPS, Seq("group2"))
+    conf.set(MODIFY_ACLS_GROUPS, Seq("group3"))
     conf.set(USER_GROUPS_MAPPING, "org.apache.spark.DummyGroupMappingServiceProvider")
 
     val securityManager = new SecurityManager(conf)
@@ -255,28 +256,28 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkUIViewPermissions("user1") === true)
 
     // change admin groups so they do not match. view and modify groups are set to admin groups
-    securityManager.setAdminAclsGroups("group4,group5")
+    securityManager.setAdminAclsGroups(Seq("group4", "group5"))
     // invoke the set ui and modify to propagate the changes
-    securityManager.setViewAclsGroups("")
-    securityManager.setModifyAclsGroups("")
+    securityManager.setViewAclsGroups(Nil)
+    securityManager.setModifyAclsGroups(Nil)
 
     assert(securityManager.checkModifyPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user1") === false)
 
     // change modify groups so they match
-    securityManager.setModifyAclsGroups("group3")
+    securityManager.setModifyAclsGroups(Seq("group3"))
     assert(securityManager.checkModifyPermissions("user1") === true)
     assert(securityManager.checkUIViewPermissions("user1") === false)
 
     // change view groups so they match
-    securityManager.setViewAclsGroups("group2")
-    securityManager.setModifyAclsGroups("group4")
+    securityManager.setViewAclsGroups(Seq("group2"))
+    securityManager.setModifyAclsGroups(Seq("group4"))
     assert(securityManager.checkModifyPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user1") === true)
 
     // change modify and view groups so they do not match
-    securityManager.setViewAclsGroups("group7")
-    securityManager.setModifyAclsGroups("group8")
+    securityManager.setViewAclsGroups(Seq("group7"))
+    securityManager.setModifyAclsGroups(Seq("group8"))
     assert(securityManager.checkModifyPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user1") === false)
   }
@@ -284,9 +285,9 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   test("set security with * in acls") {
     val conf = new SparkConf
     conf.set(ACLS_ENABLE.key, "true")
-    conf.set(ADMIN_ACLS, "user1,user2")
-    conf.set(UI_VIEW_ACLS, "*")
-    conf.set(MODIFY_ACLS, "user4")
+    conf.set(ADMIN_ACLS, Seq("user1", "user2"))
+    conf.set(UI_VIEW_ACLS, Seq("*"))
+    conf.set(MODIFY_ACLS, Seq("user4"))
 
     val securityManager = new SecurityManager(conf)
     assert(securityManager.aclsEnabled() === true)
@@ -300,22 +301,22 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkModifyPermissions("user8") === false)
 
     // check for modifyAcls with *
-    securityManager.setModifyAcls(Set("user4"), "*")
+    securityManager.setModifyAcls(Set("user4"), Seq("*"))
     assert(securityManager.checkModifyPermissions("user7") === true)
     assert(securityManager.checkModifyPermissions("user8") === true)
 
-    securityManager.setAdminAcls("user1,user2")
-    securityManager.setModifyAcls(Set("user1"), "user2")
-    securityManager.setViewAcls(Set("user1"), "user2")
+    securityManager.setAdminAcls(Seq("user1", "user2"))
+    securityManager.setModifyAcls(Set("user1"), Seq("user2"))
+    securityManager.setViewAcls(Set("user1"), Seq("user2"))
     assert(securityManager.checkUIViewPermissions("user5") === false)
     assert(securityManager.checkUIViewPermissions("user6") === false)
     assert(securityManager.checkModifyPermissions("user7") === false)
     assert(securityManager.checkModifyPermissions("user8") === false)
 
     // check for adminAcls with *
-    securityManager.setAdminAcls("user1,*")
-    securityManager.setModifyAcls(Set("user1"), "user2")
-    securityManager.setViewAcls(Set("user1"), "user2")
+    securityManager.setAdminAcls(Seq("user1", "*"))
+    securityManager.setModifyAcls(Set("user1"), Seq("user2"))
+    securityManager.setViewAcls(Set("user1"), Seq("user2"))
     assert(securityManager.checkUIViewPermissions("user5") === true)
     assert(securityManager.checkUIViewPermissions("user6") === true)
     assert(securityManager.checkModifyPermissions("user7") === true)
@@ -325,9 +326,9 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   test("set security with * in acls for groups") {
     val conf = new SparkConf
     conf.set(ACLS_ENABLE, true)
-    conf.set(ADMIN_ACLS_GROUPS, "group4,group5")
-    conf.set(UI_VIEW_ACLS_GROUPS, "*")
-    conf.set(MODIFY_ACLS_GROUPS, "group6")
+    conf.set(ADMIN_ACLS_GROUPS, Seq("group4", "group5"))
+    conf.set(UI_VIEW_ACLS_GROUPS, Seq("*"))
+    conf.set(MODIFY_ACLS_GROUPS, Seq("group6"))
 
     val securityManager = new SecurityManager(conf)
     assert(securityManager.aclsEnabled() === true)
@@ -339,17 +340,17 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkModifyPermissions("user2") === false)
 
     // check for modifyAcls with *
-    securityManager.setModifyAclsGroups("*")
-    securityManager.setViewAclsGroups("group6")
+    securityManager.setModifyAclsGroups(Seq("*"))
+    securityManager.setViewAclsGroups(Seq("group6"))
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
     assert(securityManager.checkModifyPermissions("user1") === true)
     assert(securityManager.checkModifyPermissions("user2") === true)
 
     // check for adminAcls with *
-    securityManager.setAdminAclsGroups("group9,*")
-    securityManager.setModifyAclsGroups("group4,group5")
-    securityManager.setViewAclsGroups("group6,group7")
+    securityManager.setAdminAclsGroups(Seq("group9", "*"))
+    securityManager.setModifyAclsGroups(Seq("group4", "group5"))
+    securityManager.setViewAclsGroups(Seq("group6", "group7"))
     assert(securityManager.checkUIViewPermissions("user5") === true)
     assert(securityManager.checkUIViewPermissions("user6") === true)
     assert(securityManager.checkModifyPermissions("user7") === true)
@@ -368,7 +369,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkModifyPermissions("user1") === false)
 
     // set groups only
-    securityManager.setAdminAclsGroups("group1,group2")
+    securityManager.setAdminAclsGroups(Seq("group1", "group2"))
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkModifyPermissions("user1") === false)
   }

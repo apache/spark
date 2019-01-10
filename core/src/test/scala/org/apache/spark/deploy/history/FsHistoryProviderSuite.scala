@@ -646,8 +646,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     // Test both history ui admin acls and application acls are configured.
     val conf1 = createTestConf()
       .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
-      .set(HISTORY_SERVER_UI_ADMIN_ACLS, "user1,user2")
-      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, "group1")
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, Seq("group1"))
       .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
 
     createAndCheck(conf1, (ADMIN_ACLS.key, "user"), (ADMIN_ACLS_GROUPS.key, "group")) {
@@ -668,8 +668,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     // Test only history ui admin acls are configured.
     val conf2 = createTestConf()
       .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
-      .set(HISTORY_SERVER_UI_ADMIN_ACLS, "user1,user2")
-      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, "group1")
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, Seq("group1"))
       .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf2) { securityManager =>
       // Test whether user has permission to access UI.

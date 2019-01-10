@@ -94,11 +94,13 @@ private[spark] object History {
 
   val HISTORY_SERVER_UI_ADMIN_ACLS = ConfigBuilder("spark.history.ui.admin.acls")
     .stringConf
-    .createWithDefault("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS = ConfigBuilder("spark.history.ui.admin.acls.groups")
     .stringConf
-    .createWithDefault("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val NUM_REPLAY_THREADS = ConfigBuilder("spark.history.fs.numReplayThreads")
     .intConf

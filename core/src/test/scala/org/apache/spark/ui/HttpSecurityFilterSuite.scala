@@ -93,8 +93,8 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
   test("perform access control") {
     val conf = new SparkConf(false)
       .set(ACLS_ENABLE, true)
-      .set(ADMIN_ACLS, "admin")
-      .set(UI_VIEW_ACLS, "alice")
+      .set(ADMIN_ACLS, Seq("admin"))
+      .set(UI_VIEW_ACLS, Seq("alice"))
     val secMgr = new SecurityManager(conf)
 
     val req = mockEmptyRequest()

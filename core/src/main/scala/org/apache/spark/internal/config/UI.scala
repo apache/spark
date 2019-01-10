@@ -111,27 +111,33 @@ private[spark] object UI {
 
   val UI_VIEW_ACLS = ConfigBuilder("spark.ui.view.acls")
     .stringConf
-    .createWithDefaultString("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val UI_VIEW_ACLS_GROUPS = ConfigBuilder("spark.ui.view.acls.groups")
     .stringConf
-    .createWithDefaultString("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val ADMIN_ACLS = ConfigBuilder("spark.admin.acls")
     .stringConf
-    .createWithDefault("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val ADMIN_ACLS_GROUPS = ConfigBuilder("spark.admin.acls.groups")
     .stringConf
-    .createWithDefault("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val MODIFY_ACLS = ConfigBuilder("spark.modify.acls")
     .stringConf
-    .createWithDefault("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val MODIFY_ACLS_GROUPS = ConfigBuilder("spark.modify.acls.groups")
     .stringConf
-    .createWithDefault("")
+    .toSequence
+    .createWithDefault(Nil)
 
   val USER_GROUPS_MAPPING = ConfigBuilder("spark.user.groups.mapping")
     .stringConf
