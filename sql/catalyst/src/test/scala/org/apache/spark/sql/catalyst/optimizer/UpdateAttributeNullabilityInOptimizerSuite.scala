@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CreateArray, GetArrayItem}
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
-class UpdateNullabilityInAttributeReferencesSuite extends PlanTest {
+class UpdateAttributeNullabilityInOptimizerSuite extends PlanTest {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -36,8 +37,8 @@ class UpdateNullabilityInAttributeReferencesSuite extends PlanTest {
           SimplifyConditionals,
           SimplifyBinaryComparison,
           SimplifyExtractValueOps) ::
-      Batch("UpdateAttributeReferences", Once,
-        UpdateNullabilityInAttributeReferences) :: Nil
+      Batch("UpdateNullability", Once,
+        UpdateAttributeNullability) :: Nil
   }
 
   test("update nullability in AttributeReference")  {
@@ -46,7 +47,7 @@ class UpdateNullabilityInAttributeReferencesSuite extends PlanTest {
     // nullable AttributeReference to `b`, because both array indexing and map lookup are
     // nullable expressions. After optimization, the same attribute is now non-nullable,
     // but the AttributeReference is not updated to reflect this. So, we need to update nullability
-    // by the `UpdateNullabilityInAttributeReferences` rule.
+    // by the `UpdateAttributeNullability` rule.
     val original = rel
       .select(GetArrayItem(CreateArray(Seq('a, 'a + 1L)), 0) as "b")
       .groupBy($"b")("1")
