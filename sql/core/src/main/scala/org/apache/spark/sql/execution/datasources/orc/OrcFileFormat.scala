@@ -161,7 +161,6 @@ class OrcFileFormat
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
-    val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
 
@@ -195,10 +194,8 @@ class OrcFileFormat
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-        val taskContext = Option(TaskContext.get())
         if (enableVectorizedReader) {
-          val batchReader = new OrcColumnarBatchReader(
-            enableOffHeapColumnVector && taskContext.isDefined, capacity)
+          val batchReader = new OrcColumnarBatchReader(capacity)
           // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
           // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
           // after opening a file.
