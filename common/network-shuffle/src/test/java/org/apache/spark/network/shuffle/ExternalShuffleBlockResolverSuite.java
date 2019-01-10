@@ -66,7 +66,7 @@ public class ExternalShuffleBlockResolverSuite {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     // Unregistered executor
     try {
-      resolver.getBlockData("app0", "exec1", 1, 1, 0, 1);
+      resolver.getBlockData("app0", "exec1", 1, 1, 0);
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
@@ -75,7 +75,7 @@ public class ExternalShuffleBlockResolverSuite {
     // Invalid shuffle manager
     try {
       resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
-      resolver.getBlockData("app0", "exec2", 1, 1, 0, 1);
+      resolver.getBlockData("app0", "exec2", 1, 1, 0);
       fail("Should have failed");
     } catch (UnsupportedOperationException e) {
       // pass
@@ -85,7 +85,7 @@ public class ExternalShuffleBlockResolverSuite {
     resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo(SORT_MANAGER));
     try {
-      resolver.getBlockData("app0", "exec3", 1, 1, 0, 1);
+      resolver.getBlockData("app0", "exec3", 1, 1, 0);
       fail("Should have failed");
     } catch (Exception e) {
       // pass
@@ -99,14 +99,14 @@ public class ExternalShuffleBlockResolverSuite {
       dataContext.createExecutorInfo(SORT_MANAGER));
 
     try (InputStream block0Stream = resolver.getBlockData(
-        "app0", "exec0", 0, 0, 0, 1).createInputStream()) {
+        "app0", "exec0", 0, 0, 0).createInputStream()) {
       String block0 =
         CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
       assertEquals(sortBlock0, block0);
     }
 
     try (InputStream block1Stream = resolver.getBlockData(
-        "app0", "exec0", 0, 0, 1, 1).createInputStream()) {
+        "app0", "exec0", 0, 0, 1).createInputStream()) {
       String block1 =
         CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
       assertEquals(sortBlock1, block1);

@@ -61,7 +61,7 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
  * @param shuffleMetrics used to report shuffle metrics.
  * @param shuffleBlockBatchFetch fetch contiguous shuffle blocks in one IO if server side
-  *                                   supports.
+ *                               supports.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(

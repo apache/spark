@@ -89,18 +89,18 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       try {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
-        ManagedBufferIterator iter = new ManagedBufferIterator(
+        ManagedBufferIterator blocksIter = new ManagedBufferIterator(
           msg.appId, msg.execId, msg.blockIds, msg.shuffleBlockBatchFetch);
-        long streamId = streamManager.registerStream(client.getClientId(), iter);
+        long streamId = streamManager.registerStream(client.getClientId(), blocksIter);
         if (logger.isTraceEnabled()) {
           logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
                        streamId,
-                       iter.length(),
+                       blocksIter.getNumChunks(),
                        client.getClientId(),
                        getRemoteAddress(client.getChannel()));
         }
         callback.onSuccess(
-          new StreamHandle(streamId, iter.length(), iter.getChunkSizes()).toByteBuffer());
+          new StreamHandle(streamId, blocksIter.getNumChunks(), blocksIter.getChunkSizes()).toByteBuffer());
       } finally {
         responseDelayContext.stop();
       }
@@ -207,7 +207,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
   private boolean isShuffleBlock(String[] blockIdParts) {
     // length == 4: ShuffleBlockId
-    // length == 5: ContinuousShuffleBlockId
+    // length == 5: ShuffleBlockBatchId
     return (blockIdParts.length == 4 || blockIdParts.length == 5) &&
       blockIdParts[0].equals("shuffle");
   }
@@ -219,10 +219,10 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final String execId;
     private final int shuffleId;
     // An array containing mapId, reduceId and numBlocks tuple
-    private int[] shuffleBlockIds = null;
-    private int[] chunkSizes = null;
+    private int[] shuffleBlockIds;
+    private int[] chunkSizes;
 
-    private int[] parseBlockId(String blockId) {
+    private String[] getBlockIdParts(String blockId) {
       String[] blockIdParts = blockId.split("_");
       if (!isShuffleBlock(blockIdParts)) {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
@@ -230,19 +230,19 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
         throw new IllegalArgumentException("Expected shuffleId=" + shuffleId + ", got:" + blockId);
       }
-      int[] parsedBlockId = new int[2];
-      parsedBlockId[0] = Integer.parseInt(blockIdParts[2]);
-      parsedBlockId[1] = Integer.parseInt(blockIdParts[3]);
-      return parsedBlockId;
+      return blockIdParts;
     }
 
     private void mergeShuffleBlockIds(String[] blockIds) {
       ArrayList<int[]> originBlocks = new ArrayList<>(blockIds.length);
       for (String blockId : blockIds) {
-        originBlocks.add(parseBlockId(blockId));
+        String[] blockIdParts = getBlockIdParts(blockId);
+        int[] parsedBlockId =
+          { Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) };
+        originBlocks.add(parsedBlockId);
       }
 
-      int[] shuffleBlockBatches = new int[3 * blockIds.length];
+      int[] shuffleBlockBatchIds = new int[3 * blockIds.length];
       int[] chunkSizes = new int[blockIds.length];
 
       int capacity = 0;
@@ -251,15 +251,15 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       for (int i = 1; i <= blockIds.length; i++) {
         if (i == blockIds.length || originBlocks.get(i)[0] != prevBlock[0]) {
           prevBlock = originBlocks.get(prevIdx);
-          shuffleBlockBatches[3 * capacity] = prevBlock[0];
-          shuffleBlockBatches[3 * capacity + 1] = prevBlock[1];
-          shuffleBlockBatches[3 * capacity + 2] = originBlocks.get(i - 1)[1] - prevBlock[1] + 1;
+          shuffleBlockBatchIds[3 * capacity] = prevBlock[0];
+          shuffleBlockBatchIds[3 * capacity + 1] = prevBlock[1];
+          shuffleBlockBatchIds[3 * capacity + 2] = originBlocks.get(i - 1)[1] - prevBlock[1] + 1;
           chunkSizes[capacity++] = i - prevIdx;
           prevIdx = i;
         }
       }
 
-      this.shuffleBlockIds = Arrays.copyOfRange(shuffleBlockBatches, 0, capacity * 3);
+      this.shuffleBlockIds = Arrays.copyOfRange(shuffleBlockBatchIds, 0, capacity * 3);
       this.chunkSizes = Arrays.copyOfRange(chunkSizes, 0, capacity);
     }
 
@@ -275,21 +275,26 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
-      if (shuffleBlockBatchFetch) {
+      // When fetch again happens (corrupted), openBlocks could contain ShuffleBlockBatchId
+      if (shuffleBlockBatchFetch && blockId0Parts.length == 4) {
         mergeShuffleBlockIds(blockIds);
       } else {
         shuffleBlockIds = new int[3 * blockIds.length];
         for (int i = 0; i < blockIds.length; i++) {
-          int[] blockId = parseBlockId(blockIds[i]);
-          shuffleBlockIds[3 * i] = blockId[0];
-          shuffleBlockIds[3 * i + 1] = blockId[1];
-          shuffleBlockIds[3 * i + 2] = 1;
+          String[] blockIdParts = getBlockIdParts(blockIds[i]);
+          shuffleBlockIds[3 * i] = Integer.parseInt(blockIdParts[2]);
+          shuffleBlockIds[3 * i + 1] = Integer.parseInt(blockIdParts[3]);
+          if (blockIdParts.length == 4) {
+            shuffleBlockIds[3 * i + 2] = 1;
+          } else {
+            shuffleBlockIds[3 * i + 2] = Integer.parseInt(blockIdParts[4]);
+          }
         }
         chunkSizes = new int[0];
       }
     }
 
-    public int length() {
+    public int getNumChunks() {
       return shuffleBlockIds.length / 3;
     }
 

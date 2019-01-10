@@ -50,7 +50,7 @@ class NettyBlockRpcServer(
 
   private def mergeShuffleBlockIds(blockIds: Array[String]) = {
     val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
-    var shuffleBlockBatches = ArrayBuffer.empty[ShuffleBlockBatchId]
+    var shuffleBlockBatchIds = ArrayBuffer.empty[ShuffleBlockBatchId]
     var chunkSizes = ArrayBuffer.empty[Int]
 
     def sameMapFile(index: Int) = {
@@ -62,7 +62,7 @@ class NettyBlockRpcServer(
       var prev = 0
       (1 until shuffleBlockIds.length + 1).foreach { idx =>
         if (idx == shuffleBlockIds.length || !sameMapFile(idx)) {
-          shuffleBlockBatches += ShuffleBlockBatchId(
+          shuffleBlockBatchIds += ShuffleBlockBatchId(
             shuffleBlockIds(prev).shuffleId,
             shuffleBlockIds(prev).mapId,
             shuffleBlockIds(prev).reduceId,
@@ -73,7 +73,7 @@ class NettyBlockRpcServer(
         }
       }
     }
-    (shuffleBlockBatches.toArray, chunkSizes.toArray)
+    (shuffleBlockBatchIds.toArray, chunkSizes.toArray)
   }
 
   override def receive(
@@ -85,19 +85,20 @@ class NettyBlockRpcServer(
 
     message match {
       case openBlocks: OpenBlocks =>
-        val (blocksIds, sizes) =
+        val (blockIds, chunkSizes) =
+          // When fetch again happens (corrupted), openBlocks could contain ShuffleBlockBatchId
           if (openBlocks.shuffleBlockBatchFetch
             && BlockId(openBlocks.blockIds.head).isInstanceOf[ShuffleBlockId]) {
             mergeShuffleBlockIds(openBlocks.blockIds)
           } else {
             (openBlocks.blockIds.map(BlockId.apply), Array[Int]())
           }
-        val blocksNum = blocksIds.length
+        val blocksNum = blockIds.length
         val blocks = for (i <- (0 until blocksNum).view)
-          yield blockManager.getBlockData(blocksIds(i))
+          yield blockManager.getBlockData(blockIds(i))
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
         logTrace(s"Registered streamId $streamId with $blocksNum buffers")
-        responseContext.onSuccess(new StreamHandle(streamId, blocksNum, sizes).toByteBuffer)
+        responseContext.onSuccess(new StreamHandle(streamId, blocksNum, chunkSizes).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
         // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.

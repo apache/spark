@@ -161,6 +161,16 @@ public class ExternalShuffleBlockResolver {
     executors.put(fullId, executorInfo);
   }
 
+  // For testing
+  public ManagedBuffer getBlockData(
+      String appId,
+      String execId,
+      int shuffleId,
+      int mapId,
+      int reduceId) {
+    return getBlockData(appId, execId, shuffleId, mapId, reduceId, 1);
+  }
+
   /**
    * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId, numBlocks). We make assumptions
    * about how the hash and sort based shuffles store their data.
@@ -172,8 +182,6 @@ public class ExternalShuffleBlockResolver {
       int mapId,
       int reduceId,
       int numBlocks) {
-    logger.debug("block: shuffleId={}, mapId={}, reduceId={}, numBlocks={}",
-      shuffleId, mapId, reduceId, numBlocks);
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(

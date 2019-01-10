@@ -64,8 +64,8 @@ public class RetryingBlockFetcherSuite {
 
     performInteractions(interactions, listener);
 
-    verify(listener).onBlockFetchSuccess(new String[] {"b0"}, block0);
-    verify(listener).onBlockFetchSuccess(new String[] {"b1"}, block1);
+    verify(listener).onBlockFetchSuccess(new String[] { "b0" }, block0);
+    verify(listener).onBlockFetchSuccess(new String[] { "b1" }, block1);
     verifyNoMoreInteractions(listener);
   }
 
@@ -84,7 +84,7 @@ public class RetryingBlockFetcherSuite {
     performInteractions(interactions, listener);
 
     verify(listener).onBlockFetchFailure(eq("b0"), any());
-    verify(listener).onBlockFetchSuccess(new String[] {"b1"}, block1);
+    verify(listener).onBlockFetchSuccess(new String[] { "b1" }, block1);
     verifyNoMoreInteractions(listener);
   }
 
@@ -106,8 +106,8 @@ public class RetryingBlockFetcherSuite {
 
     performInteractions(interactions, listener);
 
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b0"}, block0);
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b1"}, block1);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b0" }, block0);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b1" }, block1);
     verifyNoMoreInteractions(listener);
   }
 
@@ -128,8 +128,8 @@ public class RetryingBlockFetcherSuite {
 
     performInteractions(interactions, listener);
 
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b0"}, block0);
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b1"}, block1);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b0" }, block0);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b1" }, block1);
     verifyNoMoreInteractions(listener);
   }
 
@@ -156,8 +156,8 @@ public class RetryingBlockFetcherSuite {
 
     performInteractions(interactions, listener);
 
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b0"}, block0);
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b1"}, block1);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b0" }, block0);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b1" }, block1);
     verifyNoMoreInteractions(listener);
   }
 
@@ -188,7 +188,7 @@ public class RetryingBlockFetcherSuite {
 
     performInteractions(interactions, listener);
 
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b0"}, block0);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b0" }, block0);
     verify(listener, timeout(5000)).onBlockFetchFailure(eq("b1"), any());
     verifyNoMoreInteractions(listener);
   }
@@ -218,9 +218,9 @@ public class RetryingBlockFetcherSuite {
 
     performInteractions(interactions, listener);
 
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b0"}, block0);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b0" }, block0);
     verify(listener, timeout(5000)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] {"b2"}, block2);
+    verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b2" }, block2);
     verifyNoMoreInteractions(listener);
   }
 
@@ -268,7 +268,7 @@ public class RetryingBlockFetcherSuite {
             Object blockValue = block.getValue();
 
             if (blockValue instanceof ManagedBuffer) {
-              retryListener.onBlockFetchSuccess(new String[] {blockId}, (ManagedBuffer) blockValue);
+              retryListener.onBlockFetchSuccess(new String[] { blockId }, (ManagedBuffer) blockValue);
             } else if (blockValue instanceof Exception) {
               retryListener.onBlockFetchFailure(blockId, (Exception) blockValue);
             } else {
