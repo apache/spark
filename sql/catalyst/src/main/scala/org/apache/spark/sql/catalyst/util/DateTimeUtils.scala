@@ -433,27 +433,18 @@ object DateTimeUtils {
     } else {
       getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d").toZoneId
     }
-    println(zoneId)
     val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
     val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-    if (justTime) {
-      val localDate = LocalDate.now(zoneId)
-      println(s"tz = ${timeZone.toZoneId} date = ${localDate}")
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      println(s"localDateTime = ${localDateTime}")
-      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-      val instant = Instant.from(zonedDateTime)
-
-      Some(instantToMicros(instant))
+    val localDate = if (justTime) {
+      LocalDate.now(zoneId)
     } else {
-      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-      val instant = Instant.from(zonedDateTime)
-
-      Some(instantToMicros(instant))
+      LocalDate.of(segments(0), segments(1), segments(2))
     }
+    val localDateTime = LocalDateTime.of(localDate, localTime)
+    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+    val instant = Instant.from(zonedDateTime)
 
+    Some(instantToMicros(instant))
   }
 
   def instantToMicros(instant: Instant): Long = {
