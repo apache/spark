@@ -319,7 +319,15 @@ private[spark] class ExecutorAllocationManager(
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
       if (expired) {
-        initializing = false
+        if (initializing) {
+          initializing = false
+          // When initializing is firstly set to false due to expired executor, we need to
+          // recalculate numExecutorsTarget. Thus, all expired executors in this round can
+          // be properly removed in time. Otherwise, these executors will never be removed
+          // if there are no tasks to be submitted. (see SPARK-26588)
+          // Note that this will occur when we enable dynamic allocation with spark-shell.
+          updateAndSyncNumExecutorsTarget(now)
+        }
         executorIdsToBeRemoved += executorId
       }
       !expired
