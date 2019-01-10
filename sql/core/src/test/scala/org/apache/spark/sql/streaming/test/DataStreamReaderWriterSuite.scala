@@ -21,6 +21,7 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.compat.Platform.ConcurrentModificationException
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
@@ -650,5 +651,25 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(LastOptions.schema.get === StructType(StructField("aa", IntegerType) :: Nil))
 
     LastOptions.clear()
+  }
+
+  test("SPARK-26586: Streams should have isolated confs") {
+    import testImplicits._
+    val input = MemoryStream[Int]
+    input.addData(1 to 10)
+    spark.conf.set("testKey1", 0)
+    val queries = (1 to 10).map { i =>
+      spark.conf.set("testKey1", i)
+      input.toDF().writeStream
+        .foreachBatch { (df: Dataset[Row], id: Long) =>
+          val v = df.sparkSession.conf.get("testKey1").toInt
+          if (i != v) {
+            throw new ConcurrentModificationException(s"Stream $i has the wrong conf value $v")
+          }
+        }
+        .start()
+    }
+    queries.foreach(_.processAllAvailable())
+    queries.foreach(_.stop())
   }
 }
