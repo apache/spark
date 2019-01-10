@@ -21,10 +21,11 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
@@ -89,6 +90,18 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
       val size2 = relations(0).stats.sizeInBytes
       assert(size2 == relations(0).catalogTable.get.stats.get.sizeInBytes)
       assert(size2 < tableStats.get.sizeInBytes)
+    }
+  }
+
+  test("SPARK-26576 Broadcast hint not applied to partitioned table") {
+    withTable("tbl") {
+      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+
+      val df = spark.table("tbl")
+      val hints = df.join(broadcast(df), "p").queryExecution.optimizedPlan.collect {
+        case h: ResolvedHint => h
+      }
+      assert(hints.size === 1, "ResolvedHint removed in optimized plan")
     }
   }
 }
