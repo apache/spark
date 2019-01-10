@@ -91,7 +91,6 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set(IS_TESTING, true)
     conf.set("spark.memory.fraction", "1")
     conf.set("spark.memory.storageFraction", "1")
-    conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
     // to make a replication attempt to inactive store fail fast

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
-import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeProjection}
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
@@ -43,7 +43,7 @@ object HashedRelationMetricsBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("LongToUnsafeRowMap metrics", numRows, output = output)
       benchmark.addCase("LongToUnsafeRowMap") { iter =>
         val taskMemoryManager = new TaskMemoryManager(
-          new StaticMemoryManager(
+          new UnifiedMemoryManager(
             new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
             Long.MaxValue,
             Long.MaxValue,
