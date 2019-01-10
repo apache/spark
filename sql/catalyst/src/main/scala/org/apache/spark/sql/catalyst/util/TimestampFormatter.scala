@@ -27,6 +27,7 @@ import scala.util.Try
 
 import org.apache.commons.lang3.time.FastDateFormat
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.internal.SQLConf
 
 sealed trait TimestampFormatter extends Serializable {
@@ -60,12 +61,6 @@ class Iso8601TimestampFormatter(
     } else {
       Instant.from(temporalAccessor)
     }
-  }
-
-  private def instantToMicros(instant: Instant): Long = {
-    val sec = Math.multiplyExact(instant.getEpochSecond, DateTimeUtils.MICROS_PER_SECOND)
-    val result = Math.addExact(sec, instant.getNano / DateTimeUtils.NANOS_PER_MICROS)
-    result
   }
 
   override def parse(s: String): Long = instantToMicros(toInstant(s))
