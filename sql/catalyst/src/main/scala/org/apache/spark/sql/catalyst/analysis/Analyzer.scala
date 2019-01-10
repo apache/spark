@@ -943,7 +943,7 @@ class Analyzer(
         failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
-      case j @ Join(left, right, _, _) if !j.duplicateResolved =>
+      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
@@ -979,7 +979,7 @@ class Analyzer(
         a.mapExpressions(resolveExpressionTopDown(_, appendColumns))
 
       case q: LogicalPlan =>
-        logTrace(s"Attempting to resolve ${q.simpleString}")
+        logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
         q.mapExpressions(resolveExpressionTopDown(_, q))
     }
 
@@ -1777,7 +1777,7 @@ class Analyzer(
 
       case p if p.expressions.exists(hasGenerator) =>
         throw new AnalysisException("Generators are not supported outside the SELECT clause, but " +
-          "got: " + p.simpleString)
+          "got: " + p.simpleString(SQLConf.get.maxToStringFields))
     }
   }
 
@@ -2249,13 +2249,14 @@ class Analyzer(
    */
   object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case j @ Join(left, right, UsingJoin(joinType, usingCols), _)
+      case j @ Join(left, right, UsingJoin(joinType, usingCols), _, hint)
           if left.resolved && right.resolved && j.duplicateResolved =>
-        commonNaturalJoinProcessing(left, right, joinType, usingCols, None)
-      case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
+        commonNaturalJoinProcessing(left, right, joinType, usingCols, None, hint)
+      case j @ Join(left, right, NaturalJoin(joinType), condition, hint)
+          if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
-        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition)
+        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition, hint)
     }
   }
 
@@ -2360,7 +2361,8 @@ class Analyzer(
       right: LogicalPlan,
       joinType: JoinType,
       joinNames: Seq[String],
-      condition: Option[Expression]) = {
+      condition: Option[Expression],
+      hint: JoinHint) = {
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
         throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the left " +
@@ -2401,7 +2403,7 @@ class Analyzer(
         sys.error("Unsupported natural join type " + joinType)
     }
     // use Project to trim unnecessary fields
-    Project(projectList, Join(left, right, joinType, newCondition))
+    Project(projectList, Join(left, right, joinType, newCondition, hint))
   }
 
   /**

@@ -798,7 +798,7 @@ def factorial(col):
 # ---------------  Window functions ------------------------
 
 @since(1.4)
-def lag(col, count=1, default=None):
+def lag(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows before the current row, and
     `defaultValue` if there is less than `offset` rows before the current row. For example,
@@ -807,15 +807,15 @@ def lag(col, count=1, default=None):
     This is equivalent to the LAG function in SQL.
 
     :param col: name of column or expression
-    :param count: number of row to extend
+    :param offset: number of row to extend
     :param default: default value
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.lag(_to_java_column(col), count, default))
+    return Column(sc._jvm.functions.lag(_to_java_column(col), offset, default))
 
 
 @since(1.4)
-def lead(col, count=1, default=None):
+def lead(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows after the current row, and
     `defaultValue` if there is less than `offset` rows after the current row. For example,
@@ -824,11 +824,11 @@ def lead(col, count=1, default=None):
     This is equivalent to the LEAD function in SQL.
 
     :param col: name of column or expression
-    :param count: number of row to extend
+    :param offset: number of row to extend
     :param default: default value
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.lead(_to_java_column(col), count, default))
+    return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
 @since(1.4)
@@ -874,7 +874,7 @@ def date_format(date, format):
     format given by the second argument.
 
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-    pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
+    pattern letters of the Java class `java.time.format.DateTimeFormatter` can be used.
 
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
@@ -1094,7 +1094,7 @@ def to_date(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to
-    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted (equivalent to ``col.cast("date")``).
 
@@ -1119,7 +1119,7 @@ def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to
-    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted (equivalent to ``col.cast("timestamp")``).
 

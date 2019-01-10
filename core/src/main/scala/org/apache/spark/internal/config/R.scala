@@ -14,23 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1
+package org.apache.spark.internal.config
 
-import javax.ws.rs.container.{ContainerRequestContext, ContainerRequestFilter}
-import javax.ws.rs.core.Response
-import javax.ws.rs.ext.Provider
+private[spark] object R {
 
-@Provider
-private[v1] class SecurityFilter extends ContainerRequestFilter with ApiRequestContext {
-  override def filter(req: ContainerRequestContext): Unit = {
-    val user = httpRequest.getRemoteUser()
-    if (!uiRoot.securityManager.checkUIViewPermissions(user)) {
-      req.abortWith(
-        Response
-          .status(Response.Status.FORBIDDEN)
-          .entity(raw"""user "$user" is not authorized""")
-          .build()
-      )
-    }
-  }
+  val R_BACKEND_CONNECTION_TIMEOUT = ConfigBuilder("spark.r.backendConnectionTimeout")
+    .intConf
+    .createWithDefault(6000)
+
+  val R_NUM_BACKEND_THREADS = ConfigBuilder("spark.r.numRBackendThreads")
+    .intConf
+    .createWithDefault(2)
+
+  val R_HEARTBEAT_INTERVAL = ConfigBuilder("spark.r.heartBeatInterval")
+    .intConf
+    .createWithDefault(100)
+
+  val SPARKR_COMMAND = ConfigBuilder("spark.sparkr.r.command")
+    .stringConf
+    .createWithDefault("Rscript")
+
+  val R_COMMAND = ConfigBuilder("spark.r.command")
+    .stringConf
+    .createOptional
 }

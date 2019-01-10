@@ -264,7 +264,12 @@ class BisectingKMeans @Since("2.0.0") (
     val parentModel = bkm.run(rdd, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), $(maxIter))
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      $(maxIter),
+      parentModel.trainingCost)
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
     instr.logNumFeatures(model.clusterCenters.head.size)
     model.setSummary(Some(summary))
@@ -294,6 +299,8 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
  * @param numIter  Number of iterations.
+ * @param trainingCost Sum of the cost to the nearest centroid for all points in the training
+ *                     dataset. This is equivalent to sklearn's inertia.
  */
 @Since("2.1.0")
 @Experimental
@@ -302,4 +309,6 @@ class BisectingKMeansSummary private[clustering] (
     predictionCol: String,
     featuresCol: String,
     k: Int,
-    numIter: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)
+    numIter: Int,
+    @Since("3.0.0") val trainingCost: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)

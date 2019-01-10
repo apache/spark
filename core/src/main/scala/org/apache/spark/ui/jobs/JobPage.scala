@@ -62,7 +62,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       val stageId = stage.stageId
       val attemptId = stage.attemptId
       val name = stage.name
-      val status = stage.status.toString
+      val status = stage.status.toString.toLowerCase(Locale.ROOT)
       val submissionTime = stage.submissionTime.get.getTime()
       val completionTime = stage.completionTime.map(_.getTime())
         .getOrElse(System.currentTimeMillis())
@@ -184,8 +184,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val jobId = parameterId.toInt

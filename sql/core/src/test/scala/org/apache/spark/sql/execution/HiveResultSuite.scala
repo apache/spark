@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.r
+package org.apache.spark.sql.execution
 
-private[spark] object SparkRDefaults {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
 
-  // Default value for spark.r.backendConnectionTimeout config
-  val DEFAULT_CONNECTION_TIMEOUT: Int = 6000
+class HiveResultSuite extends SparkFunSuite {
 
-  // Default value for spark.r.heartBeatInterval config
-  val DEFAULT_HEARTBEAT_INTERVAL: Int = 100
-
-  // Default value for spark.r.numRBackendThreads config
-  val DEFAULT_NUM_RBACKEND_THREADS = 2
+  test("toHiveString correctly handles UDTs") {
+    val point = new ExamplePoint(50.0, 50.0)
+    val tpe = new ExamplePointUDT()
+    assert(HiveResult.toHiveString((point, tpe)) === "(50.0, 50.0)")
+  }
 }

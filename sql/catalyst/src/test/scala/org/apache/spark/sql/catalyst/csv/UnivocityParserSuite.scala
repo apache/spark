@@ -112,7 +112,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     assert(parser.makeConverter("_1", BooleanType).apply("true") == true)
 
     var timestampsOptions =
-      new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), false, "GMT")
+      new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy HH:mm"), false, "GMT")
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
     val customTimestamp = "31/01/2015 00:00"
     var format = FastDateFormat.getInstance(

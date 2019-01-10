@@ -266,6 +266,23 @@ public class TransportConf {
   }
 
   /**
+   * Flag indicating whether to share the pooled ByteBuf allocators between the different Netty
+   * channels. If enabled then only two pooled ByteBuf allocators are created: one where caching
+   * is allowed (for transport servers) and one where not (for transport clients).
+   * When disabled a new allocator is created for each transport servers and clients.
+   */
+  public boolean sharedByteBufAllocators() {
+    return conf.getBoolean("spark.network.sharedByteBufAllocators.enabled", true);
+  }
+
+  /**
+  * If enabled then off-heap byte buffers will be prefered for the shared ByteBuf allocators.
+  */
+  public boolean preferDirectBufsForSharedByteBufAllocators() {
+    return conf.getBoolean("spark.network.io.preferDirectBufs", true);
+  }
+
+  /**
    * The commons-crypto configuration for the module.
    */
   public Properties cryptoConf() {
@@ -309,8 +326,9 @@ public class TransportConf {
     }
     int chunkFetchHandlerThreadsPercent =
       conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 100);
-    return (int)Math.ceil(
-     (this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors()) *
-     chunkFetchHandlerThreadsPercent/(double)100);
+    int threads =
+      this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
+    return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
   }
+
 }

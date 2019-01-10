@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -171,7 +172,7 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
               s"conditions: $condition")
 
-          case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
+          case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
@@ -303,7 +304,7 @@ trait CheckAnalysis extends PredicateHelper {
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
             val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
-              s"from $input in operator ${operator.simpleString}."
+              s"from $input in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}."
 
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
@@ -368,7 +369,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"""nondeterministic expressions are only allowed in
                  |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.sql).mkString(",")}
-                 |in operator ${operator.simpleString}
+                 |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
 
           case _: UnresolvedHint =>
@@ -380,7 +381,8 @@ trait CheckAnalysis extends PredicateHelper {
     }
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
-      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case o if !o.resolved =>
+        failAnalysis(s"unresolved operator ${o.simpleString(SQLConf.get.maxToStringFields)}")
       case _ =>
     }
 
@@ -607,7 +609,7 @@ trait CheckAnalysis extends PredicateHelper {
         failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
 
       // Join can host correlated expressions.
-      case j @ Join(left, right, joinType, _) =>
+      case j @ Join(left, right, joinType, _, _) =>
         joinType match {
           // Inner join, like Filter, can be anywhere.
           case _: InnerLike =>
