@@ -18,10 +18,10 @@
 package org.apache.spark.sql.streaming.test
 
 import java.io.File
+import java.util.ConcurrentModificationException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.compat.Platform.ConcurrentModificationException
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
@@ -669,7 +669,10 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         }
         .start()
     }
-    queries.foreach(_.processAllAvailable())
-    queries.foreach(_.stop())
+    try {
+      queries.foreach(_.processAllAvailable())
+    } finally {
+      queries.foreach(_.stop())
+    }
   }
 }
