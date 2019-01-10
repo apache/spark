@@ -81,14 +81,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
    * @return Driver side metrics of this SparkPlan, which only create, update and display
-   *         on driver side, no need to be serialized and sent to executors.
+   *         on driver side, no need to be serialized and sent to executors. So when override
+   *         this method, we should decorate it with `@transient override lazy val`.
    */
   def driverMetrics: Map[String, SQLMetric] = Map.empty
-
-  /**
-   * @return All metrics of this SparkPlan.
-   */
-  @inline def allMetrics: Map[String, SQLMetric] = metrics ++ driverMetrics
 
   /**
    * Resets all the metrics.
