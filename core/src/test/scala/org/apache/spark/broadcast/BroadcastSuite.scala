@@ -145,8 +145,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
   encryptionTest("Cache broadcast to disk") { conf =>
     conf.setMaster("local")
       .setAppName("test")
-      .set("spark.memory.useLegacyMode", "true")
-      .set("spark.storage.memoryFraction", "0.0")
+      .set("spark.memory.storageFraction", "0.0")
     sc = new SparkContext(conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
@@ -173,8 +172,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName("test")
-      .set("spark.memory.useLegacyMode", "true")
-      .set("spark.storage.memoryFraction", "0.0")
+      .set("spark.memory.storageFraction", "0.0")
 
     sc = new SparkContext(conf)
     val list = List[Int](1, 2, 3, 4)

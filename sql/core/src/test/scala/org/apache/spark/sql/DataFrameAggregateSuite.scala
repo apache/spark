@@ -724,17 +724,52 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         "type: GroupBy]"))
   }
 
-  test("SPARK-26021: Double and Float 0.0/-0.0 should be equal when grouping") {
-    val colName = "i"
-    val doubles = Seq(0.0d, -0.0d, 0.0d).toDF(colName).groupBy(colName).count().collect()
-    val floats = Seq(0.0f, -0.0f, 0.0f).toDF(colName).groupBy(colName).count().collect()
+  test("SPARK-26021: NaN and -0.0 in grouping expressions") {
+    import java.lang.Float.floatToRawIntBits
+    import java.lang.Double.doubleToRawLongBits
 
-    assert(doubles.length == 1)
-    assert(floats.length == 1)
-    // using compare since 0.0 == -0.0 is true
-    assert(java.lang.Double.compare(doubles(0).getDouble(0), 0.0d) == 0)
-    assert(java.lang.Float.compare(floats(0).getFloat(0), 0.0f) == 0)
-    assert(doubles(0).getLong(1) == 3)
-    assert(floats(0).getLong(1) == 3)
+    // 0.0/0.0 and NaN are different values.
+    assert(floatToRawIntBits(0.0f/0.0f) != floatToRawIntBits(Float.NaN))
+    assert(doubleToRawLongBits(0.0/0.0) != doubleToRawLongBits(Double.NaN))
+
+    checkAnswer(
+      Seq(0.0f, -0.0f, 0.0f/0.0f, Float.NaN).toDF("f").groupBy("f").count(),
+      Row(0.0f, 2) :: Row(Float.NaN, 2) :: Nil)
+    checkAnswer(
+      Seq(0.0d, -0.0d, 0.0d/0.0d, Double.NaN).toDF("d").groupBy("d").count(),
+      Row(0.0d, 2) :: Row(Double.NaN, 2) :: Nil)
+
+    // test with complicated type grouping expressions
+    checkAnswer(
+      Seq(0.0f, -0.0f, 0.0f/0.0f, Float.NaN).toDF("f")
+        .groupBy(array("f"), struct("f")).count(),
+      Row(Seq(0.0f), Row(0.0f), 2) ::
+        Row(Seq(Float.NaN), Row(Float.NaN), 2) :: Nil)
+    checkAnswer(
+      Seq(0.0d, -0.0d, 0.0d/0.0d, Double.NaN).toDF("d")
+        .groupBy(array("d"), struct("d")).count(),
+      Row(Seq(0.0d), Row(0.0d), 2) ::
+        Row(Seq(Double.NaN), Row(Double.NaN), 2) :: Nil)
+
+    checkAnswer(
+      Seq(0.0f, -0.0f, 0.0f/0.0f, Float.NaN).toDF("f")
+        .groupBy(array(struct("f")), struct(array("f"))).count(),
+      Row(Seq(Row(0.0f)), Row(Seq(0.0f)), 2) ::
+        Row(Seq(Row(Float.NaN)), Row(Seq(Float.NaN)), 2) :: Nil)
+    checkAnswer(
+      Seq(0.0d, -0.0d, 0.0d/0.0d, Double.NaN).toDF("d")
+        .groupBy(array(struct("d")), struct(array("d"))).count(),
+      Row(Seq(Row(0.0d)), Row(Seq(0.0d)), 2) ::
+        Row(Seq(Row(Double.NaN)), Row(Seq(Double.NaN)), 2) :: Nil)
+
+    // test with complicated type grouping columns
+    val df = Seq(
+      (Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))),
+      (Array(0.0f, -0.0f), Tuple2(0.0d, Double.NaN), Seq(Tuple2(0.0d, 0.0/0.0)))
+    ).toDF("arr", "stru", "arrOfStru")
+    checkAnswer(
+      df.groupBy("arr", "stru", "arrOfStru").count(),
+      Row(Seq(0.0f, 0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, Double.NaN)), 2)
+    )
   }
 }

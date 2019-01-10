@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -35,12 +35,20 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
+    // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+    // `groupingExpressions` is not extracted during logical phase.
+    val normalizedGroupingExpressions = groupingExpressions.map { e =>
+      NormalizeFloatingNumbers.normalize(e) match {
+        case n: NamedExpression => n
+        case other => Alias(other, e.name)(exprId = e.exprId)
+      }
+    }
     val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     if (useHash) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-        groupingExpressions = groupingExpressions,
+        groupingExpressions = normalizedGroupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
@@ -53,7 +61,7 @@ object AggUtils {
       if (objectHashEnabled && useObjectHash) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-          groupingExpressions = groupingExpressions,
+          groupingExpressions = normalizedGroupingExpressions,
           aggregateExpressions = aggregateExpressions,
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,
@@ -62,7 +70,7 @@ object AggUtils {
       } else {
         SortAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-          groupingExpressions = groupingExpressions,
+          groupingExpressions = normalizedGroupingExpressions,
           aggregateExpressions = aggregateExpressions,
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,

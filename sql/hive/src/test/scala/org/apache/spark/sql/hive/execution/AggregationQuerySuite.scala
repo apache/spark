@@ -594,7 +594,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |  max(distinct value1)
           |FROM agg2
         """.stripMargin),
-      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
+      Row(-60, 70, 101.0/9.0, 5.6, 100))
 
     checkAnswer(
       spark.sql(
