@@ -99,6 +99,9 @@ class InMemoryFileIndex(
       cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
       cachedPartitionSpec = null
     }
+    // Here we track refresh0 time as file listing phase summary for InMemoryFileIndex but not the
+    // list files calls, this is because the most time cost for file listing happens here and read
+    // from cache time almost 0.
     _fileListingPhaseSummary = Some(phase)
   }
 
@@ -109,7 +112,11 @@ class InMemoryFileIndex(
 
   override def hashCode(): Int = rootPaths.toSet.hashCode()
 
-  override def fileListingPhaseSummary: Option[PhaseSummary] = _fileListingPhaseSummary
+  override def getAndCleanFileListingPhaseSummary: Option[PhaseSummary] = {
+    val ret = _fileListingPhaseSummary
+    _fileListingPhaseSummary = None
+    ret
+  }
 
   /**
    * List leaf files of given paths. This method will submit a Spark job to do parallel

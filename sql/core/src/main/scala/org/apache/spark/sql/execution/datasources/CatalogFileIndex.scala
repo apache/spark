@@ -69,7 +69,11 @@ class CatalogFileIndex(
 
   override def refresh(): Unit = fileStatusCache.invalidateAll()
 
-  override def fileListingPhaseSummary: Option[PhaseSummary] = _fileListingPhaseSummary
+  override def getAndCleanFileListingPhaseSummary: Option[PhaseSummary] = {
+    val ret = _fileListingPhaseSummary
+    _fileListingPhaseSummary = None
+    ret
+  }
 
   /**
    * Returns a [[InMemoryFileIndex]] for this table restricted to the subset of partitions

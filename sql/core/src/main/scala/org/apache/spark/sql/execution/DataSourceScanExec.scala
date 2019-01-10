@@ -183,7 +183,7 @@ case class FileSourceScanExec(
 
   /** Phase summary for file listing in FileIndex. Visible for testing. */
   @transient private[sql] lazy val fileListingPhaseSummary: Option[PhaseSummary] =
-    relation.location.fileListingPhaseSummary
+    relation.location.getAndCleanFileListingPhaseSummary
 
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)

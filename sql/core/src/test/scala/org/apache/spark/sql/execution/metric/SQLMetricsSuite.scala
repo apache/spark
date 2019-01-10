@@ -605,4 +605,27 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       assert(phase.endTimeMs > 0)
     }
   }
+
+  test("File listing with plan cache") {
+    withTable("testDataForScan") {
+      spark.range(10).selectExpr("id")
+        .write.saveAsTable("testDataForScan")
+      // The execution plan only has 1 FileScan node.
+      val df = spark.sql(
+        "SELECT * FROM testDataForScan")
+      df.collect()
+      val (metrics, phase) = getScanNodeMetricsAndPhaseSummary(df)
+      // Check deterministic metrics.
+      assert(metrics("numFiles").value == 2)
+      assert(metrics("numOutputRows").value == 10)
+      // Check file listing duration and timestamp changed.
+      assert(phase.startTimeMs > 0)
+      assert(phase.endTimeMs > 0)
+      val df1 = df.filter("id < 50")
+      df1.collect()
+      // Check file listing phase summary is None while using cached plan
+      assert(df1.queryExecution.executedPlan.collectLeaves().head
+        .asInstanceOf[FileSourceScanExec].fileListingPhaseSummary.isEmpty)
+    }
+  }
 }

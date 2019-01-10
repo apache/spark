@@ -84,6 +84,15 @@ trait FileIndex {
    */
   def metadataOpsTimeNs: Option[Long] = None
 
-  /** Returns an optional phase summary to record the start and end timestamp for listing file. */
-  def fileListingPhaseSummary: Option[PhaseSummary] = None
+  /**
+   * Returns the latest phase summary of file listing in the current FileIndex, we should also
+   * clean the phase summary cause in the scenario of the cached plan, we shouldn't report the
+   * old phase summary.
+   * This interface is only overridden in [[InMemoryFileIndex]] and [[CatalogFileIndex]], we do
+   * not override this in [[PartitioningAwareFileIndex]] cause all its subclass using in scan
+   * node already track file listing time.
+   *
+   * @return An optional phase summary to record the start and end timestamp for listing file.
+   */
+  def getAndCleanFileListingPhaseSummary: Option[PhaseSummary] = None
 }
