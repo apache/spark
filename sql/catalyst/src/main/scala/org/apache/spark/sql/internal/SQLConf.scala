@@ -561,23 +561,6 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
-  val HIVE_FILE_INPUT_FORMAT_ENABLED = buildConf("spark.sql.hive.fileInputFormat.enabled")
-    .doc("When true, enable optimizing the `fileInputFormat` in Spark SQL.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val HIVE_FILE_INPUT_FORMAT_SPLIT_MAXSIZE =
-    buildConf("spark.sql.hive.fileInputFormat.split.maxsize")
-      .doc("The maxsize of per split while reading Hive tables.")
-      .longConf
-      .createWithDefault(128 * 1024 * 1024)
-
-  val HIVE_FILE_INPUT_FORMAT_SPLIT_MINSIZE =
-    buildConf("spark.sql.hive.fileInputFormat.split.minsize")
-      .doc("The minsize of per split while reading Hive tables.")
-      .longConf
-      .createWithDefault(32 * 1024 * 1024)
-
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
@@ -1697,12 +1680,6 @@ class SQLConf extends Serializable with Logging {
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
-
-  def fileInputFormatEnabled: Boolean = getConf(HIVE_FILE_INPUT_FORMAT_ENABLED)
-
-  def fileInputFormatSplitMaxsize: Long = getConf(HIVE_FILE_INPUT_FORMAT_SPLIT_MAXSIZE)
-
-  def fileInputFormatSplitMinsize: Long = getConf(HIVE_FILE_INPUT_FORMAT_SPLIT_MINSIZE)
 
   def compareDateTimestampInTimestamp : Boolean = getConf(COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP)
 

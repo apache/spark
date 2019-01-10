@@ -123,26 +123,7 @@ class HadoopTableReader(
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
     // logDebug("Table input: %s".format(tablePath))
-    var ifc = hiveTable.getInputFormatClass
-      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    if (conf.fileInputFormatEnabled) {
-      hadoopConf.set("mapreduce.input.fileinputformat.split.maxsize",
-        conf.fileInputFormatSplitMaxsize.toString)
-      hadoopConf.set("mapreduce.input.fileinputformat.split.minsize",
-        conf.fileInputFormatSplitMinsize.toString)
-      if ("org.apache.hadoop.mapreduce.lib.input.TextInputFormat"
-        .equals(hiveTable.getInputFormatClass.getName)) {
-        ifc = Utils.classForName(
-          "org.apache.hadoop.mapreduce.lib.input.CombineTextInputFormat")
-          .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-      }
-      if ("org.apache.hadoop.mapred.TextInputFormat"
-        .equals(hiveTable.getInputFormatClass.getName)) {
-        ifc = Utils.classForName(
-          "org.apache.hadoop.mapred.lib.CombineTextInputFormat")
-          .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-      }
-    }
+    val ifc = getAndOptimizeInput(hiveTable.getInputFormatClass.getName)
     val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc)
 
     val attrsWithIndex = attributes.zipWithIndex
@@ -220,26 +201,7 @@ class HadoopTableReader(
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
-      var ifc = partDesc.getInputFileFormatClass
-        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-      if (conf.fileInputFormatEnabled) {
-        hadoopConf.set("mapreduce.input.fileinputformat.split.maxsize",
-          conf.fileInputFormatSplitMaxsize.toString)
-        hadoopConf.set("mapreduce.input.fileinputformat.split.minsize",
-          conf.fileInputFormatSplitMinsize.toString)
-        if ("org.apache.hadoop.mapreduce.lib.input.TextInputFormat"
-          .equals(partDesc.getInputFileFormatClass.getName)) {
-          ifc = Utils.classForName(
-            "org.apache.hadoop.mapreduce.lib.input.CombineTextInputFormat")
-            .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-        }
-        if ("org.apache.hadoop.mapred.TextInputFormat"
-          .equals(partDesc.getInputFileFormatClass.getName)) {
-          ifc = Utils.classForName(
-            "org.apache.hadoop.mapred.lib.CombineTextInputFormat")
-            .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-        }
-      }
+      val ifc = getAndOptimizeInput(partDesc.getInputFileFormatClassName)
       // Get partition field info
       val partSpec = partDesc.getPartSpec
       val partProps = partDesc.getProperties
@@ -346,6 +308,35 @@ class HadoopTableReader(
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
+  }
+
+  /**
+    * If `spark.sql.hive.fileInputFormat.enabled` is true, this function will optimize the input
+    * method(including format and the size of splits) while reading Hive tables.
+    */
+  private def getAndOptimizeInput(
+                               inputClassName: String): Class[InputFormat[Writable, Writable]] = {
+    var ifc = Utils.classForName(inputClassName)
+      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+    if (conf.getConf(HiveUtils.HIVE_FILE_INPUT_FORMAT_ENABLED)) {
+      hadoopConf.set("mapreduce.input.fileinputformat.split.maxsize",
+        conf.getConf(HiveUtils.HIVE_FILE_INPUT_FORMAT_SPLIT_MAXSIZE).toString)
+      hadoopConf.set("mapreduce.input.fileinputformat.split.minsize",
+        conf.getConf(HiveUtils.HIVE_FILE_INPUT_FORMAT_SPLIT_MINSIZE).toString)
+      if ("org.apache.hadoop.mapreduce.lib.input.TextInputFormat"
+        .equals(inputClassName)) {
+        ifc = Utils.classForName(
+          "org.apache.hadoop.mapreduce.lib.input.CombineTextInputFormat")
+          .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+      }
+      if ("org.apache.hadoop.mapred.TextInputFormat"
+        .equals(inputClassName)) {
+        ifc = Utils.classForName(
+          "org.apache.hadoop.mapred.lib.CombineTextInputFormat")
+          .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+      }
+    }
+    ifc
   }
 }
 
