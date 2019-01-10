@@ -226,7 +226,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TimeZone.getTimeZone("US/Pacific"))
 
     // boundary cases
-    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645926784)
+    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645969984)
     checkHiveHashForTimestampType("9999-01-01 00:00:00", -1081818240)
 
     // epoch
