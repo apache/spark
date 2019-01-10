@@ -86,7 +86,7 @@ public class ExternalShuffleBlockHandlerSuite {
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(block0Marker);
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(block1Marker);
     ByteBuffer openBlocks = new OpenBlocks("app0", "exec1",
-      new String[] { "shuffle_0_0_0", "shuffle_0_0_1" }, false)
+      new String[] { "shuffle_0_0_0", "shuffle_0_0_1" })
       .toByteBuffer();
     handler.receive(client, openBlocks, callback);
 

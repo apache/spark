@@ -35,6 +35,10 @@ public class StreamHandle extends BlockTransferMessage {
   public final int numChunks;
   public final int[] chunkSizes;
 
+  public StreamHandle(long streamId, int numChunks) {
+    this(streamId, numChunks, new int[0]);
+  }
+
   public StreamHandle(long streamId, int numChunks, int[] chunkSizes) {
     this.streamId = streamId;
     this.numChunks = numChunks;

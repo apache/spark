@@ -33,11 +33,12 @@ public class BlockTransferMessagesSuite {
   @Test
   public void serializeOpenShuffleBlocks() {
     checkSerializeDeserialize(new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, false));
+    checkSerializeDeserialize(new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true));
     checkSerializeDeserialize(new RegisterExecutor("app-1", "exec-2", new ExecutorShuffleInfo(
       new String[] { "/local1", "/local2" }, 32, "MyShuffleManager")));
     checkSerializeDeserialize(new UploadBlock("app-1", "exec-2", "block-3", new byte[] { 1, 2 },
       new byte[] { 4, 5, 6, 7} ));
-    checkSerializeDeserialize(new StreamHandle(12345, 16, new int[0]));
+    checkSerializeDeserialize(new StreamHandle(12345, 16));
   }
 
   private void checkSerializeDeserialize(BlockTransferMessage msg) {
@@ -87,7 +88,7 @@ public class BlockTransferMessagesSuite {
     checkStreamHandle(streamHandle, testStreamHandle);
     assertArrayEquals(streamHandle.chunkSizes, new int[0]);
 
-    streamHandle = new StreamHandle(12345, 16, new int[0]);
+    streamHandle = new StreamHandle(12345, 16);
     testStreamHandle = (TestStreamHandle) fromByteBuffer(streamHandle.toByteBuffer());
     checkStreamHandle(streamHandle, testStreamHandle);
   }

@@ -40,6 +40,13 @@ public class OpenBlocks extends BlockTransferMessage {
   public OpenBlocks(
       String appId,
       String execId,
+      String[] blockIds) {
+    this(appId, execId, blockIds, false);
+  }
+
+  public OpenBlocks(
+      String appId,
+      String execId,
       String[] blockIds,
       boolean shuffleBlockBatchFetch) {
     this.appId = appId;
