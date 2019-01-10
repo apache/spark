@@ -90,6 +90,8 @@ private[spark] class SparkAppConf {
   override def toString: String = map.toString
 
   def toStringArray: Iterable[String] = map.toList.flatMap(t => List("--conf", s"${t._1}=${t._2}"))
+
+  def remove(key: String): Unit = map.remove(key)
 }
 
 private[spark] case class SparkAppArguments(

@@ -93,6 +93,95 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
     runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
   }
+
+  test("Run SparkPi with driver and executor image specified independently", k8sTestTag) {
+    sparkAppConf.remove("spark.kubernetes.container.image")
+    sparkAppConf.set("spark.kubernetes.driver.container.image", image)
+    sparkAppConf.set("spark.kubernetes.executor.container.image", image)
+    runSparkPiAndVerifyCompletion()
+  }
+
+  test("Run SparkPi with custom cpu requirements", k8sTestTag) {
+    sparkAppConf.set("spark.kubernetes.driver.limit.cores", "2")
+    sparkAppConf.set("spark.kubernetes.executor.limit.cores", "2")
+    sparkAppConf.set("spark.driver.cores", ".8")
+    sparkAppConf.set("spark.kubernetes.executor.request.cores", ".5")
+
+    runSparkPiAndVerifyCompletion(
+      driverPodChecker = (driverPod: Pod) => {
+        assert(driverPod.getSpec.getContainers.get(0).getResources.getLimits.get("cpu")
+          .getAmount === "2")
+        assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("cpu")
+          .getAmount === "800m")
+      },
+      executorPodChecker = (executorPod: Pod) => {
+        assert(executorPod.getSpec.getContainers.get(0).getResources.getLimits.get("cpu")
+          .getAmount === "2")
+        assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("cpu")
+          .getAmount === "500m")
+      }
+    )
+  }
+
+  test("Run SparkPi with custom memory and memory overhead factor requirements", k8sTestTag) {
+    val memDriver = 512
+    val memExecutor = 256
+    val memOverheadConstant = 0.8
+    val minMemoryOverhead = 384
+    sparkAppConf.set("spark.driver.memory", s"${memDriver}m")
+    sparkAppConf.set("spark.executor.memory", s"${memExecutor}m")
+    sparkAppConf.set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
+
+
+    runSparkPiAndVerifyCompletion(
+      driverPodChecker = (driverPod: Pod) => {
+        val memory = s"${(memDriver + math.max(memDriver * memOverheadConstant,
+          minMemoryOverhead)).toInt}Mi"
+        assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory")
+          .getAmount === memory)
+        assert(driverPod.getSpec.getContainers.get(0).getResources.getLimits.get("memory")
+          .getAmount === memory)
+      },
+      executorPodChecker = (executorPod: Pod) => {
+        val memory = s"${(memExecutor + math.max(memExecutor * memOverheadConstant,
+          minMemoryOverhead)).toInt}Mi"
+        assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory")
+          .getAmount === memory)
+        assert(executorPod.getSpec.getContainers.get(0).getResources.getLimits.get("memory")
+          .getAmount === memory)
+      }
+    )
+  }
+
+  test("Run SparkPi with custom memory and memory overhead requirements", k8sTestTag) {
+    val memDriver = 512
+    val memExecutor = 256
+    val memOverheadConstant = 0.8
+    val memDriverOverhead = 200
+    val memExecutorOverhead = 100
+    sparkAppConf.set("spark.driver.memory", s"${memDriver}m")
+    sparkAppConf.set("spark.executor.memory", s"${memExecutor}m")
+    sparkAppConf.set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
+    sparkAppConf.set("spark.driver.memoryOverhead", "200")
+    sparkAppConf.set("spark.executor.memoryOverhead", "100")
+
+    runSparkPiAndVerifyCompletion(
+      driverPodChecker = (driverPod: Pod) => {
+        val memory = s"${memDriver + memDriverOverhead}Mi"
+        assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory")
+          .getAmount === memory)
+        assert(driverPod.getSpec.getContainers.get(0).getResources.getLimits.get("memory")
+          .getAmount === memory)
+      },
+      executorPodChecker = (executorPod: Pod) => {
+        val memory = s"${memExecutor + memExecutorOverhead}Mi"
+        assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory")
+          .getAmount === memory)
+        assert(executorPod.getSpec.getContainers.get(0).getResources.getLimits.get("memory")
+          .getAmount === memory)
+      }
+    )
+  }
 }
 
 private[spark] object BasicTestsSuite {
