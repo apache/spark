@@ -27,6 +27,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests.IS_TESTING
 
 private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
 
@@ -67,7 +68,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.executors.instances", "1")
       .set("spark.app.name", "spark-test-app")
       .set("spark.ui.enabled", "true")
-      .set("spark.testing", "false")
+      .set(IS_TESTING.key, "false")
       .set("spark.kubernetes.submission.waitAppCompletion", "false")
       .set("spark.kubernetes.authenticate.driver.serviceAccountName", serviceAccountName)
   }

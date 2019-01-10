@@ -47,6 +47,7 @@ import org.scalatest.selenium.WebBrowser
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
@@ -81,7 +82,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val conf = new SparkConf()
       .set(HISTORY_LOG_DIR, logDir)
       .set(UPDATE_INTERVAL_S.key, "0")
-      .set("spark.testing", "true")
+      .set(IS_TESTING, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
       .set(EVENT_LOG_PROCESS_TREE_METRICS, true)
@@ -400,7 +401,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
    */
   test("security manager starts with spark.authenticate set") {
     val conf = new SparkConf()
-      .set("spark.testing", "true")
+      .set(IS_TESTING, true)
       .set(SecurityManager.SPARK_AUTH_CONF, "true")
     HistoryServer.createSecurityManager(conf)
   }
@@ -422,7 +423,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(UPDATE_INTERVAL_S.key, "1s")
       .set(EVENT_LOG_ENABLED, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-      .remove("spark.testing")
+      .remove(IS_TESTING)
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
 
