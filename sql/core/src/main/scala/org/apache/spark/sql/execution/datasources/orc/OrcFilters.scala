@@ -84,14 +84,16 @@ private[sql] object OrcFilters {
     val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- buildTree(convertibleFilters(schema, filters))
+      conjunction <- buildTree(convertibleFilters(schema, dataTypeMap, filters))
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
     } yield builder.build()
   }
 
-  def convertibleFilters(schema: StructType, filters: Seq[Filter]): Seq[Filter] = {
-    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+  def convertibleFilters(
+      schema: StructType,
+      dataTypeMap: Map[String, DataType],
+      filters: Seq[Filter]): Seq[Filter] = {
     for {
       filter <- filters
       _ <- buildSearchArgument(dataTypeMap, filter, newBuilder())

@@ -34,10 +34,8 @@ object FilePartitionUtil extends Logging {
     /** Close the current partition and move to the next. */
     def closePartition(): Unit = {
       if (currentFiles.nonEmpty) {
-        val newPartition =
-          FilePartition(
-            partitions.size,
-            currentFiles.toArray.toSeq) // Copy to a new Array.
+        // Copy to a new Array.
+        val newPartition = FilePartition(partitions.size, currentFiles.toArray.toSeq)
         partitions += newPartition
       }
       currentFiles.clear()

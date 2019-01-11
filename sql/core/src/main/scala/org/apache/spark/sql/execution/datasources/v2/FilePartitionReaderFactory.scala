@@ -25,14 +25,18 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
-    val iter = filePartition.files.toIterator.map(buildReader)
+    val iter = filePartition.files.toIterator.map { file =>
+      new PartitionedFileReader(file, buildReader(file))
+    }
     new FilePartitionReader[InternalRow](iter)
   }
 
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
-    val iter = filePartition.files.toIterator.map(buildColumnarReader)
+    val iter = filePartition.files.toIterator.map { file =>
+      new PartitionedFileReader(file, buildColumnarReader(file))
+    }
     new FilePartitionReader[ColumnarBatch](iter)
   }
 
@@ -41,4 +45,17 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
   def buildColumnarReader(partitionedFile: PartitionedFile): PartitionReader[ColumnarBatch] = {
     throw new UnsupportedOperationException("Cannot create columnar reader.")
   }
+}
+
+// A compound class for combining a input partitioned file and its corresponding file.
+private[v2] class PartitionedFileReader[T](
+    file: PartitionedFile,
+    reader: PartitionReader[T]) extends PartitionReader[T] {
+  override def next(): Boolean = reader.next()
+
+  override def get(): T = reader.get()
+
+  override def close(): Unit = reader.close()
+
+  override def toString: String = file.toString
 }

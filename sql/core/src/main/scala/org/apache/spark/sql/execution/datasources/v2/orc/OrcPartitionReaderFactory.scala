@@ -27,14 +27,13 @@ import org.apache.orc.{OrcConf, OrcFile}
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
-import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources.{PartitionedFile, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcUtils}
-import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionRecordDReaderWithProject, PartitionRecordReader}
+import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader}
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -98,7 +97,7 @@ case class OrcPartitionReaderFactory(
         (value: OrcStruct) =>
           unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues))
       }
-      new PartitionRecordDReaderWithProject(orcRecordReader, projection)
+      new PartitionRecordReaderWithProject(orcRecordReader, projection)
     }
   }
 

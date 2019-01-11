@@ -22,9 +22,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.PartitionReader
 
-class FilePartitionReader[T](
-    readers: Iterator[PartitionReader[T]]) extends PartitionReader[T] with Logging {
-  private var currentReader: PartitionReader[T] = null
+class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
+  extends PartitionReader[T] with Logging {
+  private var currentReader: PartitionedFileReader[T] = null
 
   private val sqlConf = SQLConf.get
   private def ignoreMissingFiles = sqlConf.ignoreMissingFiles
@@ -36,6 +36,7 @@ class FilePartitionReader[T](
         if (ignoreMissingFiles || ignoreCorruptFiles) {
           try {
             currentReader = readers.next()
+            logInfo(s"Reading file $currentReader")
           } catch {
             case e: FileNotFoundException if ignoreMissingFiles =>
               logWarning(s"Skipped missing file: $currentReader", e)
@@ -51,6 +52,7 @@ class FilePartitionReader[T](
           }
         } else {
           currentReader = readers.next()
+          logInfo(s"Reading file $currentReader")
         }
       } else {
         return false

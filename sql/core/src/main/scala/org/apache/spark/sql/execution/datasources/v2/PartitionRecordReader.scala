@@ -30,7 +30,7 @@ class PartitionRecordReader[T](
   override def close(): Unit = rowReader.close()
 }
 
-class PartitionRecordDReaderWithProject[X, T](
+class PartitionRecordReaderWithProject[X, T](
     private[this] var rowReader: RecordReader[_, X],
     project: X => T) extends PartitionReader[T] {
   override def next(): Boolean = rowReader.nextKeyValue()

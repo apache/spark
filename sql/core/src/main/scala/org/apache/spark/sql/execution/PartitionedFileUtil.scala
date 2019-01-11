@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{PartitionedFile, _}
+import org.apache.spark.sql.execution.datasources._
 
 object PartitionedFileUtil {
   def splitFiles(
@@ -46,8 +46,7 @@ object PartitionedFileUtil {
   def getPartitionedFile(
       file: FileStatus,
       filePath: Path,
-      partitionValues: InternalRow
-  ): PartitionedFile = {
+      partitionValues: InternalRow): PartitionedFile = {
     val hosts = getBlockHosts(getBlockLocations(file), 0, file.getLen)
     PartitionedFile(partitionValues, filePath.toUri.toString, 0, file.getLen, hosts)
   }

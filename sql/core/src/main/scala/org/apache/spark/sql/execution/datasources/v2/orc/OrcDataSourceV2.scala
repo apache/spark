@@ -28,17 +28,18 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "orc"
 
-  private def geTableName(options: DataSourceOptions): String = {
+  private def getTableName(options: DataSourceOptions): String = {
     shortName() + ":" + options.paths().mkString(";")
   }
+
   override def getTable(options: DataSourceOptions): Table = {
-    val tableName = geTableName(options)
+    val tableName = getTableName(options)
     val fileIndex = getFileIndex(options, None)
     OrcTable(tableName, sparkSession, fileIndex, None)
   }
 
   override def getTable(options: DataSourceOptions, schema: StructType): Table = {
-    val tableName = geTableName(options)
+    val tableName = getTableName(options)
     val fileIndex = getFileIndex(options, Some(schema))
     OrcTable(tableName, sparkSession, fileIndex, Some(schema))
   }

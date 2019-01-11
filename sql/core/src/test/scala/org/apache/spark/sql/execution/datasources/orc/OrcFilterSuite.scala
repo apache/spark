@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -429,77 +428,3 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
   }
 }
 
-class OrcV1FilterSuite extends OrcFilterSuite {
-
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.DISABLED_V2_FILE_READS, "orc")
-
-  override def checkFilterPredicate(
-      df: DataFrame,
-      predicate: Predicate,
-      checker: (SearchArgument) => Unit): Unit = {
-    val output = predicate.collect { case a: Attribute => a }.distinct
-    val query = df
-      .select(output.map(e => Column(e)): _*)
-      .where(Column(predicate))
-
-    var maybeRelation: Option[HadoopFsRelation] = None
-    val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _, _)) =>
-        maybeRelation = Some(orcRelation)
-        filters
-    }.flatten.reduceLeftOption(_ && _)
-    assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
-
-    val (_, selectedFilters, _) =
-      DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-    assert(selectedFilters.nonEmpty, "No filter is pushed down")
-
-    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters)
-    assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $selectedFilters")
-    checker(maybeFilter.get)
-  }
-
-  override def checkFilterPredicate
-  (predicate: Predicate, filterOperator: PredicateLeaf.Operator)
-    (implicit df: DataFrame): Unit = {
-    def checkComparisonOperator(filter: SearchArgument) = {
-      val operator = filter.getLeaves.asScala
-      assert(operator.map(_.getOperator).contains(filterOperator))
-    }
-    checkFilterPredicate(df, predicate, checkComparisonOperator)
-  }
-
-  override def checkFilterPredicate
-  (predicate: Predicate, stringExpr: String)
-    (implicit df: DataFrame): Unit = {
-    def checkLogicalOperator(filter: SearchArgument) = {
-      assert(filter.toString == stringExpr)
-    }
-    checkFilterPredicate(df, predicate, checkLogicalOperator)
-  }
-
-  override def checkNoFilterPredicate
-  (predicate: Predicate, noneSupported: Boolean = false)
-    (implicit df: DataFrame): Unit = {
-    val output = predicate.collect { case a: Attribute => a }.distinct
-    val query = df
-      .select(output.map(e => Column(e)): _*)
-      .where(Column(predicate))
-
-    var maybeRelation: Option[HadoopFsRelation] = None
-    val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _, _)) =>
-        maybeRelation = Some(orcRelation)
-        filters
-    }.flatten.reduceLeftOption(_ && _)
-    assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
-
-    val (_, selectedFilters, _) =
-      DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-    assert(selectedFilters.nonEmpty, "No filter is pushed down")
-
-    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters)
-    assert(maybeFilter.isEmpty, s"Could generate filter predicate for $selectedFilters")
-  }
-}
