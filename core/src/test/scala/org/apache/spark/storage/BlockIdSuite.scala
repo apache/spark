@@ -64,7 +64,7 @@ class BlockIdSuite extends SparkFunSuite {
     assertSame(id, BlockId(id.toString))
   }
 
-  test("continuous shuffle block") {
+  test("shuffle block batch") {
     val id = ShuffleBlockBatchId(1, 2, 3, 4)
     assertSame(id, ShuffleBlockBatchId(1, 2, 3, 4))
     assertDifferent(id, ShuffleBlockBatchId(3, 2, 3, 4))

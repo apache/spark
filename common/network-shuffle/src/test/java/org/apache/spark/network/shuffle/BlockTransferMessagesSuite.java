@@ -58,7 +58,7 @@ public class BlockTransferMessagesSuite {
     }
   }
 
-  private void checkOpenBlocks(OpenBlocks ob1, TestOpenBlocks ob2) {
+  private void verifyOpenBlocks(OpenBlocks ob1, TestOpenBlocks ob2) {
     assertEquals(ob1.appId, ob2.appId);
     assertEquals(ob1.execId, ob2.execId);
     assertArrayEquals(ob1.blockIds, ob2.blockIds);
@@ -68,15 +68,15 @@ public class BlockTransferMessagesSuite {
   public void checkOpenBlocksBackwardCompatibility() {
     TestOpenBlocks testOpenBlocks = new TestOpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" });
     OpenBlocks openBlocks = (OpenBlocks)BlockTransferMessage.Decoder.fromByteBuffer(testOpenBlocks.toByteBuffer());
-    checkOpenBlocks(openBlocks, testOpenBlocks);
+    verifyOpenBlocks(openBlocks, testOpenBlocks);
     assertEquals(openBlocks.shuffleBlockBatchFetch, false);
 
     openBlocks = new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true);
     testOpenBlocks = (TestOpenBlocks)fromByteBuffer(openBlocks.toByteBuffer());
-    checkOpenBlocks(openBlocks, testOpenBlocks);
+    verifyOpenBlocks(openBlocks, testOpenBlocks);
   }
 
-  private void checkStreamHandle(StreamHandle sh1, TestStreamHandle sh2) {
+  private void verifyStreamHandle(StreamHandle sh1, TestStreamHandle sh2) {
     assertEquals(sh1.streamId, sh2.streamId);
     assertEquals(sh1.numChunks, sh2.numChunks);
   }
@@ -85,12 +85,12 @@ public class BlockTransferMessagesSuite {
   public void checkStreamHandleBackwardCompatibility() {
     TestStreamHandle testStreamHandle = new TestStreamHandle(12345, 16);
     StreamHandle streamHandle = (StreamHandle)BlockTransferMessage.Decoder.fromByteBuffer(testStreamHandle.toByteBuffer());
-    checkStreamHandle(streamHandle, testStreamHandle);
+    verifyStreamHandle(streamHandle, testStreamHandle);
     assertArrayEquals(streamHandle.chunkSizes, new int[0]);
 
     streamHandle = new StreamHandle(12345, 16);
     testStreamHandle = (TestStreamHandle) fromByteBuffer(streamHandle.toByteBuffer());
-    checkStreamHandle(streamHandle, testStreamHandle);
+    verifyStreamHandle(streamHandle, testStreamHandle);
   }
 
 }

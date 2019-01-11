@@ -191,8 +191,8 @@ public class OneForOneBlockFetcher {
 
     @Override
     public void onComplete(String streamId) throws IOException {
-      listener.onBlockFetchSuccess(Arrays.copyOfRange(
-        blockIds, blockIdIndices[chunkIndex], blockIdIndices[chunkIndex + 1]), channel.closeAndRead());
+      listener.onBlockFetchSuccess(Arrays.copyOfRange(blockIds, blockIdIndices[chunkIndex],
+        blockIdIndices[chunkIndex + 1]), channel.closeAndRead());
       if (!downloadFileManager.registerTempFileToClean(targetFile)) {
         targetFile.delete();
       }

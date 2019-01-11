@@ -37,10 +37,7 @@ public class OpenBlocks extends BlockTransferMessage {
   // (corrupted), openBlocks could contain ShuffleBlockBatchId.
   public final boolean shuffleBlockBatchFetch;
 
-  public OpenBlocks(
-      String appId,
-      String execId,
-      String[] blockIds) {
+  public OpenBlocks(String appId, String execId, String[] blockIds) {
     this(appId, execId, blockIds, false);
   }
 
