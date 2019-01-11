@@ -78,9 +78,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   public void addFetchAsStreamRequest(
-    StreamChunkId streamChunkId,
-    StreamCallback callback) {
-    updateTimeOfLastRequest();
+      StreamChunkId streamChunkId,
+      StreamCallback callback) {
+      updateTimeOfLastRequest();
     outstandingFetchAsStreams.put(streamChunkId, callback);
   }
 

@@ -57,12 +57,12 @@ public class OneForOneBlockFetcher {
   private StreamHandle streamHandle = null;
 
   public OneForOneBlockFetcher(
-    TransportClient client,
-    String appId,
-    String execId,
-    String[] blockIds,
-    BlockFetchingListener listener,
-    TransportConf transportConf) {
+      TransportClient client,
+      String appId,
+      String execId,
+      String[] blockIds,
+      BlockFetchingListener listener,
+      TransportConf transportConf) {
     this(client, appId, execId, blockIds, listener, transportConf, null);
   }
 

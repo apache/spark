@@ -165,7 +165,7 @@ public class OneForOneBlockFetcherSuite {
         fail("Unexpected failure");
       }
       return null;
-    }).when(client).fetchChunk(anyLong(), anyInt(), any());
+    }).when(client).fetchChunk(anyLong(), anyInt(), any(), any());
 
     fetcher.start();
     return listener;
