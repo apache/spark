@@ -77,11 +77,16 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("WholeStageCodegen metrics") {
-    // Assume the execution plan is
-    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
+    // Assume the execution plan with node id is
+    // WholeStageCodegen(nodeId = 0)
+    //   Filter(nodeId = 1)
+    //     Range(nodeId = 2)
     // TODO: update metrics in generated operators
     val ds = spark.range(10).filter('id < 5)
-    testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
+    testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
+      0L -> (("WholeStageCodegen", Map(
+        "duration total (min, med, max)" -> {_.toString.matches(timingMetricPattern)})))
+    ), true)
   }
 
   test("Aggregate metrics") {
@@ -194,10 +199,20 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("Sort metrics") {
-    // Assume the execution plan is
-    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val ds = spark.range(10).sort('id)
-    testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
+    // Assume the execution plan with node id is
+    // Sort(nodeId = 0)
+    //   Exchange(nodeId = 1)
+    //     Project(nodeId = 2)
+    //       LocalTableScan(nodeId = 3)
+    // Because of SPARK-25267, ConvertToLocalRelation is disabled in the test cases of sql/core,
+    // so Project here is not collapsed into LocalTableScan.
+    val df = Seq(1, 3, 2).toDF("id").sort('id)
+    testSparkPlanMetricsWithPredicates(df, 2, Map(
+      0L -> (("Sort", Map(
+        "sort time total (min, med, max)" -> {_.toString.matches(timingMetricPattern)},
+        "peak memory total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)},
+        "spill size total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)})))
+    ))
   }
 
   test("SortMergeJoin metrics") {

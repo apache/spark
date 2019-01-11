@@ -34,7 +34,7 @@ import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatcher
-import org.mockito.Matchers.{any, argThat}
+import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
@@ -44,6 +44,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.security.GroupMappingServiceProvider
@@ -294,7 +295,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
     val provider = new FsHistoryProvider(
-      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, true, None,
@@ -379,7 +380,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val maxAge = TimeUnit.SECONDS.toMillis(40)
     val clock = new ManualClock(0)
     val provider = new FsHistoryProvider(
-      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("inProgressApp1", None, inProgress = true)
     writeFile(log1, true, None,
@@ -462,8 +463,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val maxAge = TimeUnit.SECONDS.toSeconds(40)
     val clock = new ManualClock(0)
     val testConf = new SparkConf()
-    testConf.set("spark.history.fs.logDirectory",
-      Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
+    testConf.set(HISTORY_LOG_DIR, Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
     testConf.set(DRIVER_LOG_DFS_DIR, testDir.getAbsolutePath())
     testConf.set(DRIVER_LOG_CLEANER_ENABLED, true)
     testConf.set(DRIVER_LOG_CLEANER_INTERVAL, maxAge / 4)
@@ -645,12 +645,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test both history ui admin acls and application acls are configured.
     val conf1 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.history.ui.admin.acls", "user1,user2")
-      .set("spark.history.ui.admin.acls.groups", "group1")
-      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+      .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, Seq("group1"))
+      .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
 
-    createAndCheck(conf1, ("spark.admin.acls", "user"), ("spark.admin.acls.groups", "group")) {
+    createAndCheck(conf1, (ADMIN_ACLS.key, "user"), (ADMIN_ACLS_GROUPS.key, "group")) {
       securityManager =>
         // Test whether user has permission to access UI.
         securityManager.checkUIViewPermissions("user1") should be (true)
@@ -667,10 +667,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test only history ui admin acls are configured.
     val conf2 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.history.ui.admin.acls", "user1,user2")
-      .set("spark.history.ui.admin.acls.groups", "group1")
-      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+      .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, Seq("group1"))
+      .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf2) { securityManager =>
       // Test whether user has permission to access UI.
       securityManager.checkUIViewPermissions("user1") should be (true)
@@ -687,8 +687,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test neither history ui admin acls nor application acls are configured.
      val conf3 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+      .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
+      .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf3) { securityManager =>
       // Test whether user has permission to access UI.
       securityManager.checkUIViewPermissions("user1") should be (false)
@@ -934,7 +934,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
       argThat(new ArgumentMatcher[Path]() {
-        override def matches(path: Any): Boolean = {
+        override def matches(path: Path): Boolean = {
           path.asInstanceOf[Path].getName.toLowerCase(Locale.ROOT) == "accessdenied"
         }
       }))
@@ -1036,7 +1036,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   private def createTestConf(inMemory: Boolean = false): SparkConf = {
     val conf = new SparkConf()
-      .set(EVENT_LOG_DIR, testDir.getAbsolutePath())
+      .set(HISTORY_LOG_DIR, testDir.getAbsolutePath())
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {

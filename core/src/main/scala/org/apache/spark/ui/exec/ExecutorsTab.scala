@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
@@ -29,7 +30,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 
   private def init(): Unit = {
     val threadDumpEnabled =
-      parent.sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
+      parent.sc.isDefined && parent.conf.get(UI_THREAD_DUMPS_ENABLED)
 
     attachPage(new ExecutorsPage(this, threadDumpEnabled))
     if (threadDumpEnabled) {

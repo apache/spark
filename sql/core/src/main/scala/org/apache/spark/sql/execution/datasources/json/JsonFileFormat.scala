@@ -189,5 +189,5 @@ private[json] class JsonOutputWriter(
     gen.writeLineEnding()
   }
 
-  override def close(): Unit = jacksonGenerator.map(_.close())
+  override def close(): Unit = jacksonGenerator.foreach(_.close())
 }

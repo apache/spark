@@ -242,7 +242,8 @@ class BisectingKMeans private (
     norms.unpersist(false)
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters, dMeasure)
-    new BisectingKMeansModel(root, this.distanceMeasure)
+    val totalCost = root.leafNodes.map(_.cost).sum
+    new BisectingKMeansModel(root, this.distanceMeasure, totalCost)
   }
 
   /**

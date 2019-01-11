@@ -49,7 +49,7 @@ private[spark] class HiveDelegationTokenProvider
       new HiveConf(hadoopConf, classOf[HiveConf])
     } catch {
       case NonFatal(e) =>
-        logDebug("Fail to create Hive Configuration", e)
+        logWarning("Fail to create Hive Configuration", e)
         hadoopConf
       case e: NoClassDefFoundError =>
         logWarning(classNotFoundErrorStr)
@@ -67,11 +67,17 @@ private[spark] class HiveDelegationTokenProvider
     // Other modes (such as client with or without keytab, or cluster mode with keytab) do not need
     // a delegation token, since there's a valid kerberos TGT for the right user available to the
     // driver, which is the only process that connects to the HMS.
-    val deployMode = sparkConf.get("spark.submit.deployMode", "client")
-    UserGroupInformation.isSecurityEnabled &&
+    //
+    // Note that this means Hive tokens are not re-created periodically by the token manager.
+    // This is because HMS connections are only performed by the Spark driver, and the driver
+    // either has a TGT, in which case it does not need tokens, or it has a token created
+    // elsewhere, in which case it cannot create new ones. The check for an existing token avoids
+    // printing an exception to the logs in the latter case.
+    val currentToken = UserGroupInformation.getCurrentUser().getCredentials().getToken(tokenAlias)
+    currentToken == null && UserGroupInformation.isSecurityEnabled &&
       hiveConf(hadoopConf).getTrimmed("hive.metastore.uris", "").nonEmpty &&
       (SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser()) ||
-        (deployMode == "cluster" && !sparkConf.contains(KEYTAB)))
+        (!Utils.isClientMode(sparkConf) && !sparkConf.contains(KEYTAB)))
   }
 
   override def obtainDelegationTokens(
@@ -98,13 +104,13 @@ private[spark] class HiveDelegationTokenProvider
         val hive2Token = new Token[DelegationTokenIdentifier]()
         hive2Token.decodeFromUrlString(tokenStr)
         logDebug(s"Get Token from hive metastore: ${hive2Token.toString}")
-        creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
+        creds.addToken(tokenAlias, hive2Token)
       }
 
       None
     } catch {
       case NonFatal(e) =>
-        logDebug(s"Failed to get token from service $serviceName", e)
+        logWarning(s"Failed to get token from service $serviceName", e)
         None
       case e: NoClassDefFoundError =>
         logWarning(classNotFoundErrorStr)
@@ -134,4 +140,6 @@ private[spark] class HiveDelegationTokenProvider
       case e: UndeclaredThrowableException => throw Option(e.getCause()).getOrElse(e)
     }
   }
+
+  private def tokenAlias: Text = new Text("hive.server2.delegation.token")
 }

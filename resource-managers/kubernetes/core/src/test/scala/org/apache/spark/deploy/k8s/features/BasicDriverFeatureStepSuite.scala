@@ -26,7 +26,9 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
@@ -45,7 +47,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
-      .set("spark.driver.cores", "2")
+      .set(DRIVER_CORES, 2)
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(DRIVER_MEMORY.key, "256M")
       .set(DRIVER_MEMORY_OVERHEAD, 200L)
@@ -68,12 +70,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val expectedPortNames = Set(
       containerPort(DRIVER_PORT_NAME, DEFAULT_DRIVER_PORT),
       containerPort(BLOCK_MANAGER_PORT_NAME, DEFAULT_BLOCKMANAGER_PORT),
-      containerPort(UI_PORT_NAME, SparkUI.DEFAULT_PORT)
+      containerPort(UI_PORT_NAME, UI_PORT.defaultValue.get)
     )
     val foundPortNames = configuredPod.container.getPorts.asScala.toSet
     assert(expectedPortNames === foundPortNames)
 
-    assert(configuredPod.container.getEnv.size === 3)
     val envs = configuredPod.container
       .getEnv
       .asScala
@@ -82,6 +83,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     DRIVER_ENVS.foreach { case (k, v) =>
       assert(envs(v) === v)
     }
+    assert(envs(ENV_SPARK_USER) === Utils.getCurrentUserName())
 
     assert(configuredPod.pod.getSpec().getImagePullSecrets.asScala ===
       TEST_IMAGE_PULL_SECRET_OBJECTS)
