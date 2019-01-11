@@ -119,7 +119,6 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       .distinct.partition(!_.prunedIfAnyChildAccessed)
 
     optRootFields.filter { opt =>
-      val optFieldType = StructType(Array(opt.field))
       !rootFields.exists { root =>
         root.field.name == opt.field.name && {
           // Checking if current optional root field can be pruned.
@@ -134,6 +133,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
           //    to the optional root field only if they are the same. If they are, we can prune
           //    this optional root field too.
           val rootFieldType = StructType(Array(root.field))
+          val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
           merged.sameType(optFieldType)
         }
