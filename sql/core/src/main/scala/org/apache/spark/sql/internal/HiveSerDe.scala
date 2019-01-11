@@ -77,6 +77,7 @@ object HiveSerDe {
       case s if s.startsWith("org.apache.spark.sql.execution.datasources.parquet") => "parquet"
       case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
       case s if s.startsWith("org.apache.spark.sql.hive.orc") => "orc"
+      case s if s.startsWith("org.apache.spark.sql.execution.datasources.orc") => "orc"
       case s if s.equals("orcfile") => "orc"
       case s if s.equals("parquetfile") => "parquet"
       case s if s.equals("avrofile") => "avro"
