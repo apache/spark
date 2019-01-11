@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
