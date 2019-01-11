@@ -31,7 +31,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-
+import org.apache.spark.sql.internal.SQLConf
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
@@ -64,6 +64,9 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       sqlContext.newSession()
     }
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+    val parentSessionState = session.getSessionState
+    setConfMap(ctx, parentSessionState.getOverriddenConfigurations)
+    setConfMap(ctx, parentSessionState.getHiveVariables)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
       ctx.sql(s"use ${sessionConf.get("use:database")}")
     }
@@ -76,5 +79,13 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+  }
+
+  def setConfMap(ctx: SQLContext, confMap: java.util.Map[String, String]): Unit = {
+    val iterator = confMap.entrySet().iterator()
+    while (iterator.hasNext) {
+      val kv = iterator.next()
+      ctx.setConf(kv.getKey, kv.getValue)
+    }
   }
 }
