@@ -23,12 +23,6 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
-import scala.util.Try
-
-import org.apache.commons.lang3.time.FastDateFormat
-
-import org.apache.spark.sql.internal.SQLConf
-
 sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to microseconds.
@@ -79,37 +73,8 @@ class Iso8601TimestampFormatter(
   }
 }
 
-class LegacyTimestampFormatter(
-    pattern: String,
-    timeZone: TimeZone,
-    locale: Locale) extends TimestampFormatter {
-  @transient
-  private lazy val format = FastDateFormat.getInstance(pattern, timeZone, locale)
-
-  protected def toMillis(s: String): Long = format.parse(s).getTime
-
-  override def parse(s: String): Long = toMillis(s) * DateTimeUtils.MICROS_PER_MILLIS
-
-  override def format(us: Long): String = {
-    format.format(DateTimeUtils.toJavaTimestamp(us))
-  }
-}
-
-class LegacyFallbackTimestampFormatter(
-    pattern: String,
-    timeZone: TimeZone,
-    locale: Locale) extends LegacyTimestampFormatter(pattern, timeZone, locale) {
-  override def toMillis(s: String): Long = {
-    Try {super.toMillis(s)}.getOrElse(DateTimeUtils.stringToTime(s).getTime)
-  }
-}
-
 object TimestampFormatter {
   def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
-    if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackTimestampFormatter(format, timeZone, locale)
-    } else {
-      new Iso8601TimestampFormatter(format, timeZone, locale)
-    }
+    new Iso8601TimestampFormatter(format, timeZone, locale)
   }
 }
