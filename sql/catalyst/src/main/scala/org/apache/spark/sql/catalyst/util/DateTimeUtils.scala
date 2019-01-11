@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.time._
+import java.time.LocalDate
+import java.time.temporal.IsoFields
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.{Function => JFunction}
@@ -592,65 +594,12 @@ object DateTimeUtils {
   }
 
   /**
-   * Return the number of days since the start of 400 year period.
-   * The second year of a 400 year period (year 1) starts on day 365.
-   */
-  private[this] def yearBoundary(year: Int, isGregorian: Boolean): Int = {
-    if (isGregorian) {
-      year * 365 + ((year / 4) - (year / 100) + (year / 400))
-    } else {
-      year * 365 + (year / 4)
-    }
-  }
-
-  /**
-   * Calculates the number of years for the given number of days. This depends
-   * on a 400 year period.
-   * @param days days since the beginning of the 400 year period
-   * @param isGregorian indicates whether leap years should be calculated according to Gregorian
-   *                    (or Julian) calendar
-   * @return (number of year, days in year)
-   */
-  private[this] def numYears(days: Int, isGregorian: Boolean): (Int, Int) = {
-    val year = days / 365
-    val boundary = yearBoundary(year, isGregorian)
-    if (days > boundary) {
-      (year, days - boundary)
-    } else {
-      (year - 1, days - yearBoundary(year - 1, isGregorian))
-    }
-  }
-
-  /**
    * Calculates the year and the number of the day in the year for the given
    * number of days. The given days is the number of days since 1.1.1970.
-   *
-   * The calculation uses the fact that the period 1.1.2001 until 31.12.2400 is
-   * equals to the period 1.1.1601 until 31.12.2000.
    */
   private[this] def getYearAndDayInYear(daysSince1970: SQLDate): (Int, Int) = {
-    // Since Julian calendar was replaced with the Gregorian calendar,
-    // the 10 days after Oct. 4 were skipped.
-    // (1582-10-04) -141428 days since 1970-01-01
-    if (daysSince1970 <= -141428) {
-      getYearAndDayInYear(daysSince1970 - 10, toYearZeroInJulian, daysIn400YearsInJulian, false)
-    } else {
-      getYearAndDayInYear(daysSince1970, toYearZero, daysIn400Years, true)
-    }
-  }
-
-  private def getYearAndDayInYear(
-      daysSince1970: SQLDate,
-      toYearZero: SQLDate,
-      daysIn400Years: SQLDate,
-      isGregorian: Boolean): (Int, Int) = {
-    // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
-    val daysNormalized = daysSince1970 + toYearZero
-    val numOfQuarterCenturies = daysNormalized / daysIn400Years
-    val daysInThis400 = daysNormalized % daysIn400Years + 1
-    val (years, dayInYear) = numYears(daysInThis400, isGregorian)
-    val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
-    (year, dayInYear)
+    val localDate = LocalDate.ofEpochDay(daysSince1970)
+    (localDate.getYear, localDate.getDayOfYear)
   }
 
   /**
@@ -658,7 +607,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayInYear(date: SQLDate): Int = {
-    getYearAndDayInYear(date)._2
+    LocalDate.ofEpochDay(date).getDayOfYear
   }
 
   /**
@@ -666,7 +615,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getYear(date: SQLDate): Int = {
-    getYearAndDayInYear(date)._1
+    LocalDate.ofEpochDay(date).getYear
   }
 
   /**
@@ -674,19 +623,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getQuarter(date: SQLDate): Int = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    if (isLeapYear(year)) {
-      dayInYear = dayInYear - 1
-    }
-    if (dayInYear <= 90) {
-      1
-    } else if (dayInYear <= 181) {
-      2
-    } else if (dayInYear <= 273) {
-      3
-    } else {
-      4
-    }
+    LocalDate.ofEpochDay(date).get(IsoFields.QUARTER_OF_YEAR)
   }
 
   /**

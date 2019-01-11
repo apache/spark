@@ -31,9 +31,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
   val TimeZonePST = TimeZone.getTimeZone("PST")
 
-  private[this] def getInUTCDays(timestamp: Long): Int = {
-    val tz = TimeZone.getDefault
-    ((timestamp + tz.getOffset(timestamp)) / MILLIS_PER_DAY).toInt
+  private[this] def getInUTCDays(localDate: LocalDate): Int = {
+    val epochSeconds = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toEpochSecond
+    TimeUnit.SECONDS.toDays(epochSeconds).toInt
   }
 
   test("nanoseconds truncation") {
@@ -409,73 +409,47 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("get day in year") {
-    val c = Calendar.getInstance()
-    c.set(2015, 2, 18, 0, 0, 0)
-    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 77)
-    c.set(2012, 2, 18, 0, 0, 0)
-    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 78)
+    assert(getDayInYear(getInUTCDays(LocalDate.of(2015, 3, 18))) === 77)
+    assert(getDayInYear(getInUTCDays(LocalDate.of(2012, 3, 18))) === 78)
   }
 
-  test("SPARK-26002: correct day of year calculations for Julian calendar years") {
-    val c = Calendar.getInstance()
-    c.set(Calendar.MILLISECOND, 0)
-    (1000 to 1600 by 100).foreach { year =>
+  test("day of year calculations for old years") {
+    var date = LocalDate.of(1582, 3, 1)
+    assert(getDayInYear(getInUTCDays(date)) === 60)
+
+    (1000 to 1600 by 10).foreach { year =>
       // January 1 is the 1st day of year.
-      c.set(year, 0, 1, 0, 0, 0)
-      assert(getYear(getInUTCDays(c.getTimeInMillis)) === year)
-      assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 1)
-      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 1)
+      date = LocalDate.of(year, 1, 1)
+      assert(getYear(getInUTCDays(date)) === year)
+      assert(getMonth(getInUTCDays(date)) === 1)
+      assert(getDayInYear(getInUTCDays(date)) === 1)
 
-      // March 1 is the 61st day of the year as they are leap years. It is true for
-      // even the multiples of 100 as before 1582-10-4 the Julian calendar leap year calculation
-      // is used in which every multiples of 4 are leap years
-      c.set(year, 2, 1, 0, 0, 0)
-      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 61)
-      assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 3)
-
-      // testing leap day (February 29) in leap years
-      c.set(year, 1, 29, 0, 0, 0)
-      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
-
-      // For non-leap years:
-      c.set(year + 1, 2, 1, 0, 0, 0)
-      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
+      // December 31 is the 1st day of year.
+      date = LocalDate.of(year, 12, 31)
+      assert(getYear(getInUTCDays(date)) === year)
+      assert(getMonth(getInUTCDays(date)) === 12)
+      assert(getDayOfMonth(getInUTCDays(date)) === 31)
     }
-
-    c.set(1582, 2, 1, 0, 0, 0)
-    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
   }
 
   test("get year") {
-    val c = Calendar.getInstance()
-    c.set(2015, 2, 18, 0, 0, 0)
-    assert(getYear(getInUTCDays(c.getTimeInMillis)) === 2015)
-    c.set(2012, 2, 18, 0, 0, 0)
-    assert(getYear(getInUTCDays(c.getTimeInMillis)) === 2012)
+    assert(getYear(getInUTCDays(LocalDate.of(2015, 2, 18))) === 2015)
+    assert(getYear(getInUTCDays(LocalDate.of(2012, 2, 18))) === 2012)
   }
 
   test("get quarter") {
-    val c = Calendar.getInstance()
-    c.set(2015, 2, 18, 0, 0, 0)
-    assert(getQuarter(getInUTCDays(c.getTimeInMillis)) === 1)
-    c.set(2012, 11, 18, 0, 0, 0)
-    assert(getQuarter(getInUTCDays(c.getTimeInMillis)) === 4)
+    assert(getQuarter(getInUTCDays(LocalDate.of(2015, 2, 18))) === 1)
+    assert(getQuarter(getInUTCDays(LocalDate.of(2012, 11, 18))) === 4)
   }
 
   test("get month") {
-    val c = Calendar.getInstance()
-    c.set(2015, 2, 18, 0, 0, 0)
-    assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 3)
-    c.set(2012, 11, 18, 0, 0, 0)
-    assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 12)
+    assert(getMonth(getInUTCDays(LocalDate.of(2015, 3, 18))) === 3)
+    assert(getMonth(getInUTCDays(LocalDate.of(2012, 12, 18))) === 12)
   }
 
   test("get day of month") {
-    val c = Calendar.getInstance()
-    c.set(2015, 2, 18, 0, 0, 0)
-    assert(getDayOfMonth(getInUTCDays(c.getTimeInMillis)) === 18)
-    c.set(2012, 11, 24, 0, 0, 0)
-    assert(getDayOfMonth(getInUTCDays(c.getTimeInMillis)) === 24)
+    assert(getDayOfMonth(getInUTCDays(LocalDate.of(2015, 3, 18))) === 18)
+    assert(getDayOfMonth(getInUTCDays(LocalDate.of(2012, 12, 24))) === 24)
   }
 
   test("date add months") {
