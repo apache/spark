@@ -24,6 +24,7 @@ import scala.concurrent.Future
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Network
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerId
@@ -78,14 +79,13 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   // "milliseconds"
   private val executorTimeoutMs =
     sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-      s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s")
+      s"${sc.conf.get(Network.NETWORK_TIMEOUT)}s")
 
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
   private val timeoutIntervalMs =
     sc.conf.get(config.STORAGE_BLOCKMANAGER_TIMEOUTINTERVAL)
-  private val checkTimeoutIntervalMs =
-    sc.conf.getTimeAsSeconds("spark.network.timeoutInterval", s"${timeoutIntervalMs}ms") * 1000
+  private val checkTimeoutIntervalMs = sc.conf.get(Network.NETWORK_TIMEOUT_INTERVAL)
 
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 

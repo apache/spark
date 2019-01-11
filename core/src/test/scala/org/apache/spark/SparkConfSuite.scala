@@ -342,7 +342,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.validateSettings()
 
-    conf.set("spark.network.timeout", "5s")
+    conf.set(NETWORK_TIMEOUT.key, "5s")
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }

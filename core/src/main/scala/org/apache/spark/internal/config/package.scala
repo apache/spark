@@ -303,8 +303,7 @@ package object config {
 
   private[spark] val DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.defaultValue.get)
+      .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)

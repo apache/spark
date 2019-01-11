@@ -33,6 +33,7 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
@@ -101,8 +102,8 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
-      .set("spark.network.crypto.enabled", "true")
-      .set("spark.network.crypto.saslFallback", "false")
+      .set(Network.NETWORK_ENCRYPTION_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
     testConnection(conf, conf) match {
       case Success(_) => // expected
       case Failure(t) => fail(t)
