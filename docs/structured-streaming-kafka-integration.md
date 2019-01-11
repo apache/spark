@@ -392,7 +392,7 @@ The following configurations are optional:
   source has its own consumer group that does not face interference from any other consumer, and
   therefore can read all of the partitions of its subscribed topics. In some scenarios (for example,
   Kafka group-based authorization), you may want to use a specific authorized group id to read data.
-  You can optionally set the group ID. However, do this with extreme caution as it can cause
+  You can optionally set the group id. However, do this with extreme caution as it can cause
   unexpected behavior. Concurrently running queries (both, batch and streaming) or sources with the
   same group id are likely interfere with each other causing each query to read only part of the
   data. This may also occur when queries are started/restarted in quick succession. To minimize such

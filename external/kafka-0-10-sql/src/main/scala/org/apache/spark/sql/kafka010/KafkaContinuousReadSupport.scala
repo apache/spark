@@ -171,7 +171,7 @@ class KafkaContinuousScanConfigBuilder(
           offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
         s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
       } else {
-        s"$deletedPartitions are gone. Some data may have been missed"
+        s"$deletedPartitions are gone. Some data may have been missed."
       }
       reportDataLoss(message)
     }
