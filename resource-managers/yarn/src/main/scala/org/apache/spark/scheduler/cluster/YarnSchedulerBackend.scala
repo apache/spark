@@ -221,9 +221,8 @@ private[spark] abstract class YarnSchedulerBackend(
     sc.executorAllocationManager.foreach(_.reset())
   }
 
-  override protected def createTokenManager(
-      schedulerRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = {
-    Some(new YARNHadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, schedulerRef))
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new YARNHadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   /**

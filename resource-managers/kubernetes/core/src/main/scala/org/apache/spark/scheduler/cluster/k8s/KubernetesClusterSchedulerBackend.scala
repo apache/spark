@@ -147,9 +147,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     new KubernetesDriverEndpoint()
   }
 
-  override protected def createTokenManager(
-      schedulerRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = {
-    Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, schedulerRef))
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {
