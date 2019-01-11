@@ -68,8 +68,14 @@ class SimpleWritableDataSource extends DataSourceV2
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String, uniqueId: String) extends WriteBuilder with SupportsSaveMode {
+  class MyWriteBuilder(path: String) extends WriteBuilder with SupportsSaveMode {
+    private var queryId: String = _
     private var mode: SaveMode = _
+
+    override def withQueryId(queryId: String): WriteBuilder = {
+      this.queryId = queryId
+      this
+    }
 
     override def mode(mode: SaveMode): WriteBuilder = {
       this.mode = mode
@@ -98,7 +104,7 @@ class SimpleWritableDataSource extends DataSourceV2
       }
 
       val pathStr = hadoopPath.toUri.toString
-      new MyBatchWrite(uniqueId, pathStr, hadoopConf)
+      new MyBatchWrite(queryId, pathStr, hadoopConf)
     }
   }
 
@@ -145,11 +151,8 @@ class SimpleWritableDataSource extends DataSourceV2
       new MyScanBuilder(new Path(path).toUri.toString, conf)
     }
 
-    override def newWriteBuilder(
-        queryId: String,
-        schema: StructType,
-        options: DataSourceOptions): WriteBuilder = {
-      new MyWriteBuilder(path, queryId)
+    override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
+      new MyWriteBuilder(path)
     }
   }
 

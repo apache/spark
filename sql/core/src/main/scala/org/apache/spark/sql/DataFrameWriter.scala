@@ -258,8 +258,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               AppendData.byName(relation, df.logicalPlan)
             }
           } else {
-            val writeBuilder = table.newWriteBuilder(
-              UUID.randomUUID().toString, df.logicalPlan.schema, dsOptions)
+            val writeBuilder = table.newWriteBuilder(dsOptions)
+              .withQueryId(UUID.randomUUID().toString)
+              .withInputDataSchema(df.logicalPlan.schema)
             writeBuilder match {
               case s: SupportsSaveMode =>
                 val write = s.mode(mode).buildForBatch()

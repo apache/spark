@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources.v2.writer;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.SupportsBatchWrite;
 import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * An interface for building the {@link BatchWrite}. Implementations can mix in interfaces like
@@ -27,6 +28,22 @@ import org.apache.spark.sql.sources.v2.Table;
  */
 @Evolving
 public interface WriteBuilder {
+
+  /**
+   * Returns a new builder with the `queryId`. `queryId` is a unique string of the query. It's
+   * possible that there are many queries running at the same time, or a query is restarted and
+   * resumed. {@link BatchWrite} can use this id to identify the query.
+   */
+  default WriteBuilder withQueryId(String queryId) {
+    return this;
+  }
+
+  /**
+   * Returns a new builder with the schema of the input data to write.
+   */
+  default WriteBuilder withInputDataSchema(StructType schema) {
+    return this;
+  }
 
   /**
    * Returns a {@link BatchWrite} to write data to batch source. By default this method throws

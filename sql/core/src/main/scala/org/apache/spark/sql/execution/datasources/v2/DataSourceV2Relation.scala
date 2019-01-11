@@ -62,7 +62,9 @@ case class DataSourceV2Relation(
   def newWriteBuilder(schema: StructType): WriteBuilder = table match {
     case s: SupportsBatchWrite =>
       val dsOptions = new DataSourceOptions(options.asJava)
-      s.newWriteBuilder(UUID.randomUUID().toString, schema, dsOptions)
+      s.newWriteBuilder(dsOptions)
+        .withQueryId(UUID.randomUUID().toString)
+        .withInputDataSchema(schema)
     case _ => throw new AnalysisException(s"Table is not writable: ${table.name()}")
   }
 
