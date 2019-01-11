@@ -21,7 +21,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -89,6 +89,18 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
       val size2 = relations(0).stats.sizeInBytes
       assert(size2 == relations(0).catalogTable.get.stats.get.sizeInBytes)
       assert(size2 < tableStats.get.sizeInBytes)
+    }
+  }
+
+  test("PruneFileSourcePartitions should not remove the hint") {
+    withTable("t") {
+      spark.range(2).selectExpr("id", "id as p").write.partitionBy("p").saveAsTable("t")
+      val query = sql("select /*+ broadcastjoin(a) */ * from " +
+        "(select id from t where p=1) a " )
+      val hints = query.queryExecution.optimizedPlan.collect{
+        case h: ResolvedHint => h
+      }
+      assert(hints.size === 1)
     }
   }
 }
