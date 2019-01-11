@@ -20,6 +20,7 @@ package org.apache.spark.internal
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -114,26 +115,28 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_GARBAGE_COLLECTION_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorGCMetrics.enabled")
+  private[spark] val EVENT_LOG_GC_METRICS =
+    ConfigBuilder("spark.eventLog.logStageExecutorGcMetrics.enabled")
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS =
-    ConfigBuilder("spark.eventLog.additionalYoungGenerationGarbageCollectors")
-      .doc("Names of additional young generation garbage collector, " +
-        "usually is the return of GarbageCollectorMXBean.getName, e.g. ParNew.")
+  private[spark] val EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.gcMetrics.youngGenerationGarbageCollectors")
+      .doc("Names of supported young generation garbage collector. A name usually is " +
+        " the return of GarbageCollectorMXBean.getName. The built-in young generation garbage " +
+        s"collectors are ${GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
       .stringConf
       .toSequence
-      .createWithDefault(Nil)
+      .createWithDefault(GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
 
-  private[spark] val EVENT_LOG_ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS =
-    ConfigBuilder("spark.eventLog.additionalOldGenerationGarbageCollectors")
-      .doc("Names of additional old generation garbage collector, " +
-        "usually is the return of GarbageCollectorMXBean.getName, e.g. ConcurrentMarkSweep.")
+  private[spark] val EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.gcMetrics.oldGenerationGarbageCollectors")
+      .doc("Names of supported old generation garbage collector. A name usually is " +
+        "the return of GarbageCollectorMXBean.getName. The built-in old generation garbage " +
+        s"collectors are ${GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
       .stringConf
       .toSequence
-      .createWithDefault(Nil)
+      .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
 
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)

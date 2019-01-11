@@ -111,14 +111,14 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   )
 
   /* We builtin some common GC collectors which categorized as young generation and old */
-  private lazy val youngGenerationBuiltinGarbageCollectors = Seq(
+  private[spark] val YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS = Seq(
     "Copy",
     "PS Scavenge",
     "ParNew",
     "G1 Young Generation"
   )
 
-  private lazy val oldGenerationBuiltinGarbageCollectors = Seq(
+  private[spark] val OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS = Seq(
     "MarkSweepCompact",
     "PS MarkSweep",
     "ConcurrentMarkSweep",
@@ -126,18 +126,16 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   )
 
   private lazy val youngGenerationGarbageCollector: Seq[String] = {
-    youngGenerationBuiltinGarbageCollectors ++ /* additional young gc we added */
-      SparkEnv.get.conf.get(config.EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS)
+    SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS)
   }
 
   private lazy val oldGenerationGarbageCollector: Seq[String] = {
-    oldGenerationBuiltinGarbageCollectors ++ /* additional old gc we added */
-      SparkEnv.get.conf.get(config.EVENT_LOG_ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS)
+    SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS)
   }
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
-    if (SparkEnv.get.conf.get(config.EVENT_LOG_GARBAGE_COLLECTION_METRICS)) {
+    if (SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS)) {
       ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
         if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
           gcMetrics(0) = mxBean.getCollectionCount
@@ -147,8 +145,8 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
           gcMetrics(3) = mxBean.getCollectionTime
         } else {
           logDebug(s"${mxBean.getName} is an unsupported garbage collector." +
-            s"Add it to ${config.EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS} " +
-            s"or ${config.EVENT_LOG_ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS} to enable.")
+            s"Add it to ${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS} " +
+            s"or ${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS} to enable.")
         }
       }
     }
