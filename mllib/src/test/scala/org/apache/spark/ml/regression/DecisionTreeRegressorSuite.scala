@@ -177,14 +177,14 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
         .setSeed(123)
       MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeRegressionModel,
         DecisionTreeRegressor](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, _ ~== _ relTol 0.05, 0.9))
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.05, 0.9))
       MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeRegressionModel,
         DecisionTreeRegressor](df.as[LabeledPoint], estimator, numClasses,
-        MLTestingUtils.modelPredictionEquals(df, _ ~== _ relTol 0.1, 0.8),
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, 0.8),
         outlierRatio = 2)
       MLTestingUtils.testOversamplingVsWeighting[DecisionTreeRegressionModel,
         DecisionTreeRegressor](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, _ ~== _ relTol 0.01, 1.0), seed)
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.01, 1.0), seed)
     }
   }
 
