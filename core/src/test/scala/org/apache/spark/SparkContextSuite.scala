@@ -33,7 +33,8 @@ import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFor
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -665,7 +666,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val conf = new SparkConf()
       .setMaster("local-cluster[1,2,1024]")
       .setAppName("test-cluster")
-      .set("spark.ui.enabled", "false")
+      .set(UI_ENABLED.key, "false")
       // Disable this so that if a task is running, we can make sure the executor will always send
       // task metrics via heartbeat to driver.
       .set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key, "false")

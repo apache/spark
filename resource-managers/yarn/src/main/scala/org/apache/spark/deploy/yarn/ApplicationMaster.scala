@@ -44,6 +44,7 @@ import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
@@ -224,7 +225,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       val attemptID = if (isClusterMode) {
         // Set the web ui port to be ephemeral for yarn so we don't conflict with
         // other spark processes running on the same box
-        System.setProperty("spark.ui.port", "0")
+        System.setProperty(UI_PORT.key, "0")
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
@@ -620,7 +621,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         d.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
 
       case None =>
-        System.setProperty("spark.ui.filters", amFilter)
+        System.setProperty(UI_FILTERS.key, amFilter)
         params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     }
   }

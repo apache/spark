@@ -30,6 +30,8 @@ import org.scalatest.Matchers
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
@@ -83,7 +85,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // spark acls on, just pick up default user
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
+    sparkConf.set(ACLS_ENABLE, true)
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
@@ -111,9 +113,9 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // default spark acls are on and specify acls
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
-    sparkConf.set("spark.ui.view.acls", "user1,user2")
-    sparkConf.set("spark.modify.acls", "user3,user4")
+    sparkConf.set(ACLS_ENABLE, true)
+    sparkConf.set(UI_VIEW_ACLS, Seq("user1", "user2"))
+    sparkConf.set(MODIFY_ACLS, Seq("user3", "user4"))
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)

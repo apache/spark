@@ -146,7 +146,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     // the driver.
     val masters = sparkProperties.get("spark.master")
     val (_, masterPort) = Utils.extractHostPortFromSparkUrl(masterUrl)
-    val masterRestPort = this.conf.getInt("spark.master.rest.port", 6066)
+    val masterRestPort = this.conf.get(config.MASTER_REST_SERVER_PORT)
     val updatedMasters = masters.map(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = request.appArgs

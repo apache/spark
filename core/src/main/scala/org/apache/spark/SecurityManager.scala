@@ -29,6 +29,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.util.Utils
@@ -56,17 +57,13 @@ private[spark] class SecurityManager(
   private val WILDCARD_ACL = "*"
 
   private val authOn = sparkConf.get(NETWORK_AUTH_ENABLED)
-  // keep spark.ui.acls.enable for backwards compatibility with 1.0
-  private var aclsOn =
-    sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
+  private var aclsOn = sparkConf.get(ACLS_ENABLE)
 
   // admin acls should be set before view or modify acls
-  private var adminAcls: Set[String] =
-    stringToSet(sparkConf.get("spark.admin.acls", ""))
+  private var adminAcls: Set[String] = sparkConf.get(ADMIN_ACLS).toSet
 
   // admin group acls should be set before view or modify group acls
-  private var adminAclsGroups : Set[String] =
-    stringToSet(sparkConf.get("spark.admin.acls.groups", ""))
+  private var adminAclsGroups: Set[String] = sparkConf.get(ADMIN_ACLS_GROUPS).toSet
 
   private var viewAcls: Set[String] = _
 
@@ -82,11 +79,11 @@ private[spark] class SecurityManager(
   private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
     Utils.getCurrentUserName())
 
-  setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
-  setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
+  setViewAcls(defaultAclUsers, sparkConf.get(UI_VIEW_ACLS))
+  setModifyAcls(defaultAclUsers, sparkConf.get(MODIFY_ACLS))
 
-  setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""));
-  setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""));
+  setViewAclsGroups(sparkConf.get(UI_VIEW_ACLS_GROUPS))
+  setModifyAclsGroups(sparkConf.get(MODIFY_ACLS_GROUPS))
 
   private var secretKey: String = _
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
@@ -128,22 +125,15 @@ private[spark] class SecurityManager(
   }
 
   /**
-   * Split a comma separated String, filter out any empty items, and return a Set of strings
-   */
-  private def stringToSet(list: String): Set[String] = {
-    list.split(',').map(_.trim).filter(!_.isEmpty).toSet
-  }
-
-  /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setViewAcls(defaultUsers: Set[String], allowedUsers: String) {
-    viewAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
+  def setViewAcls(defaultUsers: Set[String], allowedUsers: Seq[String]) {
+    viewAcls = adminAcls ++ defaultUsers ++ allowedUsers
     logInfo("Changing view acls to: " + viewAcls.mkString(","))
   }
 
-  def setViewAcls(defaultUser: String, allowedUsers: String) {
+  def setViewAcls(defaultUser: String, allowedUsers: Seq[String]) {
     setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
@@ -151,8 +141,8 @@ private[spark] class SecurityManager(
    * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
    * acls groups you should also set the view and modify acls groups again to pick up the changes.
    */
-  def setViewAclsGroups(allowedUserGroups: String) {
-    viewAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
+  def setViewAclsGroups(allowedUserGroups: Seq[String]) {
+    viewAclsGroups = adminAclsGroups ++ allowedUserGroups
     logInfo("Changing view acls groups to: " + viewAclsGroups.mkString(","))
   }
 
@@ -179,8 +169,8 @@ private[spark] class SecurityManager(
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setModifyAcls(defaultUsers: Set[String], allowedUsers: String) {
-    modifyAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
+  def setModifyAcls(defaultUsers: Set[String], allowedUsers: Seq[String]) {
+    modifyAcls = adminAcls ++ defaultUsers ++ allowedUsers
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
 
@@ -188,8 +178,8 @@ private[spark] class SecurityManager(
    * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
    * acls groups you should also set the view and modify acls groups again to pick up the changes.
    */
-  def setModifyAclsGroups(allowedUserGroups: String) {
-    modifyAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
+  def setModifyAclsGroups(allowedUserGroups: Seq[String]) {
+    modifyAclsGroups = adminAclsGroups ++ allowedUserGroups
     logInfo("Changing modify acls groups to: " + modifyAclsGroups.mkString(","))
   }
 
@@ -216,8 +206,8 @@ private[spark] class SecurityManager(
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setAdminAcls(adminUsers: String) {
-    adminAcls = stringToSet(adminUsers)
+  def setAdminAcls(adminUsers: Seq[String]) {
+    adminAcls = adminUsers.toSet
     logInfo("Changing admin acls to: " + adminAcls.mkString(","))
   }
 
@@ -225,8 +215,8 @@ private[spark] class SecurityManager(
    * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
    * acls groups you should also set the view and modify acls groups again to pick up the changes.
    */
-  def setAdminAclsGroups(adminUserGroups: String) {
-    adminAclsGroups = stringToSet(adminUserGroups)
+  def setAdminAclsGroups(adminUserGroups: Seq[String]) {
+    adminAclsGroups = adminUserGroups.toSet
     logInfo("Changing admin acls groups to: " + adminAclsGroups.mkString(","))
   }
 
@@ -416,7 +406,7 @@ private[spark] object SecurityManager {
 
   val k8sRegex = "k8s.*".r
   val SPARK_AUTH_CONF = NETWORK_AUTH_ENABLED.key
-  val SPARK_AUTH_SECRET_CONF = "spark.authenticate.secret"
+  val SPARK_AUTH_SECRET_CONF = AUTH_SECRET.key
   // This is used to set auth secret to an executor's env variable. It should have the same
   // value as SPARK_AUTH_SECRET_CONF set in SparkConf
   val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
