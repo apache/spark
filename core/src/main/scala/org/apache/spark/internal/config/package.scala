@@ -326,6 +326,10 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val METRICS_CONF = ConfigBuilder("spark.metrics.conf")
+    .stringConf
+    .createOptional
+
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
     .stringConf
     .createOptional
@@ -337,11 +341,6 @@ package object config {
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
-
-  private[spark] val UI_SHOW_CONSOLE_PROGRESS = ConfigBuilder("spark.ui.showConsoleProgress")
-    .doc("When true, show the progress bar in the console.")
-    .booleanConf
-    .createWithDefault(false)
 
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .booleanConf
@@ -444,6 +443,11 @@ package object config {
         "information. When this regex matches a string part, that string part is replaced by a " +
         "dummy value. This is currently used to redact the output of SQL explain commands.")
       .regexConf
+      .createOptional
+
+  private[spark] val AUTH_SECRET =
+    ConfigBuilder("spark.authenticate.secret")
+      .stringConf
       .createOptional
 
   private[spark] val AUTH_SECRET_BIT_LENGTH =
@@ -625,30 +629,6 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
-  private[spark] val UI_X_XSS_PROTECTION =
-    ConfigBuilder("spark.ui.xXssProtection")
-      .doc("Value for HTTP X-XSS-Protection response header")
-      .stringConf
-      .createWithDefaultString("1; mode=block")
-
-  private[spark] val UI_X_CONTENT_TYPE_OPTIONS =
-    ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
-      .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
-      .booleanConf
-      .createWithDefault(true)
-
-  private[spark] val UI_STRICT_TRANSPORT_SECURITY =
-    ConfigBuilder("spark.ui.strictTransportSecurity")
-      .doc("Value for HTTP Strict Transport Security Response Header")
-      .stringConf
-      .createOptional
-
-  private[spark] val UI_REQUEST_HEADER_SIZE =
-    ConfigBuilder("spark.ui.requestHeaderSize")
-      .doc("Value for HTTP request header size in bytes.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("8k")
-
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
     .stringConf
@@ -780,4 +760,16 @@ package object config {
     ConfigBuilder("spark.executor.logs.rolling.enableCompression")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val MASTER_REST_SERVER_PORT = ConfigBuilder("spark.master.rest.port")
+    .intConf
+    .createWithDefault(6066)
+
+  private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
+    .intConf
+    .createWithDefault(8080)
 }
