@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case h: ResolvedHint => h
     case op @ PhysicalOperation(projects, filters,
         logicalRelation @
           LogicalRelation(fsRelation @
