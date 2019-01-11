@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
  * This is no-op datasource. It does not do anything besides consuming its input.
  * This can be useful for benchmarking or to cache data without any additional overhead.
  */
-private[noop] class NoopDataSource
+class NoopDataSource
   extends DataSourceV2
   with BatchWriteSupportProvider
   with DataSourceRegister {
