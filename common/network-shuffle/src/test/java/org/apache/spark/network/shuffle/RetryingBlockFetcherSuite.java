@@ -268,7 +268,8 @@ public class RetryingBlockFetcherSuite {
             Object blockValue = block.getValue();
 
             if (blockValue instanceof ManagedBuffer) {
-              retryListener.onBlockFetchSuccess(new String[] { blockId }, (ManagedBuffer) blockValue);
+              retryListener.onBlockFetchSuccess(new String[] { blockId },
+                (ManagedBuffer) blockValue);
             } else if (blockValue instanceof Exception) {
               retryListener.onBlockFetchFailure(blockId, (Exception) blockValue);
             } else {

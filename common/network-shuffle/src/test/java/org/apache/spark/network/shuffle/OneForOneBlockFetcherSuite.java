@@ -60,7 +60,8 @@ public class OneForOneBlockFetcherSuite {
 
     BlockFetchingListener listener = fetchBlocks(blocks);
 
-    verify(listener).onBlockFetchSuccess(new String[] { "shuffle_0_0_0" }, blocks.get("shuffle_0_0_0"));
+    verify(listener).onBlockFetchSuccess(new String[] { "shuffle_0_0_0" },
+      blocks.get("shuffle_0_0_0"));
   }
 
   @Test

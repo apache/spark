@@ -32,8 +32,10 @@ import java.nio.ByteBuffer;
 public class BlockTransferMessagesSuite {
   @Test
   public void serializeOpenShuffleBlocks() {
-    checkSerializeDeserialize(new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, false));
-    checkSerializeDeserialize(new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true));
+    checkSerializeDeserialize(
+      new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, false));
+    checkSerializeDeserialize(
+      new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true));
     checkSerializeDeserialize(new RegisterExecutor("app-1", "exec-2", new ExecutorShuffleInfo(
       new String[] { "/local1", "/local2" }, 32, "MyShuffleManager")));
     checkSerializeDeserialize(new UploadBlock("app-1", "exec-2", "block-3", new byte[] { 1, 2 },
@@ -66,13 +68,15 @@ public class BlockTransferMessagesSuite {
 
   @Test
   public void checkOpenBlocksBackwardCompatibility() {
-    TestOpenBlocks testOpenBlocks = new TestOpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" });
-    OpenBlocks openBlocks = (OpenBlocks)BlockTransferMessage.Decoder.fromByteBuffer(testOpenBlocks.toByteBuffer());
+    TestOpenBlocks testOpenBlocks =
+      new TestOpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" });
+    OpenBlocks openBlocks =
+      (OpenBlocks) BlockTransferMessage.Decoder.fromByteBuffer(testOpenBlocks.toByteBuffer());
     verifyOpenBlocks(openBlocks, testOpenBlocks);
     assertEquals(openBlocks.shuffleBlockBatchFetch, false);
 
     openBlocks = new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true);
-    testOpenBlocks = (TestOpenBlocks)fromByteBuffer(openBlocks.toByteBuffer());
+    testOpenBlocks = (TestOpenBlocks) fromByteBuffer(openBlocks.toByteBuffer());
     verifyOpenBlocks(openBlocks, testOpenBlocks);
   }
 
@@ -84,7 +88,8 @@ public class BlockTransferMessagesSuite {
   @Test
   public void checkStreamHandleBackwardCompatibility() {
     TestStreamHandle testStreamHandle = new TestStreamHandle(12345, 16);
-    StreamHandle streamHandle = (StreamHandle)BlockTransferMessage.Decoder.fromByteBuffer(testStreamHandle.toByteBuffer());
+    StreamHandle streamHandle =
+      (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(testStreamHandle.toByteBuffer());
     verifyStreamHandle(streamHandle, testStreamHandle);
     assertArrayEquals(streamHandle.chunkSizes, new int[0]);
 
