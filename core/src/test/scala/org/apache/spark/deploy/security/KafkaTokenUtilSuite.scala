@@ -84,9 +84,11 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     val savedAuthenticationMethod = currentUser.getAuthenticationMethod()
     try {
       currentUser.setAuthenticationMethod(UserGroupInformation.AuthenticationMethod.PROXY)
-      intercept[IllegalArgumentException] {
+      val thrown = intercept[IllegalArgumentException] {
         KafkaTokenUtil.checkProxyUser()
       }
+      assert(thrown.getMessage contains
+        "Obtaining delegation token for proxy user is not yet supported.")
     } finally {
       currentUser.setAuthenticationMethod(savedAuthenticationMethod)
     }
