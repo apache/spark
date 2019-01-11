@@ -32,19 +32,23 @@ class MesosRestServerSuite extends SparkFunSuite
   with TestPrematureExit with MockitoSugar {
 
   test("test default driver overhead memory") {
-    testOverheadMemory(new SparkConf(), 2384)
+    testOverheadMemory(new SparkConf(), "2000M", 2384)
+  }
+
+  test("test driver overhead memory with overhead factor") {
+    testOverheadMemory(new SparkConf(), "5000M", 5500)
   }
 
   test("test configured driver overhead memory") {
     val conf = new SparkConf()
     conf.set(config.DRIVER_MEMORY_OVERHEAD.key, "1000")
-    testOverheadMemory(conf, 3000)
+    testOverheadMemory(conf, "2000M", 3000)
   }
 
-  def testOverheadMemory(conf : SparkConf, expectedResult : Int) {
+  def testOverheadMemory(conf: SparkConf, driverMemory: String, expectedResult: Int) {
     conf.set("spark.master", "testmaster")
     conf.set("spark.app.name", "testapp")
-    conf.set(config.DRIVER_MEMORY.key, "2000M")
+    conf.set(config.DRIVER_MEMORY.key, driverMemory)
     var actualMem = 0
     class TestMesosClusterScheduler extends MesosClusterScheduler(
         mock[MesosClusterPersistenceEngineFactory], conf) {
