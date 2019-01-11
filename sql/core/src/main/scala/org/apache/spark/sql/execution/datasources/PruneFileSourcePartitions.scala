@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
@@ -71,13 +71,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         // Keep partition-pruning predicates so that they are visible in physical planning
         val filterExpression = filters.reduceLeft(And)
         val filter = Filter(filterExpression, prunedLogicalRelation)
-        op match {
-          case h: ResolvedHint =>
-            // Restore the ResolvedHint removed by PhysicalOperation.collectProjectsAndFilters
-            h.copy(child = Project(projects, filter))
-          case _ =>
-            Project(projects, filter)
-        }
+        Project(projects, filter)
       } else {
         op
       }
