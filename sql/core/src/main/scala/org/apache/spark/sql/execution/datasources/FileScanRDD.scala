@@ -61,20 +61,7 @@ case class PartitionedFile(
 case class FilePartition(index: Int, files: Seq[PartitionedFile])
   extends RDDPartition with InputPartition {
   override def preferredLocations(): Array[String] = {
-    // Computes total number of bytes can be retrieved from each host.
-    val hostToNumBytes = mutable.HashMap.empty[String, Long]
-    files.foreach { file =>
-      file.locations.filter(_ != "localhost").foreach { host =>
-        hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
-      }
-    }
-
-    // Takes the first 3 hosts with the most data to be retrieved
-    hostToNumBytes.toSeq.sortBy {
-      case (host, numBytes) => numBytes
-    }.reverse.take(3).map {
-      case (host, numBytes) => host
-    }.toArray
+    FilePartitionUtil.getPreferredLocations(files)
   }
 }
 

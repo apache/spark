@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
@@ -54,5 +55,22 @@ object FilePartitionUtil extends Logging {
     }
     closePartition()
     partitions
+  }
+
+  def getPreferredLocations(files: Seq[PartitionedFile]): Array[String] = {
+    // Computes total number of bytes can be retrieved from each host.
+    val hostToNumBytes = mutable.HashMap.empty[String, Long]
+    files.foreach { file =>
+      file.locations.filter(_ != "localhost").foreach { host =>
+        hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
+      }
+    }
+
+    // Takes the first 3 hosts with the most data to be retrieved
+    hostToNumBytes.toSeq.sortBy {
+      case (host, numBytes) => numBytes
+    }.reverse.take(3).map {
+      case (host, numBytes) => host
+    }.toArray
   }
 }
