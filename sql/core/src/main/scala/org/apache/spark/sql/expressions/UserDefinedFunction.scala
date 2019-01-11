@@ -102,17 +102,7 @@ private[sql] case class SparkUserDefinedFunction(
     // It's possible that some of the inputs don't have a specific type(e.g. `Any`),  skip type
     // check and null check for them.
     val inputTypes = inputSchemas.map(_.map(_.dataType).getOrElse(AnyDataType))
-
-    val inputsNullSafe = if (inputSchemas.isEmpty) {
-      // This is for backward compatibility of `functions.udf(AnyRef, DataType)`. We need to
-      // do reflection of the lambda function object and see if its arguments are nullable or not.
-      // This doesn't work for Scala 2.12 and we should consider removing this workaround, as Spark
-      // uses Scala 2.12 by default since 3.0.
-      ScalaReflection.getParameterTypeNullability(f)
-    } else {
-      inputSchemas.map(_.map(_.nullable).getOrElse(true))
-    }
-
+    val inputsNullSafe = inputSchemas.map(_.map(_.nullable).getOrElse(true))
     ScalaUDF(
       f,
       dataType,
