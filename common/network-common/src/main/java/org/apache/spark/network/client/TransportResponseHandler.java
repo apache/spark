@@ -123,7 +123,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       try {
         entry.getValue().onFailure(entry.getKey().toString(), cause);
       } catch (Exception e) {
-        logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
+        logger.warn("ChunkFetchRequest's StreamCallback.onFailure throws exception", e);
       }
     }
     for (Map.Entry<Long, RpcResponseCallback> entry : outstandingRpcs.entrySet()) {

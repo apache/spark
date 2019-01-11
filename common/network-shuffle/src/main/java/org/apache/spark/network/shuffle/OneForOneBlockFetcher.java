@@ -95,7 +95,7 @@ public class OneForOneBlockFetcher {
     public void onFailure(int chunkIndex, Throwable e) {
       // On receipt of a failure, fail every block from chunkIndex onwards.
       String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
-      failRemainingBlocks(remainingBlockIds, e);
+      failBlocks(remainingBlockIds, e);
     }
   }
 
@@ -129,20 +129,20 @@ public class OneForOneBlockFetcher {
           }
         } catch (Exception e) {
           logger.error("Failed while starting block fetches after success", e);
-          failRemainingBlocks(blockIds, e);
+          failBlocks(blockIds, e);
         }
       }
 
       @Override
       public void onFailure(Throwable e) {
         logger.error("Failed while starting block fetches", e);
-        failRemainingBlocks(blockIds, e);
+        failBlocks(blockIds, e);
       }
     });
   }
 
   /** Invokes the "onBlockFetchFailure" callback for every listed block id. */
-  private void failRemainingBlocks(String[] failedBlockIds, Throwable e) {
+  private void failBlocks(String[] failedBlockIds, Throwable e) {
     for (String blockId : failedBlockIds) {
       try {
         listener.onBlockFetchFailure(blockId, e);
@@ -184,7 +184,7 @@ public class OneForOneBlockFetcher {
       channel.close();
       // On receipt of a failure, fail every block from chunkIndex onwards.
       String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
-      failRemainingBlocks(remainingBlockIds, cause);
+      failBlocks(remainingBlockIds, cause);
       targetFile.delete();
     }
   }

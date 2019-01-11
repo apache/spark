@@ -115,7 +115,9 @@ public class TransportClient implements Closeable {
   }
 
   /**
-   * Requests a single chunk from the remote side, from the pre-negotiated streamId.
+   * Requests a chunk from the remote side, from the pre-negotiated streamId. The chunk will be
+   * fetched with a single response, or a stream if `streamCallback` is not null and the server
+   * supports fetching chunk as stream.
    *
    * Chunk indices go from 0 onwards. It is valid to request the same chunk multiple times, though
    * some streams may not support this.
