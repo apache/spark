@@ -39,6 +39,8 @@ import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
 
@@ -104,7 +106,7 @@ class MasterSuite extends SparkFunSuite
     conf.set("spark.deploy.recoveryMode", "CUSTOM")
     conf.set("spark.deploy.recoveryMode.factory",
       classOf[CustomRecoveryModeFactory].getCanonicalName)
-    conf.set("spark.master.rest.enabled", "false")
+    conf.set(MASTER_REST_SERVER_ENABLED, false)
 
     val instantiationAttempts = CustomRecoveryModeFactory.instantiationAttempts
 
@@ -189,7 +191,7 @@ class MasterSuite extends SparkFunSuite
     conf.set("spark.deploy.recoveryMode", "CUSTOM")
     conf.set("spark.deploy.recoveryMode.factory",
       classOf[FakeRecoveryModeFactory].getCanonicalName)
-    conf.set("spark.master.rest.enabled", "false")
+    conf.set(MASTER_REST_SERVER_ENABLED, false)
 
     val fakeAppInfo = makeAppInfo(1024)
     val fakeWorkerInfo = makeWorkerInfo(8192, 16)
@@ -286,8 +288,8 @@ class MasterSuite extends SparkFunSuite
     implicit val formats = org.json4s.DefaultFormats
     val reverseProxyUrl = "http://localhost:8080"
     val conf = new SparkConf()
-    conf.set("spark.ui.reverseProxy", "true")
-    conf.set("spark.ui.reverseProxyUrl", reverseProxyUrl)
+    conf.set(UI_REVERSE_PROXY, true)
+    conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     try {

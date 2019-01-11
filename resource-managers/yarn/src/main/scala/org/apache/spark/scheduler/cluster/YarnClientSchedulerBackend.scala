@@ -27,6 +27,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 
 private[spark] class YarnClientSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -164,6 +165,11 @@ private[spark] class YarnClientSchedulerBackend(
     super.stop()
     client.stop()
     logInfo("Stopped")
+  }
+
+  override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
+    super.updateDelegationTokens(tokens)
+    amEndpoint.foreach(_.send(UpdateDelegationTokens(tokens)))
   }
 
 }

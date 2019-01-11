@@ -45,9 +45,7 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      // stripXSS is called first to remove suspicious characters used in XSS attacks
-      val stageId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
-      stageId.foreach { id =>
+      Option(request.getParameter("id")).map(_.toInt).foreach { id =>
         store.asOption(store.lastStageAttempt(id)).foreach { stage =>
           val status = stage.status
           if (status == StageStatus.ACTIVE || status == StageStatus.PENDING) {

@@ -697,16 +697,56 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("NaN and -0.0 in window partition keys") {
+    import java.lang.Float.floatToRawIntBits
+    import java.lang.Double.doubleToRawLongBits
+
+    // 0.0/0.0 and NaN are different values.
+    assert(floatToRawIntBits(0.0f/0.0f) != floatToRawIntBits(Float.NaN))
+    assert(doubleToRawLongBits(0.0/0.0) != doubleToRawLongBits(Double.NaN))
+
     val df = Seq(
-      (Float.NaN, Double.NaN, 1),
-      (0.0f/0.0f, 0.0/0.0, 1),
-      (0.0f, 0.0, 1),
-      (-0.0f, -0.0, 1)).toDF("f", "d", "i")
-    val result = df.select($"f", count("i").over(Window.partitionBy("f", "d")))
-    checkAnswer(result, Seq(
-      Row(Float.NaN, 2),
-      Row(Float.NaN, 2),
-      Row(0.0f, 2),
-      Row(0.0f, 2)))
+      (Float.NaN, Double.NaN),
+      (0.0f/0.0f, 0.0/0.0),
+      (0.0f, 0.0),
+      (-0.0f, -0.0)).toDF("f", "d")
+
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(Window.partitionBy("f", "d"))),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    // test with complicated window partition keys.
+    val windowSpec1 = Window.partitionBy(array("f"), struct("d"))
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(windowSpec1)),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    val windowSpec2 = Window.partitionBy(array(struct("f")), struct(array("d")))
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(windowSpec2)),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    // test with df with complicated-type columns.
+    val df2 = Seq(
+      (Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))),
+      (Array(0.0f, -0.0f), Tuple2(0.0d, Double.NaN), Seq(Tuple2(0.0d, 0.0/0.0)))
+    ).toDF("arr", "stru", "arrOfStru")
+    val windowSpec3 = Window.partitionBy("arr", "stru", "arrOfStru")
+    checkAnswer(
+      df2.select($"arr", $"stru", $"arrOfStru", count(lit(1)).over(windowSpec3)),
+      Seq(
+        Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
+        Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
   }
 }
