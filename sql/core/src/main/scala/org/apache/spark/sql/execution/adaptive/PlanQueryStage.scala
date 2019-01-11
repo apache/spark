@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -30,7 +29,8 @@ import org.apache.spark.sql.types.StructType
 /**
  * Divide the spark plan into multiple QueryStages. For each Exchange in the plan, it adds a
  * QueryStage and a QueryStageInput. If reusing Exchange is enabled, it finds duplicated exchanges
- * and uses the same QueryStage for all the references.
+ * and uses the same QueryStage for all the references. Note this rule must be run after
+ * EnsureRequirements rule.
  */
 case class PlanQueryStage(conf: SQLConf) extends Rule[SparkPlan] {
 

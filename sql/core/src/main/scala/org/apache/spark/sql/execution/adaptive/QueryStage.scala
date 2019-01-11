@@ -99,6 +99,8 @@ abstract class QueryStage extends UnaryExecNode {
     val queryStageInputs: Seq[ShuffleQueryStageInput] = child.collect {
       case input: ShuffleQueryStageInput => input
     }
+    // mapOutputStatistics can be null if the childStage's RDD has 0 partition. In that case, we
+    // don't submit that stage and mapOutputStatistics is null.
     val childMapOutputStatistics = queryStageInputs.map(_.childStage.mapOutputStatistics)
       .filter(_ != null).toArray
     if (childMapOutputStatistics.length > 0) {
