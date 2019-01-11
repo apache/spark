@@ -23,7 +23,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{broadcast, SparkException}
+import org.apache.spark.{broadcast, SparkConf, SparkException}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPar
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
@@ -157,5 +157,6 @@ case class BroadcastExchangeExec(
 
 object BroadcastExchangeExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange", 128))
+    ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",
+      new SparkConf().get(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER)))
 }
