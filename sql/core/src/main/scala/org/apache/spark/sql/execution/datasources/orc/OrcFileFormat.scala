@@ -81,7 +81,7 @@ class OrcFileFormat
   with DataSourceRegister
   with Serializable {
 
-  override def shortName(): String = "orcV1"
+  override def shortName(): String = "orc"
 
   override def toString: String = "ORC"
 
