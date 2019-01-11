@@ -31,6 +31,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -302,11 +303,10 @@ object HistoryServer extends Logging {
       config.set(SecurityManager.SPARK_AUTH_CONF, "false")
     }
 
-    if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
-      logInfo("Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
-        "only using spark.history.ui.acl.enable")
-      config.set("spark.acls.enable", "false")
-      config.set("spark.ui.acls.enable", "false")
+    if (config.get(ACLS_ENABLE)) {
+      logInfo(s"${ACLS_ENABLE.key} is configured, " +
+        s"clearing it and only using ${History.HISTORY_SERVER_UI_ACLS_ENABLE.key}")
+      config.set(ACLS_ENABLE, false)
     }
 
     new SecurityManager(config)

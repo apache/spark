@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
@@ -589,7 +590,7 @@ class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
     withTempDir { checkpointDir =>
       val conf = new SparkConf()
         .set("spark.checkpoint.compress", "true")
-        .set("spark.ui.enabled", "false")
+        .set(UI_ENABLED.key, "false")
       sc = new SparkContext("local", "test", conf)
       sc.setCheckpointDir(checkpointDir.toString)
       val rdd = sc.makeRDD(1 to 20, numSlices = 1)

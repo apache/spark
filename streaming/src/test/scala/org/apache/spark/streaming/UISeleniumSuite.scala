@@ -27,6 +27,7 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
@@ -61,7 +62,7 @@ class UISeleniumSuite
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set("spark.ui.enabled", "true")
+      .set(UI_ENABLED, true)
     val ssc = new StreamingContext(conf, Seconds(1))
     assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
     ssc

@@ -42,6 +42,7 @@ import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
@@ -289,7 +290,7 @@ class SparkSubmitSuite
     conf.get("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
     conf.get("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
     conf.get("spark.app.name") should be ("beauty")
-    conf.get("spark.ui.enabled") should be ("false")
+    conf.get(UI_ENABLED) should be (false)
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
@@ -328,7 +329,7 @@ class SparkSubmitSuite
     conf.get("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
     conf.get("spark.yarn.dist.jars") should include
       regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
-    conf.get("spark.ui.enabled") should be ("false")
+    conf.get(UI_ENABLED) should be (false)
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
@@ -377,9 +378,9 @@ class SparkSubmitSuite
     confMap.keys should contain ("spark.driver.memory")
     confMap.keys should contain ("spark.driver.cores")
     confMap.keys should contain ("spark.driver.supervise")
-    confMap.keys should contain ("spark.ui.enabled")
+    confMap.keys should contain (UI_ENABLED.key)
     confMap.keys should contain ("spark.submit.deployMode")
-    conf.get("spark.ui.enabled") should be ("false")
+    conf.get(UI_ENABLED) should be (false)
   }
 
   test("handles standalone client mode") {
@@ -401,7 +402,7 @@ class SparkSubmitSuite
     classpath(0) should endWith ("thejar.jar")
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.cores.max") should be ("5")
-    conf.get("spark.ui.enabled") should be ("false")
+    conf.get(UI_ENABLED) should be (false)
   }
 
   test("handles mesos client mode") {
@@ -423,7 +424,7 @@ class SparkSubmitSuite
     classpath(0) should endWith ("thejar.jar")
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.cores.max") should be ("5")
-    conf.get("spark.ui.enabled") should be ("false")
+    conf.get(UI_ENABLED) should be (false)
   }
 
   test("handles k8s cluster mode") {

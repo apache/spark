@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
