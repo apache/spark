@@ -1038,17 +1038,18 @@ private[spark] object RandomForest extends Logging with Serializable {
       val numSplits = metadata.numSplits(featureIndex)
 
       // get count for each distinct value except zero value
-      val (partValueCountMap, partNumSamples) =
-        featureSamples.foldLeft((Map.empty[Double, Double], 0.0)) {
-          case ((m, cnt), (w, x)) =>
-            (m + ((x, m.getOrElse(x, 0.0) + w)), cnt + w)
-        }
+      val partValueCountMap = mutable.Map[Double, Double]()
+      var partNumSamples = 0.0
+      featureSamples.foreach { x =>
+        partValueCountMap(x._2) = partValueCountMap.getOrElse(x._2, 0.0) + x._1;
+        partNumSamples += x._1
+      }
 
       // Calculate the expected number of samples for finding splits
       val weightedNumSamples = samplesFractionForFindSplits(metadata) *
         metadata.weightedNumExamples
       // add expected zero value count and get complete statistics
-      val valueCountMap: Map[Double, Double] = if (weightedNumSamples - partNumSamples > 1e-5) {
+      val valueCountMap = if (weightedNumSamples - partNumSamples > Utils.EPSILON) {
         partValueCountMap + (0.0 -> (weightedNumSamples - partNumSamples))
       } else {
         partValueCountMap

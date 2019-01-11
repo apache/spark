@@ -39,7 +39,7 @@ import org.apache.spark.util.random.XORShiftRandom
 private[spark] class BaggedPoint[Datum](
     val datum: Datum,
     val subsampleCounts: Array[Int],
-    val sampleWeight: Double) extends Serializable
+    val sampleWeight: Double = 1.0) extends Serializable
 
 private[spark] object BaggedPoint {
 
@@ -93,7 +93,7 @@ private[spark] object BaggedPoint {
           }
           subsampleIndex += 1
         }
-        new BaggedPoint(instance, subsampleCounts, 1.0)
+        new BaggedPoint(instance, subsampleCounts)
       }
     }
   }
@@ -114,7 +114,7 @@ private[spark] object BaggedPoint {
           subsampleCounts(subsampleIndex) = poisson.sample()
           subsampleIndex += 1
         }
-        new BaggedPoint(instance, subsampleCounts, 1.0)
+        new BaggedPoint(instance, subsampleCounts)
       }
     }
   }

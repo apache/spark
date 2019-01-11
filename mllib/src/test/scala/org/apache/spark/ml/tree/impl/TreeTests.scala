@@ -42,16 +42,22 @@ private[ml] object TreeTests extends SparkFunSuite {
    * @return DataFrame with metadata
    */
   def setMetadata(
-      data: RDD[Instance],
+      data: RDD[_],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
+    val dataOfInstance: RDD[Instance] = data.map {
+      row => row match {
+        case instance: Instance => instance
+        case labeledPoint: LabeledPoint => labeledPoint.toInstance
+      }
+    }
     val spark = SparkSession.builder()
       .sparkContext(data.sparkContext)
       .getOrCreate()
     import spark.implicits._
 
-    val df = data.toDF()
-    val numFeatures = data.first().features.size
+    val df = dataOfInstance.toDF()
+    val numFeatures = dataOfInstance.first().features.size
     val featuresAttributes = Range(0, numFeatures).map { feature =>
       if (categoricalFeatures.contains(feature)) {
         NominalAttribute.defaultAttr.withIndex(feature).withNumValues(categoricalFeatures(feature))
@@ -77,8 +83,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
       numClasses: Int): DataFrame = {
-    setMetadata(data.rdd.map(_.toInstance),
-      categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+    setMetadata(data.rdd, categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numClasses)
   }
 

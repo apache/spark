@@ -236,8 +236,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     sc.setCheckpointDir(path)
 
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses = 2)
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
     val gbt = new GBTClassifier()
       .setMaxDepth(2)
       .setLossType("logistic")
@@ -331,8 +330,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     // In this data, feature 1 is very important.
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses)
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
     val importances = gbt.fit(df).featureImportances
     val mostImportantFeature = importances.argmax
@@ -355,8 +353,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     // In this data, feature 1 is very important.
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data.map(_.toInstance),
-      categoricalFeatures, numClasses)
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
     val importances = gbt.fit(df).featureImportances
     val mostImportantFeature = importances.argmax
@@ -460,9 +457,10 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "logistic")
 
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd.map(_.toInstance), Map.empty[Int, Int], numClasses = 2)
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
-      allParamSettings, checkModelData)  }
+      allParamSettings, checkModelData)
+  }
 }
 
 private object GBTClassifierSuite extends SparkFunSuite {
@@ -481,8 +479,7 @@ private object GBTClassifierSuite extends SparkFunSuite {
       gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
-    val newData: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses = 2)
+    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
     val newModel = gbt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTClassificationModel.fromOld(
