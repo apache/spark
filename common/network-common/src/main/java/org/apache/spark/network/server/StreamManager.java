@@ -71,6 +71,13 @@ public abstract class StreamManager {
   public void registerChannel(Channel channel, long streamId) { }
 
   /**
+   * Associates a stream with a single client connection, which is guaranteed to be the only reader
+   * of the stream. This is similar to {@link #registerChannel(Channel, long)} method, but the
+   * <code>streamId</code> argument is for the stream in response to a stream() request.
+   */
+  public void registerChannel(Channel channel, String streamId) { }
+
+  /**
    * Indicates that the given channel has been terminated. After this occurs, we are guaranteed not
    * to read from the associated streams again, so any state can be cleaned up.
    */

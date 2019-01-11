@@ -79,6 +79,11 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
+  public void registerChannel(Channel channel, String streamChunkId) {
+    registerChannel(channel, parseStreamChunkId(streamChunkId).getLeft());
+  }
+
+  @Override
   public ManagedBuffer getChunk(long streamId, int chunkIndex) {
     StreamState state = streams.get(streamId);
     if (chunkIndex != state.curChunk) {
