@@ -46,14 +46,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE bar (c0 text, c1 integer, c2 double precision, c3 bigint, "
       + "c4 bit(1), c5 bit(10), c6 bytea, c7 boolean, c8 inet, c9 cidr, "
       + "c10 integer[], c11 text[], c12 real[], c13 numeric(2,2)[], c14 enum_type, "
-      + "c15 float4, c16 smallint)").executeUpdate()
+      + "c15 float4, c16 smallint, c17 numeric[])").executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES ('hello', 42, 1.25, 123456789012345, B'0', "
       + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16', "
-      + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}', '{0.11, 0.22}', 'd1', 1.01, 1)"""
+      + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}', '{0.11, 0.22}', 'd1', 1.01, 1, """
+      + "'{111.2222, 333.4444}')"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES (null, null, null, null, null, "
       + "null, null, null, null, null, "
-      + "null, null, null, null, null, null, null)"
+      + "null, null, null, null, null, null, null, null)"
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE ts_with_timezone " +
@@ -85,7 +86,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.length == 2)
     // Test the types, and values using the first row.
     val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 17)
+    assert(types.length == 18)
     assert(classOf[String].isAssignableFrom(types(0)))
     assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
     assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
@@ -103,6 +104,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(classOf[String].isAssignableFrom(types(14)))
     assert(classOf[java.lang.Float].isAssignableFrom(types(15)))
     assert(classOf[java.lang.Short].isAssignableFrom(types(16)))
+    assert(classOf[Seq[BigDecimal]].isAssignableFrom(types(17)))
     assert(rows(0).getString(0).equals("hello"))
     assert(rows(0).getInt(1) == 42)
     assert(rows(0).getDouble(2) == 1.25)
@@ -123,6 +125,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getString(14) == "d1")
     assert(rows(0).getFloat(15) == 1.01f)
     assert(rows(0).getShort(16) == 1)
+    assert(rows(0).getSeq(17) ==
+      Seq("111.222200000000000000", "333.444400000000000000").map(BigDecimal(_).bigDecimal))
 
     // Test reading null values using the second row.
     assert(0.until(16).forall(rows(1).isNullAt(_)))
