@@ -46,7 +46,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
     val hadoopConf =
       sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
     val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(filePaths, hadoopConf,
-      checkEmptyGlobPath = false, checkFilesExist = false)
+      checkEmptyGlobPath = true, checkFilesExist = true)
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
     new InMemoryFileIndex(sparkSession, rootPathsSpecified,
       options.asMap().asScala.toMap, userSpecifiedSchema, fileStatusCache)
