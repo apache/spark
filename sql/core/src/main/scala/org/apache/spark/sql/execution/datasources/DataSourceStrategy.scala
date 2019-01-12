@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTab
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -309,7 +310,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
       relation: LogicalRelation,
       projects: Seq[NamedExpression],
       filterPredicates: Seq[Expression],
-      scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow]) = {
+      scanBuilder: (Seq[Attribute], Array[Filter]) => ((SQLMetric) => RDD[InternalRow])) = {
     pruneFilterProjectRaw(
       relation,
       projects,
@@ -337,7 +338,8 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     relation: LogicalRelation,
     projects: Seq[NamedExpression],
     filterPredicates: Seq[Expression],
-    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]): SparkPlan = {
+    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) =>
+      ((SQLMetric) => RDD[InternalRow])): SparkPlan = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
@@ -406,11 +408,15 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   private[this] def toCatalystRDD(
       relation: LogicalRelation,
       output: Seq[Attribute],
-      rdd: RDD[Row]): RDD[InternalRow] = {
-    if (relation.relation.needConversion) {
+      rdd: RDD[Row]): (SQLMetric) => RDD[InternalRow] = {
+    (recordDecodingTime: SQLMetric) => if (relation.relation.needConversion) {
       val converters = RowEncoder(StructType.fromAttributes(output))
       rdd.mapPartitions { iterator =>
-        iterator.map(converters.toRow)
+        val startTime = System.nanoTime()
+        val rowIter = iterator.map(converters.toRow)
+        val timeNs = System.nanoTime() - startTime
+        recordDecodingTime.add(timeNs)
+        rowIter
       }
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
@@ -420,7 +426,8 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   /**
    * Convert RDD of Row into RDD of InternalRow with objects in catalyst types
    */
-  private[this] def toCatalystRDD(relation: LogicalRelation, rdd: RDD[Row]): RDD[InternalRow] = {
+  private[this] def toCatalystRDD(
+      relation: LogicalRelation, rdd: RDD[Row]): (SQLMetric) => RDD[InternalRow] = {
     toCatalystRDD(relation, relation.output, rdd)
   }
 }

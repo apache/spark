@@ -354,6 +354,24 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       (1 to 10).map(Row(_)).toSeq)
   }
 
+  test("metrics for defaultSource") {
+    sql(
+      """
+        |CREATE TEMPORARY VIEW table
+        |USING org.apache.spark.sql.sources
+        |OPTIONS (
+        |  from '1',
+        |  to '10'
+        |)
+      """.stripMargin)
+    val df = sql("SELECT * FROM table")
+    df.collect()
+    val plan = df.queryExecution.executedPlan.collectLeaves().head
+    val metrics = plan.metrics
+    assert(metrics("recordDecodingTime").value > 0)
+    assert(metrics("numOutputRows").value == 10)
+  }
+
   test("exceptions") {
     // Make sure we do throw correct exception when users use a relation provider that
     // only implements the RelationProvider or the SchemaRelationProvider.

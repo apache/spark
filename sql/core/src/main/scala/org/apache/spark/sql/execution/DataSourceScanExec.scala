@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -81,7 +81,7 @@ case class RowDataSourceScanExec(
     requiredColumnsIndex: Seq[Int],
     filters: Set[Filter],
     handledFilters: Set[Filter],
-    rdd: RDD[InternalRow],
+    rddWithMetric: (SQLMetric) => RDD[InternalRow],
     @transient relation: BaseRelation,
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
@@ -89,12 +89,14 @@ case class RowDataSourceScanExec(
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
   override lazy val metrics =
-    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "recordDecodingTime" ->
+        SQLMetrics.createMetric(sparkContext, "record decoding time (ns)"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+    inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(schema)
       proj.initialize(index)
       iter.map( r => {
@@ -107,7 +109,7 @@ case class RowDataSourceScanExec(
   // Input can be InternalRow, has to be turned into UnsafeRows.
   override protected val createUnsafeProjection: Boolean = true
 
-  override def inputRDD: RDD[InternalRow] = rdd
+  override def inputRDD: RDD[InternalRow] = rddWithMetric(longMetric("recordDecodingTime"))
 
   override val metadata: Map[String, String] = {
     val markedFilters = for (filter <- filters) yield {
@@ -122,7 +124,7 @@ case class RowDataSourceScanExec(
   override def doCanonicalize(): SparkPlan =
     copy(
       fullOutput.map(QueryPlan.normalizeExprId(_, fullOutput)),
-      rdd = null,
+      rddWithMetric = null,
       tableIdentifier = None)
 }
 
