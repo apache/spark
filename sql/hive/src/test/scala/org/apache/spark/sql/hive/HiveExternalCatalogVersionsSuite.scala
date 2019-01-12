@@ -203,7 +203,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.2.2", "2.3.2", "2.4.0")
+  val testingVersions = Seq("2.3.2", "2.4.0")
 
   protected var spark: SparkSession = _
 
