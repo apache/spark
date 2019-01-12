@@ -56,30 +56,12 @@ object DateTimeUtils {
   final val NANOS_PER_MICROS = 1000L
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
 
-  // number of days in 400 years by Gregorian calendar
-  final val daysIn400Years: Int = 146097
-
-  // In the Julian calendar every year that is exactly divisible by 4 is a leap year without any
-  // exception. But in the Gregorian calendar every year that is exactly divisible by four
-  // is a leap year, except for years that are exactly divisible by 100, but these centurial years
-  // are leap years if they are exactly divisible by 400.
-  // So there are 3 extra days in the Julian calendar within a 400 years cycle compared to the
-  // Gregorian calendar.
-  final val extraLeapDaysIn400YearsJulian = 3
-
-  // number of days in 400 years by Julian calendar
-  final val daysIn400YearsInJulian: Int = daysIn400Years + extraLeapDaysIn400YearsJulian
-
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
 
   // this is year -17999, calculation: 50 * daysIn400Year
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
-
-  // days to year -17999 in Julian calendar
-  final val toYearZeroInJulian = toYearZero + 49 * extraLeapDaysIn400YearsJulian
-
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
@@ -594,15 +576,6 @@ object DateTimeUtils {
   }
 
   /**
-   * Calculates the year and the number of the day in the year for the given
-   * number of days. The given days is the number of days since 1.1.1970.
-   */
-  private[this] def getYearAndDayInYear(daysSince1970: SQLDate): (Int, Int) = {
-    val localDate = LocalDate.ofEpochDay(daysSince1970)
-    (localDate.getYear, localDate.getDayOfYear)
-  }
-
-  /**
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
    */
@@ -631,43 +604,8 @@ object DateTimeUtils {
    * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
    */
   def splitDate(date: SQLDate): (Int, Int, Int, Int) = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    val isLeap = isLeapYear(year)
-    if (isLeap && dayInYear == 60) {
-      (year, 2, 29, 0)
-    } else {
-      if (isLeap && dayInYear > 60) dayInYear -= 1
-
-      if (dayInYear <= 181) {
-        if (dayInYear <= 31) {
-          (year, 1, dayInYear, 31 - dayInYear)
-        } else if (dayInYear <= 59) {
-          (year, 2, dayInYear - 31, if (isLeap) 60 - dayInYear else 59 - dayInYear)
-        } else if (dayInYear <= 90) {
-          (year, 3, dayInYear - 59, 90 - dayInYear)
-        } else if (dayInYear <= 120) {
-          (year, 4, dayInYear - 90, 120 - dayInYear)
-        } else if (dayInYear <= 151) {
-          (year, 5, dayInYear - 120, 151 - dayInYear)
-        } else {
-          (year, 6, dayInYear - 151, 181 - dayInYear)
-        }
-      } else {
-        if (dayInYear <= 212) {
-          (year, 7, dayInYear - 181, 212 - dayInYear)
-        } else if (dayInYear <= 243) {
-          (year, 8, dayInYear - 212, 243 - dayInYear)
-        } else if (dayInYear <= 273) {
-          (year, 9, dayInYear - 243, 273 - dayInYear)
-        } else if (dayInYear <= 304) {
-          (year, 10, dayInYear - 273, 304 - dayInYear)
-        } else if (dayInYear <= 334) {
-          (year, 11, dayInYear - 304, 334 - dayInYear)
-        } else {
-          (year, 12, dayInYear - 334, 365 - dayInYear)
-        }
-      }
-    }
+    val ld = LocalDate.ofEpochDay(date)
+    (ld.getYear, ld.getMonthValue, ld.getDayOfMonth, ld.lengthOfMonth() - ld.getDayOfMonth)
   }
 
   /**
@@ -675,40 +613,7 @@ object DateTimeUtils {
    * since 1.1.1970. January is month 1.
    */
   def getMonth(date: SQLDate): Int = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    if (isLeapYear(year)) {
-      if (dayInYear == 60) {
-        return 2
-      } else if (dayInYear > 60) {
-        dayInYear = dayInYear - 1
-      }
-    }
-
-    if (dayInYear <= 31) {
-      1
-    } else if (dayInYear <= 59) {
-      2
-    } else if (dayInYear <= 90) {
-      3
-    } else if (dayInYear <= 120) {
-      4
-    } else if (dayInYear <= 151) {
-      5
-    } else if (dayInYear <= 181) {
-      6
-    } else if (dayInYear <= 212) {
-      7
-    } else if (dayInYear <= 243) {
-      8
-    } else if (dayInYear <= 273) {
-      9
-    } else if (dayInYear <= 304) {
-      10
-    } else if (dayInYear <= 334) {
-      11
-    } else {
-      12
-    }
+    LocalDate.ofEpochDay(date).getMonthValue
   }
 
   /**
@@ -716,40 +621,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayOfMonth(date: SQLDate): Int = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    if (isLeapYear(year)) {
-      if (dayInYear == 60) {
-        return 29
-      } else if (dayInYear > 60) {
-        dayInYear = dayInYear - 1
-      }
-    }
-
-    if (dayInYear <= 31) {
-      dayInYear
-    } else if (dayInYear <= 59) {
-      dayInYear - 31
-    } else if (dayInYear <= 90) {
-      dayInYear - 59
-    } else if (dayInYear <= 120) {
-      dayInYear - 90
-    } else if (dayInYear <= 151) {
-      dayInYear - 120
-    } else if (dayInYear <= 181) {
-      dayInYear - 151
-    } else if (dayInYear <= 212) {
-      dayInYear - 181
-    } else if (dayInYear <= 243) {
-      dayInYear - 212
-    } else if (dayInYear <= 273) {
-      dayInYear - 243
-    } else if (dayInYear <= 304) {
-      dayInYear - 273
-    } else if (dayInYear <= 334) {
-      dayInYear - 304
-    } else {
-      dayInYear - 334
-    }
+    LocalDate.ofEpochDay(date).getDayOfMonth
   }
 
   /**
