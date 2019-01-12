@@ -280,19 +280,19 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] def getSortFunc(
       ascending: Boolean): ((String, Long), (String, Long)) => Boolean = {
     if (ascending) {
-     (a: (String, Long), b: (String, Long)) => {
-       if (a._2 == b._2) {
-         a._1 < b._1
-       } else {
-         a._2 < b._2
-       }
-     }
-    } else {
-      (a: (String, Long), b: (String, Long)) => {
-        if (a._2 == b._2) {
-          a._1 < b._1
+      { case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
+        if (freqA == freqB) {
+         strA < strB
         } else {
-          a._2 > b._2
+         freqA < freqB
+        }
+      }
+    } else {
+      { case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
+        if (freqA == freqB) {
+          strA  < strB
+        } else {
+          freqA > freqB
         }
       }
     }
@@ -318,8 +318,9 @@ class StringIndexerModel (
 
   import StringIndexerModel._
 
-  @deprecated("`this(labels: Array[String])` is deprecated and will be removed in 3.1.0. " +
-    "Use `this(labelsArray: Array[Array[String]])` instead.", "3.0.0")
+  @Since("1.5.0")
+  def this(uid: String, labels: Array[String]) = this(uid, Array(labels))
+
   @Since("1.5.0")
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), Array(labels))
 

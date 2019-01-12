@@ -117,8 +117,7 @@ and the migration guide below will explain all changes between releases.
  `stringOrderType` param in `StringIndexer`, in case of equal frequency, the order of
  strings is undefined. Since Spark 3.0, the strings with equal frequency are further
  sorted by alphabet. And since Spark 3.0, `StringIndexer` supports encoding multiple
- columns. Because of this change, `StringIndexerModel`'s public constructor `def this(uid: String, labels: Array[String])`
- is not available. Since Spark 3.0, Developers can use `def this(uid: String, labelsArray: Array[Array[String]])` instead.
+ columns.
 
 ## From 2.2 to 2.3
 
