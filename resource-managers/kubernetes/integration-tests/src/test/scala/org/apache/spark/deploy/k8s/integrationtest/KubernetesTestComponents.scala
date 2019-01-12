@@ -68,8 +68,8 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.executor.cores", "1")
       .set("spark.executors.instances", "1")
       .set("spark.app.name", "spark-test-app")
-      .set(IS_TESTING, false)
-      .set(UI_ENABLED, true)
+      .set(IS_TESTING.key, "false")
+      .set(UI_ENABLED.key, "true")
       .set("spark.kubernetes.submission.waitAppCompletion", "false")
       .set("spark.kubernetes.authenticate.driver.serviceAccountName", serviceAccountName)
   }
