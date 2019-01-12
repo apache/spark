@@ -312,6 +312,15 @@ class UDFRegistration(object):
             >>> spark.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
             [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
 
+            >>> @pandas_udf("integer", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
+            ... def sum_udf(v):
+            ...     return v.sum()
+            ...
+            >>> _ = spark.udf.register("sum_udf", sum_udf)  # doctest: +SKIP
+            >>> q = "SELECT sum_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
+            >>> spark.sql(q).collect()  # doctest: +SKIP
+            [Row(sum_udf(v1)=1), Row(sum_udf(v1)=5)]
+
             .. note:: Registration for a user-defined function (case 2.) was added from
                 Spark 2.3.0.
         """
@@ -324,9 +333,11 @@ class UDFRegistration(object):
                     "Invalid returnType: data type can not be specified when f is"
                     "a user-defined function, but got %s." % returnType)
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
-                                  PythonEvalType.SQL_SCALAR_PANDAS_UDF]:
+                                  PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                                  PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
                 raise ValueError(
-                    "Invalid f: f must be either SQL_BATCHED_UDF or SQL_SCALAR_PANDAS_UDF")
+                    "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF or "
+                    "SQL_GROUPED_AGG_PANDAS_UDF")
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
                                                deterministic=f.deterministic,

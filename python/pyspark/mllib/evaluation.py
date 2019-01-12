@@ -229,46 +229,28 @@ class MulticlassMetrics(JavaModelWrapper):
         return self.call("falsePositiveRate", label)
 
     @since('1.4.0')
-    def precision(self, label=None):
+    def precision(self, label):
         """
-        Returns precision or precision for a given label (category) if specified.
+        Returns precision.
         """
-        if label is None:
-            # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
-            return self.call("precision")
-        else:
-            return self.call("precision", float(label))
+        return self.call("precision", float(label))
 
     @since('1.4.0')
-    def recall(self, label=None):
+    def recall(self, label):
         """
-        Returns recall or recall for a given label (category) if specified.
+        Returns recall.
         """
-        if label is None:
-            # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
-            return self.call("recall")
-        else:
-            return self.call("recall", float(label))
+        return self.call("recall", float(label))
 
     @since('1.4.0')
-    def fMeasure(self, label=None, beta=None):
+    def fMeasure(self, label, beta=None):
         """
-        Returns f-measure or f-measure for a given label (category) if specified.
+        Returns f-measure.
         """
         if beta is None:
-            if label is None:
-                # note:: Deprecated in 2.0.0. Use accuracy.
-                warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
-                return self.call("fMeasure")
-            else:
-                return self.call("fMeasure", label)
+            return self.call("fMeasure", label)
         else:
-            if label is None:
-                raise Exception("If the beta parameter is specified, label can not be none")
-            else:
-                return self.call("fMeasure", label, beta)
+            return self.call("fMeasure", label, beta)
 
     @property
     @since('2.0.0')

@@ -31,7 +31,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -155,31 +155,31 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(env.get("MASTER"))
       .orNull
     driverExtraClassPath = Option(driverExtraClassPath)
-      .orElse(sparkProperties.get("spark.driver.extraClassPath"))
+      .orElse(sparkProperties.get(config.DRIVER_CLASS_PATH.key))
       .orNull
     driverExtraJavaOptions = Option(driverExtraJavaOptions)
-      .orElse(sparkProperties.get("spark.driver.extraJavaOptions"))
+      .orElse(sparkProperties.get(config.DRIVER_JAVA_OPTIONS.key))
       .orNull
     driverExtraLibraryPath = Option(driverExtraLibraryPath)
-      .orElse(sparkProperties.get("spark.driver.extraLibraryPath"))
+      .orElse(sparkProperties.get(config.DRIVER_LIBRARY_PATH.key))
       .orNull
     driverMemory = Option(driverMemory)
-      .orElse(sparkProperties.get("spark.driver.memory"))
+      .orElse(sparkProperties.get(config.DRIVER_MEMORY.key))
       .orElse(env.get("SPARK_DRIVER_MEMORY"))
       .orNull
     driverCores = Option(driverCores)
-      .orElse(sparkProperties.get("spark.driver.cores"))
+      .orElse(sparkProperties.get(config.DRIVER_CORES.key))
       .orNull
     executorMemory = Option(executorMemory)
-      .orElse(sparkProperties.get("spark.executor.memory"))
+      .orElse(sparkProperties.get(config.EXECUTOR_MEMORY.key))
       .orElse(env.get("SPARK_EXECUTOR_MEMORY"))
       .orNull
     executorCores = Option(executorCores)
-      .orElse(sparkProperties.get("spark.executor.cores"))
+      .orElse(sparkProperties.get(config.EXECUTOR_CORES.key))
       .orElse(env.get("SPARK_EXECUTOR_CORES"))
       .orNull
     totalExecutorCores = Option(totalExecutorCores)
-      .orElse(sparkProperties.get("spark.cores.max"))
+      .orElse(sparkProperties.get(config.CORES_MAX.key))
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
@@ -197,7 +197,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(env.get("DEPLOY_MODE"))
       .orNull
     numExecutors = Option(numExecutors)
-      .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
+      .getOrElse(sparkProperties.get(config.EXECUTOR_INSTANCES.key).orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab)
       .orElse(sparkProperties.get("spark.kerberos.keytab"))

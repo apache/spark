@@ -45,7 +45,7 @@ class HadoopFsRelationSuite extends QueryTest with SharedSQLContext {
     import testImplicits._
     Seq(1.0, 0.5).foreach { compressionFactor =>
       withSQLConf("spark.sql.sources.fileCompressionFactor" -> compressionFactor.toString,
-        "spark.sql.autoBroadcastJoinThreshold" -> "400") {
+        "spark.sql.autoBroadcastJoinThreshold" -> "434") {
         withTempPath { workDir =>
           // the file size is 740 bytes
           val workDirPath = workDir.getAbsolutePath

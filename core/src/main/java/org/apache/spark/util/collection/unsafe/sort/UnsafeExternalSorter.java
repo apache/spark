@@ -213,14 +213,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       spillWriters.size() > 1 ? " times" : " time");
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-    // We only write out contents of the inMemSorter if it is not empty.
-    if (inMemSorter.numRecords() > 0) {
-      final UnsafeSorterSpillWriter spillWriter =
-        new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
-          inMemSorter.numRecords());
-      spillWriters.add(spillWriter);
-      spillIterator(inMemSorter.getSortedIterator(), spillWriter);
-    }
+
+    final UnsafeSorterSpillWriter spillWriter =
+      new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
+        inMemSorter.numRecords());
+    spillWriters.add(spillWriter);
+    spillIterator(inMemSorter.getSortedIterator(), spillWriter);
 
     final long spillSize = freeMemory();
     // Note that this is more-or-less going to be a multiple of the page size, so wasted space in

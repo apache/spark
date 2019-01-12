@@ -140,16 +140,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(stringToDate(UTF8String.fromString("2015-03-18")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18 ")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18 123142")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18T123123")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18T")).get ===
-      millisToDays(c.getTimeInMillis))
+    Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
+      "2015-03-18T123123", "2015-03-18T").foreach { s =>
+      assert(stringToDate(UTF8String.fromString(s)).get === millisToDays(c.getTimeInMillis))
+    }
 
     assert(stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
     assert(stringToDate(UTF8String.fromString("2015/03/18")).isEmpty)
@@ -214,9 +208,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18 ", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18T", Option(c.getTimeInMillis * 1000))
+
+      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+        checkStringToTimestamp(s, Option(c.getTimeInMillis * 1000))
+      }
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
@@ -413,6 +408,36 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 77)
     c.set(2012, 2, 18, 0, 0, 0)
     assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 78)
+  }
+
+  test("SPARK-26002: correct day of year calculations for Julian calendar years") {
+    val c = Calendar.getInstance()
+    c.set(Calendar.MILLISECOND, 0)
+    (1000 to 1600 by 100).foreach { year =>
+      // January 1 is the 1st day of year.
+      c.set(year, 0, 1, 0, 0, 0)
+      assert(getYear(getInUTCDays(c.getTimeInMillis)) === year)
+      assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 1)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 1)
+
+      // March 1 is the 61st day of the year as they are leap years. It is true for
+      // even the multiples of 100 as before 1582-10-4 the Julian calendar leap year calculation
+      // is used in which every multiples of 4 are leap years
+      c.set(year, 2, 1, 0, 0, 0)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 61)
+      assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 3)
+
+      // testing leap day (February 29) in leap years
+      c.set(year, 1, 29, 0, 0, 0)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
+
+      // For non-leap years:
+      c.set(year + 1, 2, 1, 0, 0, 0)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
+    }
+
+    c.set(1582, 2, 1, 0, 0, 0)
+    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
   }
 
   test("get year") {

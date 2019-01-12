@@ -31,7 +31,7 @@ import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -163,10 +163,10 @@ object SparkEnv extends Logging {
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains(DRIVER_HOST_ADDRESS),
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
-    assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
+    assert(conf.contains(DRIVER_PORT), s"${DRIVER_PORT.key} is not set on the driver!")
     val bindAddress = conf.get(DRIVER_BIND_ADDRESS)
     val advertiseAddress = conf.get(DRIVER_HOST_ADDRESS)
-    val port = conf.get("spark.driver.port").toInt
+    val port = conf.get(DRIVER_PORT)
     val ioEncryptionKey = if (conf.get(IO_ENCRYPTION_ENABLED)) {
       Some(CryptoStreamUtils.createKey(conf))
     } else {
@@ -232,8 +232,8 @@ object SparkEnv extends Logging {
     if (isDriver) {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
     }
-
-    val securityManager = new SecurityManager(conf, ioEncryptionKey)
+    val authSecretFileConf = if (isDriver) AUTH_SECRET_FILE_DRIVER else AUTH_SECRET_FILE_EXECUTOR
+    val securityManager = new SecurityManager(conf, ioEncryptionKey, authSecretFileConf)
     if (isDriver) {
       securityManager.initializeAuth()
     }
@@ -251,7 +251,7 @@ object SparkEnv extends Logging {
 
     // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
     if (isDriver) {
-      conf.set("spark.driver.port", rpcEnv.address.port.toString)
+      conf.set(DRIVER_PORT, rpcEnv.address.port)
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
@@ -261,7 +261,7 @@ object SparkEnv extends Logging {
       // SparkConf, then one taking no arguments
       try {
         cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
-          .newInstance(conf, new java.lang.Boolean(isDriver))
+          .newInstance(conf, java.lang.Boolean.valueOf(isDriver))
           .asInstanceOf[T]
       } catch {
         case _: NoSuchMethodException =>
@@ -322,13 +322,7 @@ object SparkEnv extends Logging {
       shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
-    val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
-    val memoryManager: MemoryManager =
-      if (useLegacyMemoryManager) {
-        new StaticMemoryManager(conf, numUsableCores)
-      } else {
-        UnifiedMemoryManager(conf, numUsableCores)
-      }
+    val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
 
     val blockManagerPort = if (isDriver) {
       conf.get(DRIVER_BLOCK_MANAGER_PORT)
@@ -359,7 +353,7 @@ object SparkEnv extends Logging {
       // We need to set the executor ID before the MetricsSystem is created because sources and
       // sinks specified in the metrics configuration file will want to incorporate this executor's
       // ID into the metrics they report.
-      conf.set("spark.executor.id", executorId)
+      conf.set(EXECUTOR_ID, executorId)
       val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
       ms.start()
       ms

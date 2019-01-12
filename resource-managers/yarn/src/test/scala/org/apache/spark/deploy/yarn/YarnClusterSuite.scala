@@ -36,6 +36,8 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
@@ -192,7 +194,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val propsFile = createConfFile()
     val handle = new SparkLauncher(env)
       .setSparkHome(sys.props("spark.test.home"))
-      .setConf("spark.ui.enabled", "false")
+      .setConf(UI_ENABLED.key, "false")
       .setPropertiesFile(propsFile)
       .setMaster("yarn")
       .setDeployMode("client")
@@ -265,7 +267,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.10.7-src.zip",
+        s"$sparkHome/python/lib/py4j-0.10.8.1-src.zip",
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),

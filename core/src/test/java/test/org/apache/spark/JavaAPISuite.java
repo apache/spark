@@ -33,8 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
-import org.apache.spark.Accumulator;
-import org.apache.spark.AccumulatorParam;
 import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
@@ -107,11 +105,6 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<String> s2 = sc.parallelize(strings);
     // Varargs
     JavaRDD<String> sUnion = sc.union(s1, s2);
-    assertEquals(4, sUnion.count());
-    // List
-    List<JavaRDD<String>> list = new ArrayList<>();
-    list.add(s2);
-    sUnion = sc.union(s1, list);
     assertEquals(4, sUnion.count());
 
     // Union of JavaDoubleRDDs
@@ -186,7 +179,7 @@ public class JavaAPISuite implements Serializable {
     long s1 = splits[1].count();
     long s2 = splits[2].count();
     assertTrue(s0 + " not within expected range", s0 > 150 && s0 < 250);
-    assertTrue(s1 + " not within expected range", s1 > 250 && s0 < 350);
+    assertTrue(s1 + " not within expected range", s1 > 250 && s1 < 350);
     assertTrue(s2 + " not within expected range", s2 > 430 && s2 < 570);
   }
 
@@ -956,7 +949,7 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void textFilesCompressed() throws IOException {
+  public void textFilesCompressed() {
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     rdd.saveAsTextFile(outputDir, DefaultCodec.class);
@@ -997,10 +990,10 @@ public class JavaAPISuite implements Serializable {
 
     FileOutputStream fos1 = new FileOutputStream(file1);
 
-    FileChannel channel1 = fos1.getChannel();
-    ByteBuffer bbuf = ByteBuffer.wrap(content1);
-    channel1.write(bbuf);
-    channel1.close();
+    try (FileChannel channel1 = fos1.getChannel()) {
+      ByteBuffer bbuf = ByteBuffer.wrap(content1);
+      channel1.write(bbuf);
+    }
     JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName, 3);
     List<Tuple2<String, PortableDataStream>> result = readRDD.collect();
     for (Tuple2<String, PortableDataStream> res : result) {
@@ -1018,10 +1011,10 @@ public class JavaAPISuite implements Serializable {
 
     FileOutputStream fos1 = new FileOutputStream(file1);
 
-    FileChannel channel1 = fos1.getChannel();
-    ByteBuffer bbuf = ByteBuffer.wrap(content1);
-    channel1.write(bbuf);
-    channel1.close();
+    try (FileChannel channel1 = fos1.getChannel()) {
+      ByteBuffer bbuf = ByteBuffer.wrap(content1);
+      channel1.write(bbuf);
+    }
 
     JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName).cache();
     readRDD.foreach(pair -> pair._2().toArray()); // force the file to read
@@ -1042,13 +1035,12 @@ public class JavaAPISuite implements Serializable {
 
     FileOutputStream fos1 = new FileOutputStream(file1);
 
-    FileChannel channel1 = fos1.getChannel();
-
-    for (int i = 0; i < numOfCopies; i++) {
-      ByteBuffer bbuf = ByteBuffer.wrap(content1);
-      channel1.write(bbuf);
+    try (FileChannel channel1 = fos1.getChannel()) {
+      for (int i = 0; i < numOfCopies; i++) {
+        ByteBuffer bbuf = ByteBuffer.wrap(content1);
+        channel1.write(bbuf);
+      }
     }
-    channel1.close();
 
     JavaRDD<byte[]> readRDD = sc.binaryRecords(tempDirName, content1.length);
     assertEquals(numOfCopies,readRDD.count());
@@ -1182,46 +1174,6 @@ public class JavaAPISuite implements Serializable {
 
     JavaRDD<Integer> sizes = rdd1.zipPartitions(rdd2, sizesFn);
     assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
-  }
-
-  @SuppressWarnings("deprecation")
-  @Test
-  public void accumulators() {
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
-
-    Accumulator<Integer> intAccum = sc.intAccumulator(10);
-    rdd.foreach(intAccum::add);
-    assertEquals((Integer) 25, intAccum.value());
-
-    Accumulator<Double> doubleAccum = sc.doubleAccumulator(10.0);
-    rdd.foreach(x -> doubleAccum.add((double) x));
-    assertEquals((Double) 25.0, doubleAccum.value());
-
-    // Try a custom accumulator type
-    AccumulatorParam<Float> floatAccumulatorParam = new AccumulatorParam<Float>() {
-      @Override
-      public Float addInPlace(Float r, Float t) {
-        return r + t;
-      }
-
-      @Override
-      public Float addAccumulator(Float r, Float t) {
-        return r + t;
-      }
-
-      @Override
-      public Float zero(Float initialValue) {
-        return 0.0f;
-      }
-    };
-
-    Accumulator<Float> floatAccum = sc.accumulator(10.0f, floatAccumulatorParam);
-    rdd.foreach(x -> floatAccum.add((float) x));
-    assertEquals((Float) 25.0f, floatAccum.value());
-
-    // Test the setValue method
-    floatAccum.setValue(5.0f);
-    assertEquals((Float) 5.0f, floatAccum.value());
   }
 
   @Test
@@ -1411,13 +1363,13 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
     Map<Integer, Long> wrExactCounts = wrExact.countByKey();
     assertEquals(2, wrExactCounts.size());
-    assertTrue(wrExactCounts.get(0) == 2);
-    assertTrue(wrExactCounts.get(1) == 4);
+    assertEquals(2, (long) wrExactCounts.get(0));
+    assertEquals(4, (long) wrExactCounts.get(1));
     JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKeyExact(false, fractions, 1L);
     Map<Integer, Long> worExactCounts = worExact.countByKey();
     assertEquals(2, worExactCounts.size());
-    assertTrue(worExactCounts.get(0) == 2);
-    assertTrue(worExactCounts.get(1) == 4);
+    assertEquals(2, (long) worExactCounts.get(0));
+    assertEquals(4, (long) worExactCounts.get(1));
   }
 
   private static class SomeCustomClass implements Serializable {

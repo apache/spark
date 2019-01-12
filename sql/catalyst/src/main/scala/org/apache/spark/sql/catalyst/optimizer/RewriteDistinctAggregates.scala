@@ -95,7 +95,7 @@ import org.apache.spark.sql.types.IntegerType
  *
  * This rule duplicates the input data by two or more times (# distinct groups + an optional
  * non-distinct group). This will put quite a bit of memory pressure of the used aggregate and
- * exchange operators. Keeping the number of distinct groups as low a possible should be priority,
+ * exchange operators. Keeping the number of distinct groups as low as possible should be priority,
  * we could improve this in the current rule by applying more advanced expression canonicalization
  * techniques.
  */
@@ -241,7 +241,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
         a.child)
 
-      // Construct the first aggregate operator. This de-duplicates the all the children of
+      // Construct the first aggregate operator. This de-duplicates all the children of
       // distinct operators, and applies the regular aggregate operators.
       val firstAggregateGroupBy = groupByAttrs ++ distinctAggChildAttrs :+ gid
       val firstAggregate = Aggregate(

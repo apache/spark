@@ -1134,7 +1134,8 @@ class SessionCatalog(
     if (clsForUDAF.isAssignableFrom(clazz)) {
       val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
       val e = cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
-        .newInstance(input, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+        .newInstance(input,
+          clazz.getConstructor().newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
         .asInstanceOf[ImplicitCastInputTypes]
 
       // Check input argument size
@@ -1221,9 +1222,10 @@ class SessionCatalog(
     databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
   }
 
-  protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
+  protected[sql] def failFunctionLookup(
+      name: FunctionIdentifier, cause: Option[Throwable] = None): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, cause)
   }
 
   /**

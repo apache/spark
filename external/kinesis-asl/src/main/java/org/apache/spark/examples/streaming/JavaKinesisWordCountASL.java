@@ -145,7 +145,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     // Union all the streams if there is more than 1 stream
     JavaDStream<byte[]> unionStreams;
     if (streamsList.size() > 1) {
-      unionStreams = jssc.union(streamsList.get(0), streamsList.subList(1, streamsList.size()));
+      unionStreams = jssc.union(streamsList.toArray(new JavaDStream[0]));
     } else {
       // Otherwise, just use the 1 stream
       unionStreams = streamsList.get(0);

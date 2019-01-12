@@ -88,7 +88,8 @@ statement
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         ((COMMENT comment=STRING) |
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')') |
+        (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
+        PARTITIONED BY partitionColumnNames=identifierList) |
         bucketSpec |
         skewSpec |
         rowFormat |
@@ -99,7 +100,7 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq)?                      #analyze
+        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE tableIdentifier
         ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -162,7 +163,8 @@ statement
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
-    | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
+    | CACHE LAZY? TABLE tableIdentifier
+        (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
     | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
@@ -468,7 +470,7 @@ joinType
 
 joinCriteria
     : ON booleanExpression
-    | USING '(' identifier (',' identifier)* ')'
+    | USING identifierList
     ;
 
 sample
@@ -690,6 +692,7 @@ namedWindow
 
 windowSpec
     : name=identifier  #windowRef
+    | '('name=identifier')'  #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?

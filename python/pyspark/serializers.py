@@ -185,6 +185,39 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
+class ArrowCollectSerializer(Serializer):
+    """
+    Deserialize a stream of batches followed by batch order information. Used in
+    DataFrame._collectAsArrow() after invoking Dataset.collectAsArrowToPython() in the JVM.
+    """
+
+    def __init__(self):
+        self.serializer = ArrowStreamSerializer()
+
+    def dump_stream(self, iterator, stream):
+        return self.serializer.dump_stream(iterator, stream)
+
+    def load_stream(self, stream):
+        """
+        Load a stream of un-ordered Arrow RecordBatches, where the last iteration yields
+        a list of indices that can be used to put the RecordBatches in the correct order.
+        """
+        # load the batches
+        for batch in self.serializer.load_stream(stream):
+            yield batch
+
+        # load the batch order indices
+        num = read_int(stream)
+        batch_order = []
+        for i in xrange(num):
+            index = read_int(stream)
+            batch_order.append(index)
+        yield batch_order
+
+    def __repr__(self):
+        return "ArrowCollectSerializer(%s)" % self.serializer
+
+
 class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
@@ -248,7 +281,10 @@ def _create_batch(series, timezone):
             # TODO: see ARROW-2432. Remove when the minimum PyArrow version becomes 0.10.0.
             return pa.Array.from_pandas(s.apply(
                 lambda v: decimal.Decimal('NaN') if v is None else v), mask=mask, type=t)
-        return pa.Array.from_pandas(s, mask=mask, type=t)
+        elif LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+            # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
+            return pa.Array.from_pandas(s, mask=mask, type=t)
+        return pa.Array.from_pandas(s, mask=mask, type=t, safe=False)
 
     arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])

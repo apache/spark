@@ -26,17 +26,18 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
-import org.apache.spark.rpc.RpcEndpointAddress
+import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -59,15 +60,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  private lazy val hadoopDelegationTokenManager: MesosHadoopDelegationTokenManager =
-    new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint)
-
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
 
-  private val maxCoresOption = conf.getOption("spark.cores.max").map(_.toInt)
+  private val maxCoresOption = conf.get(config.CORES_MAX)
 
-  private val executorCoresOption = conf.getOption("spark.executor.cores").map(_.toInt)
+  private val executorCoresOption = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
 
   private val minCoresPerExecutor = executorCoresOption.getOrElse(1)
 
@@ -222,18 +220,18 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int, taskId: String): CommandInfo = {
     val environment = Environment.newBuilder()
-    val extraClassPath = conf.getOption("spark.executor.extraClassPath")
+    val extraClassPath = conf.get(config.EXECUTOR_CLASS_PATH)
     extraClassPath.foreach { cp =>
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions").map {
+    val extraJavaOpts = conf.get(config.EXECUTOR_JAVA_OPTIONS).map {
       Utils.substituteAppNExecIds(_, appId, taskId)
     }.getOrElse("")
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
-    val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
+    val prefixEnv = conf.get(config.EXECUTOR_LIBRARY_PATH).map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
     }.getOrElse("")
 
@@ -263,8 +261,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
 
-    val uri = conf.getOption("spark.executor.uri")
-      .orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
+    val uri = conf.get(EXECUTOR_URI).orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
 
     if (uri.isEmpty) {
       val executorSparkHome = conf.getOption("spark.mesos.executor.home")
@@ -302,12 +299,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   protected def driverURL: String = {
-    if (conf.contains("spark.testing")) {
+    if (conf.contains(IS_TESTING)) {
       "driverURL"
     } else {
       RpcEndpointAddress(
-        conf.get("spark.driver.host"),
-        conf.get("spark.driver.port").toInt,
+        conf.get(config.DRIVER_HOST_ADDRESS),
+        conf.get(config.DRIVER_PORT),
         CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     }
   }
@@ -635,7 +632,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             externalShufflePort,
             sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
               s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s"),
-            sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+            sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL))
         slave.shuffleRegistered = true
       }
 
@@ -677,7 +674,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     launcherBackend.close()
   }
 
-  private def stopSchedulerBackend() {
+  private def stopSchedulerBackend(): Unit = {
     // Make sure we're not launching tasks during shutdown
     stateLock.synchronized {
       if (stopCalled) {
@@ -776,6 +773,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
+  override protected def createTokenManager(
+      schedulerRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = {
+    Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, schedulerRef))
+  }
+
   private def numExecutors(): Int = {
     slaves.values.map(_.taskIDs.size).sum
   }
@@ -786,14 +788,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       "0.0.0.0"
     } else {
       offer.getHostname
-    }
-  }
-
-  override def fetchHadoopDelegationTokens(): Option[Array[Byte]] = {
-    if (UserGroupInformation.isSecurityEnabled) {
-      Some(hadoopDelegationTokenManager.getTokens())
-    } else {
-      None
     }
   }
 }

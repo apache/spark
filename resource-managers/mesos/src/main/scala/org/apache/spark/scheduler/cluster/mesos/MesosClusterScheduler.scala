@@ -32,6 +32,7 @@ import org.apache.mesos.Protos.TaskStatus.Reason
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
+import org.apache.spark.internal.config.{CORES_MAX, EXECUTOR_LIBRARY_PATH, EXECUTOR_MEMORY}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
@@ -365,8 +366,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverExecutorURI(desc: MesosDriverDescription): Option[String] = {
-    desc.conf.getOption("spark.executor.uri")
-      .orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
+    desc.conf.get(config.EXECUTOR_URI).orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
   }
 
   private def getDriverFrameworkID(desc: MesosDriverDescription): String = {
@@ -474,7 +474,7 @@ private[spark] class MesosClusterScheduler(
     } else if (executorUri.isDefined) {
       val folderBasename = executorUri.get.split('/').last.split('.').head
 
-      val entries = conf.getOption("spark.executor.extraLibraryPath")
+      val entries = conf.get(EXECUTOR_LIBRARY_PATH)
         .map(path => Seq(path) ++ desc.command.libraryPathEntries)
         .getOrElse(desc.command.libraryPathEntries)
 
@@ -528,10 +528,10 @@ private[spark] class MesosClusterScheduler(
       options ++= Seq("--class", desc.command.mainClass)
     }
 
-    desc.conf.getOption("spark.executor.memory").foreach { v =>
+    desc.conf.getOption(EXECUTOR_MEMORY.key).foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
-    desc.conf.getOption("spark.cores.max").foreach { v =>
+    desc.conf.getOption(CORES_MAX.key).foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
     desc.conf.getOption("spark.submit.pyFiles").foreach { pyFiles =>

@@ -63,6 +63,9 @@ class SparkContext(object):
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD} and
     broadcast variables on that cluster.
+
+    .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
+        the active :class:`SparkContext` before creating a new one.
     """
 
     _gateway = None
@@ -112,6 +115,11 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
+        if gateway is not None and gateway.gateway_parameters.auth_token is None:
+            raise ValueError(
+                "You are trying to pass an insecure Py4j gateway to Spark. This"
+                " is not allowed as it is a security risk.")
+
         SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
@@ -490,6 +498,14 @@ class SparkContext(object):
                 return start0 + int((split * size / numSlices)) * step
 
             def f(split, iterator):
+                # it's an empty iterator here but we need this line for triggering the
+                # logic of signal handling in FramedSerializer.load_stream, for instance,
+                # SpecialLengths.END_OF_DATA_SECTION in _read_with_length. Since
+                # FramedSerializer.load_stream produces a generator, the control should
+                # at least be in that function once. Here we do it by explicitly converting
+                # the empty iterator to a list, thus make sure worker reuse takes effect.
+                # See more details in SPARK-26549.
+                assert len(list(iterator)) == 0
                 return xrange(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
@@ -834,9 +850,11 @@ class SparkContext(object):
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
             rdds = [x._reserialize() for x in rdds]
-        first = rdds[0]._jrdd
-        rest = [x._jrdd for x in rdds[1:]]
-        return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
+        cls = SparkContext._jvm.org.apache.spark.api.java.JavaRDD
+        jrdds = SparkContext._gateway.new_array(cls, len(rdds))
+        for i in range(0, len(rdds)):
+            jrdds[i] = rdds[i]._jrdd
+        return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
         """

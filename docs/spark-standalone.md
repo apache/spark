@@ -8,6 +8,11 @@ title: Spark Standalone Mode
 
 In addition to running on the Mesos or YARN cluster managers, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # Installing Spark Standalone to a Cluster
 
 To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](building-spark.html).
@@ -55,7 +60,7 @@ Finally, the following configuration options can be passed to the master and wor
   </tr>
   <tr>
     <td><code>-m MEM</code>, <code>--memory MEM</code></td>
-    <td>Total amount of memory to allow Spark applications to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GiB); only on worker</td>
   </tr>
   <tr>
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
@@ -123,7 +128,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_WORKER_MEMORY</code></td>
-    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GiB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_PORT</code></td>

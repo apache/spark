@@ -34,7 +34,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
@@ -42,13 +42,17 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Status._
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
-import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
@@ -86,31 +90,28 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     this(conf, new SystemClock())
   }
 
-  import config._
   import FsHistoryProvider._
 
   // Interval between safemode checks.
-  private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
-    "spark.history.fs.safemodeCheck.interval", "5s")
+  private val SAFEMODE_CHECK_INTERVAL_S = conf.get(History.SAFEMODE_CHECK_INTERVAL_S)
 
   // Interval between each check for event log updates
-  private val UPDATE_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.update.interval", "10s")
+  private val UPDATE_INTERVAL_S = conf.get(History.UPDATE_INTERVAL_S)
 
   // Interval between each cleaner checks for event logs to delete
-  private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
+  private val CLEAN_INTERVAL_S = conf.get(History.CLEANER_INTERVAL_S)
 
   // Number of threads used to replay event logs.
-  private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
-    Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
+  private val NUM_PROCESSING_THREADS = conf.get(History.NUM_REPLAY_THREADS)
 
-  private val logDir = conf.get(EVENT_LOG_DIR)
+  private val logDir = conf.get(History.HISTORY_LOG_DIR)
 
-  private val HISTORY_UI_ACLS_ENABLE = conf.getBoolean("spark.history.ui.acls.enable", false)
-  private val HISTORY_UI_ADMIN_ACLS = conf.get("spark.history.ui.admin.acls", "")
-  private val HISTORY_UI_ADMIN_ACLS_GROUPS = conf.get("spark.history.ui.admin.acls.groups", "")
-  logInfo(s"History server ui acls " + (if (HISTORY_UI_ACLS_ENABLE) "enabled" else "disabled") +
-    "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
-    "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
+  private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
+  private val historyUiAdminAcls = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
+  private val historyUiAdminAclsGroups = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS)
+  logInfo(s"History server ui acls " + (if (historyUiAclsEnable) "enabled" else "disabled") +
+    "; users with admin permissions: " + historyUiAdminAcls.mkString(",") +
+    "; groups with admin permissions" + historyUiAdminAclsGroups.mkString(","))
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   // Visible for testing
@@ -268,16 +269,23 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     // Disable the background thread during tests.
-    if (!conf.contains("spark.testing")) {
+    if (!conf.contains(IS_TESTING)) {
       // A task that periodically checks for event log updates on disk.
       logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
       pool.scheduleWithFixedDelay(
         getRunner(() => checkForLogs()), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
-      if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
+      if (conf.get(CLEANER_ENABLED)) {
         // A task that periodically cleans event logs on disk.
         pool.scheduleWithFixedDelay(
           getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
+      }
+
+      if (conf.contains(DRIVER_LOG_DFS_DIR) && conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
+        pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
+          0,
+          conf.get(DRIVER_LOG_CLEANER_INTERVAL),
+          TimeUnit.SECONDS)
       }
     } else {
       logDebug("Background update thread disabled for testing")
@@ -307,6 +315,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
+  /**
+   * Split a comma separated String, filter out any empty items, and return a Sequence of strings
+   */
+  private def stringToSeq(list: String): Seq[String] = {
+    list.split(',').map(_.trim).filter(!_.isEmpty)
+  }
+
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     val app = try {
       load(appId)
@@ -323,13 +338,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val conf = this.conf.clone()
     val secManager = new SecurityManager(conf)
 
-    secManager.setAcls(HISTORY_UI_ACLS_ENABLE)
+    secManager.setAcls(historyUiAclsEnable)
     // make sure to set admin acls before view acls so they are properly picked up
-    secManager.setAdminAcls(HISTORY_UI_ADMIN_ACLS + "," + attempt.adminAcls.getOrElse(""))
-    secManager.setViewAcls(attempt.info.sparkUser, attempt.viewAcls.getOrElse(""))
-    secManager.setAdminAclsGroups(HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
-      attempt.adminAclsGroups.getOrElse(""))
-    secManager.setViewAclsGroups(attempt.viewAclsGroups.getOrElse(""))
+    secManager.setAdminAcls(historyUiAdminAcls ++ stringToSeq(attempt.adminAcls.getOrElse("")))
+    secManager.setViewAcls(attempt.info.sparkUser, stringToSeq(attempt.viewAcls.getOrElse("")))
+    secManager.setAdminAclsGroups(historyUiAdminAclsGroups ++
+      stringToSeq(attempt.adminAclsGroups.getOrElse("")))
+    secManager.setViewAclsGroups(stringToSeq(attempt.viewAclsGroups.getOrElse("")))
 
     val kvstore = try {
       diskManager match {
@@ -449,10 +464,32 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               listing.write(info.copy(lastProcessed = newLastScanTime, fileSize = entry.getLen()))
             }
 
-            if (info.fileSize < entry.getLen()) {
+            if (shouldReloadLog(info, entry)) {
               if (info.appId.isDefined && fastInProgressParsing) {
                 // When fast in-progress parsing is on, we don't need to re-parse when the
                 // size changes, but we do need to invalidate any existing UIs.
+                // Also, we need to update the `lastUpdated time` to display the updated time in
+                // the HistoryUI and to avoid cleaning the inprogress app while running.
+                val appInfo = listing.read(classOf[ApplicationInfoWrapper], info.appId.get)
+
+                val attemptList = appInfo.attempts.map { attempt =>
+                  if (attempt.info.attemptId == info.attemptId) {
+                    new AttemptInfoWrapper(
+                      attempt.info.copy(lastUpdated = new Date(newLastScanTime)),
+                      attempt.logPath,
+                      attempt.fileSize,
+                      attempt.adminAcls,
+                      attempt.viewAcls,
+                      attempt.adminAclsGroups,
+                      attempt.viewAclsGroups)
+                  } else {
+                    attempt
+                  }
+                }
+
+                val updatedAppInfo = new ApplicationInfoWrapper(appInfo.info, attemptList)
+                listing.write(updatedAppInfo)
+
                 invalidateUI(info.appId.get, info.attemptId)
                 false
               } else {
@@ -466,8 +503,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // If the file is currently not being tracked by the SHS, add an entry for it and try
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
-              listing.write(LogInfo(entry.getPath().toString(), newLastScanTime, None, None,
-                entry.getLen()))
+              listing.write(LogInfo(entry.getPath().toString(), newLastScanTime, LogType.EventLogs,
+                None, None, entry.getLen()))
               entry.getLen() > 0
           }
         }
@@ -539,6 +576,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
+  }
+
+  private[history] def shouldReloadLog(info: LogInfo, entry: FileStatus): Boolean = {
+    var result = info.fileSize < entry.getLen
+    if (!result && info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
+      try {
+        result = Utils.tryWithResource(fs.open(entry.getPath)) { in =>
+          in.getWrappedStream match {
+            case dfsIn: DFSInputStream => info.fileSize < dfsIn.getFileLength
+            case _ => false
+          }
+        }
+      } catch {
+        case e: Exception =>
+          logDebug(s"Failed to check the length for the file : ${info.logPath}", e)
+      }
+    }
+    result
   }
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
@@ -706,7 +761,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // listing data is good.
         invalidateUI(app.info.id, app.attempts.head.info.attemptId)
         addListing(app)
-        listing.write(LogInfo(logPath.toString(), scanTime, Some(app.info.id),
+        listing.write(LogInfo(logPath.toString(), scanTime, LogType.EventLogs, Some(app.info.id),
           app.attempts.head.info.attemptId, fileStatus.getLen()))
 
         // For a finished log, remove the corresponding "in progress" entry from the listing DB if
@@ -735,7 +790,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // If the app hasn't written down its app ID to the logs, still record the entry in the
         // listing db, with an empty ID. This will make the log eligible for deletion if the app
         // does not make progress after the configured max log age.
-        listing.write(LogInfo(logPath.toString(), scanTime, None, None, fileStatus.getLen()))
+        listing.write(
+          LogInfo(logPath.toString(), scanTime, LogType.EventLogs, None, None, fileStatus.getLen()))
     }
   }
 
@@ -780,7 +836,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         val logPath = new Path(logDir, attempt.logPath)
         listing.delete(classOf[LogInfo], logPath.toString())
         cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
-        deleteLog(logPath)
+        deleteLog(fs, logPath)
       }
 
       if (remaining.isEmpty) {
@@ -794,16 +850,72 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .reverse()
       .first(maxTime)
       .asScala
+      .filter { l => l.logType == null || l.logType == LogType.EventLogs }
       .toList
     stale.foreach { log =>
       if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
-        deleteLog(new Path(log.logPath))
+        deleteLog(fs, new Path(log.logPath))
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
     // Clean the blacklist from the expired entries.
     clearBlacklist(CLEAN_INTERVAL_S)
+  }
+
+  /**
+   * Delete driver logs from the configured spark dfs dir that exceed the configured max age
+   */
+  private[history] def cleanDriverLogs(): Unit = Utils.tryLog {
+    val driverLogDir = conf.get(DRIVER_LOG_DFS_DIR).get
+    val driverLogFs = new Path(driverLogDir).getFileSystem(hadoopConf)
+    val currentTime = clock.getTimeMillis()
+    val maxTime = currentTime - conf.get(MAX_DRIVER_LOG_AGE_S) * 1000
+    val logFiles = driverLogFs.listLocatedStatus(new Path(driverLogDir))
+    while (logFiles.hasNext()) {
+      val f = logFiles.next()
+      // Do not rely on 'modtime' as it is not updated for all filesystems when files are written to
+      val deleteFile =
+        try {
+          val info = listing.read(classOf[LogInfo], f.getPath().toString())
+          // Update the lastprocessedtime of file if it's length or modification time has changed
+          if (info.fileSize < f.getLen() || info.lastProcessed < f.getModificationTime()) {
+            listing.write(
+              info.copy(lastProcessed = currentTime, fileSize = f.getLen()))
+            false
+          } else if (info.lastProcessed > maxTime) {
+            false
+          } else {
+            true
+          }
+        } catch {
+          case e: NoSuchElementException =>
+            // For every new driver log file discovered, create a new entry in listing
+            listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DriverLogs, None,
+              None, f.getLen()))
+          false
+        }
+      if (deleteFile) {
+        logInfo(s"Deleting expired driver log for: ${f.getPath().getName()}")
+        listing.delete(classOf[LogInfo], f.getPath().toString())
+        deleteLog(driverLogFs, f.getPath())
+      }
+    }
+
+    // Delete driver log file entries that exceed the configured max age and
+    // may have been deleted on filesystem externally.
+    val stale = listing.view(classOf[LogInfo])
+      .index("lastProcessed")
+      .reverse()
+      .first(maxTime)
+      .asScala
+      .filter { l => l.logType != null && l.logType == LogType.DriverLogs }
+      .toList
+    stale.foreach { log =>
+      logInfo(s"Deleting invalid driver log ${log.logPath}")
+      listing.delete(classOf[LogInfo], log.logPath)
+      deleteLog(driverLogFs, new Path(log.logPath))
+    }
   }
 
   /**
@@ -962,7 +1074,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       throw new NoSuchElementException(s"Cannot find attempt $attemptId of $appId."))
   }
 
-  private def deleteLog(log: Path): Unit = {
+  private def deleteLog(fs: FileSystem, log: Path): Unit = {
     if (isBlacklisted(log)) {
       logDebug(s"Skipping deleting $log as we don't have permissions on it.")
     } else {
@@ -984,7 +1096,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 }
 
 private[history] object FsHistoryProvider {
-  private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
 
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 
@@ -1007,6 +1118,10 @@ private[history] case class FsHistoryProviderMetadata(
     uiVersion: Long,
     logDir: String)
 
+private[history] object LogType extends Enumeration {
+  val DriverLogs, EventLogs = Value
+}
+
 /**
  * Tracking info for event logs detected in the configured log directory. Tracks both valid and
  * invalid logs (e.g. unparseable logs, recorded as logs with no app ID) so that the cleaner
@@ -1015,6 +1130,7 @@ private[history] case class FsHistoryProviderMetadata(
 private[history] case class LogInfo(
     @KVIndexParam logPath: String,
     @KVIndexParam("lastProcessed") lastProcessed: Long,
+    logType: LogType.Value,
     appId: Option[String],
     attemptId: Option[String],
     fileSize: Long)
@@ -1079,11 +1195,16 @@ private[history] class AppListingListener(
     // Only parse the first env update, since any future changes don't have any effect on
     // the ACLs set for the UI.
     if (!gotEnvUpdate) {
+      def emptyStringToNone(strOption: Option[String]): Option[String] = strOption match {
+        case Some("") => None
+        case _ => strOption
+      }
+
       val allProperties = event.environmentDetails("Spark Properties").toMap
-      attempt.viewAcls = allProperties.get("spark.ui.view.acls")
-      attempt.adminAcls = allProperties.get("spark.admin.acls")
-      attempt.viewAclsGroups = allProperties.get("spark.ui.view.acls.groups")
-      attempt.adminAclsGroups = allProperties.get("spark.admin.acls.groups")
+      attempt.viewAcls = emptyStringToNone(allProperties.get(UI_VIEW_ACLS.key))
+      attempt.adminAcls = emptyStringToNone(allProperties.get(ADMIN_ACLS.key))
+      attempt.viewAclsGroups = emptyStringToNone(allProperties.get(UI_VIEW_ACLS_GROUPS.key))
+      attempt.adminAclsGroups = emptyStringToNone(allProperties.get(ADMIN_ACLS_GROUPS.key))
 
       gotEnvUpdate = true
       checkProgress()
