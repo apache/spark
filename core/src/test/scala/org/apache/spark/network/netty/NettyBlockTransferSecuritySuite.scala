@@ -102,7 +102,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
-      .set(Network.NETWORK_ENCRYPTION_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
       .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
     testConnection(conf, conf) match {
       case Success(_) => // expected

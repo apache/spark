@@ -26,7 +26,7 @@ private[spark] object Network {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val NETWORK_ENCRYPTION_ENABLED =
+  private[spark] val NETWORK_CRYPTO_ENABLED =
     ConfigBuilder("spark.network.crypto.enabled")
       .booleanConf
       .createWithDefault(false)

@@ -323,12 +323,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.validateSettings()
 
-    conf.set(NETWORK_ENCRYPTION_ENABLED, true)
+    conf.set(NETWORK_CRYPTO_ENABLED, true)
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
 
-    conf.set(NETWORK_ENCRYPTION_ENABLED, false)
+    conf.set(NETWORK_CRYPTO_ENABLED, false)
     conf.set(SASL_ENCRYPTION_ENABLED, true)
     intercept[IllegalArgumentException] {
       conf.validateSettings()

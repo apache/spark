@@ -710,7 +710,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     testSend(new SparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
-      .set(Network.NETWORK_ENCRYPTION_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
       .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false))
   }
 
@@ -731,7 +731,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     testAsk(new SparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
-      .set(Network.NETWORK_ENCRYPTION_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
       .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false))
   }
 
