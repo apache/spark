@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.security
 
+import java.security.PrivilegedExceptionAction
 import java.{util => ju}
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
@@ -80,18 +81,18 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("checkProxyUser with proxy current user should throw exception") {
-    val currentUser = UserGroupInformation.getCurrentUser()
-    val savedAuthenticationMethod = currentUser.getAuthenticationMethod()
-    try {
-      currentUser.setAuthenticationMethod(UserGroupInformation.AuthenticationMethod.PROXY)
-      val thrown = intercept[IllegalArgumentException] {
-        KafkaTokenUtil.checkProxyUser()
+    val realUser = UserGroupInformation.createUserForTesting("realUser", Array())
+    UserGroupInformation.createProxyUserForTesting("proxyUser", realUser, Array()).doAs(
+      new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          val thrown = intercept[IllegalArgumentException] {
+            KafkaTokenUtil.checkProxyUser()
+          }
+          assert(thrown.getMessage contains
+            "Obtaining delegation token for proxy user is not yet supported.")
+        }
       }
-      assert(thrown.getMessage contains
-        "Obtaining delegation token for proxy user is not yet supported.")
-    } finally {
-      currentUser.setAuthenticationMethod(savedAuthenticationMethod)
-    }
+    )
   }
 
   test("createAdminClientProperties without bootstrap servers should throw exception") {
