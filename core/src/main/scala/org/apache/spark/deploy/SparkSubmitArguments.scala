@@ -576,15 +576,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
-        | Spark standalone, Mesos and K8S only:
+        | Spark standalone, Mesos and Kubernetes only:
         |  --total-executor-cores NUM  Total cores for all executors.
         |
-        | Spark standalone, YARN and K8S only:
+        | Spark standalone, YARN and Kubernetes only:
         |  --executor-cores NUM        Number of cores used by each executor. (Default: 1 in
         |                              YARN and K8S modes, or all available cores on the worker
         |                              in standalone mode).
         |
-        | Spark on YARN and K8S only:
+        | Spark on YARN and Kubernetes only:
         |  --principal PRINCIPAL       Principal to be used to login to KDC.
         |  --keytab KEYTAB             The full path to the file that contains the keytab for the
         |                              principal specified above.
