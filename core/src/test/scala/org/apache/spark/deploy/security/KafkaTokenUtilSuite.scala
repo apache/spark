@@ -17,8 +17,8 @@
 
 package org.apache.spark.deploy.security
 
-import java.security.PrivilegedExceptionAction
 import java.{util => ju}
+import java.security.PrivilegedExceptionAction
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
 import org.apache.hadoop.security.UserGroupInformation
