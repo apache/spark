@@ -39,7 +39,7 @@ import java.io.*;
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
   private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
-  private static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
+  public static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
   private DataInputStream din;
@@ -66,13 +66,6 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     long bufferSizeBytes =
         SparkEnv.get() == null ?
             DEFAULT_BUFFER_SIZE_BYTES : (long)SparkEnv.get().conf().get(bufferSizeConfigEntry);
-    if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
-      // fall back to a sane default value
-      logger.warn("Value of config \"" + bufferSizeConfigEntry.key() + "\" = {} not in " +
-        "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
-        DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
-      bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
-    }
 
     final boolean readAheadEnabled = SparkEnv.get() != null && (boolean)SparkEnv.get().conf().get(
         package$.MODULE$.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED());

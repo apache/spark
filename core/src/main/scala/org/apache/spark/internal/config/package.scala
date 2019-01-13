@@ -24,6 +24,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
 
@@ -745,6 +746,8 @@ package object config {
   private[spark] val UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE =
     ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => 1024 * 1024 <= v && v <= MAX_BUFFER_SIZE_BYTES,
+        s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
 
   private[spark] val EXECUTOR_PLUGINS =
