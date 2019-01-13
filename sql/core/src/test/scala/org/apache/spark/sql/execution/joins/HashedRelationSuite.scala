@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
+import org.apache.spark.internal.config.Kryo.KRYO_REFERENCE_TRACKING
 import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -309,7 +310,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("Spark-14521") {
     val ser = new KryoSerializer(
-      (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
+      (new SparkConf).set(KRYO_REFERENCE_TRACKING, false)).newInstance()
     val key = Seq(BoundReference(0, LongType, false))
 
     // Testing Kryo serialization of HashedRelation

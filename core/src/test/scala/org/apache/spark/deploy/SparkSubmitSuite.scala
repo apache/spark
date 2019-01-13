@@ -221,7 +221,7 @@ class SparkSubmitSuite
     val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
 
     appArgs.deployMode should be ("client")
-    conf.get("spark.submit.deployMode") should be ("client")
+    conf.get(SUBMIT_DEPLOY_MODE) should be ("client")
 
     // Both cmd line and configuration are specified, cmdline option takes the priority
     val clArgs1 = Seq(
@@ -235,7 +235,7 @@ class SparkSubmitSuite
     val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1)
 
     appArgs1.deployMode should be ("cluster")
-    conf1.get("spark.submit.deployMode") should be ("cluster")
+    conf1.get(SUBMIT_DEPLOY_MODE) should be ("cluster")
 
     // Neither cmdline nor configuration are specified, client mode is the default choice
     val clArgs2 = Seq(
@@ -248,7 +248,7 @@ class SparkSubmitSuite
 
     val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
     appArgs2.deployMode should be ("client")
-    conf2.get("spark.submit.deployMode") should be ("client")
+    conf2.get(SUBMIT_DEPLOY_MODE) should be ("client")
   }
 
   test("handles YARN cluster mode") {
@@ -374,12 +374,12 @@ class SparkSubmitSuite
     val confMap = conf.getAll.toMap
     confMap.keys should contain ("spark.master")
     confMap.keys should contain ("spark.app.name")
-    confMap.keys should contain ("spark.jars")
+    confMap.keys should contain (JARS.key)
     confMap.keys should contain ("spark.driver.memory")
     confMap.keys should contain ("spark.driver.cores")
     confMap.keys should contain ("spark.driver.supervise")
     confMap.keys should contain (UI_ENABLED.key)
-    confMap.keys should contain ("spark.submit.deployMode")
+    confMap.keys should contain (SUBMIT_DEPLOY_MODE.key)
     conf.get(UI_ENABLED) should be (false)
   }
 
@@ -467,7 +467,7 @@ class SparkSubmitSuite
     val (_, _, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.master") should be ("yarn")
-    conf.get("spark.submit.deployMode") should be ("cluster")
+    conf.get(SUBMIT_DEPLOY_MODE) should be ("cluster")
     mainClass should be (SparkSubmit.YARN_CLUSTER_SUBMIT_CLASS)
   }
 
@@ -662,7 +662,7 @@ class SparkSubmitSuite
       val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
       appArgs.jars should be(Utils.resolveURIs(jars))
       appArgs.files should be(Utils.resolveURIs(files))
-      conf.get("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
+      conf.get(JARS) should be(Utils.resolveURIs(jars + ",thejar.jar").split(",").toSeq)
       conf.get("spark.files") should be(Utils.resolveURIs(files))
 
       // Test files and archives (Yarn)
@@ -692,8 +692,8 @@ class SparkSubmitSuite
       val appArgs3 = new SparkSubmitArguments(clArgs3)
       val (_, _, conf3, _) = submit.prepareSubmitEnvironment(appArgs3)
       appArgs3.pyFiles should be(Utils.resolveURIs(pyFiles))
-      conf3.get("spark.submit.pyFiles") should be(
-        PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+      conf3.get(SUBMIT_PYTHON_FILES) should be(
+        PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)))
       conf3.get(PYSPARK_DRIVER_PYTHON.key) should be("python3.4")
       conf3.get(PYSPARK_PYTHON.key) should be("python3.5")
     }
@@ -744,7 +744,7 @@ class SparkSubmitSuite
       )
       val appArgs = new SparkSubmitArguments(clArgs)
       val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-      conf.get("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
+      conf.get(JARS) should be(Utils.resolveURIs(jars + ",thejar.jar").split(",").toSeq)
       conf.get("spark.files") should be(Utils.resolveURIs(files))
 
       // Test files and archives (Yarn)
@@ -776,8 +776,8 @@ class SparkSubmitSuite
       )
       val appArgs3 = new SparkSubmitArguments(clArgs3)
       val (_, _, conf3, _) = submit.prepareSubmitEnvironment(appArgs3)
-      conf3.get("spark.submit.pyFiles") should be(
-        PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+      conf3.get(SUBMIT_PYTHON_FILES) should be(
+        PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)))
 
       // Test remote python files
       val hadoopConf = new Configuration()
@@ -798,7 +798,7 @@ class SparkSubmitSuite
       val appArgs4 = new SparkSubmitArguments(clArgs4)
       val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4, conf = Some(hadoopConf))
       // Should not format python path for yarn cluster mode
-      conf4.get("spark.submit.pyFiles") should be(Utils.resolveURIs(remotePyFiles))
+      conf4.get(SUBMIT_PYTHON_FILES) should be(Utils.resolveURIs(remotePyFiles))
     }
   }
 
@@ -1024,7 +1024,7 @@ class SparkSubmitSuite
       conf.get("spark.repl.local.jars") should (startWith("file:"))
 
       // local py files should not be a URI format.
-      conf.get("spark.submit.pyFiles") should (startWith("/"))
+      conf.get(SUBMIT_PYTHON_FILES).foreach { _ should (startWith("/")) }
     }
   }
 
@@ -1155,7 +1155,7 @@ class SparkSubmitSuite
       val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
 
       conf.get(PY_FILES.key) should be(s"s3a://${pyFile.getAbsolutePath}")
-      conf.get("spark.submit.pyFiles") should (startWith("/"))
+      conf.get(SUBMIT_PYTHON_FILES).foreach { _ should (startWith("/")) }
 
       // Verify "spark.submit.pyFiles"
       val args1 = Seq(
@@ -1171,7 +1171,7 @@ class SparkSubmitSuite
       val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1, conf = Some(hadoopConf))
 
       conf1.get(PY_FILES.key) should be(s"s3a://${pyFile.getAbsolutePath}")
-      conf1.get("spark.submit.pyFiles") should (startWith("/"))
+      conf.get(SUBMIT_PYTHON_FILES).foreach { _ should (startWith("/")) }
     }
   }
 

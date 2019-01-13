@@ -27,6 +27,7 @@ import scala.util.{Random, Try}
 import com.esotericsoftware.kryo.Kryo
 
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
@@ -78,7 +79,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.get("spark.master") === "local[3]")
     assert(conf.get("spark.app.name") === "My app")
     assert(conf.get("spark.home") === "/path")
-    assert(conf.get("spark.jars") === "a.jar,b.jar")
+    assert(conf.get(JARS) === Seq("a.jar", "b.jar"))
     assert(conf.get("spark.executorEnv.VAR1") === "value1")
     assert(conf.get("spark.executorEnv.VAR2") === "value2")
     assert(conf.get("spark.executorEnv.VAR3") === "value3")
@@ -86,7 +87,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     // Test the Java-friendly versions of these too
     conf.setJars(Array("c.jar", "d.jar"))
     conf.setExecutorEnv(Array(("VAR4", "value4"), ("VAR5", "value5")))
-    assert(conf.get("spark.jars") === "c.jar,d.jar")
+    assert(conf.get(JARS) === Seq("c.jar", "d.jar"))
     assert(conf.get("spark.executorEnv.VAR4") === "value4")
     assert(conf.get("spark.executorEnv.VAR5") === "value5")
   }
@@ -182,19 +183,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("register kryo classes through registerKryoClasses") {
-    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+    val conf = new SparkConf().set(KRYO_REGISTRATION_REQUIRED, true)
 
     conf.registerKryoClasses(Array(classOf[Class1], classOf[Class2]))
-    assert(conf.get("spark.kryo.classesToRegister") ===
-      classOf[Class1].getName + "," + classOf[Class2].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet ===
+      Seq(classOf[Class1].getName, classOf[Class2].getName).toSet)
 
     conf.registerKryoClasses(Array(classOf[Class3]))
-    assert(conf.get("spark.kryo.classesToRegister") ===
-      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet ===
+      Seq(classOf[Class1].getName, classOf[Class2].getName, classOf[Class3].getName).toSet)
 
     conf.registerKryoClasses(Array(classOf[Class2]))
-    assert(conf.get("spark.kryo.classesToRegister") ===
-      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet ===
+      Seq(classOf[Class1].getName, classOf[Class2].getName, classOf[Class3].getName).toSet)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
@@ -205,12 +206,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("register kryo classes through registerKryoClasses and custom registrator") {
-    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+    val conf = new SparkConf().set(KRYO_REGISTRATION_REQUIRED, true)
 
     conf.registerKryoClasses(Array(classOf[Class1]))
-    assert(conf.get("spark.kryo.classesToRegister") === classOf[Class1].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet === Seq(classOf[Class1].getName).toSet)
 
-    conf.set("spark.kryo.registrator", classOf[CustomRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, classOf[CustomRegistrator].getName)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
@@ -220,9 +221,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("register kryo classes through conf") {
-    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
-    conf.set("spark.kryo.classesToRegister", "java.lang.StringBuffer")
-    conf.set("spark.serializer", classOf[KryoSerializer].getName)
+    val conf = new SparkConf().set(KRYO_REGISTRATION_REQUIRED, true)
+    conf.set(KRYO_CLASSES_TO_REGISTER, Seq("java.lang.StringBuffer"))
+    conf.set(SERIALIZER, classOf[KryoSerializer].getName)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.

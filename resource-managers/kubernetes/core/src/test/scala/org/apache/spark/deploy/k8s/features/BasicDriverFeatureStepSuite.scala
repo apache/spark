@@ -154,8 +154,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       "spark.app.id" -> KubernetesTestConf.APP_ID,
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> kubernetesConf.resourceNamePrefix,
       "spark.kubernetes.submitInDriver" -> "true",
-      "spark.jars" -> "/opt/spark/jar1.jar,hdfs:///opt/spark/jar2.jar",
-      "spark.files" -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt",
+      JARS -> Seq("/opt/spark/jar1.jar", "hdfs:///opt/spark/jar2.jar"),
+      FILES -> Seq("https://localhost:9000/file1.txt", "/opt/spark/file2.txt"),
       MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
     assert(additionalProperties === expectedSparkConf)
   }

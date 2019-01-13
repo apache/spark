@@ -27,6 +27,7 @@ import scala.concurrent.duration._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 
+import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
@@ -256,7 +257,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       .set("spark.task.reaper.enabled", "true")
       .set("spark.task.reaper.killTimeout", "-1")
       .set("spark.task.reaper.PollingInterval", "1s")
-      .set("spark.deploy.maxExecutorRetries", "1")
+      .set(MAX_EXECUTOR_RETRIES, 1)
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
     // Add a listener to release the semaphore once any tasks are launched.
