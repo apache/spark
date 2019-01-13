@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime}
+import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
@@ -474,9 +475,9 @@ object DateTimeUtils {
       return true
     }
     if (month == 2) {
-      if (isLeapYear(year) && day > 29) {
+      if (isLeap(year) && day > 29) {
         return true
-      } else if (!isLeapYear(year) && day > 28) {
+      } else if (!isLeap(year) && day > 28) {
         return true
       }
     } else if (!MonthOf31Days.contains(month) && day > 30) {
@@ -546,10 +547,6 @@ object DateTimeUtils {
     ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND) % 60).toInt
   }
 
-  private[this] def isLeapYear(year: Int): Boolean = {
-    (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
-  }
-
   /**
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
@@ -612,7 +609,7 @@ object DateTimeUtils {
     val absoluteYear = absoluteMonth / 12
     var monthInYear = absoluteMonth - absoluteYear * 12
     var date = getDateFromYear(absoluteYear)
-    if (monthInYear >= 2 && isLeapYear(absoluteYear + YearZero)) {
+    if (monthInYear >= 2 && isLeap(absoluteYear + YearZero)) {
       date += 1
     }
     while (monthInYear > 0) {
@@ -643,7 +640,7 @@ object DateTimeUtils {
     val currentMonthInYear = nonNegativeMonth % 12
     val currentYear = nonNegativeMonth / 12
 
-    val leapDay = if (currentMonthInYear == 1 && isLeapYear(currentYear + YearZero)) 1 else 0
+    val leapDay = if (currentMonthInYear == 1 && isLeap(currentYear + YearZero)) 1 else 0
     val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
 
     val currentDayInMonth = if (daysToMonthEnd == 0 || dayOfMonth >= lastDayOfMonth) {
