@@ -614,9 +614,7 @@ case class ToUnixTimestamp(
 
 /**
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
- * See [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html]
- * if SQL config spark.sql.legacy.timeParser.enabled is set to true otherwise
- * [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
+ * See [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
