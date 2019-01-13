@@ -166,35 +166,27 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * was involved in an explicit cross join. Also returns the entire list of join conditions for
    * the left-deep tree.
    */
-  def flattenJoin(
-      plan: LogicalPlan,
-      hintMap: mutable.HashMap[AttributeSet, HintInfo],
-      parentJoinType: InnerLike = Inner)
+  def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
-    case Join(left, right, joinType: InnerLike, cond, hint) =>
-      val (plans, conditions) = flattenJoin(left, hintMap, joinType)
-      hint.leftHint.map(hintMap.put(left.outputSet, _))
-      hint.rightHint.map(hintMap.put(right.outputSet, _))
+    case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
+      val (plans, conditions) = flattenJoin(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, _)) =>
-      val (plans, conditions) = flattenJoin(j, hintMap)
+    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
+      val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
   def unapply(plan: LogicalPlan)
-      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression], Map[AttributeSet, HintInfo])]
+      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
       = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, _)) =>
-      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
-      val flattened = flattenJoin(f, hintMap)
-      Some((flattened._1, flattened._2, hintMap.toMap))
-    case j @ Join(_, _, joinType, _, _) =>
-      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
-      val flattened = flattenJoin(j, hintMap)
-      Some((flattened._1, flattened._2, hintMap.toMap))
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, hint))
+        if hint == JoinHint.NONE =>
+      Some(flattenJoin(f))
+    case j @ Join(_, _, joinType, _, hint) if hint == JoinHint.NONE =>
+      Some(flattenJoin(j))
     case _ => None
   }
 }

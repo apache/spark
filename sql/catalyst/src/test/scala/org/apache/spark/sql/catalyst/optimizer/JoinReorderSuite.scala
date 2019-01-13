@@ -292,77 +292,56 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     assertEqualPlans(originalPlan, bestPlan)
   }
 
-  test("hints preservation") {
-    // Apply hints if we find an equivalent node in the new plan, otherwise discard them.
+  test("don't reorder if hints present") {
     val originalPlan =
-      t1.join(t2.hint("broadcast")).hint("broadcast").join(t4.join(t3).hint("broadcast"))
-        .where((nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")) &&
-          (nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
-          (nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .hint("broadcast")
+        .join(
+          t4.join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+            .hint("broadcast"),
+          Inner,
+          Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
+
+    assertEqualPlans(originalPlan, originalPlan)
+
+    val originalPlan2 =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .hint("broadcast")
+        .join(t4, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+        .hint("broadcast")
+        .join(t3, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
+
+    assertEqualPlans(originalPlan2, originalPlan2)
+  }
+
+  test("reorder below and above the hint node") {
+    val originalPlan =
+      t1.join(t2).join(t3)
+        .where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+          (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .hint("broadcast").join(t4)
 
     val bestPlan =
-    t1.join(t2.hint("broadcast"), Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-      .hint("broadcast")
-      .join(
-        t4.join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
-          .hint("broadcast"),
-        Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
+    t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+      .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      .select(outputsOf(t1, t2, t3): _*)
+      .hint("broadcast").join(t4)
 
     assertEqualPlans(originalPlan, bestPlan)
 
     val originalPlan2 =
-      t1.join(t2).hint("broadcast").join(t3).hint("broadcast").join(t4.hint("broadcast"))
-        .where((nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")) &&
-          (nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
-          (nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+      t1.join(t2).join(t3)
+        .where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+          (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t4.hint("broadcast"))
 
     val bestPlan2 =
-      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-        .hint("broadcast")
-        .join(
-          t4.hint("broadcast")
-            .join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100"))),
-          Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
-        .select(outputsOf(t1, t2, t3, t4): _*)
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(outputsOf(t1, t2, t3): _*)
+        .join(t4.hint("broadcast"))
 
     assertEqualPlans(originalPlan2, bestPlan2)
-
-    val originalPlan3 =
-      t1.join(t4).hint("broadcast")
-        .join(t2.hint("broadcast")).hint("broadcast")
-        .join(t3.hint("broadcast"))
-        .where((nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")) &&
-        (nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
-        (nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
-
-    val bestPlan3 =
-      t1.join(t2.hint("broadcast"), Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-        .join(
-          t4.join(t3.hint("broadcast"),
-            Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100"))),
-          Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
-        .select(outputsOf(t1, t4, t2, t3): _*)
-
-    assertEqualPlans(originalPlan3, bestPlan3)
-
-    val originalPlan4 =
-      t2.hint("broadcast")
-        .join(t4).hint("broadcast")
-        .join(t3.hint("broadcast")).hint("broadcast")
-        .join(t1)
-        .where((nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")) &&
-          (nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
-          (nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
-
-    val bestPlan4 =
-      t1.join(t2.hint("broadcast"), Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-        .join(
-          t4.join(t3.hint("broadcast"),
-            Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100"))),
-          Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
-        .select(outputsOf(t2, t4, t3, t1): _*)
-
-    assertEqualPlans(originalPlan4, bestPlan4)
   }
 
   private def assertEqualPlans(
