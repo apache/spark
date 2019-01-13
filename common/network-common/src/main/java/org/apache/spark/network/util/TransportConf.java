@@ -42,6 +42,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
+  private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
 
   private final ConfigProvider conf;
 
@@ -64,6 +65,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
+    SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -171,6 +173,14 @@ public class TransportConf {
    */
   public boolean verboseMetrics() {
     return conf.getBoolean(SPARK_NETWORK_VERBOSE_METRICS, false);
+  }
+
+  /**
+   * Whether to enable TCP keep-alive. If true, the TCP keep-alives are enabled, which removes
+   * connections that are idle for too long.
+   */
+  public boolean enableTcpKeepAlive() {
+    return conf.getBoolean(SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY, false);
   }
 
   /**
