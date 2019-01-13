@@ -1420,7 +1420,6 @@ object SQLConf {
       .createWithDefault(100)
 
   val DISABLED_V2_FILE_READS = buildConf("spark.sql.files.disabledV2Reads")
-    .internal()
     .doc("A comma-separated list of FileDataSourceV2 short names for which read paths " +
       "are disabled. Reads from these sources will fall back to the V1 sources.")
     .stringConf

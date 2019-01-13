@@ -216,24 +216,6 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 }
 
 /**
- * Replace the V2 data source of table in [[InsertIntoTable]] to V1 [[FileFormat]].
- * E.g, with temporary view `t` using [[FileDataSourceV2]], inserting into  view `t` fails
- * since there is no correspoding physical plan.
- * This is a temporary hack for making current data source V2 work. It should be removed
- * when write path of file data source v2 is finished.
- */
-class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(d @
-        DataSourceV2Relation(source: FileDataSourceV2, table: FileTable, _, _, _), _, _, _, _) =>
-      val v1FileFormat = source.fallBackFileFormat.getConstructor().newInstance()
-      val relation = HadoopFsRelation(table.getFileIndex, table.getFileIndex.partitionSchema,
-        table.schema(), None, v1FileFormat, d.options)(sparkSession)
-      i.copy(table = LogicalRelation(relation))
-  }
-}
-
-/**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.
  *
  * TODO: we should remove the special handling for hive tables after completely making hive as a
