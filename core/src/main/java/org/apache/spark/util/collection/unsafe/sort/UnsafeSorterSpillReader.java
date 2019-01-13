@@ -65,7 +65,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     final long DEFAULT_BUFFER_SIZE_BYTES = (long)bufferSizeConfigEntry.defaultValue().get();
     long bufferSizeBytes =
         SparkEnv.get() == null ?
-            DEFAULT_BUFFER_SIZE_BYTES:(long)SparkEnv.get().conf().get(bufferSizeConfigEntry);
+            DEFAULT_BUFFER_SIZE_BYTES : (long)SparkEnv.get().conf().get(bufferSizeConfigEntry);
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value
       logger.warn("Value of config \"" + bufferSizeConfigEntry.key() + "\" = {} not in " +
