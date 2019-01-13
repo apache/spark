@@ -762,7 +762,8 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getLastDayOfMonth(date: SQLDate): SQLDate = {
-    LocalDate.ofEpochDay(date).lengthOfMonth()
+    val localDate = LocalDate.ofEpochDay(date)
+    (date - localDate.getDayOfMonth) + localDate.lengthOfMonth()
   }
 
   // Visible for testing.
