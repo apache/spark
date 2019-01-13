@@ -655,10 +655,13 @@ private[spark] object JsonProtocol {
   }
 
   def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {
+    // For compatible with previous event logs
+    val hadoopProperties = jsonOption(json \ "Hadoop Properties").map(mapFromJson(_).toSeq)
+      .getOrElse(Seq.empty)
     val environmentDetails = Map[String, Seq[(String, String)]](
       "JVM Information" -> mapFromJson(json \ "JVM Information").toSeq,
       "Spark Properties" -> mapFromJson(json \ "Spark Properties").toSeq,
-      "Hadoop Properties" -> mapFromJson(json \ "Hadoop Properties").toSeq,
+      "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> mapFromJson(json \ "System Properties").toSeq,
       "Classpath Entries" -> mapFromJson(json \ "Classpath Entries").toSeq)
     SparkListenerEnvironmentUpdate(environmentDetails)
