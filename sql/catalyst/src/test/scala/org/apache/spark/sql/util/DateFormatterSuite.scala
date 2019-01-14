@@ -29,7 +29,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   test("parsing dates") {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
+        val formatter = DateFormatter()
         val daysSinceEpoch = formatter.parse("2018-12-02")
         assert(daysSinceEpoch === 17867)
       }
@@ -39,7 +39,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   test("format dates") {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
+        val formatter = DateFormatter()
         val date = formatter.format(17867)
         assert(date === "2018-12-02")
       }
@@ -59,7 +59,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       "5010-11-17").foreach { date =>
       DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
+          val formatter = DateFormatter()
           val days = formatter.parse(date)
           val formatted = formatter.format(days)
           assert(date === formatted)
@@ -82,7 +82,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       1110657).foreach { days =>
       DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
+          val formatter = DateFormatter()
           val date = formatter.format(days)
           val parsed = formatter.parse(date)
           assert(days === parsed)
@@ -92,7 +92,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("parsing date without explicit day") {
-    val formatter = DateFormatter("yyyy MMM", Locale.US)
+    val formatter = DateFormatter("yyyy MMM")
     val daysSinceEpoch = formatter.parse("2018 Dec")
     assert(daysSinceEpoch === LocalDate.of(2018, 12, 1).toEpochDay)
   }

@@ -35,10 +35,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("nanoseconds truncation") {
+    val tf = TimestampFormatter(DateTimeUtils.defaultTimeZone())
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String) {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(UTF8String.fromString(originalTime))
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
-      assert(DateTimeUtils.timestampToString(parsedTimestampOp.get) === expectedParsedTime)
+      assert(DateTimeUtils.timestampToString(tf, parsedTimestampOp.get) === expectedParsedTime)
     }
 
     checkStringToTimestamp("2015-01-02 00:00:00.123456789", "2015-01-02 00:00:00.123456")

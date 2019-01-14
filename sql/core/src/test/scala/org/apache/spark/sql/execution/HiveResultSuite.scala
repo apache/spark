@@ -17,10 +17,27 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
+import java.sql.{Date, Timestamp}
 
-class HiveResultSuite extends SparkFunSuite {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+
+class HiveResultSuite extends SparkFunSuite with SharedSQLContext {
+  import testImplicits._
+
+  test("date formatting in hive result") {
+    val date = "2018-12-28"
+    val executedPlan = Seq(Date.valueOf(date)).toDS().queryExecution.executedPlan
+    val result = HiveResult.hiveResultString(executedPlan)
+    assert(result.head == date)
+  }
+
+  test("timestamp formatting in hive result") {
+    val timestamp = "2018-12-28 01:02:03"
+    val executedPlan = Seq(Timestamp.valueOf(timestamp)).toDS().queryExecution.executedPlan
+    val result = HiveResult.hiveResultString(executedPlan)
+    assert(result.head == timestamp)
+  }
 
   test("toHiveString correctly handles UDTs") {
     val point = new ExamplePoint(50.0, 50.0)
