@@ -23,7 +23,8 @@ import io.netty.buffer.ByteBuf;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * Response to {@link StreamRequest} when the stream has been successfully opened.
+ * Response to {@link ChunkFetchRequest} when its `fetchAsStream` flag is true and the stream has
+ * been successfully opened.
  * <p>
  * Note the message itself does not contain the stream data. That is written separately by the
  * sender. The receiver is expected to set a temporary channel handler that will consume the

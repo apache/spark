@@ -195,10 +195,11 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       ChunkFetchStreamResponse resp = (ChunkFetchStreamResponse) message;
       StreamCallback callback = outstandingFetchAsStreams.get(resp.streamChunkId);
       if (callback == null) {
-        logger.warn("Ignoring response for block {} from {} since it is not outstanding",
+        logger.warn("Ignoring stream response for block {} from {} since it is not outstanding",
           resp.streamChunkId, getRemoteAddress(channel));
         resp.body().release();
       } else {
+        outstandingFetchAsStreams.remove(resp.streamChunkId);
         readStream(resp.streamChunkId.toString(), resp.byteCount, callback);
       }
     } else if (message instanceof ChunkFetchFailure) {
