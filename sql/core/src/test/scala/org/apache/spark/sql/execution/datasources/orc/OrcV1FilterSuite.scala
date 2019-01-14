@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 class OrcV1FilterSuite extends OrcFilterSuite {
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.DISABLED_V2_FILE_READS, "orc")
+    super.sparkConf.set(SQLConf.DISABLED_V2_BATCH_READERS, "orc")
 
   override def checkFilterPredicate(
       df: DataFrame,

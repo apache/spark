@@ -1419,14 +1419,15 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  val DISABLED_V2_FILE_READS = buildConf("spark.sql.files.disabledV2Reads")
-    .doc("A comma-separated list of FileDataSourceV2 short names for which read paths " +
-      "are disabled. Reads from these sources will fall back to the V1 sources.")
+  val DISABLED_V2_BATCH_READERS = buildConf("spark.sql.sources.disabledV2BatchReaders")
+    .internal()
+    .doc("A comma-separated list of data source short names or fully qualified data source" +
+      " register class names for which read paths are disabled. Reads from these sources will" +
+      " fall back to the V1 sources.")
     .stringConf
     .createWithDefault("")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
-    .internal()
     .doc("A comma-separated list of fully qualified data source register class names for which" +
       " StreamWriteSupport is disabled. Writes to these sources will fall back to the V1 Sinks.")
     .stringConf
@@ -2008,7 +2009,7 @@ class SQLConf extends Serializable with Logging {
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
-  def disabledV2FileReads: String = getConf(DISABLED_V2_FILE_READS)
+  def disabledV2BatchReaders: String = getConf(DISABLED_V2_BATCH_READERS)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 

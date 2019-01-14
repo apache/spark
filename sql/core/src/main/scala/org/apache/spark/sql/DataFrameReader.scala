@@ -193,10 +193,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val disabledV2Readers =
-      sparkSession.sessionState.conf.disabledV2FileReads.toLowerCase(Locale.ROOT).split(",")
+      sparkSession.sessionState.conf.disabledV2BatchReaders.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     val cls = lookupCls.newInstance() match {
-      case f: FileDataSourceV2 if disabledV2Readers.contains(f.shortName()) => f.fallBackFileFormat
+      case f: FileDataSourceV2 if disabledV2Readers.contains(f.shortName()) ||
+        disabledV2Readers.contains(lookupCls.getCanonicalName) =>
+        f.fallBackFileFormat
       case _ => lookupCls
     }
 
