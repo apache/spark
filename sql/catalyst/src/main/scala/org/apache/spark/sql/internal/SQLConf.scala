@@ -1621,6 +1621,17 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
+  val MAX_WITHCOLUMN_PROJECTS = buildConf("spark.sql.withColumn.maxProjects")
+    .internal()
+    .doc("Maximum number of projects on top of a plan when using `Dataset.withColumn`. When the " +
+      "threshold is exceeded, warnings are emitted in order to advice a different approach. " +
+      "This usually happens when adding too many columns in loops using withColumns. Indeed, " +
+      "this pattern can lead to serious performance issues and even OOM. Set to 0 in order to " +
+      "disable completely the check.")
+    .intConf
+    .checkValue(_ >= 0, "The max number of projects cannot be negative.")
+    .createWithDefault(50)
+
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
