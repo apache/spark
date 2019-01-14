@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
