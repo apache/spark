@@ -682,7 +682,7 @@ class DataFrameTests(ReusedSQLTestCase):
             Row(u'{"name":"Alice","age":5}'), Row(u'{"name":"Bob","age":8}')])
 
         with self.sql_conf({
-                "spark.sql.legacy.pyspark.dataframe.toJsonShouldReturnDataFrame": False}):
+                "spark.sql.legacy.pyspark.toJsonShouldReturnDataFrame": False}):
             self.assertEqual(df.toJSON().collect(), [
                 u'{"name":"Alice","age":5}', u'{"name":"Bob","age":8}'])
 

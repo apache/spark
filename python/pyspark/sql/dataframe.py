@@ -117,7 +117,7 @@ class DataFrame(object):
         Row(value=u'{"age":2,"name":"Alice"}')
         """
         jdf = self._jdf.toJSON()
-        if self.sql_ctx._conf.pysparkDataFrameToJSONShouldReturnDataFrame():
+        if self.sql_ctx._conf.pysparkToJSONShouldReturnDataFrame():
             return DataFrame(jdf, self.sql_ctx)
         else:
             return RDD(jdf.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
