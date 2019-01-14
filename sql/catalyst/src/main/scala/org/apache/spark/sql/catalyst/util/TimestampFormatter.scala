@@ -38,7 +38,7 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
-  def parse(s: String): Long // returns microseconds since epoch
+  def parse(s: String): Long
   def format(us: Long): String
 }
 
@@ -70,7 +70,18 @@ class Iso8601TimestampFormatter(
 }
 
 object TimestampFormatter {
+  val defaultPattern: String = "yyyy-MM-dd HH:mm:ss"
+  val defaultLocale: Locale = Locale.US
+
   def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
     new Iso8601TimestampFormatter(format, timeZone, locale)
+  }
+
+  def apply(format: String, timeZone: TimeZone): TimestampFormatter = {
+    apply(format, timeZone, defaultLocale)
+  }
+
+  def apply(timeZone: TimeZone): TimestampFormatter = {
+    apply(defaultPattern, timeZone, defaultLocale)
   }
 }
