@@ -205,11 +205,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test estimatePartitionStartIndices and enforce minimal number of reducers") {
-<<<<<<< HEAD
-    val coordinator = new ExchangeCoordinator(100L, Some(2))
-=======
     val coordinator = new ExchangeCoordinator(100L, 2)
->>>>>>> d422996... Add QueryStage and the framework for adaptive execution
 
     {
       // The minimal number of post-shuffle partitions is not enforced because
@@ -268,12 +264,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         .setMaster("local[*]")
         .setAppName("test")
         .set("spark.ui.enabled", "false")
-<<<<<<< HEAD
         .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-=======
-        .set("spark.driver.allowMultipleContexts", "true")
-        .set(SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key, "5")
->>>>>>> d422996... Add QueryStage and the framework for adaptive execution
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         .set(
