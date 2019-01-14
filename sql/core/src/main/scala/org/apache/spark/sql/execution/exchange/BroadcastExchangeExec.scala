@@ -43,7 +43,7 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
 
-  @transient override lazy val driverMetrics = Map(
+  driverMetrics ++= Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
     "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
@@ -111,7 +111,7 @@ case class BroadcastExchangeExec(
           val broadcasted = sparkContext.broadcast(relation)
           driverMetrics("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
 
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
+          sendDriverMetrics()
           broadcasted
         } catch {
           // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw

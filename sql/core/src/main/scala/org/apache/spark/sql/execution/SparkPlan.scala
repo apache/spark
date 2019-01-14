@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ThreadUtils
 
@@ -81,10 +81,18 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
    * @return Driver side metrics of this SparkPlan, which only create, update and display
-   *         on driver side, no need to be serialized and sent to executors. So when override
-   *         this method, we should decorate it with `@transient override lazy val`.
+   *         on driver side, no need to be serialized and sent to executors. All the driver
+   *         side metrics should be updated by calling sendDriverMetrics explicitly.
    */
-  def driverMetrics: Map[String, SQLMetric] = Map.empty
+  @transient lazy val driverMetrics = new HashMap[String, SQLMetric]
+
+  /**
+   * Send the driver-side metrics.
+   */
+  def sendDriverMetrics(): Unit = {
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
+  }
 
   /**
    * Resets all the metrics.

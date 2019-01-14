@@ -659,7 +659,7 @@ object CoalesceExec {
  */
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
-  @transient override lazy val driverMetrics = Map(
+  driverMetrics ++= Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
@@ -685,7 +685,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         driverMetrics("dataSize") += dataSize
 
-        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
+        sendDriverMetrics()
         rows
       }
     }(SubqueryExec.executionContext)
