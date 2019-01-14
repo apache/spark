@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExc
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.ThreadUtils
 
 class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits._
