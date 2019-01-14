@@ -183,6 +183,8 @@ class CacheManager extends Logging {
           // physical plan.
           it.remove()
           needToRecache += cd
+        }
+      }
     }
     val recomputedPlans = needToRecache.map { cd =>
       val plan = spark.sessionState.executePlan(cd.plan).executedPlan
