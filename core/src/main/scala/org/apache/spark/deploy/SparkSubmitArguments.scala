@@ -304,25 +304,25 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     }
 
     // Ensure heartbeat arguments is valid.
+    val networkTimeout = Utils.timeStringAsSeconds(
+      sparkProperties.getOrElse("spark.network.timeout", "120s"))
     val executorTimeoutMs =
       Utils.timeStringAsMs(sparkProperties.getOrElse(
-        "spark.storage.blockManagerSlaveTimeoutMs",
-        s"${Utils.timeStringAsSeconds(
-          sparkProperties.getOrElse("spark.network.timeout", "120s"))}s"))
+        "spark.storage.blockManagerSlaveTimeoutMs", s"${networkTimeout}s"))
     val executorHeartbeatIntervalMs = Utils.timeStringAsMs(
       sparkProperties.getOrElse("spark.executor.heartbeatInterval", "10s"))
-    val checkTimeoutIntervalMs =
+    val blockManagerTimeoutInterval = Utils.timeStringAsMs(
+      sparkProperties.getOrElse("spark.storage.blockManagerTimeoutIntervalMs", "60s"))
+    val checkNetworkTimeoutIntervalMs =
       Utils.timeStringAsSeconds(sparkProperties.getOrElse(
-        "spark.network.timeoutInterval",
-        s"${Utils.timeStringAsMs(sparkProperties.getOrElse(
-          "spark.storage.blockManagerTimeoutIntervalMs", "60s"))}ms")) * 1000
-    if (checkTimeoutIntervalMs >= executorTimeoutMs) {
-      error(s"Incorrect heartbeat arguments, checkTimeoutIntervalMs should " +
+        "spark.network.timeoutInterval", s"${blockManagerTimeoutInterval}ms")) * 1000
+    if (checkNetworkTimeoutIntervalMs >= executorTimeoutMs) {
+      error(s"Incorrect heartbeat arguments, checkNetworkTimeoutIntervalMs should " +
         s"less than executorTimeoutMs.")
     }
-    if (executorHeartbeatIntervalMs >= checkTimeoutIntervalMs) {
+    if (executorHeartbeatIntervalMs >= checkNetworkTimeoutIntervalMs) {
       error(s"Incorrect heartbeat arguments, executorHeartbeatIntervalMs should " +
-        s"less than checkTimeoutIntervalMs")
+        s"less than checkNetworkTimeoutIntervalMs")
     }
   }
 
