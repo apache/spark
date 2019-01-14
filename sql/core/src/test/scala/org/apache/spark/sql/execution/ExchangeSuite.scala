@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
-
 import scala.util.Random
 
 import org.apache.spark.sql.{Dataset, Row}
