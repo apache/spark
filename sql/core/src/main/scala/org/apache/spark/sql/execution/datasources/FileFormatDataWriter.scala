@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
-
 import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
@@ -27,7 +26,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -140,6 +141,17 @@ class SingleDirectoryDataWriter(
   }
 }
 
+/** A function that converts the empty string to null for partition values. */
+case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = if (v.numChars() == 0) null else v
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""if ($c.numChars() == 0) {
+         |${ev.isNull} = true;
+         |${ev.value} = null; }
+         |else ${ev.value} = $c;""".stripMargin)
+  }
+}
 /**
  * Writes data to using dynamic partition writes, meaning this single function can write to
  * multiple directories (partitions) or files (bucketing).
@@ -169,7 +181,13 @@ class DynamicPartitionDataWriter(
 
   /** Extracts the partition values out of an input row. */
   private lazy val getPartitionValues: InternalRow => UnsafeRow = {
-    val proj = UnsafeProjection.create(description.partitionColumns, description.allColumns)
+    val partitionExpression =
+      toBoundExprs(description.partitionColumns, description.allColumns).map {
+        case e: Expression if e.dataType == StringType =>
+          Empty2Null(e)
+        case other: Expression => other
+      }
+    val proj = UnsafeProjection.create(partitionExpression)
     row => proj(row)
   }
 
@@ -220,37 +238,24 @@ class DynamicPartitionDataWriter(
 
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
-    def getPath(concurrent: String = "") : String = {
-      // This must be in a form that matches our bucketing format. See BucketingUtils.
-      val ext = f"$bucketIdStr.c$fileCounter%03d$concurrent" +
-        description.outputWriterFactory.getFileExtension(taskAttemptContext)
+    // This must be in a form that matches our bucketing format. See BucketingUtils.
+    val ext = f"$bucketIdStr.c$fileCounter%03d" +
+      description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-      val customPath = partDir.flatMap { dir =>
-        description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
-      }
-      if (customPath.isDefined) {
-        committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
-      } else {
-        committer.newTaskTempFile(taskAttemptContext, partDir, ext)
-      }
+    val customPath = partDir.flatMap { dir =>
+      description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
+    }
+    val currentPath = if (customPath.isDefined) {
+      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+    } else {
+      committer.newTaskTempFile(taskAttemptContext, partDir, ext)
     }
 
-    var currentPath = getPath()
-    currentWriter = try {
-      description.outputWriterFactory.newInstance(
-        path = currentPath,
-        dataSchema = description.dataColumns.toStructType,
-        context = taskAttemptContext)
-    } catch {
-      case _: FileAlreadyExistsException =>
-        fileCounter += 1
-        currentPath = getPath(".concurrent")
+    currentWriter = description.outputWriterFactory.newInstance(
+      path = currentPath,
+      dataSchema = description.dataColumns.toStructType,
+      context = taskAttemptContext)
 
-        description.outputWriterFactory.newInstance(
-          path = currentPath,
-          dataSchema = description.dataColumns.toStructType,
-          context = taskAttemptContext)
-    }
     statsTrackers.foreach(_.newFile(currentPath))
   }
 
