@@ -51,18 +51,6 @@ object PartitionedFileUtil {
     PartitionedFile(partitionValues, filePath.toUri.toString, 0, file.getLen, hosts)
   }
 
-  def maxSplitBytes(
-      sparkSession: SparkSession,
-      selectedPartitions: Seq[PartitionDirectory]): Long = {
-    val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = sparkSession.sparkContext.defaultParallelism
-    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-    val bytesPerCore = totalBytes / defaultParallelism
-
-    Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
-  }
-
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
     case f: LocatedFileStatus => f.getBlockLocations
     case f => Array.empty[BlockLocation]

@@ -36,7 +36,7 @@ abstract class FileScan(
 
   protected def partitions: Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
-    val maxSplitBytes = PartitionedFileUtil.maxSplitBytes(sparkSession, selectedPartitions)
+    val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
         val filePath = file.getPath
@@ -50,7 +50,7 @@ abstract class FileScan(
         )
       }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
     }
-    FilePartitionUtil.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
+    FilePartition.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
   }
 
   override def planInputPartitions(): Array[InputPartition] = {

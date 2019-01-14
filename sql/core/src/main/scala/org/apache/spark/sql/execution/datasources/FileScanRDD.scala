@@ -55,17 +55,6 @@ case class PartitionedFile(
 }
 
 /**
- * A collection of file blocks that should be read as a single task
- * (possibly from multiple partitioned directories).
- */
-case class FilePartition(index: Int, files: Seq[PartitionedFile])
-  extends RDDPartition with InputPartition {
-  override def preferredLocations(): Array[String] = {
-    FilePartitionUtil.getPreferredLocations(files)
-  }
-}
-
-/**
  * An RDD that scans a list of file partitions.
  */
 class FileScanRDD(

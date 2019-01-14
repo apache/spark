@@ -19,10 +19,36 @@ package org.apache.spark.sql.execution.datasources
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.sources.v2.reader.InputPartition
 
-object FilePartitionUtil extends Logging {
+/**
+ * A collection of file blocks that should be read as a single task
+ * (possibly from multiple partitioned directories).
+ */
+case class FilePartition(index: Int, files: Seq[PartitionedFile])
+  extends Partition with InputPartition {
+  override def preferredLocations(): Array[String] = {
+    // Computes total number of bytes can be retrieved from each host.
+    val hostToNumBytes = mutable.HashMap.empty[String, Long]
+    files.foreach { file =>
+      file.locations.filter(_ != "localhost").foreach { host =>
+        hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
+      }
+    }
+
+    // Takes the first 3 hosts with the most data to be retrieved
+    hostToNumBytes.toSeq.sortBy {
+      case (host, numBytes) => numBytes
+    }.reverse.take(3).map {
+      case (host, numBytes) => host
+    }.toArray
+  }
+}
+
+object FilePartition extends Logging {
 
   def getFilePartitions(
       sparkSession: SparkSession,
@@ -57,20 +83,15 @@ object FilePartitionUtil extends Logging {
     partitions
   }
 
-  def getPreferredLocations(files: Seq[PartitionedFile]): Array[String] = {
-    // Computes total number of bytes can be retrieved from each host.
-    val hostToNumBytes = mutable.HashMap.empty[String, Long]
-    files.foreach { file =>
-      file.locations.filter(_ != "localhost").foreach { host =>
-        hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
-      }
-    }
+  def maxSplitBytes(
+      sparkSession: SparkSession,
+      selectedPartitions: Seq[PartitionDirectory]): Long = {
+    val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    val defaultParallelism = sparkSession.sparkContext.defaultParallelism
+    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+    val bytesPerCore = totalBytes / defaultParallelism
 
-    // Takes the first 3 hosts with the most data to be retrieved
-    hostToNumBytes.toSeq.sortBy {
-      case (host, numBytes) => numBytes
-    }.reverse.take(3).map {
-      case (host, numBytes) => host
-    }.toArray
+    Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
   }
 }
