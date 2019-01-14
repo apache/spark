@@ -128,8 +128,8 @@ object StaticSQLConf {
 
   val MAX_BROADCAST_EXCHANGE_THREADNUMBER =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadNumber")
-      .doc("MAX number of threads can hold by BroadcastExchangeExec.")
+      .doc("MAX number of threads can hold by BroadcastExchangeExec which controls" +
+        " the parallelism of fetching and broadcasting the table.")
       .intConf
       .createWithDefault(128)
-
 }
