@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.text.{DateFormat, SimpleDateFormat}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime}
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
@@ -66,39 +65,6 @@ object DateTimeUtils {
   val TIMEZONE_OPTION = "timeZone"
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
-
-  // `SimpleDateFormat` is not thread-safe.
-  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-    }
-  }
-
-  def getThreadLocalTimestampFormat(timeZone: TimeZone): DateFormat = {
-    val sdf = threadLocalTimestampFormat.get()
-    sdf.setTimeZone(timeZone)
-    sdf
-  }
-
-  // `SimpleDateFormat` is not thread-safe.
-  private val threadLocalDateFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    }
-  }
-
-  def getThreadLocalDateFormat(timeZone: TimeZone): DateFormat = {
-    val sdf = threadLocalDateFormat.get()
-    sdf.setTimeZone(timeZone)
-    sdf
-  }
-
-  // Reuse the Calendar object in each thread as it is expensive to create in each method call.
-  private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
-    override protected def initialValue: Calendar = {
-      Calendar.getInstance(TimeZoneGMT)
-    }
-  }
 
   private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
   private val computeTimeZone = new JFunction[String, TimeZone] {
@@ -940,14 +906,5 @@ object DateTimeUtils {
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
     convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
-  }
-
-  /**
-   * Re-initialize the current thread's thread locals. Exposed for testing.
-   */
-  private[util] def resetThreadLocals(): Unit = {
-    threadLocalTimestampFormat.remove()
-    threadLocalDateFormat.remove()
-    threadLocalGmtCalendar.remove()
   }
 }
