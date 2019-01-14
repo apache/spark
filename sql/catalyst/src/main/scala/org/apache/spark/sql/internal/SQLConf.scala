@@ -1628,11 +1628,11 @@ object SQLConf {
 
   val PYSPARK_DATAFRAME_TOJSON_SHOULD_RETURN_DATAFRAME =
     buildConf("spark.sql.legacy.pyspark.dataframe.toJsonShouldReturnDataFrame")
-    .internal()
-    .doc("If it is set to true, DataFrame.toJSON in PySpark returns DataFrame of JSON string " +
-      "instead of RDD.")
-    .booleanConf
-    .createWithDefault(true)
+      .internal()
+      .doc("If it is set to true, DataFrame.toJSON in PySpark returns DataFrame of JSON string " +
+        "instead of RDD.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
