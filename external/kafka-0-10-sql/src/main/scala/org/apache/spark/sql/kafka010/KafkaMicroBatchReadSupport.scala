@@ -22,6 +22,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
+import org.apache.kafka.clients.consumer.ConsumerConfig
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -122,7 +123,13 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     // Find deleted partitions, and report data loss if required
     val deletedPartitions = startPartitionOffsets.keySet.diff(endPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
-      reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed")
+      val message =
+        if (kafkaOffsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+          s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+        } else {
+          s"$deletedPartitions are gone. Some data may have been missed."
+        }
+      reportDataLoss(message)
     }
 
     // Use the end partitions to calculate offset ranges to ignore partitions that have
