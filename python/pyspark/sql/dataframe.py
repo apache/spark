@@ -109,15 +109,18 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def toJSON(self, use_unicode=True):
-        """Converts a :class:`DataFrame` into a :class:`RDD` of string.
+        """Converts a :class:`DataFrame` into a :class:`DataFrame` of JSON string.
 
-        Each row is turned into a JSON document as one element in the returned RDD.
+        Each row is turned into a JSON document as one element in the returned DataFrame.
 
         >>> df.toJSON().first()
-        u'{"age":2,"name":"Alice"}'
+        Row(value=u'{"age":2,"name":"Alice"}')
         """
-        rdd = self._jdf.toJSON()
-        return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
+        jdf = self._jdf.toJSON()
+        if self.sql_ctx._conf.pysparkDataFrameToJSONShouldReturnDataFrame():
+            return DataFrame(jdf, self.sql_ctx)
+        else:
+            return RDD(jdf.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     @since(2.0)
     def createTempView(self, name):

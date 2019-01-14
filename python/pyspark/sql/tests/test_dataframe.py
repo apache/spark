@@ -676,6 +676,16 @@ class DataFrameTests(ReusedSQLTestCase):
                     self.assertEquals(None, df._repr_html_())
                     self.assertEquals(expected, df.__repr__())
 
+    def test_toJSON(self):
+        df = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
+        self.assertEqual(df.toJSON().collect(), [
+            Row(u'{"name":"Alice","age":5}'), Row(u'{"name":"Bob","age":8}')])
+
+        with self.sql_conf({
+                "spark.sql.legacy.pyspark.dataframe.toJsonShouldReturnDataFrame": False}):
+            self.assertEqual(df.toJSON().collect(), [
+                u'{"name":"Alice","age":5}', u'{"name":"Bob","age":8}'])
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is

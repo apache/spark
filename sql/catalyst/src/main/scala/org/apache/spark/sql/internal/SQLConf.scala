@@ -1625,6 +1625,14 @@ object SQLConf {
         "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
+
+  val PYSPARK_DATAFRAME_TOJSON_SHOULD_RETURN_DATAFRAME =
+    buildConf("spark.sql.legacy.pyspark.dataframe.toJsonShouldReturnDataFrame")
+    .internal()
+    .doc("If it is set to true, DataFrame.toJSON in PySpark returns DataFrame of JSON string " +
+      "instead of RDD.")
+    .booleanConf
+    .createWithDefault(true)
 }
 
 /**
@@ -2049,6 +2057,9 @@ class SQLConf extends Serializable with Logging {
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
+
+  def pysparkDataFrameToJSONShouldReturnDataFrame: Boolean =
+    getConf(SQLConf.PYSPARK_DATAFRAME_TOJSON_SHOULD_RETURN_DATAFRAME)
 
   /** ********************** SQLConf functionality methods ************ */
 
