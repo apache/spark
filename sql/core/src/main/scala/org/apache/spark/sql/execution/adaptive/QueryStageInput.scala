@@ -58,11 +58,13 @@ abstract class QueryStageInput extends LeafExecNode {
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    childStage.generateTreeString(depth, lastChildren, builder, verbose, "*")
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    childStage.generateTreeString(
+      depth, lastChildren, append, verbose, "", false, maxFields)
   }
 }
 
@@ -84,7 +86,7 @@ case class ShuffleQueryStageInput(
 
   override def doExecute(): RDD[InternalRow] = {
     val childRDD = childStage.execute().asInstanceOf[ShuffledRowRDD]
-    new ShuffledRowRDD(childRDD.dependency, partitionStartIndices)
+    new ShuffledRowRDD(childRDD.dependency, childStage.child.metrics, partitionStartIndices)
   }
 }
 

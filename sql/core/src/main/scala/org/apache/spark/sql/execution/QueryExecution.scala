@@ -110,7 +110,6 @@ class QueryExecution(
     ReuseSubquery(sparkSession.sessionState.conf))
 
   protected def adaptivePreparations: Seq[Rule[SparkPlan]] = Seq(
-    python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf),

@@ -61,7 +61,7 @@ abstract class QueryStage extends UnaryExecNode {
     }
     val broadcastFutures = broadcastQueryStages.map { queryStage =>
       Future {
-        SQLExecution.withExecutionId(sqlContext.sparkContext, executionId) {
+        SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
           queryStage.prepareBroadcast()
         }
       }(QueryStage.executionContext)
@@ -73,7 +73,7 @@ abstract class QueryStage extends UnaryExecNode {
     }
     val shuffleStageFutures = shuffleQueryStages.map { queryStage =>
       Future {
-        SQLExecution.withExecutionId(sqlContext.sparkContext, executionId) {
+        SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
           queryStage.execute()
         }
       }(QueryStage.executionContext)
@@ -170,11 +170,13 @@ abstract class QueryStage extends UnaryExecNode {
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, "*")
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    child.generateTreeString(
+      depth, lastChildren, append, verbose, "", false, maxFields)
   }
 }
 
