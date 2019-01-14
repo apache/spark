@@ -60,6 +60,8 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
@@ -1847,7 +1849,7 @@ private[spark] object Utils extends Logging {
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
-    sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+    sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
   }
 
   /**
@@ -2175,7 +2177,7 @@ private[spark] object Utils extends Logging {
    */
   def portMaxRetries(conf: SparkConf): Int = {
     val maxRetries = conf.getOption("spark.port.maxRetries").map(_.toInt)
-    if (conf.contains("spark.testing")) {
+    if (conf.contains(IS_TESTING)) {
       // Set a higher number of retries for tests...
       maxRetries.getOrElse(100)
     } else {
@@ -2386,8 +2388,7 @@ private[spark] object Utils extends Logging {
 
   // Returns the groups to which the current user belongs.
   def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
-    val groupProviderClassName = sparkConf.get("spark.user.groups.mapping",
-      "org.apache.spark.security.ShellBasedGroupsMappingProvider")
+    val groupProviderClassName = sparkConf.get(USER_GROUPS_MAPPING)
     if (groupProviderClassName != "") {
       try {
         val groupMappingServiceProvider = classForName(groupProviderClassName).

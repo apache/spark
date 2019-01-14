@@ -197,8 +197,8 @@ class Analyzer(
       PullOutNondeterministic),
     Batch("UDF", Once,
       HandleNullInputsForUDF),
-    Batch("FixNullability", Once,
-      FixNullability),
+    Batch("UpdateNullability", Once,
+      UpdateAttributeNullability),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -943,7 +943,7 @@ class Analyzer(
         failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
-      case j @ Join(left, right, _, _) if !j.duplicateResolved =>
+      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
@@ -1822,40 +1822,6 @@ class Analyzer(
   }
 
   /**
-   * Fixes nullability of Attributes in a resolved LogicalPlan by using the nullability of
-   * corresponding Attributes of its children output Attributes. This step is needed because
-   * users can use a resolved AttributeReference in the Dataset API and outer joins
-   * can change the nullability of an AttribtueReference. Without the fix, a nullable column's
-   * nullable field can be actually set as non-nullable, which cause illegal optimization
-   * (e.g., NULL propagation) and wrong answers.
-   * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
-   */
-  object FixNullability extends Rule[LogicalPlan] {
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case p if !p.resolved => p // Skip unresolved nodes.
-      case p: LogicalPlan if p.resolved =>
-        val childrenOutput = p.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
-          case (exprId, attributes) =>
-            // If there are multiple Attributes having the same ExprId, we need to resolve
-            // the conflict of nullable field. We do not really expect this happen.
-            val nullable = attributes.exists(_.nullable)
-            attributes.map(attr => attr.withNullability(nullable))
-        }.toSeq
-        // At here, we create an AttributeMap that only compare the exprId for the lookup
-        // operation. So, we can find the corresponding input attribute's nullability.
-        val attributeMap = AttributeMap[Attribute](childrenOutput.map(attr => attr -> attr))
-        // For an Attribute used by the current LogicalPlan, if it is from its children,
-        // we fix the nullable field by using the nullability setting of the corresponding
-        // output Attribute from the children.
-        p.transformExpressions {
-          case attr: Attribute if attributeMap.contains(attr) =>
-            attr.withNullability(attributeMap(attr).nullable)
-        }
-    }
-  }
-
-  /**
    * Extracts [[WindowExpression]]s from the projectList of a [[Project]] operator and
    * aggregateExpressions of an [[Aggregate]] operator and creates individual [[Window]]
    * operators for every distinct [[WindowSpecDefinition]].
@@ -2249,13 +2215,14 @@ class Analyzer(
    */
   object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case j @ Join(left, right, UsingJoin(joinType, usingCols), _)
+      case j @ Join(left, right, UsingJoin(joinType, usingCols), _, hint)
           if left.resolved && right.resolved && j.duplicateResolved =>
-        commonNaturalJoinProcessing(left, right, joinType, usingCols, None)
-      case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
+        commonNaturalJoinProcessing(left, right, joinType, usingCols, None, hint)
+      case j @ Join(left, right, NaturalJoin(joinType), condition, hint)
+          if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
-        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition)
+        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition, hint)
     }
   }
 
@@ -2360,7 +2327,8 @@ class Analyzer(
       right: LogicalPlan,
       joinType: JoinType,
       joinNames: Seq[String],
-      condition: Option[Expression]) = {
+      condition: Option[Expression],
+      hint: JoinHint) = {
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
         throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the left " +
@@ -2401,7 +2369,7 @@ class Analyzer(
         sys.error("Unsupported natural join type " + joinType)
     }
     // use Project to trim unnecessary fields
-    Project(projectList, Join(left, right, joinType, newCondition))
+    Project(projectList, Join(left, right, joinType, newCondition, hint))
   }
 
   /**
