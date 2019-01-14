@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution
 
-import java.sql.{Date, Timestamp}
-
 import scala.io.Source
 
 import org.apache.spark.sql.AnalysisException
