@@ -259,7 +259,7 @@ public class SparkSaslSuite {
     try {
       TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(testConf));
       StreamManager sm = mock(StreamManager.class);
-      when(sm.getChunk(anyLong(), anyInt())).thenAnswer(invocation ->
+      when(sm.getChunk(anyLong(), anyInt(), any(Channel.class))).thenAnswer(invocation ->
           new FileSegmentManagedBuffer(conf, file, 0, file.length()));
 
       RpcHandler rpcHandler = mock(RpcHandler.class);

@@ -19,6 +19,8 @@ package org.apache.spark.rpc.netty
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+import io.netty.channel.Channel
+
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc.RpcEnvFileServer
@@ -43,11 +45,11 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   private val jars = new ConcurrentHashMap[String, File]()
   private val dirs = new ConcurrentHashMap[String, File]()
 
-  override def getChunk(streamId: Long, chunkIndex: Int): ManagedBuffer = {
+  override def getChunk(streamId: Long, chunkIndex: Int, channel: Channel): ManagedBuffer = {
     throw new UnsupportedOperationException()
   }
 
-  override def openStream(streamId: String): ManagedBuffer = {
+  override def openStream(streamId: String, channel: Channel): ManagedBuffer = {
     val Array(ftype, fname) = streamId.stripPrefix("/").split("/", 2)
     val file = ftype match {
       case "files" => files.get(fname)

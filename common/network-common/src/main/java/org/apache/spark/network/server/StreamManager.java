@@ -42,9 +42,10 @@ public abstract class StreamManager {
    * The returned ManagedBuffer will be release()'d after being written to the network.
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
+   * @param channel The connection used to serve chunk request.
    * @param chunkIndex 0-indexed chunk of the stream that's requested
    */
-  public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
+  public abstract ManagedBuffer getChunk(long streamId, int chunkIndex, Channel channel);
 
   /**
    * Called in response to a stream() request. The returned data is streamed to the client
@@ -54,28 +55,12 @@ public abstract class StreamManager {
    * {@link #getChunk(long, int)} method.
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
+   * @param channel The connection used to serve stream request.
    * @return A managed buffer for the stream, or null if the stream was not found.
    */
-  public ManagedBuffer openStream(String streamId) {
+  public ManagedBuffer openStream(String streamId, Channel channel) {
     throw new UnsupportedOperationException();
   }
-
-  /**
-   * Associates a stream with a single client connection, which is guaranteed to be the only reader
-   * of the stream. The getChunk() method will be called serially on this connection and once the
-   * connection is closed, the stream will never be used again, enabling cleanup.
-   *
-   * This must be called before the first getChunk() on the stream, but it may be invoked multiple
-   * times with the same channel and stream id.
-   */
-  public void registerChannel(Channel channel, long streamId) { }
-
-  /**
-   * Associates a stream with a single client connection, which is guaranteed to be the only reader
-   * of the stream. This is similar to {@link #registerChannel(Channel, long)} method, but the
-   * <code>streamId</code> argument is for the stream in response to a stream() request.
-   */
-  public void registerChannel(Channel channel, String streamId) { }
 
   /**
    * Indicates that the given channel has been terminated. After this occurs, we are guaranteed not

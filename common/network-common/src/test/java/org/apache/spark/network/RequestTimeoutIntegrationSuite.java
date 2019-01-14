@@ -18,6 +18,7 @@
 package org.apache.spark.network;
 
 import com.google.common.util.concurrent.Uninterruptibles;
+import io.netty.channel.Channel;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
@@ -65,7 +66,7 @@ public class RequestTimeoutIntegrationSuite {
 
     defaultManager = new StreamManager() {
       @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
+      public ManagedBuffer getChunk(long streamId, int chunkIndex, Channel channel) {
         throw new UnsupportedOperationException();
       }
     };
@@ -184,7 +185,7 @@ public class RequestTimeoutIntegrationSuite {
     final byte[] response = new byte[16];
     final StreamManager manager = new StreamManager() {
       @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
+      public ManagedBuffer getChunk(long streamId, int chunkIndex, Channel channel) {
         Uninterruptibles.sleepUninterruptibly(FOREVER, TimeUnit.MILLISECONDS);
         return new NioManagedBuffer(ByteBuffer.wrap(response));
       }

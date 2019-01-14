@@ -71,7 +71,12 @@ public class OneForOneStreamManager extends StreamManager {
     streams = new ConcurrentHashMap<>();
   }
 
-  @Override
+
+  /**
+   * Associates a stream with a single client connection, which is guaranteed to be the only reader
+   * of the stream. Once the connection is closed, the stream will never be used again, enabling
+   * cleanup by `connectionTerminated`.
+   */
   public void registerChannel(Channel channel, long streamId) {
     if (streams.containsKey(streamId)) {
       streams.get(streamId).associatedChannel = channel;
@@ -79,12 +84,9 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
-  public void registerChannel(Channel channel, String streamChunkId) {
-    registerChannel(channel, parseStreamChunkId(streamChunkId).getLeft());
-  }
+  public ManagedBuffer getChunk(long streamId, int chunkIndex, Channel channel) {
+    registerChannel(channel, streamId);
 
-  @Override
-  public ManagedBuffer getChunk(long streamId, int chunkIndex) {
     StreamState state = streams.get(streamId);
     if (chunkIndex != state.curChunk) {
       throw new IllegalStateException(String.format(
@@ -105,9 +107,9 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
-  public ManagedBuffer openStream(String streamChunkId) {
+  public ManagedBuffer openStream(String streamChunkId, Channel channel) {
     Pair<Long, Integer> streamChunkIdPair = parseStreamChunkId(streamChunkId);
-    return getChunk(streamChunkIdPair.getLeft(), streamChunkIdPair.getRight());
+    return getChunk(streamChunkIdPair.getLeft(), streamChunkIdPair.getRight(), channel);
   }
 
   public static String genStreamChunkId(long streamId, int chunkId) {

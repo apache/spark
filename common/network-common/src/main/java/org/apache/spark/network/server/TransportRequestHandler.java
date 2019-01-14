@@ -126,8 +126,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
     ManagedBuffer buf;
     try {
-      buf = streamManager.openStream(req.streamId);
-      streamManager.registerChannel(channel, req.streamId);
+      buf = streamManager.openStream(req.streamId, channel);
     } catch (Exception e) {
       logger.error(String.format(
         "Error opening stream %s for request from %s", req.streamId, getRemoteAddress(channel)), e);

@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
+import io.netty.channel.Channel;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -92,7 +93,7 @@ public class ChunkFetchIntegrationSuite {
 
     streamManager = new StreamManager() {
       @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
+      public ManagedBuffer getChunk(long streamId, int chunkIndex, Channel channel) {
         assertEquals(STREAM_ID, streamId);
         if (chunkIndex == BUFFER_CHUNK_INDEX) {
           return new NioManagedBuffer(buf);
