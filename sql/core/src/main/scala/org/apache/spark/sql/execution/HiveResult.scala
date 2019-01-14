@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -77,6 +77,10 @@ object HiveResult {
     TimestampType,
     BinaryType)
 
+  private lazy val dateFormatter = DateFormatter()
+  private lazy val timestampFormatter = TimestampFormatter(
+    DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone))
+
   /** Hive outputs fields of structs slightly differently than top level attributes. */
   private def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
@@ -111,11 +115,9 @@ object HiveResult {
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "NULL"
-    case (d: Date, DateType) =>
-      DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
+    case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
     case (t: Timestamp, TimestampType) =>
-      val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
-      DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t), timeZone)
+      DateTimeUtils.timestampToString(timestampFormatter, DateTimeUtils.fromJavaTimestamp(t))
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
     case (interval, CalendarIntervalType) => interval.toString

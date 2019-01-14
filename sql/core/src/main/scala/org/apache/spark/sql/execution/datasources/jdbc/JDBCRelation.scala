@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -185,10 +185,11 @@ private[sql] object JDBCRelation extends Logging {
       columnType: DataType,
       timeZoneId: String): String = {
     def dateTimeToString(): String = {
-      val timeZone = DateTimeUtils.getTimeZone(timeZoneId)
       val dateTimeStr = columnType match {
-        case DateType => DateTimeUtils.dateToString(value.toInt, timeZone)
-        case TimestampType => DateTimeUtils.timestampToString(value, timeZone)
+        case DateType => DateFormatter().format(value.toInt)
+        case TimestampType =>
+          val timestampFormatter = TimestampFormatter(DateTimeUtils.getTimeZone(timeZoneId))
+          DateTimeUtils.timestampToString(timestampFormatter, value)
       }
       s"'$dateTimeStr'"
     }
