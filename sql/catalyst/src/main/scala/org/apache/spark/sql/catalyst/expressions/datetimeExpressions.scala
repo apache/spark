@@ -562,7 +562,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = TimestampFormatter(format.toString, timeZone, Locale.US)
+    val df = TimestampFormatter(format.toString, timeZone)
     UTF8String.fromString(df.format(timestamp.asInstanceOf[Long]))
   }
 
@@ -665,7 +665,7 @@ abstract class UnixTime
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
+      TimestampFormatter(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -698,7 +698,7 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter(formatString, timeZone, Locale.US).parse(
+              TimestampFormatter(formatString, timeZone).parse(
                 t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
             } catch {
               case NonFatal(_) => null
@@ -819,7 +819,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
+      TimestampFormatter(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -845,7 +845,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(TimestampFormatter(f.toString, timeZone, Locale.US)
+            UTF8String.fromString(TimestampFormatter(f.toString, timeZone)
               .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
