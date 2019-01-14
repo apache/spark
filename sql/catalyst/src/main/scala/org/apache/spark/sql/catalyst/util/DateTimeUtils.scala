@@ -368,7 +368,7 @@ object DateTimeUtils {
 
   def instantToDays(instant: Instant): Int = {
     val seconds = instant.getEpochSecond
-    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
+    val days = Math.floorDiv(seconds, SECONDS_PER_DAY)
     days.toInt
   }
 
