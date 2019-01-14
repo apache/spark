@@ -745,7 +745,7 @@ class SparkSubmitSuite
       val appArgs = new SparkSubmitArguments(clArgs)
       val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
       conf.get(JARS) should be(Utils.resolveURIs(jars + ",thejar.jar").split(",").toSeq)
-      conf.get("spark.files") should be(Utils.resolveURIs(files))
+      conf.get(FILES) should be(Utils.resolveURIs(files).split(",").toSeq)
 
       // Test files and archives (Yarn)
       val f2 = File.createTempFile("test-submit-files-archives", "", tmpDir)
@@ -798,7 +798,7 @@ class SparkSubmitSuite
       val appArgs4 = new SparkSubmitArguments(clArgs4)
       val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4, conf = Some(hadoopConf))
       // Should not format python path for yarn cluster mode
-      conf4.get(SUBMIT_PYTHON_FILES) should be(Utils.resolveURIs(remotePyFiles))
+      conf4.get(SUBMIT_PYTHON_FILES) should be(Utils.resolveURIs(remotePyFiles).split(","))
     }
   }
 
