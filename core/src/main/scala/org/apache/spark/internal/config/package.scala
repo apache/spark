@@ -932,7 +932,7 @@ package object config {
     .doc("Maximum size of map outputs to fetch simultaneously from each reduce task, " +
       "in MiB unless otherwise specified. Since each output requires us to create a " +
       "buffer to receive it, this represents a fixed memory overhead per reduce task, " +
-      "so keep it small unless you have a large amount of memory.")
+      "so keep it small unless you have a large amount of memory")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("48m")
 
