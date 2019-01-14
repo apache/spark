@@ -80,7 +80,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   public void addFetchAsStreamRequest(
       StreamChunkId streamChunkId,
       StreamCallback callback) {
-      updateTimeOfLastRequest();
+    updateTimeOfLastRequest();
     outstandingFetchAsStreams.put(streamChunkId, callback);
   }
 
