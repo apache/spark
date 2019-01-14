@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.sql.{Date, Timestamp}
 import java.util.Locale
 import javax.xml.bind.DatatypeConverter
 
@@ -1555,9 +1554,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     try {
       valueType match {
         case "DATE" =>
-          Literal(Date.valueOf(value))
+          val castedValue = Cast(
+            Literal(value),
+            DateType,
+            Some(SQLConf.get.sessionLocalTimeZone)).eval()
+          if (castedValue == null) {
+            throw new ParseException(s"Cannot parse the date value: ${value}", ctx)
+          } else {
+            Literal(castedValue, DateType)
+          }
         case "TIMESTAMP" =>
-          Literal(Timestamp.valueOf(value))
+          val castedValue = Cast(
+            Literal(value),
+            TimestampType,
+            Some(SQLConf.get.sessionLocalTimeZone)).eval()
+          if (castedValue == null) {
+            throw new ParseException(s"Cannot parse the timestamp value: ${value}", ctx)
+          } else {
+            Literal(castedValue, TimestampType)
+          }
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
