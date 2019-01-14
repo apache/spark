@@ -860,7 +860,7 @@ package object config {
     ConfigBuilder("spark.executor.logs.rolling.enableCompression")
       .booleanConf
       .createWithDefault(false)
-
+  
   private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
     .booleanConf
     .createWithDefault(false)
