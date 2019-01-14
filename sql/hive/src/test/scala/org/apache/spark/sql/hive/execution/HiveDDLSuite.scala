@@ -718,10 +718,13 @@ class HiveDDLSuite
         assert(!catalog.tableExists(TableIdentifier(newViewName)))
 
         assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName RENAME TO $newViewName")
+        assertErrorForAlterViewOnTable(s"RENAME VIEW $tabName TO $newViewName")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
+        assertErrorForAlterTableOnView(s"RENAME TABLE $oldViewName TO $newViewName")
 
         assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
+
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 

@@ -636,8 +636,12 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
   test("alter table/view: rename table/view") {
     val sql_table = "ALTER TABLE table_name RENAME TO new_table_name"
     val sql_view = sql_table.replace("TABLE", "VIEW")
+    val sql_table2 = "RENAME TABLE table_name TO new_table_name"
+    val sql_view2 = sql_table2.replace("TABLE", "VIEW")
     val parsed_table = parser.parsePlan(sql_table)
     val parsed_view = parser.parsePlan(sql_view)
+    val parsed_table2 = parser.parsePlan(sql_table2)
+    val parsed_view2 = parser.parsePlan(sql_view2)
     val expected_table = AlterTableRenameCommand(
       TableIdentifier("table_name"),
       TableIdentifier("new_table_name"),
@@ -646,15 +650,29 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       TableIdentifier("table_name"),
       TableIdentifier("new_table_name"),
       isView = true)
+    val expected_table2 = AlterTableRenameCommand(
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
+      isView = false)
+    val expected_view2 = AlterTableRenameCommand(
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
+      isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
+    comparePlans(parsed_table2, expected_table2)
+    comparePlans(parsed_view2, expected_view2)
   }
 
   test("alter table: rename table with database") {
     val query = "ALTER TABLE db1.tbl RENAME TO db1.tbl2"
+    val query2 = "RENAME TABLE db1.tbl TO db1.tbl2"
     val plan = parseAs[AlterTableRenameCommand](query)
+    val plan2 = parseAs[AlterTableRenameCommand](query2)
     assert(plan.oldName == TableIdentifier("tbl", Some("db1")))
     assert(plan.newName == TableIdentifier("tbl2", Some("db1")))
+    assert(plan2.oldName == TableIdentifier("tbl", Some("db1")))
+    assert(plan2.newName == TableIdentifier("tbl2", Some("db1")))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);

@@ -131,6 +131,12 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
       sql("ALTER TABLE src RENAME TO src2")
       assert(getPathOption("src2").map(makeQualifiedPath) == Some(defaultTablePath("src2")))
     }
+
+    withTable("src", "src2") {
+      sql(s"CREATE TABLE src(i int) USING ${classOf[TestOptionsSource].getCanonicalName}")
+      sql("RENAME TABLE src TO src2")
+      assert(getPathOption("src2").map(makeQualifiedPath) == Some(defaultTablePath("src2")))
+    }
   }
 
   private def getPathOption(tableName: String): Option[String] = {

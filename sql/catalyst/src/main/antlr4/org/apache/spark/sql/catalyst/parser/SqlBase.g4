@@ -105,6 +105,7 @@ statement
         ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
+    | RENAME (TABLE | VIEW) from=tableIdentifier TO to=tableIdentifier #renameTable
     | ALTER (TABLE | VIEW) tableIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) tableIdentifier
