@@ -117,8 +117,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf = new SparkConf(false)
       .set("spark.app.id", "test")
       .set(IS_TESTING, true)
-      .set(MEMORY_FRACTION, 1)
-      .set(MEMORY_STORAGE_FRACTION, 1)
+      .set(MEMORY_FRACTION, 1.0)
+      .set(MEMORY_STORAGE_FRACTION, 1.0)
       .set("spark.kryoserializer.buffer", "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 

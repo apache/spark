@@ -217,7 +217,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("compute without caching when no partitions fit in memory") {
     val size = 10000
     val conf = new SparkConf()
-      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024)
+      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024L)
       .set(TEST_MEMORY, size.toLong / 2)
 
     sc = new SparkContext(clusterUrl, "test", conf)
