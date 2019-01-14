@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
 import scala.util.Random
 
 import org.apache.spark.sql.{Dataset, Row}
@@ -24,8 +26,9 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.ThreadUtils
 
 class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits._
@@ -131,5 +134,13 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val projection1 = cached.select("_1", "_2").queryExecution.executedPlan
     val projection2 = cached.select("_1", "_3").queryExecution.executedPlan
     assert(!projection1.sameResult(projection2))
+  }
+
+  test("SPARK-26601: Make broadcast-exchange thread pool configurable") {
+
+    withSQLConf(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER.key -> "1") {
+      assert(SQLConf.get.getConf(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER) === 1)
+      assert(BroadcastExchangeExec.executionContext != null)
+    }
   }
 }
