@@ -35,8 +35,11 @@ public class StreamHandle extends BlockTransferMessage {
   public final int numChunks;
   public final int[] chunkSizes;
 
+  private static final int[] EMPTY_CHUNK_SIZES_ARRAY = new int[0];
+
+  // This is only used in tests.
   public StreamHandle(long streamId, int numChunks) {
-    this(streamId, numChunks, new int[0]);
+    this(streamId, numChunks, EMPTY_CHUNK_SIZES_ARRAY);
   }
 
   public StreamHandle(long streamId, int numChunks, int[] chunkSizes) {
@@ -88,7 +91,7 @@ public class StreamHandle extends BlockTransferMessage {
   public static StreamHandle decode(ByteBuf buf) {
     long streamId = buf.readLong();
     int numChunks = buf.readInt();
-    int[] chunkSizes = new int[0];
+    int[] chunkSizes = EMPTY_CHUNK_SIZES_ARRAY;
     if (buf.readableBytes() != 0) {
       chunkSizes = Encoders.IntArrays.decode(buf);
     }
