@@ -21,7 +21,7 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{array, struct}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, ShortType, StringType, TimestampType}
+import org.apache.spark.sql.types._
 
 /**
  * A benchmark that compares the performance of different ways to evaluate SQL IN expressions.
