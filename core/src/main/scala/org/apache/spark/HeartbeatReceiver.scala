@@ -79,6 +79,17 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   private val checkTimeoutIntervalMs = sc.conf.get(Network.NETWORK_TIMEOUT_INTERVAL)
 
+  private val executorHeartbeatIntervalMs = sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL)
+
+  require(checkTimeoutIntervalMs >= executorTimeoutMs,
+    s"checkTimeoutIntervalMs should be less than executorTimeoutMs, " +
+      s"please set ${Network.NETWORK_TIMEOUT_INTERVAL.key} and " +
+      s"${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key} properly.")
+  require(executorHeartbeatIntervalMs >= executorTimeoutMs,
+    "executorHeartbeatIntervalMs should be less than executorTimeoutMs, " +
+      s"please set ${config.EXECUTOR_HEARTBEAT_INTERVAL.key} and " +
+      s"${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key} properly.")
+
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
   // "eventLoopThread" is used to run some pretty fast actions. The actions running in it should not
