@@ -97,6 +97,7 @@ class Strategy @Since("1.3.0") (
     isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
   }
 
+  // scalastyle:off argcount
   /**
    * Backwards compatible constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
    */
@@ -119,6 +120,7 @@ class Strategy @Since("1.3.0") (
       categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB,
       subsamplingRate, useNodeIdCache, checkpointInterval, 0.0)
   }
+  // scalastyle:on argcount
 
   /**
    * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
