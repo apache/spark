@@ -198,7 +198,7 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(_, address, _, buf, _, _) =>
+        case SuccessFetchResult(_, address, _, _, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
@@ -217,12 +217,10 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  // To make the fetch again work (may corrupted), we need use ShuffleBlockId instead of
-  // ShuffleBlockBatchId when blockIds has only one blockId.
-  private def convertBlockIds(blockIds: Seq[String]): BlockId = {
+  private def convertToShuffleBlockBatchId(blockIds: Seq[BlockId]): BlockId = {
     assert(blockIds.nonEmpty)
-    val headBlockId = BlockId(blockIds.head).asInstanceOf[ShuffleBlockId]
-    val lastBlockId = BlockId(blockIds.last).asInstanceOf[ShuffleBlockId]
+    val headBlockId = blockIds.head.asInstanceOf[ShuffleBlockId]
+    val lastBlockId = blockIds.last.asInstanceOf[ShuffleBlockId]
     if (blockIds.size > 1) {
       ShuffleBlockBatchId(headBlockId.shuffleId, headBlockId.mapId, headBlockId.reduceId,
         lastBlockId.reduceId - headBlockId.reduceId + 1)
@@ -245,7 +243,8 @@ final class ShuffleBlockFetcherIterator(
 
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockIds: Array[String], buf: ManagedBuffer): Unit = {
-        val blockId = convertBlockIds(blockIds)
+        val parsedBlockIds = blockIds.map(BlockId.apply)
+        val batchId = convertToShuffleBlockBatchId(parsedBlockIds)
         // Only add the buffer to results queue if the iterator is not zombie,
         // i.e. cleanup() has not been called yet.
         ShuffleBlockFetcherIterator.this.synchronized {
@@ -254,12 +253,12 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             remainingBlocks --= blockIds
-            results.put(new SuccessFetchResult(blockId, address,
-              blockIds.map(sizeMap).sum, buf, remainingBlocks.isEmpty, blockIds.length))
+            results.put(new SuccessFetchResult(batchId, address, parsedBlockIds,
+              blockIds.map(sizeMap).sum, Some(sizeMap), buf, remainingBlocks.isEmpty))
             logDebug("remainingBlocks: " + remainingBlocks)
           }
         }
-        logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+        logTrace("Got remote block " + batchId + " after " + Utils.getUsedTimeMs(startTime))
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
@@ -355,8 +354,8 @@ final class ShuffleBlockFetcherIterator(
         shuffleMetrics.incLocalBlocksFetched(1)
         shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()
-        results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId,
-          buf.size(), buf, false, 1))
+        results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId, Array(blockId),
+          buf.size(), None, buf, false))
       } catch {
         case e: Exception =>
           // If we see an exception, stop immediately.
@@ -419,15 +418,15 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case _ @ SuccessFetchResult(
-          blockId, address, size, buf, isNetworkReqDone, numBlocksFetched) =>
-          numBlocksProcessed += numBlocksFetched
+          blockId, address, blockIds, size, sizeMap, buf, isNetworkReqDone) =>
+          numBlocksProcessed += blockIds.length
           if (address != blockManager.blockManagerId) {
             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
             }
-            shuffleMetrics.incRemoteBlocksFetched(numBlocksFetched)
+            shuffleMetrics.incRemoteBlocksFetched(blockIds.length)
           }
           if (!localBlocks.contains(blockId)) {
             bytesInFlight -= size
@@ -483,16 +482,21 @@ final class ShuffleBlockFetcherIterator(
           } catch {
             case e: IOException =>
               buf.release()
-              if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                || corruptedBlocks.contains(blockId)) {
+              if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
                 throwFetchFailedException(blockId, address, e)
-              } else {
-                logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
-                corruptedBlocks += blockId
-                fetchRequests += FetchRequest(address, Array((blockId, size)))
-                numBlocksToFetch += 1
-                result = null
               }
+              blockIds.foreach { blockId =>
+                if (corruptedBlocks.contains(blockId)) {
+                  throwFetchFailedException(blockId, address, e)
+                }
+              }
+              logWarning(s"got an corrupted blocks from $address, fetch again", e)
+              corruptedBlocks ++= blockIds
+              assert(sizeMap.isDefined)
+              val sizes = blockIds.map(id => sizeMap.get(id.toString))
+              fetchRequests += FetchRequest(address, blockIds.zip(sizes))
+              numBlocksToFetch += blockIds.length
+              result = null
           } finally {
             // TODO: release the buf here to free memory earlier
             if (isStreamCopied) {
@@ -647,10 +651,11 @@ object ShuffleBlockFetcherIterator {
   private[storage] case class SuccessFetchResult(
       blockId: BlockId,
       address: BlockManagerId,
+      blockIds: Array[BlockId],
       size: Long,
+      sizeMap: Option[Map[String, Long]],
       buf: ManagedBuffer,
-      isNetworkReqDone: Boolean,
-      numBlocksFetched: Int) extends FetchResult {
+      isNetworkReqDone: Boolean) extends FetchResult {
     require(buf != null)
     require(size >= 0)
   }
