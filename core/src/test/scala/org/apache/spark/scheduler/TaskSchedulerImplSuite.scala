@@ -42,10 +42,10 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def maxNumConcurrentTasks(): Int = 0
   val killedTaskIds: Set[Long] = Set[Long]()
   override def killTask(
-    taskId: Long,
-    executorId: String,
-    interruptThread: Boolean,
-    reason: String): Unit = {
+      taskId: Long,
+      executorId: String,
+      interruptThread: Boolean,
+      reason: String): Unit = {
     killedTaskIds.add(taskId)
   }
 }

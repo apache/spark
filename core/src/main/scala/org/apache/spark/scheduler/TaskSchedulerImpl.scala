@@ -286,18 +286,6 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  /**
-   * SPARK-25250: Whenever any Task gets successfully completed, we simply mark the
-   * corresponding partition id as completed in all attempts for that particular stage and
-   * additionally, for a Result Stage, we also kill the remaining task attempts running on the
-   * same partition. As a result, we do not see any Killed tasks due to
-   * TaskCommitDenied Exceptions showing up in the UI. When this method is called from
-   * DAGScheduler.scala on a task completion event being fired, it is assumed that the new
-   * TaskSet has already been created and registered. However, a small possibility does exist
-   * that when this method gets called, possibly the new TaskSet might have not been added
-   * to taskSetsByStageIdAndAttempt. In such a case, we might still hit the same issue. However,
-   * the above scenario has not yet been reproduced.
-   */
   override def completeTasks(partitionId: Int, stageId: Int, killTasks: Boolean): Unit = {
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.partitionToIndex.get(partitionId) match {

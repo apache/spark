@@ -109,6 +109,13 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  /**
+   * SPARK-25250: Whenever any Task gets successfully completed, we simply mark the
+   * corresponding partition id as completed in all attempts for that particular stage and
+   * additionally, for a Result Stage, we also kill the remaining task attempts running on the
+   * same partition. As a result, we do not see any Killed tasks due to
+   * TaskCommitDenied Exceptions showing up in the UI.
+   */
   def completeTasks(partitionId: Int, stageId: Int, killTasks: Boolean): Unit
 
 }
