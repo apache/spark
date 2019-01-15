@@ -850,8 +850,11 @@ class JDBCSuite extends QueryTest
 
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val md = new MetadataBuilder().putLong("scale", 0)
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
+      Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     val errMsg = intercept[IllegalArgumentException] {
@@ -1506,5 +1509,18 @@ class JDBCSuite extends QueryTest
     checkAnswer(
       checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
       Row("fred", 1) :: Nil)
+  }
+
+  test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
+    val e = intercept[IllegalArgumentException] {
+      val opts = Map(
+        "url" -> "jdbc:mysql://localhost/db",
+        "dbtable" -> "table",
+        "driver" -> "org.postgresql.Driver"
+      )
+      spark.read.format("jdbc").options(opts).load
+    }.getMessage
+    assert(e.contains("The driver could not open a JDBC connection. " +
+      "Check the URL: jdbc:mysql://localhost/db"))
   }
 }

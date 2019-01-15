@@ -29,13 +29,14 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.Files
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -693,42 +694,42 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("send with authentication") {
     testSend(new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good"))
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good"))
   }
 
   test("send with SASL encryption") {
     testSend(new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
-      .set("spark.authenticate.enableSaslEncryption", "true"))
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
+      .set(SASL_ENCRYPTION_ENABLED, true))
   }
 
   test("send with AES encryption") {
     testSend(new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
       .set("spark.network.crypto.enabled", "true")
       .set("spark.network.crypto.saslFallback", "false"))
   }
 
   test("ask with authentication") {
     testAsk(new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good"))
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good"))
   }
 
   test("ask with SASL encryption") {
     testAsk(new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
-      .set("spark.authenticate.enableSaslEncryption", "true"))
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
+      .set(SASL_ENCRYPTION_ENABLED, true))
   }
 
   test("ask with AES encryption") {
     testAsk(new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
       .set("spark.network.crypto.enabled", "true")
       .set("spark.network.crypto.saslFallback", "false"))
   }

@@ -34,7 +34,7 @@ class YARNHadoopDelegationTokenManagerSuite extends SparkFunSuite {
   }
 
   test("Correctly loads credential providers") {
-    credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf)
+    credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(credentialManager.isProviderLoaded("yarn-test"))
   }
 }

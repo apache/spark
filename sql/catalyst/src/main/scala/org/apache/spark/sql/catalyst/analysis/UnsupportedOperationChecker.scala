@@ -229,7 +229,7 @@ object UnsupportedOperationChecker {
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
-        case Join(left, right, joinType, condition) =>
+        case Join(left, right, joinType, condition, _) =>
 
           joinType match {
 

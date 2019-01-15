@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import org.scalatest._
 
 import org.apache.spark._
-import org.apache.spark.memory.{MemoryMode, StaticMemoryManager}
+import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
@@ -39,8 +39,6 @@ class MemoryStoreSuite
   with ResetSystemProperties {
 
   var conf: SparkConf = new SparkConf(false)
-    .set("spark.test.useCompressedOops", "true")
-    .set("spark.storage.unrollFraction", "0.4")
     .set("spark.storage.unrollMemoryThreshold", "512")
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
@@ -61,7 +59,7 @@ class MemoryStoreSuite
   }
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem, 1)
     val blockInfoManager = new BlockInfoManager
     val blockEvictionHandler = new BlockEvictionHandler {
       var memoryStore: MemoryStore = _
@@ -240,7 +238,7 @@ class MemoryStoreSuite
   }
 
   test("safely unroll blocks through putIteratorAsBytes") {
-    val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
+    val (memoryStore, blockInfoManager) = makeMemoryStore(8400)
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
@@ -418,7 +416,7 @@ class MemoryStoreSuite
     val bytesPerSmallBlock = memStoreSize / numInitialBlocks
     def testFailureOnNthDrop(numValidBlocks: Int, readLockAfterDrop: Boolean): Unit = {
       val tc = TaskContext.empty()
-      val memManager = new StaticMemoryManager(conf, Long.MaxValue, memStoreSize, numCores = 1)
+      val memManager = new UnifiedMemoryManager(conf, memStoreSize, memStoreSize.toInt, 1)
       val blockInfoManager = new BlockInfoManager
       blockInfoManager.registerTask(tc.taskAttemptId)
       var droppedSoFar = 0

@@ -239,6 +239,18 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
 
+  test("allow group.id overriding") {
+    // Tests code path KafkaSourceProvider.createRelation(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val df = createDF(topic, withOptions = Map("kafka.group.id" -> "custom"))
+    checkAnswer(df, (1 to 30).map(_.toString).toDF())
+  }
+
   test("read Kafka transactional messages: read_committed") {
     val topic = newTopic()
     testUtils.createTopic(topic)
