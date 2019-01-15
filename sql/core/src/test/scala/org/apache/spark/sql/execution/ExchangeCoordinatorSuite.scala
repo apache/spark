@@ -264,7 +264,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         .setMaster("local[*]")
         .setAppName("test")
         .set("spark.ui.enabled", "false")
-        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+        .set(SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         .set(
@@ -484,8 +484,10 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val df = spark.range(1).selectExpr("id AS key", "id AS value")
       val resultDf = df.join(df, "key").join(df, "key")
       val sparkPlan = resultDf.queryExecution.executedPlan
-      assert(sparkPlan.collect { case p: ReusedExchangeExec => p }.length == 1)
-      assert(sparkPlan.collect { case p @ ShuffleExchangeExec(_, _, Some(c)) => p }.length == 3)
+      val queryStageInputs = sparkPlan.collect { case p: ShuffleQueryStageInput => p }
+      assert(queryStageInputs.length === 3)
+      assert(queryStageInputs(0).childStage === queryStageInputs(1).childStage)
+      assert(queryStageInputs(1).childStage === queryStageInputs(2).childStage)
       checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
     }
     withSparkSession(test, 4, None)
