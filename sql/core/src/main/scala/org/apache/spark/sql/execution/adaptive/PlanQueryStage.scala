@@ -30,7 +30,9 @@ import org.apache.spark.sql.types.StructType
  * Divide the spark plan into multiple QueryStages. For each Exchange in the plan, it adds a
  * QueryStage and a QueryStageInput. If reusing Exchange is enabled, it finds duplicated exchanges
  * and uses the same QueryStage for all the references. Note this rule must be run after
- * EnsureRequirements rule.
+ * EnsureRequirements rule. The rule divides the plan into multiple sub-trees as QueryStageInput
+ * is a leaf node. Transforming the plan after applying this rule will only transform node in a
+ * sub-tree.
  */
 case class PlanQueryStage(conf: SQLConf) extends Rule[SparkPlan] {
 

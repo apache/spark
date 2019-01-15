@@ -25,9 +25,13 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.execution._
 
 /**
- * QueryStageInput is the leaf node of a QueryStage and is used to hide its child stage. It gets
- * the result of its child stage and serves it as the input of the QueryStage. A QueryStage knows
- * its child stages by collecting all the QueryStageInputs.
+ * QueryStageInput is the leaf node of a QueryStage and serves as its input. It is responsible for
+ * changing the output partition based on the need of its QueryStage. It gets the ShuffledRowRDD
+ * from its child stage and creates a new ShuffledRowRDD with different partitions by specifying
+ * an optional array of partition start indices. For example, a ShuffledQueryStage can be reused
+ * by two different QueryStages. One QueryStageInput can let the first task read partition 0 to 3,
+ * while in another stage, the QueryStageInput can let the first task read partition 0 to 1.
+ * A QueryStage knows its child stages by collecting all the QueryStageInputs.
  */
 abstract class QueryStageInput extends LeafExecNode {
 
