@@ -17,9 +17,11 @@
 
 package org.apache.spark.deploy.security
 
-import java.{ util => ju }
+import java.{util => ju}
+import java.security.PrivilegedExceptionAction
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
@@ -76,6 +78,21 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private def resetGlobalConfig(): Unit = {
     Configuration.setConfiguration(null)
+  }
+
+  test("checkProxyUser with proxy current user should throw exception") {
+    val realUser = UserGroupInformation.createUserForTesting("realUser", Array())
+    UserGroupInformation.createProxyUserForTesting("proxyUser", realUser, Array()).doAs(
+      new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          val thrown = intercept[IllegalArgumentException] {
+            KafkaTokenUtil.checkProxyUser()
+          }
+          assert(thrown.getMessage contains
+            "Obtaining delegation token for proxy user is not yet supported.")
+        }
+      }
+    )
   }
 
   test("createAdminClientProperties without bootstrap servers should throw exception") {
