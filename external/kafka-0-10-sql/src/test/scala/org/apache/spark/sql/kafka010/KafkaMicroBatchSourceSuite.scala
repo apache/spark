@@ -629,6 +629,33 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  test("allow group.id override") {
+    // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
+    // as well as KafkaOffsetReader.createConsumer(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val dsKafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.group.id", "id-" + Random.nextInt())
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(dsKafka)(
+      makeSureGetOffsetCalled,
+      CheckAnswer(1 to 30: _*)
+    )
+  }
+
   test("ensure stream-stream self-join generates only one offset in log and correct metrics") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
@@ -1233,7 +1260,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
-    testUnsupportedConfig("kafka.group.id")
     testUnsupportedConfig("kafka.auto.offset.reset")
     testUnsupportedConfig("kafka.enable.auto.commit")
     testUnsupportedConfig("kafka.interceptor.classes")

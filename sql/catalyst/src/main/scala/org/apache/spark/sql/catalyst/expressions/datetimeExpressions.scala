@@ -562,7 +562,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = TimestampFormatter(format.toString, timeZone, Locale.US)
+    val df = TimestampFormatter(format.toString, timeZone)
     UTF8String.fromString(df.format(timestamp.asInstanceOf[Long]))
   }
 
@@ -614,9 +614,7 @@ case class ToUnixTimestamp(
 
 /**
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
- * See [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html]
- * if SQL config spark.sql.legacy.timeParser.enabled is set to true otherwise
- * [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
+ * See [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
@@ -667,7 +665,7 @@ abstract class UnixTime
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
+      TimestampFormatter(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -700,7 +698,7 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter(formatString, timeZone, Locale.US).parse(
+              TimestampFormatter(formatString, timeZone).parse(
                 t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
             } catch {
               case NonFatal(_) => null
@@ -821,7 +819,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
+      TimestampFormatter(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -847,7 +845,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(TimestampFormatter(f.toString, timeZone, Locale.US)
+            UTF8String.fromString(TimestampFormatter(f.toString, timeZone)
               .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null

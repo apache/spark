@@ -38,6 +38,7 @@ import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -165,7 +166,7 @@ private[deploy] class Worker(
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
 
-  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
+  val reverseProxy = conf.get(UI_REVERSE_PROXY)
 
   private var registerMasterFutures: Array[JFuture[_]] = null
   private var registrationRetryTimer: Option[JScheduledFuture[_]] = None

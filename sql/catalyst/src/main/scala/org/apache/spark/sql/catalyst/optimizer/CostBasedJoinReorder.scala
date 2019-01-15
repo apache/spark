@@ -31,40 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
  * Cost-based join reorder.
  * We may have several join reorder algorithms in the future. This class is the entry of these
  * algorithms, and chooses which one to use.
- *
- * Note that join strategy hints, e.g. the broadcast hint, do not interfere with the reordering.
- * Such hints will be applied on the equivalent counterparts (i.e., join between the same relations
- * regardless of the join order) of the original nodes after reordering.
- * For example, the plan before reordering is like:
- *
- *            Join
- *            /   \
- *          Hint1 t4
- *          /
- *        Join
- *        / \
- *      Join t3
- *      /   \
- *    Hint2 t2
- *    /
- *   t1
- *
- * The original join order as illustrated above is "((t1 JOIN t2) JOIN t3) JOIN t4", and after
- * reordering, the new join order is "((t1 JOIN t3) JOIN t2) JOIN t4", so the new plan will be like:
- *
- *            Join
- *            /   \
- *          Hint1 t4
- *          /
- *        Join
- *        / \
- *      Join t2
- *      / \
- *    t1  t3
- *
- * "Hint1" is applied on "(t1 JOIN t3) JOIN t2" as it is equivalent to the original hinted node,
- * "(t1 JOIN t2) JOIN t3"; while "Hint2" has disappeared from the new plan since there is no
- * equivalent node to "t1 JOIN t2".
  */
 object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -74,30 +40,24 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
-      // Use a map to track the hints on the join items.
-      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
       val result = plan transformDown {
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
-        case j @ Join(_, _, _: InnerLike, Some(cond), _) =>
-          reorder(j, j.output, hintMap)
-        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), _))
-          if projectList.forall(_.isInstanceOf[Attribute]) =>
-          reorder(p, p.output, hintMap)
+        // Avoid reordering if a join hint is present.
+        case j @ Join(_, _, _: InnerLike, Some(cond), hint) if hint == JoinHint.NONE =>
+          reorder(j, j.output)
+        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), hint))
+          if projectList.forall(_.isInstanceOf[Attribute]) && hint == JoinHint.NONE =>
+          reorder(p, p.output)
       }
       // After reordering is finished, convert OrderedJoin back to Join.
       result transform {
-        case OrderedJoin(left, right, jt, cond) =>
-          val joinHint = JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet))
-          Join(left, right, jt, cond, joinHint)
+        case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond, JoinHint.NONE)
       }
     }
   }
 
-  private def reorder(
-      plan: LogicalPlan,
-      output: Seq[Attribute],
-      hintMap: mutable.HashMap[AttributeSet, HintInfo]): LogicalPlan = {
-    val (items, conditions) = extractInnerJoins(plan, hintMap)
+  private def reorder(plan: LogicalPlan, output: Seq[Attribute]): LogicalPlan = {
+    val (items, conditions) = extractInnerJoins(plan)
     val result =
       // Do reordering if the number of items is appropriate and join conditions exist.
       // We also need to check if costs of all items can be evaluated.
@@ -115,20 +75,16 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
    * Extracts items of consecutive inner joins and join conditions.
    * This method works for bushy trees and left/right deep trees.
    */
-  private def extractInnerJoins(
-      plan: LogicalPlan,
-      hintMap: mutable.HashMap[AttributeSet, HintInfo]): (Seq[LogicalPlan], Set[Expression]) = {
+  private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
     plan match {
-      case Join(left, right, _: InnerLike, Some(cond), hint) =>
-        hint.leftHint.foreach(hintMap.put(left.outputSet, _))
-        hint.rightHint.foreach(hintMap.put(right.outputSet, _))
-        val (leftPlans, leftConditions) = extractInnerJoins(left, hintMap)
-        val (rightPlans, rightConditions) = extractInnerJoins(right, hintMap)
+      case Join(left, right, _: InnerLike, Some(cond), _) =>
+        val (leftPlans, leftConditions) = extractInnerJoins(left)
+        val (rightPlans, rightConditions) = extractInnerJoins(right)
         (leftPlans ++ rightPlans, splitConjunctivePredicates(cond).toSet ++
           leftConditions ++ rightConditions)
       case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), _))
         if projectList.forall(_.isInstanceOf[Attribute]) =>
-        extractInnerJoins(j, hintMap)
+        extractInnerJoins(j)
       case _ =>
         (Seq(plan), Set())
     }

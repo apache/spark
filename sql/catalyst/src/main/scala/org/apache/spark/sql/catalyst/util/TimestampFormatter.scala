@@ -23,12 +23,6 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
-import scala.util.Try
-
-import org.apache.commons.lang3.time.FastDateFormat
-
-import org.apache.spark.sql.internal.SQLConf
-
 sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to microseconds.
@@ -42,7 +36,7 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
-  def parse(s: String): Long // returns microseconds since epoch
+  def parse(s: String): Long
   def format(us: Long): String
 }
 
@@ -79,37 +73,19 @@ class Iso8601TimestampFormatter(
   }
 }
 
-class LegacyTimestampFormatter(
-    pattern: String,
-    timeZone: TimeZone,
-    locale: Locale) extends TimestampFormatter {
-  @transient
-  private lazy val format = FastDateFormat.getInstance(pattern, timeZone, locale)
-
-  protected def toMillis(s: String): Long = format.parse(s).getTime
-
-  override def parse(s: String): Long = toMillis(s) * DateTimeUtils.MICROS_PER_MILLIS
-
-  override def format(us: Long): String = {
-    format.format(DateTimeUtils.toJavaTimestamp(us))
-  }
-}
-
-class LegacyFallbackTimestampFormatter(
-    pattern: String,
-    timeZone: TimeZone,
-    locale: Locale) extends LegacyTimestampFormatter(pattern, timeZone, locale) {
-  override def toMillis(s: String): Long = {
-    Try {super.toMillis(s)}.getOrElse(DateTimeUtils.stringToTime(s).getTime)
-  }
-}
-
 object TimestampFormatter {
+  val defaultPattern: String = "yyyy-MM-dd HH:mm:ss"
+  val defaultLocale: Locale = Locale.US
+
   def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
-    if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackTimestampFormatter(format, timeZone, locale)
-    } else {
-      new Iso8601TimestampFormatter(format, timeZone, locale)
-    }
+    new Iso8601TimestampFormatter(format, timeZone, locale)
+  }
+
+  def apply(format: String, timeZone: TimeZone): TimestampFormatter = {
+    apply(format, timeZone, defaultLocale)
+  }
+
+  def apply(timeZone: TimeZone): TimestampFormatter = {
+    apply(defaultPattern, timeZone, defaultLocale)
   }
 }

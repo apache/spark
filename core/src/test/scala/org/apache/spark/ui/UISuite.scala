@@ -32,6 +32,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.util.Utils
 
 class UISuite extends SparkFunSuite {
@@ -44,7 +45,7 @@ class UISuite extends SparkFunSuite {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set("spark.ui.enabled", "true")
+      .set(UI_ENABLED, true)
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
