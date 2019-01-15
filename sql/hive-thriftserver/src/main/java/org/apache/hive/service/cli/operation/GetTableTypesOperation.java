@@ -48,7 +48,7 @@ public class GetTableTypesOperation extends MetadataOperation {
       .getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING);
     tableTypeMapping =
       TableTypeMappingFactory.getTableTypeMapping(tableMappingStr);
-    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override

@@ -20,25 +20,29 @@ package org.apache.hive.service.cli.operation;
 
 import java.util.Set;
 
+import org.apache.hadoop.hive.common.classification.InterfaceAudience;
+import org.apache.hadoop.hive.common.classification.InterfaceStability;
 
+@InterfaceAudience.Public
+@InterfaceStability.Evolving
 public interface TableTypeMapping {
   /**
    * Map client's table type name to hive's table type
    * @param clientTypeName
    * @return
    */
-  String mapToHiveType(String clientTypeName);
+  public String[] mapToHiveType (String clientTypeName);
 
   /**
    * Map hive's table type name to client's table type
    * @param hiveTypeName
    * @return
    */
-  String mapToClientType(String hiveTypeName);
+  public String mapToClientType (String hiveTypeName);
 
   /**
    * Get all the table types of this mapping
    * @return
    */
-  Set<String> getTableTypeNames();
+  public Set<String> getTableTypeNames();
 }

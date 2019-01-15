@@ -21,7 +21,7 @@ import java.util.Properties
 
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet, Utils => JdbcUtils}
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.thrift._
+import org.apache.hive.service.rpc.thrift._
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
@@ -55,13 +55,10 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
           schemaReq.setSchemaName(schemaPattern)
         }
 
-        val schemaResp = client.GetSchemas(schemaReq)
-        JdbcUtils.verifySuccess(schemaResp.getStatus)
-
         rs = new HiveQueryResultSet.Builder(connection)
           .setClient(client)
           .setSessionHandle(sessHandle)
-          .setStmtHandle(schemaResp.getOperationHandle)
+          .setStmtHandle(client.GetSchemas(schemaReq).getOperationHandle)
           .build()
         f(rs)
       } finally {

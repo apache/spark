@@ -17,7 +17,7 @@
  */
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.THandleIdentifier;
+import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 
 
 

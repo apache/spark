@@ -22,16 +22,24 @@ import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.regex.Pattern;
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.api.PrimaryKeysRequest;
+import org.apache.hadoop.hive.metastore.api.SQLPrimaryKey;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.ql.metadata.TableIterable;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType;
+import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.cli.ColumnDescriptor;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.HiveSQLException;
@@ -40,7 +48,6 @@ import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.Type;
 import org.apache.hive.service.cli.session.HiveSession;
 
 /**
@@ -118,7 +125,7 @@ public class GetColumnsOperation extends MetadataOperation {
     this.schemaName = schemaName;
     this.tableName = tableName;
     this.columnName = columnName;
-    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override
@@ -151,11 +158,20 @@ public class GetColumnsOperation extends MetadataOperation {
         authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr);
       }
 
+      int maxBatchSize = SessionState.get().getConf().getIntVar(ConfVars.METASTORE_BATCH_RETRIEVE_MAX);
       for (Entry<String, List<String>> dbTabs : db2Tabs.entrySet()) {
         String dbName = dbTabs.getKey();
         List<String> tableNames = dbTabs.getValue();
-        for (Table table : metastoreClient.getTableObjectsByName(dbName, tableNames)) {
-          TableSchema schema = new TableSchema(metastoreClient.getSchema(dbName, table.getTableName()));
+
+        for (Table table : new TableIterable(metastoreClient, dbName, tableNames, maxBatchSize)) {
+
+          TableSchema schema = new TableSchema(metastoreClient.getSchema(dbName,
+              table.getTableName()));
+          List<SQLPrimaryKey> primaryKeys = metastoreClient.getPrimaryKeys(new PrimaryKeysRequest(dbName, table.getTableName()));
+          Set<String> pkColNames = new HashSet<>();
+          for(SQLPrimaryKey key : primaryKeys) {
+            pkColNames.add(key.getColumn_name().toLowerCase());
+          }
           for (ColumnDescriptor column : schema.getColumnDescriptors()) {
             if (columnPattern != null && !columnPattern.matcher(column.getName()).matches()) {
               continue;
@@ -171,14 +187,15 @@ public class GetColumnsOperation extends MetadataOperation {
                 null, // BUFFER_LENGTH, unused
                 column.getTypeDescriptor().getDecimalDigits(), // DECIMAL_DIGITS
                 column.getType().getNumPrecRadix(), // NUM_PREC_RADIX
-                DatabaseMetaData.columnNullable, // NULLABLE
+                pkColNames.contains(column.getName().toLowerCase()) ? DatabaseMetaData.columnNoNulls
+                    : DatabaseMetaData.columnNullable, // NULLABLE
                 column.getComment(), // REMARKS
                 null, // COLUMN_DEF
                 null, // SQL_DATA_TYPE
                 null, // SQL_DATETIME_SUB
                 null, // CHAR_OCTET_LENGTH
                 column.getOrdinalPosition(), // ORDINAL_POSITION
-                "YES", // IS_NULLABLE
+                pkColNames.contains(column.getName().toLowerCase()) ? "NO" : "YES", // IS_NULLABLE
                 null, // SCOPE_CATALOG
                 null, // SCOPE_SCHEMA
                 null, // SCOPE_TABLE

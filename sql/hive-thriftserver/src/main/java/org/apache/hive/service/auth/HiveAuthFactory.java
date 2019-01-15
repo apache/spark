@@ -147,12 +147,11 @@ public class HiveAuthFactory {
 
         // Start delegation token manager
         delegationTokenManager = new HiveDelegationTokenManager();
-
-        // start delegation token manager
         try {
           // rawStore is only necessary for DBTokenStore
           Object rawStore = null;
-          String tokenStoreClass = conf.getVar(HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS);
+          String tokenStoreClass = conf.getVar(
+              HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS);
 
           if (tokenStoreClass.equals(DBTokenStore.class.getName())) {
             HMSHandler baseHandler = new HiveMetaStore.HMSHandler(
@@ -160,7 +159,8 @@ public class HiveAuthFactory {
             rawStore = baseHandler.getMS();
           }
 
-          delegationTokenManager.startDelegationTokenSecretManager(conf, rawStore, ServerMode.HIVESERVER2);
+          delegationTokenManager.startDelegationTokenSecretManager(
+              conf, rawStore, ServerMode.HIVESERVER2);
           saslServer.setSecretManager(delegationTokenManager.getSecretManager());
         }
         catch (MetaException|IOException e) {

@@ -30,7 +30,8 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Shell;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
-import org.apache.hive.service.cli.thrift.TCLIService.Iface;
+import org.apache.hive.service.rpc.thrift.TCLIService;
+import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -149,7 +150,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       LOG.info(msg);
       httpServer.join();
     } catch (Throwable t) {
-      LOG.fatal(
+      LOG.error(
           "Error starting HiveServer2: could not start "
               + ThriftHttpCLIService.class.getSimpleName(), t);
       System.exit(-1);

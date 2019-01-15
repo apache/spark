@@ -201,7 +201,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("Commands using SerDe provided in --jars") {
     val jarFile =
-      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+      "../hive/src/test/resources/hive-hcatalog-core-2.3.4.jar"
         .split("/")
         .mkString(File.separator)
 

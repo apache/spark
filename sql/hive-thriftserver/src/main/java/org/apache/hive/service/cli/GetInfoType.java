@@ -18,7 +18,7 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TGetInfoType;
+import org.apache.hive.service.rpc.thrift.TGetInfoType;
 
 /**
  * GetInfoType.

@@ -21,7 +21,7 @@ package org.apache.hive.service.cli;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
-import org.apache.hive.service.cli.thrift.THandleIdentifier;
+import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 
 /**
  * HandleIdentifier.

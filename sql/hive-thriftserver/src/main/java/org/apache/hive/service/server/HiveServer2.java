@@ -29,9 +29,9 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.hadoop.hive.common.JvmPauseMonitor;
 import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.common.LogUtils.LogInitializationException;
-import org.apache.hadoop.hive.common.JvmPauseMonitor;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.service.CompositeService;
@@ -124,15 +124,12 @@ public class HiveServer2 extends CompositeService {
         server = new HiveServer2();
         server.init(hiveConf);
         server.start();
-
         try {
           JvmPauseMonitor pauseMonitor = new JvmPauseMonitor(hiveConf);
           pauseMonitor.start();
         } catch (Throwable t) {
-          LOG.warn("Could not initiate the JvmPauseMonitor thread." + " GCs and Pauses may not be " +
-            "warned upon.", t);
+          LOG.warn("Could not initiate the JvmPauseMonitor thread.", t);
         }
-
         break;
       } catch (Throwable throwable) {
         if (server != null) {

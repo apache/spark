@@ -48,7 +48,7 @@ public class GetSchemasOperation extends MetadataOperation {
     super(parentSession, OperationType.GET_SCHEMAS);
     this.catalogName = catalogName;
     this.schemaName = schemaName;
-    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override

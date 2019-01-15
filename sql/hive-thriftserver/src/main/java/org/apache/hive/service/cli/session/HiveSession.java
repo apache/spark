@@ -53,11 +53,32 @@ public interface HiveSession extends HiveSessionBase {
    * execute operation handler
    * @param statement
    * @param confOverlay
+   * @param queryTimeout
    * @return
    * @throws HiveSQLException
    */
-  OperationHandle executeStatementAsync(String statement,
-      Map<String, String> confOverlay) throws HiveSQLException;
+  OperationHandle executeStatement(String statement, Map<String, String> confOverlay,
+      long queryTimeout) throws HiveSQLException;
+
+  /**
+   * execute operation handler
+   * @param statement
+   * @param confOverlay
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle executeStatementAsync(String statement, Map<String, String> confOverlay) throws HiveSQLException;
+
+  /**
+   * execute operation handler
+   * @param statement
+   * @param confOverlay
+   * @param queryTimeout
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle executeStatementAsync(String statement, Map<String, String> confOverlay,
+      long queryTimeout) throws HiveSQLException;
 
   /**
    * getTypeInfo operation handler
@@ -124,6 +145,33 @@ public interface HiveSession extends HiveSessionBase {
    */
   OperationHandle getFunctions(String catalogName, String schemaName,
       String functionName) throws HiveSQLException;
+
+  /**
+   * getPrimaryKeys operation handler
+   * @param catalog
+   * @param schema
+   * @param table
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle getPrimaryKeys(String catalog, String schema,
+      String table) throws HiveSQLException;
+
+
+  /**
+   * getCrossReference operation handler
+   * @param primaryCatalog
+   * @param primarySchema
+   * @param primaryTable
+   * @param foreignCatalog
+   * @param foreignSchema
+   * @param foreignTable
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle getCrossReference(String primaryCatalog,
+      String primarySchema, String primaryTable, String foreignCatalog,
+      String foreignSchema, String foreignTable) throws HiveSQLException;
 
   /**
    * close the session

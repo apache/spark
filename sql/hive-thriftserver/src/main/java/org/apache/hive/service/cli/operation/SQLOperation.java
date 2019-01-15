@@ -21,22 +21,25 @@ package org.apache.hive.service.cli.operation;
 import java.io.IOException;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.io.PrintStream;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.CharEncoding;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.conf.VariableSubstitution;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.CommandNeedRetryException;
 import org.apache.hadoop.hive.ql.Driver;
+import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.ExplainTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.metadata.Hive;
@@ -76,22 +79,22 @@ public class SQLOperation extends ExecuteStatementOperation {
   private AbstractSerDe serde = null;
   private boolean fetchStarted = false;
 
-  public SQLOperation(HiveSession parentSession, String statement, Map<String,
-      String> confOverlay, boolean runInBackground) {
+  public SQLOperation(HiveSession parentSession, String statement, Map<String, String> confOverlay,
+      boolean runInBackground, long queryTimeout) {
     // TODO: call setRemoteUser in ExecuteStatementOperation or higher.
     super(parentSession, statement, confOverlay, runInBackground);
   }
 
   /***
    * Compile the query and extract metadata
-   * @param sqlOperationConf
+   * @param queryState
    * @throws HiveSQLException
    */
-  public void prepare(HiveConf sqlOperationConf) throws HiveSQLException {
+  public void prepare(QueryState queryState) throws HiveSQLException {
     setState(OperationState.RUNNING);
 
     try {
-      driver = new Driver(sqlOperationConf, getParentSession().getUserName());
+      driver = new Driver(queryState, getParentSession().getUserName());
 
       // set the operation handle information in Driver, so that thrift API users
       // can use the operation handle they receive, to lookup query information in
@@ -105,9 +108,7 @@ public class SQLOperation extends ExecuteStatementOperation {
       // For now, we disable the test attempts.
       driver.setTryCount(Integer.MAX_VALUE);
 
-      String subStatement = new VariableSubstitution(() ->
-          SessionState.get().getHiveVariables()).substitute(sqlOperationConf, statement);
-      response = driver.compileAndRespond(subStatement);
+      response = driver.compileAndRespond(statement);
       if (0 != response.getResponseCode()) {
         throw toSQLException("Error while compiling statement", response);
       }
@@ -178,7 +179,7 @@ public class SQLOperation extends ExecuteStatementOperation {
   public void runInternal() throws HiveSQLException {
     setState(OperationState.PENDING);
     final HiveConf opConfig = getConfigForOperation();
-    prepare(opConfig);
+    prepare(queryState);
     if (!shouldRunAsync()) {
       runQuery(opConfig);
     } else {
@@ -321,7 +322,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     validateDefaultFetchOrientation(orientation);
     assertState(OperationState.FINISHED);
 
-    RowSet rowSet = RowSetFactory.create(resultSchema, getProtocolVersion());
+    RowSet rowSet = RowSetFactory.create(resultSchema, getProtocolVersion(), false);
 
     try {
       /* if client is requesting fetch-from-start and its not the first time reading from this operation

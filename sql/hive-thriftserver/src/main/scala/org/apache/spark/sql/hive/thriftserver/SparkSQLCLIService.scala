@@ -23,7 +23,6 @@ import javax.security.auth.login.LoginException
 
 import scala.collection.JavaConverters._
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.Utils
@@ -33,6 +32,7 @@ import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
+import org.slf4j.Logger
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
@@ -112,6 +112,6 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
     invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.NOTINITED)
     setAncestorField(this, 3, "hiveConf", hiveConf)
     invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.INITED)
-    getAncestorField[Log](this, 3, "LOG").info(s"Service: $getName is inited.")
+    getAncestorField[Logger](this, 3, "LOG").info(s"Service: $getName is inited.")
   }
 }
