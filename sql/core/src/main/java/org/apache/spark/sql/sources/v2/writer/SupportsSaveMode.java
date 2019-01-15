@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.SaveMode;
 
-/**
- * TODO: remove it when we finish the API refactor for streaming side.
- */
-@Evolving
-public interface DataSourceV2 {}
+// A temporary mixin trait for `WriteBuilder` to support `SaveMode`. Will be removed before
+// Spark 3.0 when all the new write operators are finished. See SPARK-26356 for more details.
+public interface SupportsSaveMode extends WriteBuilder {
+  WriteBuilder mode(SaveMode mode);
+}
