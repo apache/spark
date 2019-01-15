@@ -290,10 +290,10 @@ private[spark] class TaskSchedulerImpl(
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.partitionToIndex.get(partitionId) match {
         case Some(index) =>
-          tsm.markPartitionAsAlreadyCompleted(index)
-          if (killTasks) {
-            val taskInfoList = tsm.taskAttempts(index)
-            taskInfoList.filter(_.running).foreach { taskInfo =>
+          val taskInfoList = tsm.taskAttempts(index)
+          taskInfoList.foreach { taskInfo =>
+            tsm.markPartitionCompleted(partitionId, taskInfo)
+            if (killTasks && taskInfo.running) {
               try {
                 killTaskAttempt(taskInfo.taskId, false,
                   s"Partition $partitionId is already completed")
