@@ -28,6 +28,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.mockito.AdditionalMatchers.aryEq;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyLong;
@@ -89,8 +90,8 @@ public class OneForOneBlockFetcherSuite {
 
     // Each failure will cause a failure to be invoked in all remaining block fetches.
     verify(listener, times(1)).onBlockFetchSuccess(new String[] { "b0" }, blocks.get("b0"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, times(2)).onBlockFetchFailure(eq("b2"), any());
+    verify(listener, times(1)).onBlockFetchFailure(aryEq(new String[] { "b1", "b2" }), any());
+    verify(listener, times(1)).onBlockFetchFailure(aryEq(new String[] { "b2" }), any());
   }
 
   @Test
@@ -104,9 +105,8 @@ public class OneForOneBlockFetcherSuite {
 
     // We may call both success and failure for the same block.
     verify(listener, times(1)).onBlockFetchSuccess(new String[] { "b0" }, blocks.get("b0"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
+    verify(listener, times(1)).onBlockFetchFailure(aryEq(new String[] { "b1", "b2" }), any());
     verify(listener, times(1)).onBlockFetchSuccess(new String[] { "b2" }, blocks.get("b2"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b2"), any());
   }
 
   @Test

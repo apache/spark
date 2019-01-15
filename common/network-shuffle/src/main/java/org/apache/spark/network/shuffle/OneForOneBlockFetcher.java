@@ -180,12 +180,10 @@ public class OneForOneBlockFetcher {
 
   /** Invokes the "onBlockFetchFailure" callback for every listed block id. */
   private void failRemainingBlocks(String[] failedBlockIds, Throwable e) {
-    for (String blockId : failedBlockIds) {
-      try {
-        listener.onBlockFetchFailure(blockId, e);
-      } catch (Exception e2) {
-        logger.error("Error in block fetch failure callback", e2);
-      }
+    try {
+      listener.onBlockFetchFailure(failedBlockIds, e);
+    } catch (Exception e2) {
+      logger.error("Error in block fetch failure callback", e2);
     }
   }
 

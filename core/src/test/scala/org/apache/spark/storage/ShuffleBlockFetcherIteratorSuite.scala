@@ -56,7 +56,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
           if (data.contains(BlockId(blockId))) {
             listener.onBlockFetchSuccess(Array(blockId), data(BlockId(blockId)))
           } else {
-            listener.onBlockFetchFailure(blockId, new BlockNotFoundException(blockId))
+            listener.onBlockFetchFailure(Array(blockId), new BlockNotFoundException(blockId))
           }
         }
       }
@@ -242,9 +242,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
           listener.onBlockFetchSuccess(
             Array(ShuffleBlockId(0, 0, 0).toString), blocks(ShuffleBlockId(0, 0, 0)))
           listener.onBlockFetchFailure(
-            ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
+            Array(ShuffleBlockId(0, 1, 0).toString), new BlockNotFoundException("blah"))
           listener.onBlockFetchFailure(
-            ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
+            Array(ShuffleBlockId(0, 2, 0).toString), new BlockNotFoundException("blah"))
           sem.release()
         }
       }

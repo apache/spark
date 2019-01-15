@@ -161,11 +161,13 @@ public class ExternalShuffleIntegrationSuite {
           }
 
           @Override
-          public void onBlockFetchFailure(String blockId, Throwable exception) {
+          public void onBlockFetchFailure(String[] blockIds, Throwable exception) {
             synchronized (this) {
-              if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
-                res.failedBlocks.add(blockId);
-                requestsRemaining.release();
+              for (String blockId : blockIds) {
+                if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
+                  res.failedBlocks.add(blockId);
+                  requestsRemaining.release();
+                }
               }
             }
           }

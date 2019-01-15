@@ -113,9 +113,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       }
     } catch (Exception e) {
       logger.error("Exception while beginning fetchBlocks", e);
-      for (String blockId : blockIds) {
-        listener.onBlockFetchFailure(blockId, e);
-      }
+      listener.onBlockFetchFailure(blockIds, e);
     }
   }
 

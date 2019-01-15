@@ -158,7 +158,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
     self.fetchBlocks(from.hostName, from.port, execId, Array(blockId.toString),
       new BlockFetchingListener {
-        override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
+        override def onBlockFetchFailure(blockIds: Array[String], exception: Throwable): Unit = {
           promise.failure(exception)
         }
 

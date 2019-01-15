@@ -32,6 +32,7 @@ import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
 
 import static org.junit.Assert.*;
+import static org.mockito.AdditionalMatchers.aryEq;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -83,7 +84,7 @@ public class RetryingBlockFetcherSuite {
 
     performInteractions(interactions, listener);
 
-    verify(listener).onBlockFetchFailure(eq("b0"), any());
+    verify(listener).onBlockFetchFailure(aryEq(new String[] { "b0" }), any());
     verify(listener).onBlockFetchSuccess(new String[] { "b1" }, block1);
     verifyNoMoreInteractions(listener);
   }
@@ -189,7 +190,7 @@ public class RetryingBlockFetcherSuite {
     performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b0" }, block0);
-    verify(listener, timeout(5000)).onBlockFetchFailure(eq("b1"), any());
+    verify(listener, timeout(5000)).onBlockFetchFailure(aryEq(new String[] { "b1" }), any());
     verifyNoMoreInteractions(listener);
   }
 
@@ -219,7 +220,7 @@ public class RetryingBlockFetcherSuite {
     performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b0" }, block0);
-    verify(listener, timeout(5000)).onBlockFetchFailure(eq("b1"), any());
+    verify(listener, timeout(5000)).onBlockFetchFailure(aryEq(new String[] { "b1" }), any());
     verify(listener, timeout(5000)).onBlockFetchSuccess(new String[] { "b2" }, block2);
     verifyNoMoreInteractions(listener);
   }
@@ -271,7 +272,7 @@ public class RetryingBlockFetcherSuite {
               retryListener.onBlockFetchSuccess(new String[] { blockId },
                 (ManagedBuffer) blockValue);
             } else if (blockValue instanceof Exception) {
-              retryListener.onBlockFetchFailure(blockId, (Exception) blockValue);
+              retryListener.onBlockFetchFailure(new String[] { blockId }, (Exception) blockValue);
             } else {
               fail("Can only handle ManagedBuffers and Exceptions, got " + blockValue);
             }

@@ -192,11 +192,11 @@ public class SaslIntegrationSuite {
       CountDownLatch blockFetchLatch = new CountDownLatch(1);
       BlockFetchingListener listener = new BlockFetchingListener() {
         @Override
-        public void onBlockFetchSuccess(String[] blockId, ManagedBuffer data) {
+        public void onBlockFetchSuccess(String[] blockIds, ManagedBuffer data) {
           blockFetchLatch.countDown();
         }
         @Override
-        public void onBlockFetchFailure(String blockId, Throwable t) {
+        public void onBlockFetchFailure(String[] blockIds, Throwable t) {
           exception.set(t);
           blockFetchLatch.countDown();
         }

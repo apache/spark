@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.concurrent.ExecutorService;
@@ -146,9 +147,7 @@ public class RetryingBlockFetcher {
       if (shouldRetry(e)) {
         initiateRetry();
       } else {
-        for (String bid : blockIdsToFetch) {
-          listener.onBlockFetchFailure(bid, e);
-        }
+        listener.onBlockFetchFailure(blockIdsToFetch, e);
       }
     }
   }
@@ -191,43 +190,56 @@ public class RetryingBlockFetcher {
     public void onBlockFetchSuccess(String[] blockIds, ManagedBuffer data) {
       // We will only forward this success message to our parent listener if this block request is
       // outstanding and we are still the active listener.
-      boolean shouldForwardSuccess = false;
+      ArrayList<String> forwardBlockIds = new ArrayList<>(blockIds.length);
       synchronized (RetryingBlockFetcher.this) {
-        for (String blockId : blockIds) {
-          if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
-            outstandingBlocksIds.remove(blockId);
-            shouldForwardSuccess = true;
+        if (this == currentListener) {
+          for (String blockId : blockIds) {
+            if (outstandingBlocksIds.contains(blockId)) {
+              outstandingBlocksIds.remove(blockId);
+              forwardBlockIds.add(blockId);
+            }
           }
         }
       }
 
       // Now actually invoke the parent listener, outside of the synchronized block.
-      if (shouldForwardSuccess) {
+      if (!forwardBlockIds.isEmpty()) {
         listener.onBlockFetchSuccess(blockIds, data);
       }
     }
 
     @Override
-    public void onBlockFetchFailure(String blockId, Throwable exception) {
+    public void onBlockFetchFailure(String[] blockIds, Throwable exception) {
       // We will only forward this failure to our parent listener if this block request is
       // outstanding, we are still the active listener, AND we cannot retry the fetch.
       boolean shouldForwardFailure = false;
+      ArrayList<String> possibleForwardBlockIds = new ArrayList<>(blockIds.length);
       synchronized (RetryingBlockFetcher.this) {
-        if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
-          if (shouldRetry(exception)) {
-            initiateRetry();
-          } else {
-            logger.error(String.format("Failed to fetch block %s, and will not retry (%s retries)",
-              blockId, retryCount), exception);
-            outstandingBlocksIds.remove(blockId);
-            shouldForwardFailure = true;
+        if (this == currentListener) {
+          for (String blockId : blockIds) {
+            if (outstandingBlocksIds.contains(blockId)) {
+              possibleForwardBlockIds.add(blockId);
+            }
+          }
+          if (!possibleForwardBlockIds.isEmpty()) {
+            if (shouldRetry(exception)) {
+              initiateRetry();
+            } else {
+              logger.error(String.format("Failed to fetch of %s outstanding blocks, and will " +
+                "not retry (%s retries)", possibleForwardBlockIds.size(), retryCount), exception);
+              for (String blockId : possibleForwardBlockIds) {
+                outstandingBlocksIds.remove(blockId);
+              }
+              shouldForwardFailure = true;
+            }
           }
         }
       }
 
       // Now actually invoke the parent listener, outside of the synchronized block.
       if (shouldForwardFailure) {
-        listener.onBlockFetchFailure(blockId, exception);
+        listener.onBlockFetchFailure(
+          possibleForwardBlockIds.toArray(new String[possibleForwardBlockIds.size()]), exception);
       }
     }
   }

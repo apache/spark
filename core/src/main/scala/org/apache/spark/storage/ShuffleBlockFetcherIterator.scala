@@ -261,9 +261,10 @@ final class ShuffleBlockFetcherIterator(
         logTrace("Got remote block " + batchId + " after " + Utils.getUsedTimeMs(startTime))
       }
 
-      override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
+      override def onBlockFetchFailure(blockIds: Array[String], e: Throwable): Unit = {
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        results.put(new FailureFetchResult(BlockId(blockId), address, e))
+        blockIds.foreach(
+          blockId => results.put(new FailureFetchResult(BlockId(blockId), address, e)))
       }
     }
 

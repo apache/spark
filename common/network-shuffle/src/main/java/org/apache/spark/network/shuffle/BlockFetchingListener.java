@@ -32,5 +32,5 @@ public interface BlockFetchingListener extends EventListener {
   /**
    * Called at least once per block upon failures.
    */
-  void onBlockFetchFailure(String blockId, Throwable exception);
+  void onBlockFetchFailure(String[] blockIds, Throwable exception);
 }

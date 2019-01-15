@@ -129,7 +129,7 @@ private[spark] class NettyBlockTransferService(
     } catch {
       case e: Exception =>
         logError("Exception while beginning fetchBlocks", e)
-        blockIds.foreach(listener.onBlockFetchFailure(_, e))
+        listener.onBlockFetchFailure(blockIds, e)
     }
   }
 
