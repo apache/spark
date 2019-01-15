@@ -273,7 +273,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 }
 
               case _ => throw new AnalysisException(
-                s"data source ${table.name} does not support SaveMode")
+                s"data source ${table.name} does not support SaveMode $mode")
             }
           }
 
