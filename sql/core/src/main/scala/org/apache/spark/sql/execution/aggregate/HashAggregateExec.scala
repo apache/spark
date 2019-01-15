@@ -65,7 +65,7 @@ case class HashAggregateExec(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
-      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iterations"))
+      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 

@@ -226,7 +226,7 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Gets the collision rate per looking up for the underlying `BytesToBytesMap`.
+   * Gets the average bucket list iterations per lookup in the underlying `BytesToBytesMap`.
    */
   public double getAvgHashProbeBucketListIterations() {
     return map.getAvgHashProbeBucketListIterations();
