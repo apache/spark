@@ -232,5 +232,5 @@ class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSQ
 
 class OrcV1PartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSQLContext {
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.DISABLED_V2_BATCH_READERS, "orc")
+    super.sparkConf.set(SQLConf.USE_V1_READERS, "orc")
 }
