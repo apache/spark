@@ -43,12 +43,6 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
 
-  driverMetrics ++= Map(
-    "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
-    "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
-    "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
-    "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
-
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
   override def doCanonicalize(): SparkPlan = {
@@ -67,6 +61,12 @@ case class BroadcastExchangeExec(
 
   @transient
   private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+    // create relative sql metrics and add them into driverMetrics
+    driverMetrics ++= Map(
+      "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
+      "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
+      "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
+      "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {

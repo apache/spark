@@ -659,10 +659,6 @@ object CoalesceExec {
  */
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
-  driverMetrics ++= Map(
-    "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
-    "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
-
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -671,6 +667,10 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
+    // create relative sql metrics and add them into driverMetrics
+    driverMetrics ++= Map(
+      "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
+      "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
