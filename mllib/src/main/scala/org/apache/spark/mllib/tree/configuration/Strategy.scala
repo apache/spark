@@ -98,6 +98,29 @@ class Strategy @Since("1.3.0") (
   }
 
   /**
+   * Backwards compatible constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
+   */
+  @Since("1.0.0")
+  def this(
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      numClasses: Int,
+      maxBins: Int,
+      quantileCalculationStrategy: QuantileStrategy,
+      categoricalFeaturesInfo: Map[Int, Int],
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      maxMemoryInMB: Int,
+      subsamplingRate: Double,
+      useNodeIdCache: Boolean,
+      checkpointInterval: Int) {
+    this(algo, impurity, maxDepth, numClasses, maxBins, quantileCalculationStrategy,
+      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB,
+      subsamplingRate, useNodeIdCache, checkpointInterval, 0.0)
+  }
+
+  /**
    * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
    */
   @Since("1.1.0")
