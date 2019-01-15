@@ -123,7 +123,8 @@ public class ExternalShuffleIntegrationSuite {
       String execId,
       String[] blockIds,
       boolean fetchContinuousShuffleBlocksInBatch) throws Exception {
-    return fetchBlocks(execId, blockIds, conf, server.getPort(), fetchContinuousShuffleBlocksInBatch);
+    return fetchBlocks(execId, blockIds, conf, server.getPort(),
+      fetchContinuousShuffleBlocksInBatch);
   }
 
   // Fetch a set of blocks from a pre-registered executor. Connects to the server on the given port,
