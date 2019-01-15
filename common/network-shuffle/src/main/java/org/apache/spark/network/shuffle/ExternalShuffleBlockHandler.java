@@ -252,6 +252,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
           shuffleBlockBatchIds[3 * capacity + 1] = prevBlock[1];
           shuffleBlockBatchIds[3 * capacity + 2] = originBlocks.get(i - 1)[1] - prevBlock[1] + 1;
           prevIdx = i;
+          capacity++;
         }
       }
 
