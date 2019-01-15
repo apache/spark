@@ -103,6 +103,7 @@ class ParquetSchemaPruningSuite
       .select("id", "name", "address", "friends")
       .select(col("id"), firstAndLastName(col("name.first"), col("name.last")))
 
+    query.explain(true)
     query.show(true)
 
     val a =10

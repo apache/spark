@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.{immutable, mutable}
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -610,16 +611,17 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    // If current project or child references to nested fields, we substitute them
-    // by alias attributes; then a project of the nested fields as aliases
-    // on the children of the child will be created.
-    // Note that if the child is a [[Project]], it will be handled by the previous rule;
-    // if the child is a [[Filter]], TODO: doc
+    // If the current project or the child references to nested fields, we can substitute them
+    // by alias attributes; then a project of the nested fields as aliases on the children
+    // of the child will be created.
+    //
+    // Note that if the child is also a [[Project]], it will be handled by the previous rule.
+    // If the child is a [[Filter]], it will be conflict with PushPredicatesThroughProject.
+    // When the child is a [[SerializeFromObject]], we can not push the projection through it.
     case p @ Project(_, child) if !child.isInstanceOf[Project] && !child.isInstanceOf[Filter] &&
-      !child.isInstanceOf[SerializeFromObject] &&
-        getAliasSubMap(p, child).nonEmpty =>
-      val aliasSub: Map[AttributeSet, Seq[(Expression, Alias)]] = getAliasSubMap(p, child)
-      val nestedFieldToAlias = aliasSub.values.flatten.toMap
+         !child.isInstanceOf[SerializeFromObject] && getAliasSubMap(p, child).nonEmpty =>
+      val aliasSub = getAliasSubMap(p, child)
+      val nestedFieldToAlias: Map[Expression, Alias] = aliasSub.values.flatten.toMap
       val attrToAliases: Map[AttributeSet, Seq[Alias]] = aliasSub.map(x => (x._1, x._2.map(_._2)))
 
       val newChild = child.withNewChildren(child.children.map { plan =>
@@ -627,10 +629,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
         Project(plan.output.flatMap(a => attrToAliases.getOrElse(AttributeSet(a), Seq(a))), plan)
       })
       val newProjectList = p.projectList.map(_.transform {
-        // Replacing the `GetStructField` by alias attribute.
-        case f: GetStructField if nestedFieldToAlias.contains(f.canonicalized) =>
-          nestedFieldToAlias(f.canonicalized).toAttribute
-        // TODO: Support GetArrayStructFields, GetMapValue, GetArrayItem
+        case e if nestedFieldToAlias.contains(e.canonicalized) =>
+          nestedFieldToAlias(e.canonicalized).toAttribute
       }.asInstanceOf[NamedExpression])
       Project(newProjectList, newChild)
 
@@ -666,7 +666,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
    * in a [[LogicalPlan]].
    */
   private def getNestedFieldReferences(plan: LogicalPlan): Seq[Expression] = {
-    // TODO: Currently, we only support to have [[GetStructField]] in the chain
+    // TODO: Currently, we only support having [[GetStructField]] in the chain
     // of the expressions. If the chain contains GetArrayStructFields, GetMapValue, or
     // GetArrayItem, the nested field alias substitution will not be performed.
     def isGetStructFieldOrAttr(e: Expression): Boolean = e match {
@@ -685,13 +685,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
   }
 
   /**
-   * The first map is used to replace `GetStructField` in current project to alias attributes.
-   * The second map is used in the children projects to convert attributes of entire nested
-   * columns into each referred nested columns as aliases. The key in the first map,
-   * `GetStructField` is canonicalized to remove the cosmetic differences.
+   * The key with type [[AttributeSet]] in the returned map contains only one root column attribute,
+   * and the value is Seq of tuple containing [[Expression]] of nested fields to be replaced, and
+   * corresponding [[Alias]]. Note that the [[Expression]] of nested fields are canonicalized
+   * to remove the cosmetic differences.
    *
-   * Note that when all of the nested fields in a root column are referred, this substitution
-   * will not be performed. For example, let's say `name` has three nested fields, `first`,
+   * TODO: when all of the nested fields in a root column are referred, this substitution
+   * doesn't have to be performed. For example, let's say `name` has three nested fields, `first`,
    * `middle`, and `last`, and if all of them are referred, it's not necessary to replace each of
    * them by alias variables.
    */
@@ -709,7 +709,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         // contain multiple nested fields.
         val nestedFieldToAlias: Seq[(Expression, Alias)] =
           nestedFields.map(_.canonicalized).distinct.flatMap {
-            case f: GetStructField => Some((f, Alias(f, f.sql)()))
+            case f: GetStructField => Some((f, Alias(f, f.prettyName)()))
             // TODO: Top level extractor such as GetArrayStructFields is not supported yet.
             case _ => None
           }
