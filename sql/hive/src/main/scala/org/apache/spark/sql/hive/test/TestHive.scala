@@ -33,9 +33,10 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, ExternalCatalogWithListener}
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
@@ -59,7 +60,7 @@ object TestHive
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")
+        .set(UI_ENABLED, false)
         .set("spark.unsafe.exceptionOnMemoryLeak", "true")
         // Disable ConvertToLocalRelation for better test coverage. Test cases built on
         // LocalRelation will exercise the optimization rules better by disabling it as
@@ -219,6 +220,16 @@ private[hive] class TestHiveSparkSession(
     sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.newSession()
   }
 
+  /**
+   * This is a temporary hack to override SparkSession.sql so we can still use the version of
+   * Dataset.ofRows that creates a TestHiveQueryExecution (rather than a normal QueryExecution
+   * which wouldn't load all the test tables).
+   */
+  override def sql(sqlText: String): DataFrame = {
+    val plan = sessionState.sqlParser.parsePlan(sqlText)
+    Dataset.ofRows(self, plan)
+  }
+
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
   }
@@ -287,7 +298,7 @@ private[hive] class TestHiveSparkSession(
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new TestHiveQueryExecution(sql).hiveResultString(): Unit
+      () => new TestHiveQueryExecution(sql).executedPlan.executeCollect(): Unit
     }
   }
 
@@ -586,7 +597,7 @@ private[hive] class TestHiveQueryExecution(
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical)
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 }
 

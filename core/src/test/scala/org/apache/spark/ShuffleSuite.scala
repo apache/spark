@@ -23,6 +23,7 @@ import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
@@ -37,7 +38,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
   // Ensure that the DAGScheduler doesn't retry stages whose fetches fail, so that we accurately
   // test that the shuffle works (rather than retrying until all blocks are local to one Executor).
-  conf.set("spark.test.noStageRetry", "true")
+  conf.set(TEST_NO_STAGE_RETRY, true)
 
   test("groupByKey without compression") {
     val myConf = conf.clone().set("spark.shuffle.compress", "false")
@@ -269,7 +270,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   }
 
   test("[SPARK-4085] rerun map stage if reduce stage cannot find its local shuffle file") {
-    val myConf = conf.clone().set("spark.test.noStageRetry", "false")
+    val myConf = conf.clone().set(TEST_NO_STAGE_RETRY, false)
     sc = new SparkContext("local", "test", myConf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
     rdd.count()
@@ -362,15 +363,19 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
-    val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0,
-      new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val context1 =
+      new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem)
+    val writer1 = manager.getWriter[Int, Int](
+      shuffleHandle, 0, context1, context1.taskMetrics.shuffleWriteMetrics)
     val data1 = (1 to 10).map { x => x -> x}
 
     // second attempt -- also successful.  We'll write out different data,
     // just to simulate the fact that the records may get written differently
     // depending on what gets spilled, what gets combined, etc.
-    val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0,
-      new TaskContextImpl(0, 0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val context2 =
+      new TaskContextImpl(0, 0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem)
+    val writer2 = manager.getWriter[Int, Int](
+      shuffleHandle, 0, context2, context2.taskMetrics.shuffleWriteMetrics)
     val data2 = (11 to 20).map { x => x -> x}
 
     // interleave writes of both attempts -- we want to test that both attempts can occur
@@ -397,8 +402,10 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       mapTrackerMaster.registerMapOutput(0, 0, mapStatus)
     }
 
-    val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-      new TaskContextImpl(1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val taskContext = new TaskContextImpl(
+      1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem)
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1, taskContext, metrics)
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
 

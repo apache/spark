@@ -130,6 +130,9 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  * Note that exprId and qualifiers are in a separate parameter list because
  * we only pattern match on child and name.
  *
+ * Note that when creating a new Alias, all the [[AttributeReference]] that refer to
+ * the original alias should be updated to the new one.
+ *
  * @param child The computation being performed
  * @param name The name to be associated with the result of computing [[child]].
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
@@ -308,7 +311,7 @@ case class AttributeReference(
     }
   }
 
-  override def withMetadata(newMetadata: Metadata): Attribute = {
+  override def withMetadata(newMetadata: Metadata): AttributeReference = {
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
@@ -327,7 +330,9 @@ case class AttributeReference(
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
-  override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
+  override def simpleString(maxFields: Int): String = {
+    s"$name#${exprId.id}: ${dataType.simpleString(maxFields)}"
+  }
 
   override def sql: String = {
     val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""

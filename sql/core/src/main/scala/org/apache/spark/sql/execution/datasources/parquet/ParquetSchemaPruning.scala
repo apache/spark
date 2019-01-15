@@ -116,10 +116,28 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     // For example, for a query `SELECT name.first FROM contacts WHERE name IS NOT NULL`,
     // we don't need to read nested fields of `name` struct other than `first` field.
     val (rootFields, optRootFields) = (projectionRootFields ++ filterRootFields)
-      .distinct.partition(_.contentAccessed)
+      .distinct.partition(!_.prunedIfAnyChildAccessed)
 
     optRootFields.filter { opt =>
-      !rootFields.exists(_.field.name == opt.field.name)
+      !rootFields.exists { root =>
+        root.field.name == opt.field.name && {
+          // Checking if current optional root field can be pruned.
+          // For each required root field, we merge it with the optional root field:
+          // 1. If this optional root field has nested fields and any nested field of it is used
+          //    in the query, the merged field type must equal to the optional root field type.
+          //    We can prune this optional root field. For example, for optional root field
+          //    `struct<name:struct<middle:string,last:string>>`, if its field
+          //    `struct<name:struct<last:string>>` is used, we don't need to add this optional
+          //    root field.
+          // 2. If this optional root field has no nested fields, the merged field type equals
+          //    to the optional root field only if they are the same. If they are, we can prune
+          //    this optional root field too.
+          val rootFieldType = StructType(Array(root.field))
+          val optFieldType = StructType(Array(opt.field))
+          val merged = optFieldType.merge(rootFieldType)
+          merged.sameType(optFieldType)
+        }
+      }
     } ++ rootFields
   }
 
@@ -213,11 +231,11 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.
       case IsNotNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, contentAccessed = false) :: Nil
+        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
       case IsNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, contentAccessed = false) :: Nil
+        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
-        expr.children.flatMap(getRootFields).map(_.copy(contentAccessed = false))
+        expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
       case _ =>
         expr.children.flatMap(getRootFields)
     }
@@ -271,9 +289,9 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
   /**
    * This represents a "root" schema field (aka top-level, no-parent). `field` is the
    * `StructField` for field name and datatype. `derivedFromAtt` indicates whether it
-   * was derived from an attribute or had a proper child. `contentAccessed` means whether
-   * it was accessed with its content by the expressions refer it.
+   * was derived from an attribute or had a proper child. `prunedIfAnyChildAccessed` means
+   * whether this root field can be pruned if any of child field is used in the query.
    */
   private case class RootField(field: StructField, derivedFromAtt: Boolean,
-    contentAccessed: Boolean = true)
+    prunedIfAnyChildAccessed: Boolean = false)
 }

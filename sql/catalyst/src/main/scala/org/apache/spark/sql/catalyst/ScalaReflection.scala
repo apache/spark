@@ -788,12 +788,37 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Finds an accessible constructor with compatible parameters. This is a more flexible search
-   * than the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
-   * matching constructor is returned. Otherwise, it returns `None`.
+   * Finds an accessible constructor with compatible parameters. This is a more flexible search than
+   * the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
+   * matching constructor is returned if it exists. Otherwise, we check for additional compatible
+   * constructors defined in the companion object as `apply` methods. Otherwise, it returns `None`.
    */
-  def findConstructor(cls: Class[_], paramTypes: Seq[Class[_]]): Option[Constructor[_]] = {
-    Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*))
+  def findConstructor[T](cls: Class[T], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => T] = {
+    Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*)) match {
+      case Some(c) => Some(x => c.newInstance(x: _*).asInstanceOf[T])
+      case None =>
+        val companion = mirror.staticClass(cls.getName).companion
+        val moduleMirror = mirror.reflectModule(companion.asModule)
+        val applyMethods = companion.asTerm.typeSignature
+          .member(universe.TermName("apply")).asTerm.alternatives
+        applyMethods.find { method =>
+          val params = method.typeSignature.paramLists.head
+          // Check that the needed params are the same length and of matching types
+          params.size == paramTypes.tail.size &&
+          params.zip(paramTypes.tail).forall { case(ps, pc) =>
+            ps.typeSignature.typeSymbol == mirror.classSymbol(pc)
+          }
+        }.map { applyMethodSymbol =>
+          val expectedArgsCount = applyMethodSymbol.typeSignature.paramLists.head.size
+          val instanceMirror = mirror.reflect(moduleMirror.instance)
+          val method = instanceMirror.reflectMethod(applyMethodSymbol.asMethod)
+          (_args: Seq[AnyRef]) => {
+            // Drop the "outer" argument if it is provided
+            val args = if (_args.size == expectedArgsCount) _args else _args.tail
+            method.apply(args: _*).asInstanceOf[T]
+          }
+        }
+    }
   }
 
   /**
@@ -933,23 +958,6 @@ trait ScalaReflection extends Logging {
   }
 
   /**
-   * Returns the nullability of the input parameter types of the scala function object.
-   *
-   * Note that this only works with Scala 2.11, and the information returned may be inaccurate if
-   * used with a different Scala version.
-   */
-  def getParameterTypeNullability(func: AnyRef): Seq[Boolean] = {
-    if (!Properties.versionString.contains("2.11")) {
-      logWarning(s"Scala ${Properties.versionString} cannot get type nullability correctly via " +
-        "reflection, thus Spark cannot add proper input null check for UDF. To avoid this " +
-        "problem, use the typed UDF interfaces instead.")
-    }
-    val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
-    assert(methods.length == 1)
-    methods.head.getParameterTypes.map(!_.isPrimitive)
-  }
-
-  /**
    * Returns the parameter names and types for the primary constructor of this type.
    *
    * Note that it only works for scala classes with primary constructor, and currently doesn't
@@ -973,8 +981,19 @@ trait ScalaReflection extends Logging {
     }
   }
 
+  /**
+   * If our type is a Scala trait it may have a companion object that
+   * only defines a constructor via `apply` method.
+   */
+  private def getCompanionConstructor(tpe: Type): Symbol = {
+    tpe.typeSymbol.asClass.companion.asTerm.typeSignature.member(universe.TermName("apply"))
+  }
+
   protected def constructParams(tpe: Type): Seq[Symbol] = {
-    val constructorSymbol = tpe.dealias.member(termNames.CONSTRUCTOR)
+    val constructorSymbol = tpe.member(termNames.CONSTRUCTOR) match {
+      case NoSymbol => getCompanionConstructor(tpe)
+      case sym => sym
+    }
     val params = if (constructorSymbol.isMethod) {
       constructorSymbol.asMethod.paramLists
     } else {

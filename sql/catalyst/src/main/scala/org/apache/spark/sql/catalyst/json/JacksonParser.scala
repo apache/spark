@@ -22,6 +22,7 @@ import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
 
@@ -53,6 +54,12 @@ class JacksonParser(
 
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
+
+  private val timestampFormatter = TimestampFormatter(
+    options.timestampFormat,
+    options.timeZone,
+    options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -135,6 +142,8 @@ class JacksonParser(
     }
   }
 
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
@@ -215,17 +224,7 @@ class JacksonParser(
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          val stringValue = parser.getText
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.
-          Long.box {
-            Try(options.timestampFormat.parse(stringValue).getTime * 1000L)
-              .getOrElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                DateTimeUtils.stringToTime(stringValue).getTime * 1000L
-              }
-          }
+          timestampFormatter.parse(parser.getText)
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
@@ -234,22 +233,7 @@ class JacksonParser(
     case DateType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          val stringValue = parser.getText
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.x
-          Int.box {
-            Try(DateTimeUtils.millisToDays(options.dateFormat.parse(stringValue).getTime))
-              .orElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(stringValue).getTime))
-              }
-              .getOrElse {
-                // In Spark 1.5.0, we store the data as number of days since epoch in string.
-                // So, we just convert it to Int.
-                stringValue.toInt
-              }
-          }
+          dateFormatter.parse(parser.getText)
       }
 
     case BinaryType =>
@@ -261,6 +245,9 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[Decimal](parser, dataType) {
         case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
           Decimal(parser.getDecimalValue, dt.precision, dt.scale)
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          val bigDecimal = decimalParser(parser.getText)
+          Decimal(bigDecimal, dt.precision, dt.scale)
       }
 
     case st: StructType =>
@@ -341,17 +328,28 @@ class JacksonParser(
       schema: StructType,
       fieldConverters: Array[ValueConverter]): InternalRow = {
     val row = new GenericInternalRow(schema.length)
+    var badRecordException: Option[Throwable] = None
+
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
-          row.update(index, fieldConverters(index).apply(parser))
-
+          try {
+            row.update(index, fieldConverters(index).apply(parser))
+          } catch {
+            case NonFatal(e) =>
+              badRecordException = badRecordException.orElse(Some(e))
+              parser.skipChildren()
+          }
         case None =>
           parser.skipChildren()
       }
     }
 
-    row
+    if (badRecordException.isEmpty) {
+      row
+    } else {
+      throw PartialResultException(row, badRecordException.get)
+    }
   }
 
   /**
@@ -367,6 +365,8 @@ class JacksonParser(
       values += fieldConverter.apply(parser)
     }
 
+    // The JSON map will never have null or duplicated map keys, it's safe to create a
+    // ArrayBasedMapData directly here.
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
 
@@ -399,7 +399,7 @@ class JacksonParser(
         // a null first token is equivalent to testing for input.trim.isEmpty
         // but it works on any token stream and not just strings
         parser.nextToken() match {
-          case null => Nil
+          case null => throw new RuntimeException("Not found any JSON token")
           case _ => rootConverter.apply(parser) match {
             case null => throw new RuntimeException("Root converter returned null")
             case rows => rows
@@ -420,6 +420,11 @@ class JacksonParser(
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
         throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
+      case PartialResultException(row, cause) =>
+        throw BadRecordException(
+          record = () => recordLiteral(record),
+          partialResult = () => Some(row),
+          cause)
     }
   }
 }

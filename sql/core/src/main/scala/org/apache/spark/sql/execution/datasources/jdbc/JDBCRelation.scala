@@ -26,11 +26,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
-import org.apache.spark.util.Utils
 
 /**
  * Instructions on how to partition the table among workers.
@@ -159,8 +159,9 @@ private[sql] object JDBCRelation extends Logging {
     val column = schema.find { f =>
       resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
     }.getOrElse {
+      val maxNumToStringFields = SQLConf.get.maxToStringFields
       throw new AnalysisException(s"User-defined partition column $columnName not " +
-        s"found in the JDBC relation: ${schema.simpleString(Utils.maxNumToStringFields)}")
+        s"found in the JDBC relation: ${schema.simpleString(maxNumToStringFields)}")
     }
     column.dataType match {
       case _: NumericType | DateType | TimestampType =>
@@ -184,10 +185,11 @@ private[sql] object JDBCRelation extends Logging {
       columnType: DataType,
       timeZoneId: String): String = {
     def dateTimeToString(): String = {
-      val timeZone = DateTimeUtils.getTimeZone(timeZoneId)
       val dateTimeStr = columnType match {
-        case DateType => DateTimeUtils.dateToString(value.toInt, timeZone)
-        case TimestampType => DateTimeUtils.timestampToString(value, timeZone)
+        case DateType => DateFormatter().format(value.toInt)
+        case TimestampType =>
+          val timestampFormatter = TimestampFormatter(DateTimeUtils.getTimeZone(timeZoneId))
+          DateTimeUtils.timestampToString(timestampFormatter, value)
       }
       s"'$dateTimeStr'"
     }

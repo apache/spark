@@ -33,6 +33,8 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
@@ -115,13 +117,13 @@ private[deploy] class Master(
 
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
-  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
+  val reverseProxy = conf.get(UI_REVERSE_PROXY)
   if (defaultCores < 1) {
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
 
   // Alternative application submission gateway that is stable across Spark versions
-  private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", false)
+  private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
   private var restServer: Option[StandaloneRestServer] = None
   private var restServerBoundPort: Option[Int] = None
 
@@ -140,7 +142,7 @@ private[deploy] class Master(
     webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     if (reverseProxy) {
-      masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", masterWebUiUrl)
+      masterWebUiUrl = conf.get(UI_REVERSE_PROXY_URL).orElse(Some(masterWebUiUrl)).get
       webUi.addProxy()
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
@@ -152,7 +154,7 @@ private[deploy] class Master(
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
 
     if (restServerEnabled) {
-      val port = conf.getInt("spark.master.rest.port", 6066)
+      val port = conf.get(MASTER_REST_SERVER_PORT)
       restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
     }
     restServerBoundPort = restServer.map(_.start())

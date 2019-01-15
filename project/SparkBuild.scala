@@ -95,15 +95,15 @@ object SparkBuild extends PomBuild {
     }
 
     Option(System.getProperty("scala.version"))
-      .filter(_.startsWith("2.12"))
+      .filter(_.startsWith("2.11"))
       .foreach { versionString =>
-        System.setProperty("scala-2.12", "true")
+        System.setProperty("scala-2.11", "true")
       }
-    if (System.getProperty("scala-2.12") == "") {
+    if (System.getProperty("scala-2.11") == "") {
       // To activate scala-2.10 profile, replace empty property value to non-empty value
       // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
       // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
-      System.setProperty("scala-2.12", "true")
+      System.setProperty("scala-2.11", "true")
     }
     profiles
   }
@@ -494,7 +494,13 @@ object KubernetesIntegrationTests {
     dockerBuild := {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
-        val cmd = Seq(dockerTool, "-m", "-t", imageTag.value, "build")
+        val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
+        val cmd = Seq(dockerTool, "-m",
+          "-t", imageTag.value,
+          "-p", s"$bindingsDir/python/Dockerfile",
+          "-R", s"$bindingsDir/R/Dockerfile",
+          "build"
+        )
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
@@ -516,7 +522,8 @@ object KubernetesIntegrationTests {
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
     // Force packaging before building images, so that the latest code is tested.
-    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly).value
+    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly)
+      .dependsOn(packageBin in Compile in examples).value
   )
 }
 
@@ -849,10 +856,10 @@ object TestSettings {
   import BuildCommons._
 
   private val scalaBinaryVersion =
-    if (System.getProperty("scala-2.12") == "true") {
-      "2.12"
-    } else {
+    if (System.getProperty("scala-2.11") == "true") {
       "2.11"
+    } else {
+      "2.12"
     }
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
@@ -881,7 +888,7 @@ object TestSettings {
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx3g -Xss4m"
+    javaOptions in Test ++= "-Xmx4g -Xss4m"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Exclude tags defined in a system property

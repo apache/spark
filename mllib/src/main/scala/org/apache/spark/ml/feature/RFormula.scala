@@ -246,7 +246,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
         if (!hasIntercept && !keepReferenceCategory) {
-          encoderStages += new OneHotEncoderEstimator(uid)
+          encoderStages += new OneHotEncoder(uid)
             .setInputCols(Array(indexed(term)))
             .setOutputCols(Array(encodedCol))
             .setDropLast(false)
@@ -269,7 +269,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     if (oneHotEncodeColumns.nonEmpty) {
       val (inputCols, outputCols) = oneHotEncodeColumns.toArray.unzip
-      encoderStages += new OneHotEncoderEstimator(uid)
+      encoderStages += new OneHotEncoder(uid)
         .setInputCols(inputCols)
         .setOutputCols(outputCols)
         .setDropLast(true)

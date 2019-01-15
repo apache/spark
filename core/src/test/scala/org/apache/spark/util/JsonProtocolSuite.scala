@@ -96,7 +96,8 @@ class JsonProtocolSuite extends SparkFunSuite {
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
-        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L))
+        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
+          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
         Some(executorUpdates))
     }
@@ -105,8 +106,8 @@ class JsonProtocolSuite extends SparkFunSuite {
         "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
-        new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L)))
-
+        new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
+          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)))
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
@@ -440,14 +441,14 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("executorMetricsFromJson backward compatibility: handle missing metrics") {
     // any missing metrics should be set to 0
-    val executorMetrics = new ExecutorMetrics(
-      Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 789L))
+    val executorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L, 78L, 89L,
+      90L, 123L, 456L, 789L, 40L, 20L, 20L, 10L, 20L, 10L))
     val oldExecutorMetricsJson =
       JsonProtocol.executorMetricsToJson(executorMetrics)
         .removeField( _._1 == "MappedPoolMemory")
-    val expectedExecutorMetrics = new ExecutorMetrics(
-      Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 0L))
-    assertEquals(expectedExecutorMetrics,
+    val exepectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L,
+      78L, 89L, 90L, 123L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L))
+    assertEquals(exepectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
 
@@ -753,20 +754,20 @@ private[spark] object JsonProtocolSuite extends Assertions {
       assertStackTraceElementEquals)
   }
 
-  private def assertEquals(metrics1: ExecutorMetrics, metrics2: ExecutorMetrics) {
-    ExecutorMetricType.values.foreach { metricType =>
-      assert(metrics1.getMetricValue(metricType) === metrics2.getMetricValue(metricType))
+  private def assertEquals(metrics1: ExecutorMetrics, metrics2: ExecutorMetrics): Unit = {
+    ExecutorMetricType.metricToOffset.foreach { metric =>
+      assert(metrics1.getMetricValue(metric._1) === metrics2.getMetricValue(metric._1))
     }
   }
 
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
-    val expectedJson = pretty(parse(expected))
-    val actualJson = pretty(parse(actual))
+    val expectedJson = parse(expected)
+    val actualJson = parse(actual)
     if (expectedJson != actualJson) {
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
-      println("=== EXPECTED ===\n" + expectedJson + "\n")
-      println("=== ACTUAL ===\n" + actualJson + "\n")
+      println(s"=== EXPECTED ===\n${pretty(expectedJson)}\n")
+      println(s"=== ACTUAL ===\n${pretty(actualJson)}\n")
       // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }
@@ -806,7 +807,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertStackTraceElementEquals(ste1: StackTraceElement, ste2: StackTraceElement) {
-    assert(ste1 === ste2)
+    // This mimics the equals() method from Java 8 and earlier. Java 9 adds checks for
+    // class loader and module, which will cause them to be not equal, when we don't
+    // care about those
+    assert(ste1.getClassName === ste2.getClassName)
+    assert(ste1.getMethodName === ste2.getMethodName)
+    assert(ste1.getLineNumber === ste2.getLineNumber)
+    assert(ste1.getFileName === ste2.getFileName)
   }
 
   /** ----------------------------------- *
@@ -872,13 +879,14 @@ private[spark] object JsonProtocolSuite extends Assertions {
       if (includeTaskMetrics) {
         Seq((1L, 1, 1, Seq(makeAccumulableInfo(1, false, false, None),
           makeAccumulableInfo(2, false, false, None))))
-      } else {
+       } else {
         Seq()
       }
     val executorMetricsUpdate =
       if (includeExecutorMetrics) {
-        Some(new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L)))
-       } else {
+        Some(new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L,
+          0L, 0L, 0L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)))
+      } else {
         None
       }
     SparkListenerExecutorMetricsUpdate(execId, taskMetrics, executorMetricsUpdate)
@@ -2082,7 +2090,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "OnHeapUnifiedMemory" : 432,
       |    "OffHeapUnifiedMemory" : 321,
       |    "DirectPoolMemory" : 654,
-      |    "MappedPoolMemory" : 765
+      |    "MappedPoolMemory" : 765,
+      |    "ProcessTreeJVMVMemory": 256912,
+      |    "ProcessTreeJVMRSSMemory": 123456,
+      |    "ProcessTreePythonVMemory": 123456,
+      |    "ProcessTreePythonRSSMemory": 61728,
+      |    "ProcessTreeOtherVMemory": 30364,
+      |    "ProcessTreeOtherRSSMemory": 15182
       |  }
       |
       |}
@@ -2105,7 +2119,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "OnHeapUnifiedMemory" : 432,
       |    "OffHeapUnifiedMemory" : 321,
       |    "DirectPoolMemory" : 654,
-      |    "MappedPoolMemory" : 765
+      |    "MappedPoolMemory" : 765,
+      |    "ProcessTreeJVMVMemory": 256912,
+      |    "ProcessTreeJVMRSSMemory": 123456,
+      |    "ProcessTreePythonVMemory": 123456,
+      |    "ProcessTreePythonRSSMemory": 61728,
+      |    "ProcessTreeOtherVMemory": 30364,
+      |    "ProcessTreeOtherRSSMemory": 15182
       |  }
       |}
     """.stripMargin

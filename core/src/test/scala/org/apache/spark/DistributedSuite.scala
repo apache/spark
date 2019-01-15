@@ -22,6 +22,7 @@ import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -195,7 +196,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)
     }
-    // This will exercise the getRemoteBytes / getRemoteValues code paths:
+    // This will exercise the getRemoteValues code path:
     assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
@@ -217,7 +218,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val size = 10000
     val conf = new SparkConf()
       .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", (size / 2).toString)
+      .set(TEST_MEMORY, size.toLong / 2)
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, 2).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)
@@ -233,7 +234,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val numPartitions = 20
     val conf = new SparkConf()
       .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", size.toString)
+      .set(TEST_MEMORY, size.toLong)
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)

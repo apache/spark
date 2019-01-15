@@ -31,7 +31,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -84,7 +84,7 @@ private[util] sealed trait BaseReadWrite {
  *
  * @since 2.4.0
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 trait MLWriterFormat {
   /**
@@ -108,7 +108,7 @@ trait MLWriterFormat {
  *
  * @since 2.4.0
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 trait MLFormatRegister extends MLWriterFormat {
   /**
@@ -208,7 +208,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 /**
  * A ML Writer which delegates based on the requested format.
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
   private var source: String = "internal"
@@ -291,7 +291,7 @@ trait MLWritable {
  * Trait for classes that provide `GeneralMLWriter`.
  */
 @Since("2.4.0")
-@InterfaceStability.Unstable
+@Unstable
 trait GeneralMLWritable extends MLWritable {
   /**
    * Returns an `MLWriter` instance for this ML instance.

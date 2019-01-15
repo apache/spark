@@ -166,9 +166,8 @@ object FileFormatWriter extends Logging {
         // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
         // the physical plan may have different attribute ids due to optimizer removing some
         // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-        val orderingExpr = requiredOrdering
-          .map(SortOrder(_, Ascending))
-          .map(BindReferences.bindReference(_, outputSpec.outputColumns))
+        val orderingExpr = bindReferences(
+          requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
         SortExec(
           orderingExpr,
           global = false,

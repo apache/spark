@@ -251,7 +251,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       UTF8String.fromString("c"))
     assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getInt(1) === 3)
 
-    val fromUnsafe = FromUnsafeProjection(schema)
+    val fromUnsafe = SafeProjection.create(schema)
     val internalRow2 = fromUnsafe(unsafeRow)
     assert(internalRow === internalRow2)
 

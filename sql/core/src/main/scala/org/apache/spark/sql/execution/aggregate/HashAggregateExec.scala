@@ -23,10 +23,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
@@ -198,15 +200,13 @@ case class HashAggregateExec(
     val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = bufVars
-      val aggResults = functions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
-      }
+      val aggResults = bindReferences(
+        functions.map(_.evaluateExpression),
+        aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, aggregateAttributes).genCode(ctx)
-      }
+      val resultVars = bindReferences(resultExpressions, aggregateAttributes).map(_.genCode(ctx))
       (resultVars, s"""
         |$evaluateAggResults
         |${evaluateVariables(resultVars)}
@@ -263,7 +263,7 @@ case class HashAggregateExec(
       }
     }
     ctx.currentVars = bufVars ++ input
-    val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttrs))
+    val boundUpdateExpr = bindReferences(updateExpr, inputAttrs)
     val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
     val effectiveCodes = subExprs.codes.mkString("\n")
     val aggVals = ctx.withSubExprEliminationExprs(subExprs.states) {
@@ -455,16 +455,16 @@ case class HashAggregateExec(
       val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
-      val aggResults = declFunctions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
-      }
+      val aggResults = bindReferences(
+        declFunctions.map(_.evaluateExpression),
+        aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
-      }
+      val resultVars = bindReferences[Expression](
+        resultExpressions,
+        inputAttrs).map(_.genCode(ctx))
       s"""
        $evaluateKeyVars
        $evaluateBufferVars
@@ -493,9 +493,9 @@ case class HashAggregateExec(
 
       ctx.currentVars = keyVars ++ resultBufferVars
       val inputAttrs = resultExpressions.map(_.toAttribute)
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
-      }
+      val resultVars = bindReferences[Expression](
+        resultExpressions,
+        inputAttrs).map(_.genCode(ctx))
       s"""
        $evaluateKeyVars
        $evaluateResultBufferVars
@@ -505,9 +505,9 @@ case class HashAggregateExec(
       // generate result based on grouping key
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
-      val eval = resultExpressions.map{ e =>
-        BindReferences.bindReference(e, groupingAttributes).genCode(ctx)
-      }
+      val eval = bindReferences[Expression](
+        resultExpressions,
+        groupingAttributes).map(_.genCode(ctx))
       consume(ctx, eval)
     }
     ctx.addNewFunction(funcName,
@@ -729,9 +729,9 @@ case class HashAggregateExec(
   private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
-      ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+      ctx, bindReferences[Expression](groupingExpressions, child.output))
     val fastRowKeys = ctx.generateExpressions(
-      groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+      bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
@@ -824,7 +824,7 @@ case class HashAggregateExec(
 
     val updateRowInRegularHashMap: String = {
       ctx.INPUT_ROW = unsafeRowBuffer
-      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+      val boundUpdateExpr = bindReferences(updateExpr, inputAttr)
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
       val effectiveCodes = subExprs.codes.mkString("\n")
       val unsafeRowBufferEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
@@ -848,7 +848,7 @@ case class HashAggregateExec(
       if (isFastHashMapEnabled) {
         if (isVectorizedHashMapEnabled) {
           ctx.INPUT_ROW = fastRowBuffer
-          val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+          val boundUpdateExpr = bindReferences(updateExpr, inputAttr)
           val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
           val effectiveCodes = subExprs.codes.mkString("\n")
           val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
@@ -921,18 +921,18 @@ case class HashAggregateExec(
      """
   }
 
-  override def verboseString: String = toString(verbose = true)
+  override def verboseString(maxFields: Int): String = toString(verbose = true, maxFields)
 
-  override def simpleString: String = toString(verbose = false)
+  override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)
 
-  private def toString(verbose: Boolean): String = {
+  private def toString(verbose: Boolean, maxFields: Int): String = {
     val allAggregateExpressions = aggregateExpressions
 
     testFallbackStartsAt match {
       case None =>
-        val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
-        val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
-        val outputString = Utils.truncatedString(output, "[", ", ", "]")
+        val keyString = truncatedString(groupingExpressions, "[", ", ", "]", maxFields)
+        val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
+        val outputString = truncatedString(output, "[", ", ", "]", maxFields)
         if (verbose) {
           s"HashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
         } else {

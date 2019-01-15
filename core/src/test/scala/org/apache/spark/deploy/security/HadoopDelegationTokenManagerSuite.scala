@@ -19,8 +19,6 @@ package org.apache.spark.deploy.security
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
@@ -29,28 +27,31 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
   private val hadoopConf = new Configuration()
 
   test("default configuration") {
-    val manager = new HadoopDelegationTokenManager(new SparkConf(false), hadoopConf)
+    val manager = new HadoopDelegationTokenManager(new SparkConf(false), hadoopConf, null)
     assert(manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
     assert(manager.isProviderLoaded("hive"))
+    assert(manager.isProviderLoaded("kafka"))
   }
 
   test("disable hive credential provider") {
     val sparkConf = new SparkConf(false).set("spark.security.credentials.hive.enabled", "false")
-    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf)
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
     assert(!manager.isProviderLoaded("hive"))
+    assert(manager.isProviderLoaded("kafka"))
   }
 
   test("using deprecated configurations") {
     val sparkConf = new SparkConf(false)
       .set("spark.yarn.security.tokens.hadoopfs.enabled", "false")
       .set("spark.yarn.security.credentials.hive.enabled", "false")
-    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf)
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(!manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
     assert(!manager.isProviderLoaded("hive"))
+    assert(manager.isProviderLoaded("kafka"))
   }
 
   test("SPARK-23209: obtain tokens when Hive classes are not available") {
@@ -98,7 +99,7 @@ private object NoHiveTest {
 
   def runTest(): Unit = {
     try {
-      val manager = new HadoopDelegationTokenManager(new SparkConf(), new Configuration())
+      val manager = new HadoopDelegationTokenManager(new SparkConf(), new Configuration(), null)
       require(!manager.isProviderLoaded("hive"))
     } catch {
       case e: Throwable =>

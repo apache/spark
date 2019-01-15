@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -38,7 +39,12 @@ package object config {
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst").booleanConf.createWithDefault(false)
 
-  private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
+  private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
+    .doc("Number of cores to use for the driver process, only in cluster mode.")
+    .intConf
+    .createWithDefault(1)
+
+  private[spark] val DRIVER_MEMORY = ConfigBuilder(SparkLauncher.DRIVER_MEMORY)
     .doc("Amount of memory to use for the driver process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
@@ -48,6 +54,27 @@ package object config {
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  private[spark] val DRIVER_LOG_DFS_DIR =
+    ConfigBuilder("spark.driver.log.dfsDir").stringConf.createOptional
+
+  private[spark] val DRIVER_LOG_LAYOUT =
+    ConfigBuilder("spark.driver.log.layout")
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_LOG_PERSISTTODFS =
+    ConfigBuilder("spark.driver.log.persistToDfs.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_DIR = ConfigBuilder("spark.eventLog.dir")
+    .stringConf
+    .createWithDefault(EventLoggingListener.DEFAULT_LOG_DIR)
 
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
@@ -80,11 +107,19 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_PROCESS_TREE_METRICS =
+    ConfigBuilder("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 
   private[spark] val EVENT_LOG_CALLSITE_LONG_FORM =
     ConfigBuilder("spark.eventLog.longForm.enabled").booleanConf.createWithDefault(false)
+
+  private[spark] val EXECUTOR_ID =
+    ConfigBuilder("spark.executor.id").stringConf.createOptional
 
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
@@ -112,7 +147,11 @@ package object config {
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.createWithDefault(false)
 
-  private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
+  private[spark] val EXECUTOR_CORES = ConfigBuilder(SparkLauncher.EXECUTOR_CORES)
+    .intConf
+    .createWithDefault(1)
+
+  private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
     .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
@@ -121,6 +160,15 @@ package object config {
     .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
+    .createOptional
+
+  private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
+    .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +
+      "sharing mode, the maximum amount of CPU cores to request for the application from across " +
+      "the cluster (not from each machine). If not set, the default will be " +
+      "`spark.deploy.defaultCores` on Spark's standalone cluster manager, or infinite " +
+      "(all available cores) on Mesos.")
+    .intConf
     .createOptional
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
@@ -138,10 +186,6 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)
-
-  private[spark] val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
-    .bytesConf(ByteUnit.MiB)
-    .createOptional
 
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
@@ -268,7 +312,7 @@ package object config {
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
       .intConf
-      .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
+      .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
 
   private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
@@ -279,6 +323,10 @@ package object config {
 
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
+    .stringConf
+    .createOptional
+
+  private[spark] val METRICS_CONF = ConfigBuilder("spark.metrics.conf")
     .stringConf
     .createOptional
 
@@ -293,11 +341,6 @@ package object config {
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
-
-  private[spark] val UI_SHOW_CONSOLE_PROGRESS = ConfigBuilder("spark.ui.showConsoleProgress")
-    .doc("When true, show the progress bar in the console.")
-    .booleanConf
-    .createWithDefault(false)
 
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .booleanConf
@@ -323,6 +366,17 @@ package object config {
     .doc("Address of driver endpoints.")
     .stringConf
     .createWithDefault(Utils.localCanonicalHostName())
+
+  private[spark] val DRIVER_PORT = ConfigBuilder("spark.driver.port")
+    .doc("Port of driver endpoints.")
+    .intConf
+    .createWithDefault(0)
+
+  private[spark] val DRIVER_SUPERVISE = ConfigBuilder("spark.driver.supervise")
+    .doc("If true, restarts the driver automatically if it fails with a non-zero exit status. " +
+      "Only has effect in Spark standalone mode or Mesos cluster deploy mode.")
+    .booleanConf
+    .createWithDefault(false)
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
@@ -391,6 +445,11 @@ package object config {
       .regexConf
       .createOptional
 
+  private[spark] val AUTH_SECRET =
+    ConfigBuilder("spark.authenticate.secret")
+      .stringConf
+      .createOptional
+
   private[spark] val AUTH_SECRET_BIT_LENGTH =
     ConfigBuilder("spark.authenticate.secretBitLength")
       .intConf
@@ -406,6 +465,37 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val AUTH_SECRET_FILE =
+    ConfigBuilder("spark.authenticate.secret.file")
+      .doc("Path to a file that contains the authentication secret to use. The secret key is " +
+        "loaded from this path on both the driver and the executors if overrides are not set for " +
+        "either entity (see below). File-based secret keys are only allowed when using " +
+        "Kubernetes.")
+      .stringConf
+      .createOptional
+
+  private[spark] val AUTH_SECRET_FILE_DRIVER =
+    ConfigBuilder("spark.authenticate.secret.driver.file")
+      .doc("Path to a file that contains the authentication secret to use. Loaded by the " +
+        "driver. In Kubernetes client mode it is often useful to set a different secret " +
+        "path for the driver vs. the executors, since the driver may not be running in " +
+        "a pod unlike the executors. If this is set, an accompanying secret file must " +
+        "be specified for the executors. The fallback configuration allows the same path to be " +
+        "used for both the driver and the executors when running in cluster mode. File-based " +
+        "secret keys are only allowed when using Kubernetes.")
+      .fallbackConf(AUTH_SECRET_FILE)
+
+  private[spark] val AUTH_SECRET_FILE_EXECUTOR =
+    ConfigBuilder("spark.authenticate.secret.executor.file")
+      .doc("Path to a file that contains the authentication secret to use. Loaded by the " +
+        "executors only. In Kubernetes client mode it is often useful to set a different " +
+        "secret path for the driver vs. the executors, since the driver may not be running " +
+        "in a pod unlike the executors. If this is set, an accompanying secret file must be " +
+        "specified for the executors. The fallback configuration allows the same path to be " +
+        "used for both the driver and the executors when running in cluster mode. File-based " +
+        "secret keys are only allowed when using Kubernetes.")
+      .fallbackConf(AUTH_SECRET_FILE)
+
   private[spark] val NETWORK_ENCRYPTION_ENABLED =
     ConfigBuilder("spark.network.crypto.enabled")
       .booleanConf
@@ -417,8 +507,8 @@ package object config {
       .doc("The chunk size in bytes during writing out the bytes of ChunkedByteBuffer.")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
-        "The chunk size during writing out the bytes of" +
-        " ChunkedByteBuffer should not larger than Int.MaxValue - 15.")
+        "The chunk size during writing out the bytes of ChunkedByteBuffer should" +
+          s" be less than or equal to ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefault(64 * 1024 * 1024)
 
   private[spark] val CHECKPOINT_COMPRESS =
@@ -490,7 +580,7 @@ package object config {
         "made in creating intermediate shuffle files.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The file buffer size must be greater than 0 and less than" +
+        s"The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
@@ -500,7 +590,7 @@ package object config {
         "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The buffer size must be greater than 0 and less than" +
+        s"The buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
@@ -538,24 +628,6 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
-
-  private[spark] val UI_X_XSS_PROTECTION =
-    ConfigBuilder("spark.ui.xXssProtection")
-      .doc("Value for HTTP X-XSS-Protection response header")
-      .stringConf
-      .createWithDefaultString("1; mode=block")
-
-  private[spark] val UI_X_CONTENT_TYPE_OPTIONS =
-    ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
-      .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
-      .booleanConf
-      .createWithDefault(true)
-
-  private[spark] val UI_STRICT_TRANSPORT_SECURITY =
-    ConfigBuilder("spark.ui.strictTransportSecurity")
-      .doc("Value for HTTP Strict Transport Security Response Header")
-      .stringConf
-      .createOptional
 
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
@@ -669,4 +741,35 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
+    ConfigBuilder("spark.executor.logs.rolling.strategy").stringConf.createWithDefault("")
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_TIME_INTERVAL =
+    ConfigBuilder("spark.executor.logs.rolling.time.interval").stringConf.createWithDefault("daily")
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_MAX_SIZE =
+    ConfigBuilder("spark.executor.logs.rolling.maxSize")
+      .stringConf
+      .createWithDefault((1024 * 1024).toString)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES =
+    ConfigBuilder("spark.executor.logs.rolling.maxRetainedFiles").intConf.createWithDefault(-1)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION =
+    ConfigBuilder("spark.executor.logs.rolling.enableCompression")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val MASTER_REST_SERVER_PORT = ConfigBuilder("spark.master.rest.port")
+    .intConf
+    .createWithDefault(6066)
+
+  private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
+    .intConf
+    .createWithDefault(8080)
 }
