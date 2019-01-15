@@ -55,7 +55,6 @@ public class BlockTransferMessagesSuite {
     byte type = buf.readByte();
     switch (type) {
       case 0: return TestOpenBlocks.decode(buf);
-      case 3: return TestStreamHandle.decode(buf);
       default: throw new IllegalArgumentException("Unknown message type: " + type);
     }
   }
@@ -73,29 +72,11 @@ public class BlockTransferMessagesSuite {
     OpenBlocks openBlocks =
       (OpenBlocks) BlockTransferMessage.Decoder.fromByteBuffer(testOpenBlocks.toByteBuffer());
     verifyOpenBlocks(openBlocks, testOpenBlocks);
-    assertEquals(openBlocks.shuffleBlockBatchFetch, false);
+    assertEquals(openBlocks.fetchContinuousShuffleBlocksInBatch, false);
 
     openBlocks = new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true);
     testOpenBlocks = (TestOpenBlocks) fromByteBuffer(openBlocks.toByteBuffer());
     verifyOpenBlocks(openBlocks, testOpenBlocks);
-  }
-
-  private void verifyStreamHandle(StreamHandle sh1, TestStreamHandle sh2) {
-    assertEquals(sh1.streamId, sh2.streamId);
-    assertEquals(sh1.numChunks, sh2.numChunks);
-  }
-
-  @Test
-  public void checkStreamHandleBackwardCompatibility() {
-    TestStreamHandle testStreamHandle = new TestStreamHandle(12345, 16);
-    StreamHandle streamHandle =
-      (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(testStreamHandle.toByteBuffer());
-    verifyStreamHandle(streamHandle, testStreamHandle);
-    assertArrayEquals(streamHandle.chunkSizes, new int[0]);
-
-    streamHandle = new StreamHandle(12345, 16);
-    testStreamHandle = (TestStreamHandle) fromByteBuffer(streamHandle.toByteBuffer());
-    verifyStreamHandle(streamHandle, testStreamHandle);
   }
 
 }

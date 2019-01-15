@@ -51,7 +51,6 @@ class NettyBlockRpcServer(
   private def mergeShuffleBlockIds(blockIds: Array[String]) = {
     val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
     var shuffleBlockBatchIds = ArrayBuffer.empty[ShuffleBlockBatchId]
-    var chunkSizes = ArrayBuffer.empty[Int]
 
     def sameMapFile(index: Int) = {
       shuffleBlockIds(index).shuffleId == shuffleBlockIds(index - 1).shuffleId &&
@@ -68,12 +67,11 @@ class NettyBlockRpcServer(
             shuffleBlockIds(prev).reduceId,
             shuffleBlockIds(idx - 1).reduceId - shuffleBlockIds(prev).reduceId + 1
           )
-          chunkSizes += (idx - prev)
           prev = idx
         }
       }
     }
-    (shuffleBlockBatchIds.toArray, chunkSizes.toArray)
+    shuffleBlockBatchIds.toArray
   }
 
   override def receive(
@@ -85,20 +83,20 @@ class NettyBlockRpcServer(
 
     message match {
       case openBlocks: OpenBlocks =>
-        val (blockIds, chunkSizes) =
+        val blockIds =
           // When fetch again happens (corrupted), openBlocks could contain ShuffleBlockBatchId
-          if (openBlocks.shuffleBlockBatchFetch
+          if (openBlocks.fetchContinuousShuffleBlocksInBatch
             && BlockId(openBlocks.blockIds.head).isInstanceOf[ShuffleBlockId]) {
             mergeShuffleBlockIds(openBlocks.blockIds)
           } else {
-            (openBlocks.blockIds.map(BlockId.apply), Array[Int]())
+            openBlocks.blockIds.map(BlockId.apply)
           }
         val blocksNum = blockIds.length
         val blocks = for (i <- (0 until blocksNum).view)
           yield blockManager.getBlockData(blockIds(i))
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
         logTrace(s"Registered streamId $streamId with $blocksNum buffers")
-        responseContext.onSuccess(new StreamHandle(streamId, blocksNum, chunkSizes).toByteBuffer)
+        responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
         // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.

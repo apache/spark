@@ -122,8 +122,8 @@ public class ExternalShuffleIntegrationSuite {
   private FetchResult fetchBlocks(
       String execId,
       String[] blockIds,
-      boolean shuffleBlockBatchFetch) throws Exception {
-    return fetchBlocks(execId, blockIds, conf, server.getPort(), shuffleBlockBatchFetch);
+      boolean fetchContinuousShuffleBlocksInBatch) throws Exception {
+    return fetchBlocks(execId, blockIds, conf, server.getPort(), fetchContinuousShuffleBlocksInBatch);
   }
 
   // Fetch a set of blocks from a pre-registered executor. Connects to the server on the given port,
@@ -133,7 +133,7 @@ public class ExternalShuffleIntegrationSuite {
       String[] blockIds,
       TransportConf clientConf,
       int port,
-      boolean shuffleBlockBatchFetch) throws Exception {
+      boolean fetchContinuousShuffleBlocksInBatch) throws Exception {
     final FetchResult res = new FetchResult();
     res.successBlocks = Collections.synchronizedSet(new HashSet<String>());
     res.failedBlocks = Collections.synchronizedSet(new HashSet<String>());
@@ -168,7 +168,7 @@ public class ExternalShuffleIntegrationSuite {
               }
             }
           }
-        }, null, shuffleBlockBatchFetch);
+        }, null, fetchContinuousShuffleBlocksInBatch);
 
       if (!requestsRemaining.tryAcquire(blockIds.length, 5, TimeUnit.SECONDS)) {
         fail("Timeout getting response from the server");

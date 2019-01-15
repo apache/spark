@@ -47,6 +47,8 @@ public abstract class ShuffleClient implements Closeable {
    *                        If it's not <code>null</code>, the remote blocks will be streamed
    *                        into temp shuffle files to reduce the memory usage, otherwise,
    *                        they will be kept in memory.
+   * @param fetchContinuousShuffleBlocksInBatch fetch continuous shuffle blocks in batch if server
+   *                                            side supports.
    */
   public abstract void fetchBlocks(
       String host,
@@ -55,7 +57,7 @@ public abstract class ShuffleClient implements Closeable {
       String[] blockIds,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager,
-      boolean shuffleBlockBatchFetch);
+      boolean fetchContinuousShuffleBlocksInBatch);
 
   /**
    * Get the shuffle MetricsSet from ShuffleClient, this will be used in MetricsSystem to

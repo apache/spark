@@ -76,9 +76,9 @@ public class OneForOneBlockFetcher {
       BlockFetchingListener listener,
       TransportConf transportConf,
       DownloadFileManager downloadFileManager,
-      boolean shuffleBlockBatchFetch) {
+      boolean fetchContinuousShuffleBlocksInBatch) {
     this.client = client;
-    this.openMessage = new OpenBlocks(appId, execId, blockIds, shuffleBlockBatchFetch);
+    this.openMessage = new OpenBlocks(appId, execId, blockIds, fetchContinuousShuffleBlocksInBatch);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
@@ -104,6 +104,27 @@ public class OneForOneBlockFetcher {
     }
   }
 
+  private void initShuffleBlockIdIndices(String[] blockIds) {
+    int[] blockIdIndices = new int[streamHandle.numChunks + 1];
+    int chunkIndex = 0;
+    blockIdIndices[chunkIndex++] = 0;
+
+    String[] blockIdParts = blockIds[0].split("_");
+    int prevMapId = Integer.parseInt(blockIdParts[2]);
+
+    for (int i = 1; i < blockIds.length; i++) {
+      blockIdParts = blockIds[i].split("_");
+      int currMapId = Integer.parseInt(blockIdParts[2]);
+      if (currMapId != prevMapId) {
+        blockIdIndices[chunkIndex++] = i;
+        prevMapId = currMapId;
+      }
+    }
+    blockIdIndices[chunkIndex] = blockIds.length;
+
+    this.blockIdIndices = blockIdIndices;
+  }
+
   /**
    * Begins the fetching process, calling the listener with every block fetched.
    * The given message will be serialized with the Java serializer, and the RPC must return a
@@ -122,16 +143,14 @@ public class OneForOneBlockFetcher {
           logger.trace("Successfully opened blocks {}, preparing to fetch chunks.", streamHandle);
 
           // initiate blockIdIndices
-          blockIdIndices = new int[streamHandle.numChunks + 1];
-          blockIdIndices[0] = 0;
-          if (streamHandle.chunkSizes.length == 0) {
-            for (int i = 1; i < blockIdIndices.length; i++) {
+          if (streamHandle.numChunks == blockIds.length) {
+            blockIdIndices = new int[streamHandle.numChunks + 1];
+            for (int i = 0; i < blockIdIndices.length; i++) {
               blockIdIndices[i] = i;
             }
           } else {
-            for (int i = 1; i < blockIdIndices.length; i++) {
-              blockIdIndices[i] = blockIdIndices[i - 1] + streamHandle.chunkSizes[i - 1];
-            }
+            // server fetches continuous shuffle blocks in batch
+            initShuffleBlockIdIndices(blockIds);
           }
           assert blockIdIndices[blockIdIndices.length - 1] == blockIds.length;
 
