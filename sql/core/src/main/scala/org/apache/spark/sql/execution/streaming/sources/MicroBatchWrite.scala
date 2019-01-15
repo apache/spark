@@ -18,16 +18,15 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.{BatchWriteSupport, DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
 
 /**
- * A [[BatchWriteSupport]] used to hook V2 stream writers into a microbatch plan. It implements
+ * A [[BatchWrite]] used to hook V2 stream writers into a microbatch plan. It implements
  * the non-streaming interface, forwarding the epoch ID determined at construction to a wrapped
  * streaming write support.
  */
-class MicroBatchWritSupport(eppchId: Long, val writeSupport: StreamingWriteSupport)
-  extends BatchWriteSupport {
+class MicroBatchWrite(eppchId: Long, val writeSupport: StreamingWriteSupport) extends BatchWrite {
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writeSupport.commit(eppchId, messages)

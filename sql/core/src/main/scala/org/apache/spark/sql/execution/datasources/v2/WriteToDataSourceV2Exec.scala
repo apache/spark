@@ -35,7 +35,7 @@ import org.apache.spark.util.{LongAccumulator, Utils}
  * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
  */
 @deprecated("Use specific logical plans like AppendData instead", "2.4.0")
-case class WriteToDataSourceV2(writeSupport: BatchWriteSupport, query: LogicalPlan)
+case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
   extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
@@ -44,7 +44,7 @@ case class WriteToDataSourceV2(writeSupport: BatchWriteSupport, query: LogicalPl
 /**
  * The physical plan for writing data into data source v2.
  */
-case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: SparkPlan)
+case class WriteToDataSourceV2Exec(batchWrite: BatchWrite, query: SparkPlan)
   extends UnaryExecNode {
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
@@ -53,13 +53,13 @@ case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: Spark
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = writeSupport.createBatchWriterFactory()
-    val useCommitCoordinator = writeSupport.useCommitCoordinator
+    val writerFactory = batchWrite.createBatchWriterFactory()
+    val useCommitCoordinator = batchWrite.useCommitCoordinator
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
     val totalNumRowsAccumulator = new LongAccumulator()
 
-    logInfo(s"Start processing data source write support: $writeSupport. " +
+    logInfo(s"Start processing data source write support: $batchWrite. " +
       s"The input RDD has ${messages.length} partitions.")
 
     try {
@@ -72,26 +72,26 @@ case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: Spark
           val commitMessage = result.writerCommitMessage
           messages(index) = commitMessage
           totalNumRowsAccumulator.add(result.numRows)
-          writeSupport.onDataWriterCommit(commitMessage)
+          batchWrite.onDataWriterCommit(commitMessage)
         }
       )
 
-      logInfo(s"Data source write support $writeSupport is committing.")
-      writeSupport.commit(messages)
-      logInfo(s"Data source write support $writeSupport committed.")
+      logInfo(s"Data source write support $batchWrite is committing.")
+      batchWrite.commit(messages)
+      logInfo(s"Data source write support $batchWrite committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
       case cause: Throwable =>
-        logError(s"Data source write support $writeSupport is aborting.")
+        logError(s"Data source write support $batchWrite is aborting.")
         try {
-          writeSupport.abort(messages)
+          batchWrite.abort(messages)
         } catch {
           case t: Throwable =>
-            logError(s"Data source write support $writeSupport failed to abort.")
+            logError(s"Data source write support $batchWrite failed to abort.")
             cause.addSuppressed(t)
             throw new SparkException("Writing job failed.", cause)
         }
-        logError(s"Data source write support $writeSupport aborted.")
+        logError(s"Data source write support $batchWrite aborted.")
         cause match {
           // Only wrap non fatal exceptions.
           case NonFatal(e) => throw new SparkException("Writing job aborted.", e)

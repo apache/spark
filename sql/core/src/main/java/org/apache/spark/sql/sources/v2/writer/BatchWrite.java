@@ -38,7 +38,7 @@ import org.apache.spark.annotation.Evolving;
  * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
 @Evolving
-public interface BatchWriteSupport {
+public interface BatchWrite {
 
   /**
    * Creates a writer factory which will be serialized and sent to executors.

@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, Logi
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -241,33 +242,38 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
-    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val source = cls.getConstructor().newInstance().asInstanceOf[DataSourceV2]
-      source match {
-        case provider: BatchWriteSupportProvider =>
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            source,
-            df.sparkSession.sessionState.conf)
-          val options = sessionOptions ++ extraOptions
-
+    val session = df.sparkSession
+    val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
+    if (classOf[TableProvider].isAssignableFrom(cls)) {
+      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        provider, session.sessionState.conf)
+      val options = sessionOptions ++ extraOptions
+      val dsOptions = new DataSourceOptions(options.asJava)
+      provider.getTable(dsOptions) match {
+        case table: SupportsBatchWrite =>
           if (mode == SaveMode.Append) {
-            val relation = DataSourceV2Relation.createRelationForWrite(source, options)
+            val relation = DataSourceV2Relation.create(table, options)
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }
-
           } else {
-            val writer = provider.createBatchWriteSupport(
-              UUID.randomUUID().toString,
-              df.logicalPlan.output.toStructType,
-              mode,
-              new DataSourceOptions(options.asJava))
+            val writeBuilder = table.newWriteBuilder(dsOptions)
+              .withQueryId(UUID.randomUUID().toString)
+              .withInputDataSchema(df.logicalPlan.schema)
+            writeBuilder match {
+              case s: SupportsSaveMode =>
+                val write = s.mode(mode).buildForBatch()
+                // It can only return null with `SupportsSaveMode`. We can clean it up after
+                // removing `SupportsSaveMode`.
+                if (write != null) {
+                  runCommand(df.sparkSession, "save") {
+                    WriteToDataSourceV2(write, df.logicalPlan)
+                  }
+                }
 
-            if (writer.isPresent) {
-              runCommand(df.sparkSession, "save") {
-                WriteToDataSourceV2(writer.get, df.logicalPlan)
-              }
+              case _ => throw new AnalysisException(
+                s"data source ${table.name} does not support SaveMode $mode")
             }
           }
 
