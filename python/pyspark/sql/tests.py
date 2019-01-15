@@ -1792,6 +1792,31 @@ class SQLTests(ReusedSQLTestCase):
         self.assertRaises(IndexError, lambda: struct1[9])
         self.assertRaises(TypeError, lambda: struct1[9.9])
 
+    def test_struct_type_to_internal(self):
+        # Verify when not needSerializeAnyField
+        struct = StructType().add("b", StringType()).add("a", StringType())
+        string_a = "value_a"
+        string_b = "value_b"
+        row = Row(a=string_a, b=string_b)
+        tupleResult = struct.toInternal(row)
+        # Reversed because of struct
+        self.assertEqual(tupleResult, (string_b, string_a))
+
+        # Verify when needSerializeAnyField
+        struct1 = StructType().add("b", TimestampType()).add("a", TimestampType())
+        timestamp_a = datetime.datetime(2018, 1, 1, 1, 1, 1)
+        timestamp_b = datetime.datetime(2019, 1, 1, 1, 1, 1)
+        row = Row(a=timestamp_a, b=timestamp_b)
+        tupleResult = struct1.toInternal(row)
+        # Reversed because of struct
+        d = 1000000
+        ts_b = tupleResult[0]
+        new_timestamp_b = datetime.datetime.fromtimestamp(ts_b // d).replace(microsecond=ts_b % d)
+        ts_a = tupleResult[1]
+        new_timestamp_a = datetime.datetime.fromtimestamp(ts_a // d).replace(microsecond=ts_a % d)
+        self.assertEqual(timestamp_a, new_timestamp_a)
+        self.assertEqual(timestamp_b, new_timestamp_b)
+
     def test_parse_datatype_string(self):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
         for k, t in _all_atomic_types.items():
