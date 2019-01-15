@@ -1011,7 +1011,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Locality should be used for bulk offers even with delay scheduling off") {
     val conf = new SparkConf()
-      .set("spark.locality.wait", "0")
+      .set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
     val clock = new ManualClock()
@@ -1058,7 +1058,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("With delay scheduling off, tasks can be run at any locality level immediately") {
     val conf = new SparkConf()
-      .set("spark.locality.wait", "0")
+      .set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
 
     // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
