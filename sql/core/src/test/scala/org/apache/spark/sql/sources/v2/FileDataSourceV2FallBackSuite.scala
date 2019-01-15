@@ -66,14 +66,14 @@ class FileDataSourceV2FallBackSuite extends QueryTest with ParquetTest with Shar
         "ParQuet,bar,foo",
         s"foobar,$dummyParquetReaderV2"
       ).foreach { fallbackReaders =>
-        withSQLConf(SQLConf.USE_V1_READERS.key -> fallbackReaders) {
+        withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> fallbackReaders) {
           // Reading file should fall back to v1 and succeed.
           checkAnswer(spark.read.format(dummyParquetReaderV2).load(path), df)
           checkAnswer(sql(s"SELECT * FROM parquet.`$path`"), df)
         }
       }
 
-      withSQLConf(SQLConf.USE_V1_READERS.key -> "foo,bar") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "foo,bar") {
         // Dummy File reader should fail as DISABLED_V2_FILE_DATA_SOURCE_READERS doesn't include it.
         val exception = intercept[AnalysisException] {
           spark.read.format(dummyParquetReaderV2).load(path)
