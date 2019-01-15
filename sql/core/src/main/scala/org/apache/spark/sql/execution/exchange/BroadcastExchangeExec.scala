@@ -62,11 +62,11 @@ case class BroadcastExchangeExec(
   @transient
   private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     // create relative sql metrics and add them into driverMetrics
-    driverMetrics ++= Map(
-      "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
-      "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
-      "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
-      "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
+    driverMetrics("dataSize") = SQLMetrics.createMetric(sparkContext, "data size (bytes)")
+    driverMetrics("collectTime") = SQLMetrics.createMetric(sparkContext, "time to collect (ms)")
+    driverMetrics("buildTime") = SQLMetrics.createMetric(sparkContext, "time to build (ms)")
+    driverMetrics("broadcastTime") =
+      SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)")
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
@@ -111,7 +111,7 @@ case class BroadcastExchangeExec(
           val broadcasted = sparkContext.broadcast(relation)
           driverMetrics("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
 
-          sendDriverMetrics()
+          sendDriverMetrics(executionId)
           broadcasted
         } catch {
           // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw

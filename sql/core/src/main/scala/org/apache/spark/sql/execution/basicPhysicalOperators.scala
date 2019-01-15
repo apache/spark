@@ -668,9 +668,8 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
     // create relative sql metrics and add them into driverMetrics
-    driverMetrics ++= Map(
-      "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
-      "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
+    driverMetrics("dataSize") = SQLMetrics.createMetric(sparkContext, "data size (bytes)")
+    driverMetrics("collectTime") = SQLMetrics.createMetric(sparkContext, "time to collect (ms)")
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
@@ -685,7 +684,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         driverMetrics("dataSize") += dataSize
 
-        sendDriverMetrics()
+        sendDriverMetrics(executionId)
         rows
       }
     }(SubqueryExec.executionContext)

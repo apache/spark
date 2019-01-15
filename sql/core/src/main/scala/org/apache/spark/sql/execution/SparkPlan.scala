@@ -89,8 +89,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Send the driver-side metrics.
    */
-  def sendDriverMetrics(): Unit = {
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+  def sendDriverMetrics(executionId: String): Unit = {
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
   }
 

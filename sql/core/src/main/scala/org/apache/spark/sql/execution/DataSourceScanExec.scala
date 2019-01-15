@@ -168,9 +168,8 @@ case class FileSourceScanExec(
       relation.sparkSession.sessionState.conf)
 
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
-    driverMetrics ++= Map(
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
-      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time (ms)"))
+    driverMetrics("numFiles") = SQLMetrics.createMetric(sparkContext, "number of files")
+    driverMetrics("metadataTime") = SQLMetrics.createMetric(sparkContext, "metadata time (ms)")
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
@@ -304,7 +303,10 @@ case class FileSourceScanExec(
       case _ =>
         createNonBucketedReadRDD(readFile, selectedPartitions, relation)
     }
-    sendDriverMetrics()
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    sendDriverMetrics(executionId)
+
     readRDD
   }
 
