@@ -631,9 +631,19 @@ object ScalaReflection extends ScalaReflection {
               "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
           }
 
+          // Only trust primitives being not-nullable when the accessor method agrees.
+          // With mixed reified/erased generics in Scala, it's possible to get unexpected nulls
+          // where a generic type argument says it's a primitive type but the underlying field is
+          // a reference type.
+          val fieldNullable =
+            Invoke.resolveTargetMethod(
+              receiverType = inputObject.dataType,
+              functionName = fieldName)
+            .map(!_.getReturnType.isPrimitive)
+            .getOrElse(true)
           val fieldValue = Invoke(
             AssertNotNull(inputObject, walkedTypePath), fieldName, dataTypeFor(fieldType),
-            returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+            returnNullable = fieldNullable)
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           expressions.Literal(fieldName) ::

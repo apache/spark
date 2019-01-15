@@ -282,6 +282,29 @@ case class StaticInvoke(
   }
 }
 
+object Invoke {
+  def encodeFunctionName(functionName: String): String = {
+    TermName(functionName).encodedName.toString
+  }
+
+  def resolveTargetMethod(
+      receiverType: DataType,
+      functionName: String,
+      arguments: Seq[Expression] = Nil): Option[Method] = receiverType match {
+    case ObjectType(cls) =>
+      // TODO: Should verify if argument list matches, and reject the symbol can be resolved to
+      // to multiple target functions.
+      val encodedFunctionName = encodeFunctionName(functionName)
+      val m = cls.getMethods.find(_.getName == encodedFunctionName)
+      if (m.isEmpty) {
+        sys.error(s"Couldn't find $encodedFunctionName on $cls")
+      } else {
+        m
+      }
+    case _ => None
+  }
+}
+
 /**
  * Calls the specified function on an object, optionally passing arguments.  If the `targetObject`
  * expression evaluates to null then null will be returned.
@@ -307,24 +330,17 @@ case class Invoke(
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends InvokeLike {
+  import Invoke._
+
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
-  private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
+  private lazy val encodedFunctionName = encodeFunctionName(functionName)
 
-  @transient lazy val method = targetObject.dataType match {
-    case ObjectType(cls) =>
-      val m = cls.getMethods.find(_.getName == encodedFunctionName)
-      if (m.isEmpty) {
-        sys.error(s"Couldn't find $encodedFunctionName on $cls")
-      } else {
-        m
-      }
-    case _ => None
-  }
+  @transient lazy val method = resolveTargetMethod(targetObject.dataType, functionName, arguments)
 
   override def eval(input: InternalRow): Any = {
     val obj = targetObject.eval(input)
