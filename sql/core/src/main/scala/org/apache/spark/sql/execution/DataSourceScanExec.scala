@@ -179,7 +179,7 @@ case class FileSourceScanExec(
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
-    driverMetrics("filesNum") = ret.map(_.files.size.toLong).sum
+    driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
     val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
     driverMetrics("metadataTime") = timeTakenMs
     ret
@@ -319,7 +319,7 @@ case class FileSourceScanExec(
 
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "filesNum" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
       "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
