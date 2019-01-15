@@ -27,9 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -142,17 +140,6 @@ class SingleDirectoryDataWriter(
   }
 }
 
-/** A function that converts the empty string to null for partition values. */
-case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
-  override def convert(v: UTF8String): UTF8String = if (v.numChars() == 0) null else v
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c =>
-      s"""if ($c.numChars() == 0) {
-         |${ev.isNull} = true;
-         |${ev.value} = null; }
-         |else ${ev.value} = $c;""".stripMargin)
-  }
-}
 /**
  * Writes data to using dynamic partition writes, meaning this single function can write to
  * multiple directories (partitions) or files (bucketing).
@@ -182,13 +169,8 @@ class DynamicPartitionDataWriter(
 
   /** Extracts the partition values out of an input row. */
   private lazy val getPartitionValues: InternalRow => UnsafeRow = {
-    val partitionExpression =
-      toBoundExprs(description.partitionColumns, description.allColumns).map {
-        case e: Expression if e.dataType == StringType =>
-          Empty2Null(e)
-        case other: Expression => other
-      }
-    val proj = UnsafeProjection.create(partitionExpression)
+    val proj = UnsafeProjection.create(description.normalizedPartitionExpression,
+      description.allColumns)
     row => proj(row)
   }
 
@@ -302,6 +284,7 @@ class WriteJobDescription(
     val allColumns: Seq[Attribute],
     val dataColumns: Seq[Attribute],
     val partitionColumns: Seq[Attribute],
+    val normalizedPartitionExpression: Seq[Expression],
     val bucketIdExpression: Option[Expression],
     val path: String,
     val customPartitionLocations: Map[TablePartitionSpec, String],
