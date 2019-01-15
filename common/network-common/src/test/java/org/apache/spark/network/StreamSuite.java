@@ -31,7 +31,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.io.Files;
-import io.netty.channel.Channel;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -71,12 +70,12 @@ public class StreamSuite {
     final TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     final StreamManager streamManager = new StreamManager() {
       @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex, Channel channel) {
+      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
         throw new UnsupportedOperationException();
       }
 
       @Override
-      public ManagedBuffer openStream(String streamId, Channel channel) {
+      public ManagedBuffer openStream(String streamId) {
         return testData.openStream(conf, streamId);
       }
     };

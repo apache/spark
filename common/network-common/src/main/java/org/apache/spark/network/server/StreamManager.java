@@ -42,10 +42,9 @@ public abstract class StreamManager {
    * The returned ManagedBuffer will be release()'d after being written to the network.
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
-   * @param channel The connection used to serve chunk request.
    * @param chunkIndex 0-indexed chunk of the stream that's requested
    */
-  public abstract ManagedBuffer getChunk(long streamId, int chunkIndex, Channel channel);
+  public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
   /**
    * Called in response to a stream() request. The returned data is streamed to the client
@@ -55,10 +54,9 @@ public abstract class StreamManager {
    * {@link #getChunk(long, int)} method.
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
-   * @param channel The connection used to serve stream request.
    * @return A managed buffer for the stream, or null if the stream was not found.
    */
-  public ManagedBuffer openStream(String streamId, Channel channel) {
+  public ManagedBuffer openStream(String streamId) {
     throw new UnsupportedOperationException();
   }
 
