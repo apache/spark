@@ -1136,7 +1136,7 @@ private[spark] class Client(
     val amService = new Thread("Unmanaged Application Master Service") {
       override def run(): Unit = {
         appMaster.runUnmanaged(rpcEnv, report.getCurrentApplicationAttemptId,
-          unManagedAMStagingDirPath)
+          unManagedAMStagingDirPath, cachedResourcesConf)
       }
     }
     amService.setDaemon(true)

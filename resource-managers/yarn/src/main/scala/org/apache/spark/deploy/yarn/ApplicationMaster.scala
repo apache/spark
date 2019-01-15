@@ -62,7 +62,13 @@ private[spark] class ApplicationMaster(
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
-  private val appAttemptId = YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
+  private val appAttemptId =
+    if (System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name()) != null) {
+      YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
+    } else {
+      null
+    }
+
   private val isClusterMode = args.userClass != null
 
   private val securityMgr = new SecurityManager(sparkConf)
@@ -145,15 +151,8 @@ private[spark] class ApplicationMaster(
    * Load the list of localized files set by the client, used when launching executors. This should
    * be called in a context where the needed credentials to access HDFS are available.
    */
-  private def prepareLocalResources(): Map[String, LocalResource] = {
+  private def prepareLocalResources(distCacheConf: SparkConf): Map[String, LocalResource] = {
     logInfo("Preparing Local resources")
-    val distCacheConf = new SparkConf(false)
-    if (args.distCacheConf != null) {
-      Utils.getPropertiesFromFile(args.distCacheConf).foreach { case (k, v) =>
-        distCacheConf.set(k, v)
-      }
-    }
-
     val resources = HashMap[String, LocalResource]()
 
     def setupDistributedCache(
@@ -285,7 +284,8 @@ private[spark] class ApplicationMaster(
   def runUnmanaged(
       clientRpcEnv: RpcEnv,
       appAttemptId: ApplicationAttemptId,
-      stagingDir: Path): Unit = {
+      stagingDir: Path,
+      cachedResourcesConf: SparkConf): Unit = {
     try {
       new CallerContext(
         "APPMASTER", sparkConf.get(APP_CALLER_CONTEXT),
@@ -299,7 +299,7 @@ private[spark] class ApplicationMaster(
       registerAM(Utils.localHostName, -1, sparkConf,
         sparkConf.getOption("spark.driver.appUIAddress"), appAttemptId)
       addAmIpFilter(Some(driverRef), ProxyUriUtils.getPath(appAttemptId.getApplicationId))
-      createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId)
+      createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId, cachedResourcesConf)
       reporterThread.join()
     } catch {
       case e: Exception =>
@@ -427,7 +427,8 @@ private[spark] class ApplicationMaster(
       driverRef: RpcEndpointRef,
       _sparkConf: SparkConf,
       rpcEnv: RpcEnv,
-      appAttemptId: ApplicationAttemptId): Unit = {
+      appAttemptId: ApplicationAttemptId,
+      distCacheConf: SparkConf): Unit = {
     // In client mode, the AM may be restarting after delegation tokens have reached their TTL. So
     // always contact the driver to get the current set of valid tokens, so that local resources can
     // be initialized below.
@@ -441,7 +442,7 @@ private[spark] class ApplicationMaster(
     val appId = appAttemptId.getApplicationId().toString()
     val driverUrl = RpcEndpointAddress(driverRef.address.host, driverRef.address.port,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
-    val localResources = prepareLocalResources()
+    val localResources = prepareLocalResources(distCacheConf)
 
     // Before we initialize the allocator, let's log the information about how executors will
     // be run up front, to avoid printing this out for every single executor being launched.
@@ -500,7 +501,7 @@ private[spark] class ApplicationMaster(
         val driverRef = rpcEnv.setupEndpointRef(
           RpcAddress(host, port),
           YarnSchedulerBackend.ENDPOINT_NAME)
-        createAllocator(driverRef, userConf, rpcEnv, appAttemptId)
+        createAllocator(driverRef, userConf, rpcEnv, appAttemptId, distCacheConf)
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
@@ -538,7 +539,7 @@ private[spark] class ApplicationMaster(
       YarnSchedulerBackend.ENDPOINT_NAME)
     addAmIpFilter(Some(driverRef),
       System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
-    createAllocator(driverRef, sparkConf, rpcEnv, appAttemptId)
+    createAllocator(driverRef, sparkConf, rpcEnv, appAttemptId, distCacheConf)
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
@@ -632,6 +633,16 @@ private[spark] class ApplicationMaster(
     logInfo(s"Started progress reporter thread with (heartbeat : $heartbeatInterval, " +
             s"initial allocation : $initialAllocationInterval) intervals")
     t
+  }
+
+  private def distCacheConf(): SparkConf = {
+    val distCacheConf = new SparkConf(false)
+    if (args.distCacheConf != null) {
+      Utils.getPropertiesFromFile(args.distCacheConf).foreach { case (k, v) =>
+        distCacheConf.set(k, v)
+      }
+    }
+    distCacheConf
   }
 
   /**
