@@ -24,6 +24,7 @@ import scala.util.Random
 import org.scalatest.Assertions
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.EncryptionFunSuite
@@ -68,7 +69,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
   encryptionTest("Accessing TorrentBroadcast variables in a local cluster") { conf =>
     val numSlaves = 4
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.broadcast.compress", "true")
+    conf.set(config.BROADCAST_COMPRESS, true)
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
@@ -145,7 +146,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
   encryptionTest("Cache broadcast to disk") { conf =>
     conf.setMaster("local")
       .setAppName("test")
-      .set("spark.memory.storageFraction", "0.0")
+      .set(config.MEMORY_STORAGE_FRACTION, 0.0)
     sc = new SparkContext(conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
@@ -172,7 +173,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName("test")
-      .set("spark.memory.storageFraction", "0.0")
+      .set(config.MEMORY_STORAGE_FRACTION, 0.0)
 
     sc = new SparkContext(conf)
     val list = List[Int](1, 2, 3, 4)

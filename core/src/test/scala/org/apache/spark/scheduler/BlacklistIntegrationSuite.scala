@@ -85,7 +85,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     extraConfs = Seq(
        config.BLACKLIST_ENABLED.key -> "true",
       // just to avoid this test taking too long
-      "spark.locality.wait" -> "10ms"
+      config.LOCALITY_WAIT.key -> "10ms"
     )
   ) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)

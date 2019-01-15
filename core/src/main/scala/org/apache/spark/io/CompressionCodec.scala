@@ -27,6 +27,7 @@ import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -51,7 +52,7 @@ trait CompressionCodec {
 
 private[spark] object CompressionCodec {
 
-  private val configKey = "spark.io.compression.codec"
+  private val configKey = IO_COMPRESSION_CODEC.key
 
   private[spark] def supportsConcatenationOfSerializedStreams(codec: CompressionCodec): Boolean = {
     (codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
@@ -65,7 +66,7 @@ private[spark] object CompressionCodec {
     "zstd" -> classOf[ZStdCompressionCodec].getName)
 
   def getCodecName(conf: SparkConf): String = {
-    conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
+    conf.get(IO_COMPRESSION_CODEC)
   }
 
   def createCodec(conf: SparkConf): CompressionCodec = {
@@ -117,7 +118,7 @@ private[spark] object CompressionCodec {
 class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.getSizeAsBytes("spark.io.compression.lz4.blockSize", "32k").toInt
+    val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
     new LZ4BlockOutputStream(s, blockSize)
   }
 
@@ -166,7 +167,7 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.getSizeAsBytes("spark.io.compression.snappy.blockSize", "32k").toInt
+    val blockSize = conf.get(IO_COMPRESSION_SNAPPY_BLOCKSIZE).toInt
     new SnappyOutputStream(s, blockSize)
   }
 
@@ -185,10 +186,10 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 @DeveloperApi
 class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
-  private val bufferSize = conf.getSizeAsBytes("spark.io.compression.zstd.bufferSize", "32k").toInt
+  private val bufferSize = conf.get(IO_COMPRESSION_ZSTD_BUFFERSIZE).toInt
   // Default compression level for zstd compression to 1 because it is
   // fastest of all with reasonably high compression ratio.
-  private val level = conf.getInt("spark.io.compression.zstd.level", 1)
+  private val level = conf.get(IO_COMPRESSION_ZSTD_LEVEL)
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     // Wrap the zstd output stream in a buffered output stream, so that we can

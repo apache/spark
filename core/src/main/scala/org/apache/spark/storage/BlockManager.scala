@@ -233,8 +233,7 @@ private[spark] class BlockManager(
     shuffleClient.init(appId)
 
     blockReplicationPolicy = {
-      val priorityClass = conf.get(
-        "spark.storage.replication.policy", classOf[RandomBlockReplicationPolicy].getName)
+      val priorityClass = conf.get(config.STORAGE_REPLICATION_POLICY)
       val clazz = Utils.classForName(priorityClass)
       val ret = clazz.getConstructor().newInstance().asInstanceOf[BlockReplicationPolicy]
       logInfo(s"Using $priorityClass for block replication policy")
@@ -1339,7 +1338,7 @@ private[spark] class BlockManager(
    */
   private def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = {
     peerFetchLock.synchronized {
-      val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds
+      val cachedPeersTtl = conf.get(config.STORAGE_CACHED_PEERS_TTL) // milliseconds
       val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
       if (cachedPeers == null || forceFetch || timeout) {
         cachedPeers = master.getPeers(blockManagerId).sortBy(_.hashCode)
@@ -1393,7 +1392,7 @@ private[spark] class BlockManager(
       classTag: ClassTag[_],
       existingReplicas: Set[BlockManagerId] = Set.empty): Unit = {
 
-    val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
+    val maxReplicationFailures = conf.get(config.STORAGE_MAX_REPLICATION_FAILURE)
     val tLevel = StorageLevel(
       useDisk = level.useDisk,
       useMemory = level.useMemory,
