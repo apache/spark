@@ -29,7 +29,9 @@ import org.apache.spark.util.Utils
 class SparkContextSchedulerCreationSuite
   extends SparkFunSuite with LocalSparkContext with PrivateMethodTester with Logging {
 
-  def createTaskScheduler(master: String)(body: TaskSchedulerImpl => Unit): Unit =
+  def noOp(taskSchedulerImpl: TaskSchedulerImpl): Unit = {}
+
+  def createTaskScheduler(master: String)(body: TaskSchedulerImpl => Unit = noOp): Unit =
     createTaskScheduler(master, "client")(body)
 
   def createTaskScheduler(master: String, deployMode: String)(
@@ -56,11 +58,9 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
-  def noOp(taskSchedulerImpl: TaskSchedulerImpl): Unit = {}
-
   test("bad-master") {
     val e = intercept[SparkException] {
-      createTaskScheduler("localhost:1234")(noOp)
+      createTaskScheduler("localhost:1234")()
     }
     assert(e.getMessage.contains("Could not parse Master URL"))
   }
@@ -117,14 +117,14 @@ class SparkContextSchedulerCreationSuite
 
   test("bad-local-n") {
     val e = intercept[SparkException] {
-      createTaskScheduler("local[2*]")(noOp)
+      createTaskScheduler("local[2*]")()
     }
     assert(e.getMessage.contains("Could not parse Master URL"))
   }
 
   test("bad-local-n-failures") {
     val e = intercept[SparkException] {
-      createTaskScheduler("local[2*,4]")(noOp)
+      createTaskScheduler("local[2*,4]")()
     }
     assert(e.getMessage.contains("Could not parse Master URL"))
   }
