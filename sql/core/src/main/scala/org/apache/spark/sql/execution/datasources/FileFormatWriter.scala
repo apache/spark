@@ -119,7 +119,7 @@ object FileFormatWriter extends Logging {
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
     val normalizedPartitionExpression = partitionColumns.map { attr =>
-      if (attr.dataType == StringType) Empty2Null(attr) else attr
+      if (attr.dataType == StringType && attr.nullable) Empty2Null(attr) else attr
     }
 
     val description = new WriteJobDescription(
