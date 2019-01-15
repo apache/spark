@@ -56,7 +56,7 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
-  def noOp(taskSchedulerImpl: TaskSchedulerImpl): Unit = ()
+  def noOp(taskSchedulerImpl: TaskSchedulerImpl): Unit = {}
 
   test("bad-master") {
     val e = intercept[SparkException] {
