@@ -26,6 +26,9 @@ import org.apache.spark.sql.types._
 /**
  * A benchmark that compares the performance of different ways to evaluate SQL IN expressions.
  *
+ * Specifically, this class compares the if-based approach, which might iterate through all items
+ * inside the IN value list, to other options with better worst-case time complexities (e.g., sets).
+ *
  * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
