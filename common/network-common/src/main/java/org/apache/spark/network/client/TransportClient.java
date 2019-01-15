@@ -124,6 +124,9 @@ public class TransportClient implements Closeable {
    * to be returned in the same order that they were requested, assuming only a single
    * TransportClient is used to fetch the chunks.
    *
+   * OpenBlocks and following FetchChunk requests for a stream should be sent by the same
+   * TransportClient to avoid potential memory leak on server side.
+   *
    * @param streamId Identifier that refers to a stream in the remote StreamManager. This should
    *                 be agreed upon by client and server beforehand.
    * @param chunkIndex 0-based index of the chunk to fetch

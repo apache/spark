@@ -59,9 +59,10 @@ public class StreamStatesCleanupSuite {
 
     // Open blocks
     handler.receive(reverseClient, openBlocks, callback);
+    assertEquals(1, streamManager.getStreamCount());
+
     // Connection closed before any FetchChunk request received
     streamManager.connectionTerminated(reverseClient.getChannel());
-
     assertEquals(0, streamManager.getStreamCount());
   }
 
