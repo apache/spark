@@ -57,11 +57,20 @@
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
+      <artifactId>hive-exec</artifactId>
+      <classifier>core</classifier>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-jdbc</artifactId>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive.shims</groupId>
+      <artifactId>hive-shims-common</artifactId>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>

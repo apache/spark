@@ -171,11 +171,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
           // For more details, see https://orc.apache.org/specification/
           assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
-          if (isSelective) {
-            assert(stripe.getColumns(2).getKind === DIRECT_V2)
-          } else {
-            assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
-          }
+          assert(stripe.getColumns(2).getKind === DIRECT_V2)
           // Floating point types are stored with DIRECT encoding in IEEE 754 floating
           // point bit layout.
           assert(stripe.getColumns(3).getKind === DIRECT)

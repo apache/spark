@@ -393,12 +393,38 @@
     -->
     <dependency>
       <groupId>${hive.group}</groupId>
+      <artifactId>hive-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
+      <classifier>core</classifier>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-serde</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-storage-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive.shims</groupId>
+      <artifactId>hive-shims-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive.shims</groupId>
+      <artifactId>hive-shims-0.23</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>

@@ -51,6 +51,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -187,7 +188,15 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = state.getConf
+  def conf: HiveConf = {
+    val hiveConf = state.getConf
+    // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
+    // hive.metastore.schema.verification from false to true since 2.0
+    // For details, see the JIRA HIVE-6113, HIVE-12463 and HIVE-1841
+    hiveConf.setBoolean("hive.metastore.schema.verification", false)
+    hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
+    hiveConf
+  }
 
   private val userName = conf.getUser
 
@@ -433,6 +442,8 @@ private[hive] class HiveClientImpl(
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
+          case HiveTableType.MATERIALIZED_VIEW =>
+            throw new AnalysisException("Hive materialized view is not supported.")
           case HiveTableType.INDEX_TABLE =>
             throw new AnalysisException("Hive index table is not supported.")
         },

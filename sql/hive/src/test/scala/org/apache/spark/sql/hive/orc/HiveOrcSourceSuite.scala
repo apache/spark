@@ -149,7 +149,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   test("Check BloomFilter creation") {
     Seq(true, false).foreach { convertMetastore =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
-        testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER) // Before ORC-101
+        testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER_UTF8)
       }
     }
   }

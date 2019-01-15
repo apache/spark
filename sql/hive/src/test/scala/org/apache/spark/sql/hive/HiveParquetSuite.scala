@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.HadoopReadOptions
+import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.hadoop.util.HadoopInputFile
+
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetTest, SpecificParquetRecordReaderBase}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
@@ -104,6 +110,22 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
         checkAnswer(sql(s"SELECT m FROM $targetTable"),
           Row(Map(1 -> "a")) :: Row(Map.empty[Int, String]) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-24766 decimal type should generate stats after upgrade Hive's parquet to 1.10.0") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      sql(s"INSERT OVERWRITE LOCAL DIRECTORY '$path' STORED AS PARQUET " +
+        "SELECT CAST(1 AS decimal) AS decimal1")
+
+      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+      val conf = new Configuration()
+      val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
+      val parquetReadOptions = HadoopReadOptions.builder(conf).build()
+      val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
+      m.close()
+      assert(!m.getFooter.getBlocks.get(0).getColumns.get(0).getStatistics.isEmpty)
     }
   }
 }

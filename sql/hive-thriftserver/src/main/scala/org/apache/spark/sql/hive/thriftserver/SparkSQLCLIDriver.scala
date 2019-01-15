@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
@@ -37,6 +36,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
+import org.slf4j.LoggerFactory
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -298,7 +298,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
+  private val LOG = LoggerFactory.getLogger(classOf[SparkSQLCLIDriver])
 
   private val console = new SessionState.LogHelper(LOG)
 

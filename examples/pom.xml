@@ -110,7 +110,7 @@
       <version>3.7.0</version>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-hadoop-bundle</artifactId>
       <scope>provided</scope>
     </dependency>

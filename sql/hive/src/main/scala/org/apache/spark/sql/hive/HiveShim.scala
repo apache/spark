@@ -24,19 +24,19 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.base.Objects
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
+import org.apache.hadoop.hive.ql.exec.{SerializationUtilities, UDF}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
-import org.apache.hive.com.esotericsoftware.kryo.Kryo
-import org.apache.hive.com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
@@ -168,12 +168,12 @@ private[hive] object HiveShim {
     }
 
     def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-      deserializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), is, clazz)
+      deserializeObjectByKryo(SerializationUtilities.borrowKryo(), is, clazz)
         .asInstanceOf[UDFType]
     }
 
     def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-      serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
+      serializeObjectByKryo(SerializationUtilities.borrowKryo(), function, out)
     }
 
     def writeExternal(out: java.io.ObjectOutput) {

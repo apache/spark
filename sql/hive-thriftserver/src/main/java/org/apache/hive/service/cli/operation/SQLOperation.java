@@ -32,6 +32,7 @@ import java.util.concurrent.RejectedExecutionException;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.conf.VariableSubstitution;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.CommandNeedRetryException;
@@ -40,11 +41,10 @@ import org.apache.hadoop.hive.ql.exec.ExplainTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.hive.serde2.SerDe;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
@@ -73,7 +73,7 @@ public class SQLOperation extends ExecuteStatementOperation {
   private CommandProcessorResponse response;
   private TableSchema resultSchema = null;
   private Schema mResultSchema = null;
-  private SerDe serde = null;
+  private AbstractSerDe serde = null;
   private boolean fetchStarted = false;
 
   public SQLOperation(HiveSession parentSession, String statement, Map<String,
@@ -105,7 +105,8 @@ public class SQLOperation extends ExecuteStatementOperation {
       // For now, we disable the test attempts.
       driver.setTryCount(Integer.MAX_VALUE);
 
-      String subStatement = new VariableSubstitution().substitute(sqlOperationConf, statement);
+      String subStatement = new VariableSubstitution(() ->
+          SessionState.get().getHiveVariables()).substitute(sqlOperationConf, statement);
       response = driver.compileAndRespond(subStatement);
       if (0 != response.getResponseCode()) {
         throw toSQLException("Error while compiling statement", response);
@@ -389,7 +390,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     return rowSet;
   }
 
-  private SerDe getSerDe() throws SQLException {
+  private AbstractSerDe getSerDe() throws SQLException {
     if (serde != null) {
       return serde;
     }

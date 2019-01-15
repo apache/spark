@@ -172,6 +172,7 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
+      <classifier>core</classifier>
       <scope>provided</scope>
     </dependency>
     <dependency>
