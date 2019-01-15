@@ -319,11 +319,7 @@ class HadoopTableReader(
 
     var ifc = Utils.classForName(inputClassName)
       .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    if (conf.getConf(HiveUtils.HIVE_FILE_INPUT_FORMAT_ENABLED)) {
-      hadoopConf.set("mapreduce.input.fileinputformat.split.maxsize",
-        conf.getConf(HiveUtils.HIVE_FILE_INPUT_FORMAT_SPLIT_MAXSIZE).toString)
-      hadoopConf.set("mapreduce.input.fileinputformat.split.minsize",
-        conf.getConf(HiveUtils.HIVE_FILE_INPUT_FORMAT_SPLIT_MINSIZE).toString)
+    if (conf.getConf(HiveUtils.HIVE_INPUT_FORMAT_OPTIMIZER_ENABLED)) {
       if ("org.apache.hadoop.mapreduce.lib.input.TextInputFormat"
         .equals(inputClassName)) {
         ifc = Utils.classForName(
