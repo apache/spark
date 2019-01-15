@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -209,10 +209,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _ => provider.getTable(dsOptions)
       }
       table match {
-        case s: SupportsBatchRead =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-            provider, s, finalOptions, userSpecifiedSchema = userSpecifiedSchema))
-
+        case _: SupportsBatchRead =>
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
         case _ => loadV1Source(paths: _*)
       }
     } else {

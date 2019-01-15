@@ -17,10 +17,19 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.writer.BatchWrite;
+import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
 
 /**
- * TODO: remove it when we finish the API refactor for streaming side.
+ * An internal base interface of mix-in interfaces for writable {@link Table}. This adds
+ * {@link #newWriteBuilder(DataSourceOptions)} that is used to create a write
+ * for batch or streaming.
  */
-@Evolving
-public interface DataSourceV2 {}
+interface SupportsWrite extends Table {
+
+  /**
+   * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
+   * this method to configure each data source write.
+   */
+  WriteBuilder newWriteBuilder(DataSourceOptions options);
+}
