@@ -605,7 +605,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
-        N = 200001
+        N = 2000001
         kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
