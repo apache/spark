@@ -302,28 +302,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (proxyUser != null && principal != null) {
       error("Only one of --proxy-user or --principal can be provided.")
     }
-
-    // Ensure heartbeat arguments is valid.
-    val networkTimeout = Utils.timeStringAsSeconds(
-      sparkProperties.getOrElse("spark.network.timeout", "120s"))
-    val executorTimeoutMs =
-      Utils.timeStringAsMs(sparkProperties.getOrElse(
-        "spark.storage.blockManagerSlaveTimeoutMs", s"${networkTimeout}s"))
-    val executorHeartbeatIntervalMs = Utils.timeStringAsMs(
-      sparkProperties.getOrElse("spark.executor.heartbeatInterval", "10s"))
-    val blockManagerTimeoutInterval = Utils.timeStringAsMs(
-      sparkProperties.getOrElse("spark.storage.blockManagerTimeoutIntervalMs", "60s"))
-    val checkNetworkTimeoutIntervalMs =
-      Utils.timeStringAsSeconds(sparkProperties.getOrElse(
-        "spark.network.timeoutInterval", s"${blockManagerTimeoutInterval}ms")) * 1000
-    if (checkNetworkTimeoutIntervalMs >= executorTimeoutMs) {
-      error(s"Incorrect heartbeat arguments, checkNetworkTimeoutIntervalMs should " +
-        s"less than executorTimeoutMs.")
-    }
-    if (executorHeartbeatIntervalMs >= checkNetworkTimeoutIntervalMs) {
-      error(s"Incorrect heartbeat arguments, executorHeartbeatIntervalMs should " +
-        s"less than checkNetworkTimeoutIntervalMs")
-    }
   }
 
   private def validateKillArguments(): Unit = {
