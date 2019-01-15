@@ -179,7 +179,7 @@ case class FileSourceScanExec(
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
-    driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
+    driverMetrics("filesNum") = ret.map(_.files.size.toLong).sum
     val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
     driverMetrics("metadataTime") = timeTakenMs
     ret
