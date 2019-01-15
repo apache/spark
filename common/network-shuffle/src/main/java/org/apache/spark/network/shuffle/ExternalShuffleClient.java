@@ -99,8 +99,8 @@ public class ExternalShuffleClient extends ShuffleClient {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, downloadFileManager, fetchContinuousShuffleBlocksInBatch).start();
+            new OneForOneBlockFetcher(client, appId, execId, blockIds1, listener1, conf,
+              downloadFileManager, fetchContinuousShuffleBlocksInBatch).start();
           };
 
       int maxRetries = conf.maxIORetries();
