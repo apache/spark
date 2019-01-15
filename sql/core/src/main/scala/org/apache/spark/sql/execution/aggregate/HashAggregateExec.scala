@@ -65,7 +65,7 @@ case class HashAggregateExec(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
-      SQLMetrics.createAverageMetric(sparkContext, "avg hash collisions per lookup"))
+      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iterations"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -363,7 +363,7 @@ case class HashAggregateExec(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Update average hashmap probe
-    avgHashProbe.set(hashMap.getHashCollisionsPerLookup)
+    avgHashProbe.set(hashMap.getAvgHashProbeBucketListIterations)
 
     if (sorter == null) {
       // not spilled

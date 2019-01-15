@@ -387,7 +387,7 @@ class TungstenAggregationIterator(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Updating average hashmap probe
-    avgHashProbe.set(hashMap.getHashCollisionsPerLookup)
+    avgHashProbe.set(hashMap.getAvgHashProbeBucketListIterations)
   })
 
   ///////////////////////////////////////////////////////////////////////////
