@@ -141,6 +141,36 @@ class ReadwriterTests(ReusedSQLTestCase):
                 .mode("overwrite").saveAsTable("pyspark_bucket"))
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
+    def test_read_json_dataframe(self):
+        from pyspark.sql.functions import struct, to_json
+        df = self.df
+
+        json_df = df.select(to_json(struct(df.key, df.value)))
+        actual = self.spark.read.json(json_df, schema=df.schema)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        with self.assertRaisesRegexp(TypeError, df.schema.simpleString()):
+            self.spark.read.json(df)
+
+        int_df = df.select(df.key)
+        with self.assertRaisesRegexp(TypeError, int_df.schema.simpleString()):
+            self.spark.read.json(int_df)
+
+    def test_read_csv_dataframe(self):
+        from pyspark.sql.functions import struct, to_csv
+        df = self.df
+
+        csv_df = df.select(to_csv(struct(df.key, df.value)))
+        actual = self.spark.read.csv(csv_df, schema=df.schema)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        with self.assertRaisesRegexp(TypeError, df.schema.simpleString()):
+            self.spark.read.csv(df)
+
+        int_df = df.select(df.key)
+        with self.assertRaisesRegexp(TypeError, int_df.schema.simpleString()):
+            self.spark.read.csv(int_df)
+
 
 if __name__ == "__main__":
     import unittest

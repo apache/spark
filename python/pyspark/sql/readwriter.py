@@ -188,7 +188,7 @@ class DataFrameReader(OptionUtils):
         through the input once to determine the input schema.
 
         :param path: string represents path to the JSON dataset, or a list of paths,
-                     or RDD of Strings storing JSON objects.
+                     or RDD or DataFrame of Strings storing JSON objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema or
                        a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
@@ -261,8 +261,13 @@ class DataFrameReader(OptionUtils):
         >>> df2 = spark.read.json(rdd)
         >>> df2.dtypes
         [('age', 'bigint'), ('name', 'string')]
+        >>> json_df = spark.createDataFrame(rdd, 'string')
+        >>> df3 = spark.read.json(json_df)
+        >>> df3.dtypes
+        [('age', 'bigint'), ('name', 'string')]
 
         """
+        from pyspark.sql.dataframe import DataFrame
         self._set_opts(
             schema=schema, primitivesAsString=primitivesAsString, prefersDecimal=prefersDecimal,
             allowComments=allowComments, allowUnquotedFieldNames=allowUnquotedFieldNames,
@@ -289,8 +294,14 @@ class DataFrameReader(OptionUtils):
             keyed._bypass_serializer = True
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
+        elif isinstance(path, DataFrame):
+            if len(path.schema) != 1 or not isinstance(path.schema[0].dataType, StringType):
+                raise TypeError("The DataFrame can contain only one String column: %s"
+                                % path.schema.simpleString())
+            jdataset = path._jdf.__getattr__('as')(self._spark._jvm.Encoders.STRING())
+            return self._df(self._jreader.json(jdataset))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise TypeError("path can be only string, list, RDD or DataFrame")
 
     @since(1.4)
     def table(self, tableName):
@@ -362,7 +373,7 @@ class DataFrameReader(OptionUtils):
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
         :param path: string, or list of strings, for input path(s),
-                     or RDD of Strings storing CSV rows.
+                     or RDD or DataFrame of Strings storing CSV rows.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param sep: sets a single character as a separator for each field and value.
@@ -466,7 +477,12 @@ class DataFrameReader(OptionUtils):
         >>> df2 = spark.read.csv(rdd)
         >>> df2.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
+        >>> csv_df = spark.createDataFrame(rdd, 'string')
+        >>> df3 = spark.read.csv(csv_df)
+        >>> df3.dtypes
+        [('_c0', 'string'), ('_c1', 'string')]
         """
+        from pyspark.sql.dataframe import DataFrame
         self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
@@ -501,8 +517,14 @@ class DataFrameReader(OptionUtils):
                 jrdd.rdd(),
                 self._spark._jvm.Encoders.STRING())
             return self._df(self._jreader.csv(jdataset))
+        elif isinstance(path, DataFrame):
+            if len(path.schema) != 1 or not isinstance(path.schema[0].dataType, StringType):
+                raise TypeError("The DataFrame can contain only one String column: %s"
+                                % path.schema.simpleString())
+            jdataset = path._jdf.__getattr__('as')(self._spark._jvm.Encoders.STRING())
+            return self._df(self._jreader.csv(jdataset))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise TypeError("path can be only string, list, RDD or DataFrame")
 
     @since(1.5)
     def orc(self, path):
