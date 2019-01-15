@@ -946,4 +946,33 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     // Clean-up
     df.unpersist()
   }
+
+  test("SPARK-25196 analyzes column statistics in cached query") {
+    def query(): DataFrame = {
+      spark.range(100)
+        .selectExpr("id % 3 AS c0", "id % 5 AS c1", "2 AS c2")
+        .groupBy("c0")
+        .agg(avg("c1").as("v1"), sum("c2").as("v2"))
+    }
+    // First, checks if there is no column statistic in cached query
+    val queryStats1 = query().cache.queryExecution.optimizedPlan.stats.attributeStats
+    assert(queryStats1.map(_._1.name).isEmpty)
+
+    val cacheManager = spark.sharedState.cacheManager
+    val cachedData = cacheManager.lookupCachedData(query().logicalPlan)
+    assert(cachedData.isDefined)
+    val queryAttrs = cachedData.get.plan.output
+    assert(queryAttrs.size === 3)
+    val (c0, v1, v2) = (queryAttrs(0), queryAttrs(1), queryAttrs(2))
+
+    // Analyzes one column in the query output
+    cacheManager.analyzeColumnCacheQuery(query(), v1 :: Nil)
+    val queryStats2 = query().queryExecution.optimizedPlan.stats.attributeStats
+    assert(queryStats2.map(_._1.name).toSet === Set("v1"))
+
+    // Analyzes two more columns
+    cacheManager.analyzeColumnCacheQuery(query(), c0 :: v2 :: Nil)
+    val queryStats3 = query().queryExecution.optimizedPlan.stats.attributeStats
+    assert(queryStats3.map(_._1.name).toSet === Set("c0", "v1", "v2"))
+  }
 }

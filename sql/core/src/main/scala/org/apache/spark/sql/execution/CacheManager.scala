@@ -25,9 +25,10 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -155,6 +156,38 @@ class CacheManager extends Logging {
     if (!cascade) {
       recacheByCondition(spark, _.find(_.sameResult(plan)).isDefined, clearCache = false)
     }
+  }
+
+  private[sql] def analyzeColumnCacheQuery(
+      query: Dataset[_],
+      columnNames: Seq[Attribute]): Unit = writeLock {
+    val cachedData = lookupCachedData(query)
+    if (cachedData.isEmpty) {
+      logWarning("The cached data not found, so you need to cache the query first.")
+    } else {
+      cachedData.foreach { cachedData =>
+        val relation = cachedData.cachedRepresentation
+        val (rowCount, newColStats) =
+          CommandUtils.computeColumnStats(query.sparkSession, relation, columnNames)
+        val oldStats = cachedData.cachedRepresentation.statsOfPlanToCache
+        val newStats = oldStats.copy(
+          rowCount = Some(rowCount),
+          attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
+        )
+        cachedData.cachedRepresentation.statsOfPlanToCache = newStats
+      }
+    }
+  }
+
+  /**
+   * Analyzes column statistics in an already-cached table.
+   *
+   * @param spark        The Spark session.
+   * @param tableName    The identifier of a cached table.
+   * @param columnNames  The names of columns to be analyzed for computing statistics.
+   */
+  def analyzeColumn(spark: SparkSession, tableName: String, columnNames: Seq[Attribute]): Unit = {
+    analyzeColumnCacheQuery(spark.table(tableName), columnNames)
   }
 
   /**
