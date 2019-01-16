@@ -18,6 +18,7 @@ package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -46,7 +47,33 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public ArrayData copy() {
-    throw new UnsupportedOperationException();
+    GenericArrayData arrayData = new GenericArrayData(length);
+    for (int i = 0; i < numElements(); i++) {
+      if (isNullAt(i)) {
+        arrayData.setNullAt(i);
+      } else {
+        DataType dt = data.dataType();
+        if (dt instanceof BooleanType) {
+          arrayData.setBoolean(i, getBoolean(i));
+        } else if (dt instanceof ByteType) {
+          arrayData.setByte(i, getByte(i));
+        } else if (dt instanceof ShortType) {
+          arrayData.setShort(i, getShort(i));
+        } else if (dt instanceof IntegerType) {
+          arrayData.setInt(i, getInt(i));
+        } else if (dt instanceof LongType) {
+          arrayData.setLong(i, getLong(i));
+        } else if (dt instanceof FloatType) {
+          arrayData.setFloat(i, getFloat(i));
+        } else if (dt instanceof DoubleType) {
+          arrayData.setDouble(i, getDouble(i));
+        } else {
+          throw new RuntimeException("Not implemented. " + dt);
+        }
+      }
+    }
+
+    return arrayData;
   }
 
   @Override
