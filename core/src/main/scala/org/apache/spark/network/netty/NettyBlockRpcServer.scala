@@ -84,9 +84,7 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val blockIds =
-          // When fetch again happens (corrupted), openBlocks could contain ShuffleBlockBatchId
-          if (openBlocks.fetchContinuousShuffleBlocksInBatch
-            && BlockId(openBlocks.blockIds.head).isInstanceOf[ShuffleBlockId]) {
+          if (openBlocks.fetchContinuousShuffleBlocksInBatch) {
             mergeShuffleBlockIds(openBlocks.blockIds)
           } else {
             openBlocks.blockIds.map(BlockId.apply)

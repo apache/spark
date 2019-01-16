@@ -272,7 +272,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       // When fetch again happens (corrupted), openBlocks could contain ShuffleBlockBatchId
-      if (fetchContinuousShuffleBlocksInBatch && blockId0Parts.length == 4) {
+      if (fetchContinuousShuffleBlocksInBatch) {
         mergeShuffleBlockIds(blockIds);
       } else {
         shuffleBlockIds = new int[3 * blockIds.length];

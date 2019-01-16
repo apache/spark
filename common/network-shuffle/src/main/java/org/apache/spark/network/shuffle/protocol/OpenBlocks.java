@@ -32,9 +32,7 @@ public class OpenBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
   public final String[] blockIds;
-  // When fetchContinuousShuffleBlocksInBatch == true, OpenBlocks could contains ShuffleBlockId or
-  // ShuffleBlockBatchId only. Normally, It contains ShuffleBlockId, but when fetch again happens
-  // (corrupted), openBlocks could contain ShuffleBlockBatchId.
+  // When fetchContinuousShuffleBlocksInBatch == true, OpenBlocks could contain ShuffleBlockId only
   public final boolean fetchContinuousShuffleBlocksInBatch;
 
   // This is only used in tests.
