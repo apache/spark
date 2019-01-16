@@ -353,15 +353,15 @@ class ColumnPruningSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          ResolvedHint(SubqueryAlias("y", input)), Inner, None)).analyze
+          SubqueryAlias("y", input), Inner, None, JoinHint.NONE)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
-        ResolvedHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
-        Inner, None).analyze
+        Project(Seq($"y.key"), SubqueryAlias("y", input)),
+        Inner, None, JoinHint.NONE).analyze
 
     comparePlans(optimized, expected)
   }

@@ -532,35 +532,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
 
     // Validate memory fractions
-    val deprecatedMemoryKeys = Seq(
-      "spark.storage.memoryFraction",
-      "spark.shuffle.memoryFraction",
-      "spark.shuffle.safetyFraction",
-      "spark.storage.unrollFraction",
-      "spark.storage.safetyFraction")
-    val memoryKeys = Seq(
-      "spark.memory.fraction",
-      "spark.memory.storageFraction") ++
-      deprecatedMemoryKeys
-    for (key <- memoryKeys) {
+    for (key <- Seq(MEMORY_FRACTION.key, MEMORY_STORAGE_FRACTION.key)) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
         throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
-      }
-    }
-
-    // Warn against deprecated memory fractions (unless legacy memory management mode is enabled)
-    val legacyMemoryManagementKey = "spark.memory.useLegacyMode"
-    val legacyMemoryManagement = getBoolean(legacyMemoryManagementKey, false)
-    if (!legacyMemoryManagement) {
-      val keyset = deprecatedMemoryKeys.toSet
-      val detected = settings.keys().asScala.filter(keyset.contains)
-      if (detected.nonEmpty) {
-        logWarning("Detected deprecated memory fraction settings: " +
-          detected.mkString("[", ", ", "]") + ". As of Spark 1.6, execution and storage " +
-          "memory management are unified. All memory fractions used in the old model are " +
-          "now deprecated and no longer read. If you wish to use the old memory management, " +
-          s"you may explicitly enable `$legacyMemoryManagementKey` (not recommended).")
       }
     }
 
@@ -619,7 +594,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
-      s"spark.network.timeout=${executorTimeoutThresholdMs}ms must be no less than the value of " +
+      s"spark.network.timeout=${executorTimeoutThresholdMs}ms must be greater than the value of " +
       s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
   }
 
@@ -689,7 +664,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
         // Translate old value to a duration, with 10s wait time per try.
         translation = s => s"${s.toLong * 10}s")),
-    "spark.reducer.maxSizeInFlight" -> Seq(
+    REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
     "spark.kryoserializer.buffer" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
@@ -700,9 +675,9 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
     EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
-    "spark.io.compression.snappy.blockSize" -> Seq(
+    IO_COMPRESSION_SNAPPY_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
-    "spark.io.compression.lz4.blockSize" -> Seq(
+    IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
     "spark.rpc.numRetries" -> Seq(
       AlternateConfig("spark.akka.num.retries", "1.4")),

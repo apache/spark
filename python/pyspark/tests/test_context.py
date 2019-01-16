@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import unittest
+from collections import namedtuple
 
 from pyspark import SparkFiles, SparkContext
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
@@ -245,6 +246,15 @@ class ContextTests(unittest.TestCase):
     def test_startTime(self):
         with SparkContext() as sc:
             self.assertGreater(sc.startTime, 0)
+
+    def test_forbid_insecure_gateway(self):
+        # Fail immediately if you try to create a SparkContext
+        # with an insecure gateway
+        parameters = namedtuple('MockGatewayParameters', 'auth_token')(None)
+        mock_insecure_gateway = namedtuple('MockJavaGateway', 'gateway_parameters')(parameters)
+        with self.assertRaises(ValueError) as context:
+            SparkContext(gateway=mock_insecure_gateway)
+        self.assertIn("insecure Py4j gateway", str(context.exception))
 
 
 if __name__ == "__main__":
