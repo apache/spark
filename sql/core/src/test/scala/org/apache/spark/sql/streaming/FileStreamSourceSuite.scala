@@ -48,21 +48,33 @@ abstract class FileStreamSourceTest
    * `FileStreamSource` actually being used in the execution.
    */
   abstract class AddFileData extends AddData {
+    private val _qualifiedBasePath = PrivateMethod[Path]('qualifiedBasePath)
+
+    private def isSamePath(fileSource: FileStreamSource, srcPath: File): Boolean = {
+      val path = (fileSource invokePrivate _qualifiedBasePath()).toString.stripPrefix("file:")
+      path == srcPath.getCanonicalPath
+    }
+
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
       require(
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active file stream source")
 
       val sources = getSourcesFromStreamingQuery(query.get)
-      if (sources.isEmpty) {
+      val source = if (sources.isEmpty) {
         throw new Exception(
           "Could not find file source in the StreamExecution logical plan to add data to")
-      } else if (sources.size > 1) {
-        throw new Exception(
-          "Could not select the file source in the StreamExecution logical plan as there" +
-            "are multiple file sources:\n\t" + sources.mkString("\n\t"))
+      } else if (sources.size == 1) {
+        sources.head
+      } else {
+        val matchedSources = sources.filter(isSamePath(_, src))
+        if (matchedSources.size != 1) {
+          throw new Exception(
+            "Could not select the file source in StreamExecution as there are multiple" +
+              s" file sources and none / more than one matches $src:\n" + sources.mkString("\n"))
+        }
+        matchedSources.head
       }
-      val source = sources.head
       val newOffset = source.withBatchingLocked {
         addData(source)
         new FileStreamSourceOffset(source.currentLogOffset + 1)
@@ -70,6 +82,9 @@ abstract class FileStreamSourceTest
       logInfo(s"Added file to $source at offset $newOffset")
       (source, newOffset)
     }
+
+    /** Source directory to add file data to */
+    protected def src: File
 
     protected def addData(source: FileStreamSource): Unit
   }
@@ -1492,6 +1507,54 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         dir.getAbsolutePath, Map.empty)
       // this method should throw an exception if `fs.exists` is called during resolveRelation
       newSource.getBatch(None, FileStreamSourceOffset(1))
+    }
+  }
+
+  test("SPARK-26629: multiple file sources work with restarts when a source does not have data") {
+    withTempDirs { case (dir, tmp) =>
+      val sourceDir1 = new File(dir, "source1")
+      val sourceDir2 = new File(dir, "source2")
+      sourceDir1.mkdirs()
+      sourceDir2.mkdirs()
+
+      val source1 = createFileStream("text", s"${sourceDir1.getCanonicalPath}")
+      val source2 = createFileStream("text", s"${sourceDir2.getCanonicalPath}")
+      val unioned = source1.union(source2)
+
+      def addMultiTextFileData(
+          source1Content: String,
+          source2Content: String): StreamAction = {
+        val actions = Seq(
+          AddTextFileData(source1Content, sourceDir1, tmp),
+          AddTextFileData(source2Content, sourceDir2, tmp)
+        ).filter(_.content != null)  // don't write to a source dir if no content specified
+        StreamProgressLockedActions(actions, desc = actions.mkString("[ ", " | ", " ]"))
+      }
+
+      testStream(unioned)(
+        StartStream(),
+        addMultiTextFileData(source1Content = "source1_0", source2Content = "source2_0"),
+        CheckNewAnswer("source1_0", "source2_0"),
+        StopStream,
+
+        StartStream(),
+        addMultiTextFileData(source1Content = "source1_1", source2Content = null),
+        CheckNewAnswer("source1_1"),
+        StopStream,
+
+        // Restart after a batch with one file source having no new data.
+        // This restart is needed to hit the issue in SPARK-26629.
+
+        StartStream(),
+        addMultiTextFileData(source1Content = null, source2Content = "source2_2"),
+        CheckNewAnswer("source2_2"),
+        StopStream,
+
+        StartStream(),
+        addMultiTextFileData(source1Content = "source1_3", source2Content = "source2_3"),
+        CheckNewAnswer("source1_3", "source2_3"),
+        StopStream
+      )
     }
   }
 }
