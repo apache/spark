@@ -176,7 +176,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val partition: Int = 2
     val authorizedCommitter: Int = 3
     val nonAuthorizedCommitter: Int = 100
-    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
+    outputCommitCoordinator.stageStart(stage, stageAttempt, maxPartitionId = 2)
 
     assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, authorizedCommitter))
     assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
@@ -203,7 +203,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val stageAttempt: Int = 1
     val partition: Int = 1
     val failedAttempt: Int = 0
-    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.stageStart(stage, stageAttempt, maxPartitionId = 1)
     outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
       attemptNumber = failedAttempt,
       reason = ExecutorLostFailure("0", exitCausedByApp = true, None))
@@ -213,16 +213,17 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-24589: Differentiate tasks from different stage attempts") {
     var stage = 1
+    val stageAttempt: Int = 1
     val taskAttempt = 1
     val partition = 1
 
-    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.stageStart(stage, stageAttempt, maxPartitionId = 1)
     assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
     assert(!outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
 
     // Fail the task in the first attempt, the task in the second attempt should succeed.
     stage += 1
-    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.stageStart(stage, stageAttempt, maxPartitionId = 1)
     outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
       ExecutorLostFailure("0", exitCausedByApp = true, None))
     assert(!outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
@@ -231,7 +232,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Commit the 1st attempt, fail the 2nd attempt, make sure 3rd attempt cannot commit,
     // then fail the 1st attempt and make sure the 4th one can commit again.
     stage += 1
-    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.stageStart(stage, stageAttempt, maxPartitionId = 1)
     assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
     outputCommitCoordinator.taskCompleted(stage, 2, partition, taskAttempt,
       ExecutorLostFailure("0", exitCausedByApp = true, None))
@@ -270,8 +271,25 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(retriedStage.size === 1)
     assert(sc.dagScheduler.outputCommitCoordinator.isEmpty)
     verify(sc.env.outputCommitCoordinator, times(2))
-      .stageStart(meq(retriedStage.head), any())
+      .stageStart(meq(retriedStage.head), any(), any())
     verify(sc.env.outputCommitCoordinator).stageEnd(meq(retriedStage.head))
+  }
+
+  test("SPARK-26634: Do not allow attempts of failed stage to commit") {
+    val stage: Int = 1
+    var stageAttempt: Int = 1
+    val partition: Int = 1
+    val taskAttempt: Int = 0
+    outputCommitCoordinator.stageStart(stage, stageAttempt, maxPartitionId = 1)
+    stageAttempt += 1
+    outputCommitCoordinator.stageStart(stage, stageAttempt, maxPartitionId = 1)
+    // attempts of failed stage is not authorized for committing
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt - 1, partition, taskAttempt))
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt - 1, partition,
+      attemptNumber = taskAttempt,
+      reason = Success)
+    // attempts of current stage is authorized for committing
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, taskAttempt))
   }
 }
 

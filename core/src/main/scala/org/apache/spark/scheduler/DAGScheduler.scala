@@ -1101,10 +1101,12 @@ private[spark] class DAGScheduler(
     // event.
     stage match {
       case s: ShuffleMapStage =>
-        outputCommitCoordinator.stageStart(stage = s.id, maxPartitionId = s.numPartitions - 1)
+        outputCommitCoordinator.stageStart(
+          stage = s.id, stage.latestInfo.attemptNumber(), maxPartitionId = s.numPartitions - 1)
       case s: ResultStage =>
         outputCommitCoordinator.stageStart(
-          stage = s.id, maxPartitionId = s.rdd.partitions.length - 1)
+          stage = s.id, stage.latestInfo.attemptNumber(),
+          maxPartitionId = s.rdd.partitions.length - 1)
     }
     val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
       stage match {

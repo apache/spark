@@ -58,6 +58,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private case class StageState(numPartitions: Int) {
     val authorizedCommitters = Array.fill[TaskIdentifier](numPartitions)(null)
     val failures = mutable.Map[Int, mutable.Set[TaskIdentifier]]()
+    var latestStageAttempt: Int = -1
   }
 
   /**
@@ -114,13 +115,16 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
    * yet been initialized.
    *
    * @param stage the stage id.
+   * @param stageAttemptNumber the stage attempt number.
    * @param maxPartitionId the maximum partition id that could appear in this stage's tasks (i.e.
    *                       the maximum possible value of `context.partitionId`).
    */
-  private[scheduler] def stageStart(stage: Int, maxPartitionId: Int): Unit = synchronized {
+  private[scheduler] def stageStart(
+    stage: Int, stageAttemptNumber: Int, maxPartitionId: Int): Unit = synchronized {
     stageStates.get(stage) match {
       case Some(state) =>
         require(state.authorizedCommitters.length == maxPartitionId + 1)
+        state.latestStageAttempt = stageAttemptNumber
         logInfo(s"Reusing state from previous attempt of stage $stage.")
 
       case _ =>
@@ -177,7 +181,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       partition: Int,
       attemptNumber: Int): Boolean = synchronized {
     stageStates.get(stage) match {
-      case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
+      case Some(state) if attemptInvalidOrFailed(state, stageAttempt, partition, attemptNumber) =>
         logInfo(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
           s"task attempt $attemptNumber already marked as failed.")
         false
@@ -200,13 +204,14 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     }
   }
 
-  private def attemptFailed(
+  private def attemptInvalidOrFailed(
       stageState: StageState,
       stageAttempt: Int,
       partition: Int,
       attempt: Int): Boolean = synchronized {
     val failInfo = TaskIdentifier(stageAttempt, attempt)
-    stageState.failures.get(partition).exists(_.contains(failInfo))
+    stageAttempt < stageState.latestStageAttempt ||
+      stageState.failures.get(partition).exists(_.contains(failInfo))
   }
 }
 
