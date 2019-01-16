@@ -1422,8 +1422,8 @@ object SQLConf {
   val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
     .internal()
     .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which read paths are disabled. Reads from these sources will" +
-      " fall back to the V1 sources.")
+      " register class names for which data source V2 read paths are disabled. Reads from these" +
+      " sources will fall back to the V1 sources.")
     .stringConf
     .createWithDefault("")
 

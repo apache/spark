@@ -192,12 +192,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val disabledV2Readers =
+    val useV1Sources =
       sparkSession.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     val cls = lookupCls.newInstance() match {
-      case f: FileDataSourceV2 if disabledV2Readers.contains(f.shortName()) ||
-        disabledV2Readers.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
+        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         f.fallBackFileFormat
       case _ => lookupCls
     }

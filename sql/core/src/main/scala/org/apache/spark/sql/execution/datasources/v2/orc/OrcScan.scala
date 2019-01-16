@@ -38,6 +38,6 @@ case class OrcScan(
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readSchema, fileIndex.partitionSchema)
+      dataSchema, fileIndex.partitionSchema, readSchema)
   }
 }

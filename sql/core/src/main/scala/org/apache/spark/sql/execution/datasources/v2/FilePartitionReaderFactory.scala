@@ -47,7 +47,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
   }
 }
 
-// A compound class for combining a input partitioned file and its corresponding file.
+// A compound class for combining file and its corresponding reader.
 private[v2] class PartitionedFileReader[T](
     file: PartitionedFile,
     reader: PartitionReader[T]) extends PartitionReader[T] {

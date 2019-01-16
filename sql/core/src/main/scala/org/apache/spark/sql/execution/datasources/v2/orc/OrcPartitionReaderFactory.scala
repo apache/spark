@@ -40,12 +40,21 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
 
+/**
+ * A factory used to create Orc readers.
+ *
+ * @param sqlConf SQL configuration.
+ * @param broadcastedConf Broadcast serializable Hadoop Configuration.
+ * @param dataSchema Schema of orc files.
+ * @param partitionSchema Schema of partitions.
+ * @param readSchema Required schema in the batch scan.
+ */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     dataSchema: StructType,
-    readSchema: StructType,
-    partitionSchema: StructType) extends FilePartitionReaderFactory {
+    partitionSchema: StructType,
+    readSchema: StructType) extends FilePartitionReaderFactory {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
 
