@@ -43,7 +43,6 @@ import org.apache.spark.util.SerializableConfiguration
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
-    schema: StructType,
     dataSchema: StructType,
     readSchema: StructType,
     partitionSchema: StructType) extends FilePartitionReaderFactory {
@@ -52,8 +51,8 @@ case class OrcPartitionReaderFactory(
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
-      schema.length <= sqlConf.wholeStageMaxNumFields &&
-      schema.forall(_.dataType.isInstanceOf[AtomicType])
+      readSchema.length <= sqlConf.wholeStageMaxNumFields &&
+      readSchema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
@@ -111,7 +110,7 @@ case class OrcPartitionReaderFactory(
     val reader = OrcFile.createReader(filePath, readerOptions)
 
     val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, schema, readSchema, reader, conf)
+      isCaseSensitive, dataSchema, readSchema, reader, conf)
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader

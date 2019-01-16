@@ -40,7 +40,7 @@ case class OrcScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
 
   override def build(): Scan = {
-    OrcScan(sparkSession, hadoopConf, fileIndex, schema, dataSchema, readSchema)
+    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readSchema)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty
