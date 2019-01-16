@@ -60,13 +60,13 @@ object SparkTransportConf {
   }
 
   /**
-    * Separate threads configuration of driver and executor
-    * @param conf the [[SparkConf]]
-    * @param module the module name
-    * @param server if true, it's for the serverThreads. Otherwise, it's for the clientThreads.
-    * @param defaultNumThreads default number of threads
-    * @return
-    */
+   * Separate threads configuration of driver and executor
+   * @param conf the [[SparkConf]]
+   * @param module the module name
+   * @param server if true, it's for the serverThreads. Otherwise, it's for the clientThreads.
+   * @param defaultNumThreads default number of threads
+   * @return
+   */
   def getNumOfThreads(
       conf: SparkConf,
       module: String,
