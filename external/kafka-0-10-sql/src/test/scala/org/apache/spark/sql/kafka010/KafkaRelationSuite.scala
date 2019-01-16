@@ -20,6 +20,9 @@ package org.apache.spark.sql.kafka010
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
+import scala.util.Random
+
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
@@ -237,6 +240,26 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testBadOptions("assign" -> "")("no topicpartitions to assign")
     testBadOptions("subscribe" -> "")("no topics to subscribe")
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
+  }
+
+  test("allow group.id overriding") {
+    // Tests code path KafkaSourceProvider.createRelation(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val customGroupId = "id-" + Random.nextInt()
+    val df = createDF(topic, withOptions = Map("kafka.group.id" -> customGroupId))
+    checkAnswer(df, (1 to 30).map(_.toString).toDF())
+
+    val consumerGroups = testUtils.listConsumerGroups()
+    val validGroups = consumerGroups.valid().get()
+    val validGroupsId = validGroups.asScala.map(_.groupId())
+    assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
+      s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
+      s"expected group id: $customGroupId")
   }
 
   test("read Kafka transactional messages: read_committed") {

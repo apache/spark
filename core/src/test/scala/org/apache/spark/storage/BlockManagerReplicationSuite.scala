@@ -31,7 +31,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DRIVER_PORT, MEMORY_OFFHEAP_SIZE}
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.BlockTransferService
@@ -85,18 +85,17 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
   before {
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
-
-    conf.set("spark.authenticate", "false")
+    conf.set(NETWORK_AUTH_ENABLED, false)
     conf.set(DRIVER_PORT, rpcEnv.address.port)
     conf.set(IS_TESTING, true)
-    conf.set("spark.memory.fraction", "1")
-    conf.set("spark.memory.storageFraction", "1")
-    conf.set("spark.storage.unrollMemoryThreshold", "512")
+    conf.set(MEMORY_FRACTION, 1.0)
+    conf.set(MEMORY_STORAGE_FRACTION, 1.0)
+    conf.set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
     // to make a replication attempt to inactive store fail fast
     conf.set("spark.core.connection.ack.wait.timeout", "1s")
     // to make cached peers refresh frequently
-    conf.set("spark.storage.cachedPeersTtl", "10")
+    conf.set(STORAGE_CACHED_PEERS_TTL, 10)
 
     sc = new SparkContext("local", "test", conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
@@ -424,8 +423,8 @@ class BlockManagerReplicationSuite extends BlockManagerReplicationBehavior {
 class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehavior {
   val conf = new SparkConf(false).set("spark.app.id", "test")
   conf.set("spark.kryoserializer.buffer", "1m")
-  conf.set("spark.storage.replication.proactive", "true")
-  conf.set("spark.storage.exceptionOnPinLeak", "true")
+  conf.set(STORAGE_REPLICATION_PROACTIVE, true)
+  conf.set(STORAGE_EXCEPTION_PIN_LEAK, true)
 
   (2 to 5).foreach { i =>
     test(s"proactive block replication - $i replicas - ${i - 1} block manager deletions") {
@@ -500,10 +499,10 @@ class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationB
   val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
   conf.set("spark.kryoserializer.buffer", "1m")
   conf.set(
-    "spark.storage.replication.policy",
+    STORAGE_REPLICATION_POLICY,
     classOf[BasicBlockReplicationPolicy].getName)
   conf.set(
-    "spark.storage.replication.topologyMapper",
+    STORAGE_REPLICATION_TOPOLOGY_MAPPER,
     classOf[DummyTopologyMapper].getName)
 }
 
