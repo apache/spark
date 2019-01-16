@@ -63,3 +63,4 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = {}
 }
+
