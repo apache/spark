@@ -120,9 +120,8 @@ class CacheManager extends Logging {
   def uncacheQuery(
       query: Dataset[_],
       cascade: Boolean,
-      blocking: Boolean = true): Unit = readLock {
+      blocking: Boolean = true): Unit =
     uncacheQuery(query.sparkSession, query.logicalPlan, cascade, blocking)
-  }
 
   /**
    * Un-cache the given plan or all the cache entries that refer to the given plan.
