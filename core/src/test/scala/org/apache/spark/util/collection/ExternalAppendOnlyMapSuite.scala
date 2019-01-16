@@ -27,6 +27,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
@@ -57,7 +58,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     conf.set("spark.shuffle.spill.compress", codec.isDefined.toString)
     conf.set("spark.shuffle.compress", codec.isDefined.toString)
-    codec.foreach { c => conf.set("spark.io.compression.codec", c) }
+    codec.foreach { c => conf.set(IO_COMPRESSION_CODEC, c) }
     // Ensure that we actually have multiple batches per spill file
     conf.set("spark.shuffle.spill.batchSize", "10")
     conf
@@ -550,12 +551,11 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
 
   test("force to spill for external aggregation") {
     val conf = createSparkConf(loadDefaults = false)
-      .set("spark.shuffle.memoryFraction", "0.01")
-      .set("spark.memory.useLegacyMode", "true")
-      .set("spark.testing.memory", "100000000")
+      .set("spark.memory.storageFraction", "0.999")
+      .set(TEST_MEMORY, 471859200L)
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
-    val N = 2e5.toInt
+    val N = 200000
     sc.parallelize(1 to N, 2)
       .map { i => (i, i) }
       .groupByKey()

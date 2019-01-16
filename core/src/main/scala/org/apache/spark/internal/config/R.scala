@@ -14,20 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.hadooputils
+package org.apache.spark.internal.config
 
-import io.fabric8.kubernetes.api.model.Secret
+private[spark] object R {
 
-/**
- * Represents a given configuration of the Kerberos Configuration logic
- * <p>
- * - The secret containing a DT, either previously specified or built on the fly
- * - The name of the secret where the DT will be stored
- * - The data item-key on the secret which correlates with where the current DT data is stored
- * - The Job User's username
- */
-private[spark] case class KerberosConfigSpec(
-    dtSecret: Option[Secret],
-    dtSecretName: String,
-    dtSecretItemKey: String,
-    jobUserName: String)
+  val R_BACKEND_CONNECTION_TIMEOUT = ConfigBuilder("spark.r.backendConnectionTimeout")
+    .intConf
+    .createWithDefault(6000)
+
+  val R_NUM_BACKEND_THREADS = ConfigBuilder("spark.r.numRBackendThreads")
+    .intConf
+    .createWithDefault(2)
+
+  val R_HEARTBEAT_INTERVAL = ConfigBuilder("spark.r.heartBeatInterval")
+    .intConf
+    .createWithDefault(100)
+
+  val SPARKR_COMMAND = ConfigBuilder("spark.sparkr.r.command")
+    .stringConf
+    .createWithDefault("Rscript")
+
+  val R_COMMAND = ConfigBuilder("spark.r.command")
+    .stringConf
+    .createOptional
+}

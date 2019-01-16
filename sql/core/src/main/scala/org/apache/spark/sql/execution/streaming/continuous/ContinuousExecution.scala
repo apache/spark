@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2StreamingScanExec, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
@@ -118,6 +119,8 @@ class ContinuousExecution(
     // For at least once, we can just ignore those reports and risk duplicates.
     commitLog.getLatest() match {
       case Some((latestEpochId, _)) =>
+        updateStatusMessage("Starting new streaming query " +
+          s"and getting offsets from latest epoch $latestEpochId")
         val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
           throw new IllegalStateException(
             s"Batch $latestEpochId was committed without end epoch offsets!")
@@ -129,6 +132,7 @@ class ContinuousExecution(
         nextOffsets
       case None =>
         // We are starting this stream for the first time. Offsets are all None.
+        updateStatusMessage("Starting new streaming query")
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
         OffsetSeq.fill(continuousSources.map(_ => null): _*)
@@ -163,10 +167,10 @@ class ContinuousExecution(
         val readSupport = continuousSources(insertedSourceId)
         insertedSourceId += 1
         val newOutput = readSupport.fullSchema().toAttributes
-
+        val maxFields = SQLConf.get.maxToStringFields
         assert(output.size == newOutput.size,
-          s"Invalid reader: ${truncatedString(output, ",")} != " +
-            s"${truncatedString(newOutput, ",")}")
+          s"Invalid reader: ${truncatedString(output, ",", maxFields)} != " +
+            s"${truncatedString(newOutput, ",", maxFields)}")
         replacements ++= output.zip(newOutput)
 
         val loggedOffset = offsets.offsets(0)
@@ -263,6 +267,7 @@ class ContinuousExecution(
       epochUpdateThread.setDaemon(true)
       epochUpdateThread.start()
 
+      updateStatusMessage("Running")
       reportTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(
           sparkSessionForQuery, lastExecution) {
@@ -322,6 +327,8 @@ class ContinuousExecution(
    * before this is called.
    */
   def commit(epoch: Long): Unit = {
+    updateStatusMessage(s"Committing epoch $epoch")
+
     assert(continuousSources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
 

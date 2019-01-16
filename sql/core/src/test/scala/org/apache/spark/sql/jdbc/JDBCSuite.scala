@@ -56,6 +56,20 @@ class JDBCSuite extends QueryTest
       Some(StringType)
   }
 
+  val testH2DialectTinyInt = new JdbcDialect {
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = {
+      sqlType match {
+        case java.sql.Types.TINYINT => Some(ByteType)
+        case _ => None
+      }
+    }
+  }
+
   before {
     Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
@@ -693,6 +707,17 @@ class JDBCSuite extends QueryTest
     JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
+  test("Map TINYINT to ByteType via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2DialectTinyInt)
+    val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
+    val rows = df.collect()
+    assert(rows.length === 2)
+    assert(rows(0).get(2).isInstanceOf[Byte])
+    assert(rows(0).getByte(2) === 3)
+    assert(rows(1).isNullAt(2))
+    JdbcDialects.unregisterDialect(testH2DialectTinyInt)
+  }
+
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
@@ -825,8 +850,11 @@ class JDBCSuite extends QueryTest
 
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val md = new MetadataBuilder().putLong("scale", 0)
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
+      Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     val errMsg = intercept[IllegalArgumentException] {
@@ -1481,5 +1509,18 @@ class JDBCSuite extends QueryTest
     checkAnswer(
       checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
       Row("fred", 1) :: Nil)
+  }
+
+  test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
+    val e = intercept[IllegalArgumentException] {
+      val opts = Map(
+        "url" -> "jdbc:mysql://localhost/db",
+        "dbtable" -> "table",
+        "driver" -> "org.postgresql.Driver"
+      )
+      spark.read.format("jdbc").options(opts).load
+    }.getMessage
+    assert(e.contains("The driver could not open a JDBC connection. " +
+      "Check the URL: jdbc:mysql://localhost/db"))
   }
 }

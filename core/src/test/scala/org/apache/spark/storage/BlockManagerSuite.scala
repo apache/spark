@@ -27,7 +27,7 @@ import scala.language.{implicitConversions, postfixOps}
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.RandomUtils
-import org.mockito.{Matchers => mc}
+import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
@@ -37,6 +37,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
@@ -89,8 +90,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       transferService: Option[BlockTransferService] = Option.empty,
       testConf: Option[SparkConf] = None): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
-    bmConf.set("spark.testing.memory", maxMem.toString)
-    bmConf.set(MEMORY_OFFHEAP_SIZE.key, maxMem.toString)
+    bmConf.set(TEST_MEMORY, maxMem)
+    bmConf.set(MEMORY_OFFHEAP_SIZE, maxMem)
     val serializer = new KryoSerializer(bmConf)
     val encryptionKey = if (bmConf.get(IO_ENCRYPTION_ENABLED)) {
       Some(CryptoStreamUtils.createKey(bmConf))
@@ -115,16 +116,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     System.setProperty("os.arch", "amd64")
     conf = new SparkConf(false)
       .set("spark.app.id", "test")
-      .set("spark.testing", "true")
-      .set("spark.memory.fraction", "1")
-      .set("spark.memory.storageFraction", "1")
+      .set(IS_TESTING, true)
+      .set(MEMORY_FRACTION, 1.0)
+      .set(MEMORY_STORAGE_FRACTION, 1.0)
       .set("spark.kryoserializer.buffer", "1m")
-      .set("spark.test.useCompressedOops", "true")
-      .set("spark.storage.unrollFraction", "0.4")
-      .set("spark.storage.unrollMemoryThreshold", "512")
+      .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
-    conf.set("spark.driver.port", rpcEnv.address.port.toString)
+    conf.set(DRIVER_PORT, rpcEnv.address.port)
 
     // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
     // need to create a SparkContext is to initialize LiveListenerBus.
@@ -855,7 +854,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.stop()
       store = null
 
-      conf.set("spark.broadcast.compress", "true")
+      conf.set(BROADCAST_COMPRESS, true)
       store = makeBlockManager(20000, "exec3")
       store.putSingle(
         BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
@@ -864,7 +863,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.stop()
       store = null
 
-      conf.set("spark.broadcast.compress", "false")
+      conf.set(BROADCAST_COMPRESS, false)
       store = makeBlockManager(20000, "exec4")
       store.putSingle(
         BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
@@ -872,14 +871,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.stop()
       store = null
 
-      conf.set("spark.rdd.compress", "true")
+      conf.set(RDD_COMPRESS, true)
       store = makeBlockManager(20000, "exec5")
       store.putSingle(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) <= 1000, "rdd_0_0 was not compressed")
       store.stop()
       store = null
 
-      conf.set("spark.rdd.compress", "false")
+      conf.set(RDD_COMPRESS, false)
       store = makeBlockManager(20000, "exec6")
       store.putSingle(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) >= 10000, "rdd_0_0 was compressed")
@@ -894,14 +893,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store = null
     } finally {
       System.clearProperty("spark.shuffle.compress")
-      System.clearProperty("spark.broadcast.compress")
-      System.clearProperty("spark.rdd.compress")
+      System.clearProperty(BROADCAST_COMPRESS.key)
+      System.clearProperty(RDD_COMPRESS.key)
     }
   }
 
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
-    conf.set("spark.testing.memory", "1200")
+    conf.set(TEST_MEMORY, 1200L)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)

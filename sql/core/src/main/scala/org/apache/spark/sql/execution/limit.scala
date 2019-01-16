@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.metric.{SQLShuffleMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 
 /**
  * Take the first `limit` elements and collect them to a single partition.
@@ -41,7 +41,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
   private lazy val readMetrics =
-    SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext)
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
@@ -165,7 +165,7 @@ case class TakeOrderedAndProjectExec(
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
   private lazy val readMetrics =
-    SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext)
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = readMetrics ++ writeMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -198,9 +198,9 @@ case class TakeOrderedAndProjectExec(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def simpleString: String = {
-    val orderByString = truncatedString(sortOrder, "[", ",", "]")
-    val outputString = truncatedString(output, "[", ",", "]")
+  override def simpleString(maxFields: Int): String = {
+    val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
+    val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }

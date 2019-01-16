@@ -50,7 +50,6 @@ class WorkerWebUI(
     addStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE)
     attachHandler(createServletHandler("/log",
       (request: HttpServletRequest) => logPage.renderLog(request),
-      worker.securityMgr,
       worker.conf))
   }
 }

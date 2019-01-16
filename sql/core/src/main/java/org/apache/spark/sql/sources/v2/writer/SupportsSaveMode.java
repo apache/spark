@@ -14,21 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features
 
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
-import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
+package org.apache.spark.sql.sources.v2.writer;
 
-/**
- * This step is responsible for setting ENV_SPARK_USER when HADOOP_FILES are detected
- * however, this step would not be run if Kerberos is enabled, as Kerberos sets SPARK_USER
- */
-private[spark] class HadoopSparkUserExecutorFeatureStep(conf: KubernetesExecutorConf)
-  extends KubernetesFeatureConfigStep {
+import org.apache.spark.sql.SaveMode;
 
-  override def configurePod(pod: SparkPod): SparkPod = {
-    val sparkUserName = conf.get(KERBEROS_SPARK_USER_NAME)
-    HadoopBootstrapUtil.bootstrapSparkUserPod(sparkUserName, pod)
-  }
+// A temporary mixin trait for `WriteBuilder` to support `SaveMode`. Will be removed before
+// Spark 3.0 when all the new write operators are finished. See SPARK-26356 for more details.
+public interface SupportsSaveMode extends WriteBuilder {
+  WriteBuilder mode(SaveMode mode);
 }

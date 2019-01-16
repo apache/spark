@@ -15,16 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.r
+package org.apache.spark.sql.sources.v2;
 
-private[spark] object SparkRDefaults {
+import org.apache.spark.sql.sources.v2.reader.Scan;
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 
-  // Default value for spark.r.backendConnectionTimeout config
-  val DEFAULT_CONNECTION_TIMEOUT: Int = 6000
+/**
+ * An internal base interface of mix-in interfaces for readable {@link Table}. This adds
+ * {@link #newScanBuilder(DataSourceOptions)} that is used to create a scan for batch, micro-batch,
+ * or continuous processing.
+ */
+interface SupportsRead extends Table {
 
-  // Default value for spark.r.heartBeatInterval config
-  val DEFAULT_HEARTBEAT_INTERVAL: Int = 100
-
-  // Default value for spark.r.numRBackendThreads config
-  val DEFAULT_NUM_RBACKEND_THREADS = 2
+  /**
+   * Returns a {@link ScanBuilder} which can be used to build a {@link Scan}. Spark will call this
+   * method to configure each data source scan.
+   *
+   * @param options The options for reading, which is an immutable case-insensitive
+   *                string-to-string map.
+   */
+  ScanBuilder newScanBuilder(DataSourceOptions options);
 }
