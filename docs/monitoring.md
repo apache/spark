@@ -248,6 +248,18 @@ Security options for the Spark History Server are covered more detail in the
         written to disk will be re-used in the event of a history server restart.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.custom.executor.log.url</td>
+    <td>(none)</td>
+    <td>
+        Specifies custom spark executor log url for supporting external log service instead of using resource managers' app log urls.
+        Spark will support some path variables via patterns which can be vary on resource managers. 
+        Please check the document for resource manager to refer which patterns are supported.
+        <p/>
+        For now, YARN mode only supports this configuration.
+    </td>
+  </tr>
+
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,

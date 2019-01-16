@@ -47,8 +47,9 @@ import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.{AppStatusStore, ExecutorSummaryWrapper}
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
@@ -288,6 +289,160 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         }
       }
 
+    }
+  }
+
+  test("Handling executor log url without renewing") {
+    val conf = createTestConf()
+    val appId = "app1"
+    val user = "user1"
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("Handling executor log url with custom executor url - happy case") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
+        "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}}")
+
+    // some of available attributes are not used in pattern which should be OK
+
+    val appId = "app1"
+    val user = "user1"
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      val attr = execInfo.attributes
+      val newLogUrlMap = attr("LOG_FILES").split(",").map { file =>
+        val newLogUrl = s"http://newhost:9999/logs/clusters/${attr("CLUSTER_ID")}" +
+          s"/users/${attr("USER")}/containers/${attr("CONTAINER_ID")}/$file"
+        file -> newLogUrl
+      }.toMap
+
+      execInfo -> newLogUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("Handling executor log url with custom executor url - happy case - " +
+    "pattern doesn't contain 'FILE_NAME'") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
+        "/users/{{USER}}/containers/{{CONTAINER_ID}}")
+
+    // some of available attributes are not used in pattern which should be OK
+
+    val appId = "app1"
+    val user = "user1"
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      val attr = execInfo.attributes
+      val newLogUrl = s"http://newhost:9999/logs/clusters/${attr("CLUSTER_ID")}" +
+        s"/users/${attr("USER")}/containers/${attr("CONTAINER_ID")}"
+
+      execInfo -> Map("log" -> newLogUrl)
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("Handling executor log url with custom executor url - bad case - " +
+    "referring non-available attribute") {
+    // Here we are referring {{NON_EXISTING}} which is not available in attributes,
+    // which Spark will fail back to provide origin log url with warning log.
+
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
+        "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{NON_EXISTING}}/{{FILE_NAME}}")
+
+    val appId = "app1"
+    val user = "user1"
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("Handling executor log url with custom executor url - bad case - " +
+    "'FILE_NAME' is given for pattern but 'LOG_FILES' attribute is not available") {
+    // For this case Spark will fail back to provide origin log url with warning log.
+
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
+        "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{NON_EXISTING}}/{{FILE_NAME}}")
+
+    val appId = "app1"
+    val user = "user1"
+
+    val executorInfos = (1 to 5).map(
+      createTestExecutorInfo(appId, user, _, includingLogFiles = false))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  private def testHandlingExecutorLogUrl(
+      conf: SparkConf,
+      expectedLogUrlMap: Map[ExecutorInfo, Map[String, String]]): Unit = {
+    val provider = new FsHistoryProvider(conf)
+
+    val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = true)
+
+    val executorAddedEvents = expectedLogUrlMap.keys.zipWithIndex.map { case (execInfo, idx) =>
+      val event = SparkListenerExecutorAdded(1 + idx, s"exec$idx", execInfo)
+      event
+    }.toList.sortBy(_.time)
+    val allEvents = List(SparkListenerApplicationStart("app1", Some("app1"), 1L,
+      "test", Some("attempt1"))) ++ executorAddedEvents
+
+    writeFile(attempt1, true, None, allEvents: _*)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      list.head.attempts.size should be (1)
+
+      list.foreach { app =>
+        app.attempts.foreach { attempt =>
+          val appUi = provider.getAppUI(app.id, attempt.attemptId)
+          appUi should not be null
+          val executors = appUi.get.ui.store.store.view(classOf[ExecutorSummaryWrapper])
+            .closeableIterator().asScala
+          executors should not be null
+
+          val iterForExpectation = expectedLogUrlMap.iterator
+
+          var executorCount = 0
+          while (executors.hasNext) {
+            val executor = executors.next()
+            val expectation = iterForExpectation.next()
+
+            executor.host should be(expectation._1.executorHost)
+            executor.info.executorLogs should be(expectation._2)
+
+            executorCount += 1
+          }
+
+          executorCount should be (expectedLogUrlMap.size)
+        }
+      }
     }
   }
 
@@ -1046,6 +1201,29 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
 
     conf
+  }
+
+  private def createTestExecutorInfo(
+      appId: String,
+      user: String,
+      executorSeqNum: Int,
+      includingLogFiles: Boolean = true): ExecutorInfo = {
+    val host = s"host$executorSeqNum"
+    val container = s"container$executorSeqNum"
+    val cluster = s"cluster$executorSeqNum"
+    val logUrlPrefix = s"http://$host:8888/$appId/$container/origin"
+
+    val executorLogUrlMap = Map("stdout" -> s"$logUrlPrefix/stdout",
+      "stderr" -> s"$logUrlPrefix/stderr")
+
+    val executorAttributes = if (includingLogFiles) {
+      Map("LOG_FILES" -> "stdout,stderr", "CONTAINER_ID" -> container,
+        "CLUSTER_ID" -> cluster, "USER" -> user)
+    } else {
+      Map("CONTAINER_ID" -> container, "CLUSTER_ID" -> cluster, "USER" -> user)
+    }
+
+    new ExecutorInfo(host, 1, executorLogUrlMap, executorAttributes)
   }
 
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)

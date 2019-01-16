@@ -248,21 +248,24 @@ private[yarn] class ExecutorRunnable(
       }
     }
 
-    // Add log urls
+    // Add log urls, as well as executor attributes
     container.foreach { c =>
-      sys.env.filterKeys(_.endsWith("USER")).foreach { user =>
-        val containerId = ConverterUtils.toString(c.getId)
-        val address = c.getNodeHttpAddress
+      val containerId = ConverterUtils.toString(c.getId)
+      val address = c.getNodeHttpAddress
 
-        val customLogUrl = sparkConf.get(config.CUSTOM_LOG_URL)
+      env("SPARK_EXECUTOR_ATTRIBUTE_HTTP_SCHEME") = httpScheme
+      env("SPARK_EXECUTOR_ATTRIBUTE_NODE_HTTP_ADDRESS") = address
+      env("SPARK_EXECUTOR_ATTRIBUTE_CLUSTER_ID") = clusterId.getOrElse("")
+      env("SPARK_EXECUTOR_ATTRIBUTE_CONTAINER_ID") = containerId
 
-        val envNameToFileNameMap = Map("SPARK_LOG_URL_STDERR" -> "stderr",
-          "SPARK_LOG_URL_STDOUT" -> "stdout")
-        val logUrls = ExecutorRunnable.buildLogUrls(customLogUrl, httpScheme, address,
-          clusterId, containerId, user, envNameToFileNameMap)
-        logUrls.foreach { case (envName, url) =>
-          env(envName) = url
-        }
+      sys.env.filterKeys(_.endsWith("USER")).foreach { u =>
+        val user = u._2
+        val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
+        env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
+        env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
+
+        env("SPARK_EXECUTOR_ATTRIBUTE_USER") = user
+        env("SPARK_EXECUTOR_ATTRIBUTE_LOG_FILES") = "stderr,stdout"
       }
     }
 
@@ -271,6 +274,7 @@ private[yarn] class ExecutorRunnable(
 }
 
 private[yarn] object ExecutorRunnable {
+  // FIXME: MOVE TO SHS side, as well as allowing arbitrary parameters
   def buildLogUrls(
       logUrlPattern: String,
       httpScheme: String,

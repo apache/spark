@@ -930,7 +930,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
     val replayBus = new ReplayListenerBus()
-    val listener = new AppStatusListener(trackingStore, replayConf, false,
+    val listener = new HistoryAppStatusListener(trackingStore, replayConf, false,
       lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)
 

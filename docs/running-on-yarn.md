@@ -431,21 +431,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.custom.log.url</code></td>
-  <td>{{HttpScheme}}{{NodeHttpAddress}}/node/containerlogs/{{ContainerId}}/{{User}}/{{FileName}}?start=-4096</td>
-  <td>
-  Specifies custom spark log url for supporting external log service rather than NodeManager webapp address.
-  Spark will support some path variables via patterns. Supported patterns and allocated values are below: <p/>
-  <p/>
-  * `{{HttpScheme}}`: `http://`/`https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)<p/>
-  * `{{NodeHttpAddress}}`: The "host:port" of node where container was run.<p/> 
-  * `{{ClusterId}}`: The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)<p/>
-  * `{{ContainerId}}`: The ID of container.<p/>
-  * `{{User}}`: `SPARK_USER` on system environment.<p/>
-  * `{{FileName}}`: `stdout`/`stderr`.<p/>
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.rolledLog.includePattern</code></td>
   <td>(none)</td>
   <td>
@@ -485,6 +470,36 @@ To use a custom metrics.properties for the application master and executors, upd
   If it is not set then the YARN application ID is used.
   </td>
 </tr>
+</table>
+
+#### Available patterns for SHS custom executor log URL
+
+<table class="table">
+    <tr><th>Pattern</th><th>Meaning</th></tr>
+    <tr>
+      <td>{{HTTP_SCHEME}}</td>
+      <td>`http://`/`https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
+    </tr>
+    <tr>
+      <td>{{NODE_HTTP_ADDRESS}}</td>
+      <td>The "host:port" of node where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{CLUSTER_ID}}</td>
+      <td>The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)</td>
+    </tr>
+    <tr>
+      <td>{{CONTAINER_ID}}</td>
+      <td>The ID of container.</td>
+    </tr>
+    <tr>
+      <td>{{USER}}</td>
+      <td>'SPARK_USER' on system environment.</td>
+    </tr>
+    <tr>
+      <td>{{FILE_NAME}}</td>
+      <td>`stdout`, `stderr`.</td>
+    </tr>
 </table>
 
 # Important notes

@@ -125,4 +125,12 @@ private[spark] object History {
   val KERBEROS_KEYTAB = ConfigBuilder("spark.history.kerberos.keytab")
     .stringConf
     .createOptional
+
+  val CUSTOM_EXECUTOR_LOG_URL = ConfigBuilder("spark.history.custom.executor.log.url")
+    .doc("Specifies custom spark executor log url for supporting external log service instead of " +
+      "using resource managers' app log urls. Spark will support some path variables via " +
+      "patterns which can be vary on resource managers. Please check the document for " +
+      "resource manager to refer which patterns are supported.")
+    .stringConf
+    .createOptional
 }
