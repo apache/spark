@@ -52,8 +52,8 @@ private[noop] class NoopWriteSupport extends BatchWriteSupport {
   }
 
   override def useCommitCoordinator(): Boolean = false
-  override def commit(messages: Array[WriterCommitMessage]): Unit = ()
-  override def abort(messages: Array[WriterCommitMessage]): Unit = ()
+  override def commit(messages: Array[WriterCommitMessage]): Unit = {}
+  override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }
 
 private[noop] class NoopWriterFactory extends DataWriterFactory {
@@ -63,8 +63,8 @@ private[noop] class NoopWriterFactory extends DataWriterFactory {
 }
 
 private[noop] class NoopWriter extends DataWriter[InternalRow] {
-  override def write(record: InternalRow): Unit = ()
+  override def write(record: InternalRow): Unit = {}
   override def commit(): WriterCommitMessage = null
-  override def abort(): Unit = ()
+  override def abort(): Unit = {}
 }
 
