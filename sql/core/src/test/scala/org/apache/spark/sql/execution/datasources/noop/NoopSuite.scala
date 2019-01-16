@@ -36,22 +36,6 @@ class NoopSuite extends SharedSQLContext {
     assert(accum.value == numElems)
   }
 
-  test("write partitioned data") {
-    val numElems = 100
-    val accum = spark.sparkContext.longAccumulator
-    spark.range(numElems)
-      .map { x =>
-        accum.add(1)
-        x
-      }
-      .select(('value mod 10) as "key", 'value)
-      .write
-      .format("noop")
-      .partitionBy("key")
-      .save()
-    assert(accum.value == numElems)
-  }
-
   test("read partitioned data") {
     val numElems = 100
     withTempPath { dir =>
