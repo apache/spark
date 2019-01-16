@@ -17,6 +17,8 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDate
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
@@ -679,5 +681,23 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+  }
+
+  test("timestamp literals") {
+    assertEqual("TIMESTAMP '2019-01-14 20:54:00.000'", Literal(new Timestamp(1547495640000L)))
+    assertEqual("TIMESTAMP '1400-01-01 20:54:00.000'", Literal(new Timestamp(-17986680360000L)))
+    assertEqual("timestamp '2000-01-01T00:00:00.123'", Literal(new Timestamp(946681200123L)))
+    assertEqual(
+      sqlCommand = "TIMESTAMP '2019-01-16 20:50:00.567000+01:00'",
+      Literal(new Timestamp(1547668200567L)))
+  }
+
+  test("date literals") {
+    def dateLiteral(year: Int, month: Int, day: Int): Literal = {
+      Literal(new Date(TimeUnit.DAYS.toMillis(LocalDate.of(year, month, day).toEpochDay)))
+    }
+    assertEqual(sqlCommand = "DATE '2019-01-14'", dateLiteral(2019, 1, 14))
+    assertEqual(sqlCommand = "date '2019-01'", dateLiteral(2019, 1, 1))
+    assertEqual(sqlCommand = "Date '2019'", dateLiteral(2019, 1, 1))
   }
 }
