@@ -644,59 +644,70 @@ class MasterSuite extends SparkFunSuite
       val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
       assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
     }
-    val worker1 = new MockWorker(master.self)
-    worker1.rpcEnv.setupEndpoint("worker", worker1)
-    val worker1Reg = RegisterWorker(
-      worker1.id,
-      "localhost",
-      9998,
-      worker1.self,
-      10,
-      1024,
-      "http://localhost:8080",
-      RpcAddress("localhost2", 10000))
-    master.self.send(worker1Reg)
-    val driver = DeployTestUtils.createDriverDesc().copy(supervise = true)
-    master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
+    var worker1: MockWorker = null
+    var worker2: MockWorker = null
+    try {
+      worker1 = new MockWorker(master.self)
+      worker1.rpcEnv.setupEndpoint("worker", worker1)
+      val worker1Reg = RegisterWorker(
+        worker1.id,
+        "localhost",
+        9998,
+        worker1.self,
+        10,
+        1024,
+        "http://localhost:8080",
+        RpcAddress("localhost2", 10000))
+      master.self.send(worker1Reg)
+      val driver = DeployTestUtils.createDriverDesc().copy(supervise = true)
+      master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
 
-    eventually(timeout(10.seconds)) {
-      assert(worker1.apps.nonEmpty)
-    }
+      eventually(timeout(10.seconds)) {
+        assert(worker1.apps.nonEmpty)
+      }
 
-    eventually(timeout(10.seconds)) {
-      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
-      assert(masterState.workers(0).state == WorkerState.DEAD)
-    }
+      eventually(timeout(10.seconds)) {
+        val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+        assert(masterState.workers(0).state == WorkerState.DEAD)
+      }
 
-    val worker2 = new MockWorker(master.self)
-    worker2.rpcEnv.setupEndpoint("worker", worker2)
-    master.self.send(RegisterWorker(
-      worker2.id,
-      "localhost",
-      9999,
-      worker2.self,
-      10,
-      1024,
-      "http://localhost:8081",
-      RpcAddress("localhost", 10001)))
-    eventually(timeout(10.seconds)) {
-      assert(worker2.apps.nonEmpty)
-    }
+      worker2 = new MockWorker(master.self)
+      worker2.rpcEnv.setupEndpoint("worker", worker2)
+      master.self.send(RegisterWorker(
+        worker2.id,
+        "localhost",
+        9999,
+        worker2.self,
+        10,
+        1024,
+        "http://localhost:8081",
+        RpcAddress("localhost", 10001)))
+      eventually(timeout(10.seconds)) {
+        assert(worker2.apps.nonEmpty)
+      }
 
-    master.self.send(worker1Reg)
-    eventually(timeout(10.seconds)) {
-      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      master.self.send(worker1Reg)
+      eventually(timeout(10.seconds)) {
+        val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
 
-      val worker = masterState.workers.filter(w => w.id == worker1.id)
-      assert(worker.length == 1)
-      // make sure the `DriverStateChanged` arrives at Master.
-      assert(worker(0).drivers.isEmpty)
-      assert(worker1.apps.isEmpty)
-      assert(worker1.drivers.isEmpty)
-      assert(worker2.apps.size == 1)
-      assert(worker2.drivers.size == 1)
-      assert(masterState.activeDrivers.length == 1)
-      assert(masterState.activeApps.length == 1)
+        val worker = masterState.workers.filter(w => w.id == worker1.id)
+        assert(worker.length == 1)
+        // make sure the `DriverStateChanged` arrives at Master.
+        assert(worker(0).drivers.isEmpty)
+        assert(worker1.apps.isEmpty)
+        assert(worker1.drivers.isEmpty)
+        assert(worker2.apps.size == 1)
+        assert(worker2.drivers.size == 1)
+        assert(masterState.activeDrivers.length == 1)
+        assert(masterState.activeApps.length == 1)
+      }
+    } finally {
+      if (worker1 != null) {
+        worker1.rpcEnv.shutdown()
+      }
+      if (worker2 != null) {
+        worker2.rpcEnv.shutdown()
+      }
     }
   }
 
