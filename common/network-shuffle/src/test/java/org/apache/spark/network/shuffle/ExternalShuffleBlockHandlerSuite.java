@@ -103,7 +103,8 @@ public class ExternalShuffleBlockHandlerSuite {
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
         (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
-    verify(streamManager, times(1)).registerStream(anyString(), stream.capture());
+    verify(streamManager, times(1)).registerStream(anyString(), stream.capture(),
+      any());
     Iterator<ManagedBuffer> buffers = stream.getValue();
     assertEquals(block0Marker, buffers.next());
     assertEquals(block1Marker, buffers.next());
