@@ -1543,7 +1543,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         StopStream,
 
         // Restart after a batch with one file source having no new data.
-        // This restart is needed to hit the issue in SC-14336.
+        // This restart is needed to hit the issue in SPARK-26629.
 
         StartStream(),
         addMultiTextFileData(source1Content = null, source2Content = "source2_2"),
