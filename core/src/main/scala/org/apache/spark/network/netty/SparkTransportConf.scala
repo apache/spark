@@ -66,14 +66,21 @@ object SparkTransportConf {
     * @param defaultNumThreads default number of threads
     * @return
     */
-  def getNumOfThreads(conf: SparkConf, module: String, server: Boolean,
-                      defaultNumThreads: Int): String = {
+  def getNumOfThreads(
+      conf: SparkConf,
+      module: String,
+      server: Boolean,
+      defaultNumThreads: Int): String = {
+
     val isDriver = conf.get("spark.executor.id", "") == SparkContext.DRIVER_IDENTIFIER
     val side = if (isDriver) "driver" else "executor"
 
     val num =
-      if (server) conf.getInt(s"spark.$side.$module.io.serverThreads", defaultNumThreads)
-      else conf.getInt(s"spark.$side.$module.io.clientThreads", defaultNumThreads)
+      if (server) {
+        conf.getInt(s"spark.$side.$module.io.serverThreads", defaultNumThreads)
+      } else {
+        conf.getInt(s"spark.$side.$module.io.clientThreads", defaultNumThreads)
+      }
 
     if(num > 0) num.toString else defaultNumThreads.toString
   }
