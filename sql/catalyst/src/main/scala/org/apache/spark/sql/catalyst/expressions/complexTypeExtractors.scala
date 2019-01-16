@@ -233,7 +233,20 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   override def right: Expression = ordinal
 
   /** `Null` is returned for invalid ordinals. */
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (ordinal.foldable && !ordinal.nullable) {
+    val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
+    child match {
+      case CreateArray(ar) if intOrdinal < ar.length =>
+        ar(intOrdinal).nullable
+      case GetArrayStructFields(CreateArray(ar), _, _, _, containsNull)
+          if intOrdinal < ar.length =>
+        containsNull
+      case _ =>
+        true
+    }
+  } else {
+    true
+  }
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 

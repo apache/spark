@@ -59,6 +59,35 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(GetArrayItem(nestedArray, Literal(0)), Seq(1))
   }
 
+  test("SPARK-26637 handles GetArrayItem nullability correctly when input array size is constant") {
+    // CreateArray case
+    val a = AttributeReference("a", IntegerType, nullable = false)()
+    val b = AttributeReference("b", IntegerType, nullable = true)()
+    val array = CreateArray(a :: b :: Nil)
+    assert(!GetArrayItem(array, Literal(0)).nullable)
+    assert(GetArrayItem(array, Literal(1)).nullable)
+    assert(!GetArrayItem(array, Subtract(Literal(2), Literal(2))).nullable)
+    assert(GetArrayItem(array, AttributeReference("ordinal", IntegerType)()).nullable)
+
+    // GetArrayStructFields case
+    val f1 = StructField("a", IntegerType, nullable = false)
+    val f2 = StructField("b", IntegerType, nullable = true)
+    val structType = StructType(f1 :: f2 :: Nil)
+    val c = AttributeReference("c", structType, nullable = false)()
+    val stArray1 = GetArrayStructFields(CreateArray(c :: Nil), f1, 0, 2, containsNull = false)
+    assert(!GetArrayItem(stArray1, Literal(0)).nullable)
+    val stArray2 = GetArrayStructFields(CreateArray(c :: Nil), f1, 1, 2, containsNull = true)
+    assert(GetArrayItem(stArray2, Literal(0)).nullable)
+
+    val d = AttributeReference("d", structType, nullable = true)()
+    val stArray3 = GetArrayStructFields(CreateArray(c :: d :: Nil), f1, 0, 2, containsNull = false)
+    assert(!GetArrayItem(stArray3, Literal(0)).nullable)
+    assert(!GetArrayItem(stArray3, Literal(1)).nullable)
+    val stArray4 = GetArrayStructFields(CreateArray(c :: d :: Nil), f1, 1, 2, containsNull = true)
+    assert(GetArrayItem(stArray4, Literal(0)).nullable)
+    assert(GetArrayItem(stArray4, Literal(1)).nullable)
+  }
+
   test("GetMapValue") {
     val typeM = MapType(StringType, StringType)
     val map = Literal.create(Map("a" -> "b"), typeM)
