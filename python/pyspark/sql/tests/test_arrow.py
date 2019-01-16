@@ -250,7 +250,7 @@ class ArrowTests(ReusedSQLTestCase):
         fields[0], fields[7] = fields[7], fields[0]  # swap str with timestamp
         wrong_schema = StructType(fields)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, ".*No cast.*string.*timestamp.*"):
+            with self.assertRaisesRegexp(Exception, ".*cast.*[s|S]tring.*timestamp.*"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
