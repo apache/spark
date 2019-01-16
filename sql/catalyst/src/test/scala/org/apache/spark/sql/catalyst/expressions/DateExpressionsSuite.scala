@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -42,10 +43,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
   sdf.setTimeZone(TimeZoneGMT)
-  val sdfDate = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
-  sdfDate.setTimeZone(TimeZoneGMT)
-  val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
-  val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
+
+  def toMillis(timestamp: String): Long = {
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", TimeZoneGMT)
+    TimeUnit.MICROSECONDS.toMillis(tf.parse(timestamp))
+  }
+  val date = "2015-04-08 13:10:15"
+  val d = new Date(toMillis(date))
+  val time = "2013-11-08 13:10:15"
+  val ts = new Timestamp(toMillis(time))
 
   test("datetime function current_date") {
     val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis(), TimeZoneGMT)
@@ -86,7 +92,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Year") {
     checkEvaluation(Year(Literal.create(null, DateType)), null)
     checkEvaluation(Year(Literal(d)), 2015)
-    checkEvaluation(Year(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 2015)
+    checkEvaluation(Year(Cast(Literal(date), DateType, gmtId)), 2015)
     checkEvaluation(Year(Cast(Literal(ts), DateType, gmtId)), 2013)
 
     val c = Calendar.getInstance()
@@ -108,7 +114,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Quarter") {
     checkEvaluation(Quarter(Literal.create(null, DateType)), null)
     checkEvaluation(Quarter(Literal(d)), 2)
-    checkEvaluation(Quarter(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 2)
+    checkEvaluation(Quarter(Cast(Literal(date), DateType, gmtId)), 2)
     checkEvaluation(Quarter(Cast(Literal(ts), DateType, gmtId)), 4)
 
     val c = Calendar.getInstance()
@@ -131,7 +137,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Month") {
     checkEvaluation(Month(Literal.create(null, DateType)), null)
     checkEvaluation(Month(Literal(d)), 4)
-    checkEvaluation(Month(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 4)
+    checkEvaluation(Month(Cast(Literal(date), DateType, gmtId)), 4)
     checkEvaluation(Month(Cast(Literal(ts), DateType, gmtId)), 11)
 
     checkEvaluation(Month(Cast(Literal("1582-04-28 13:10:15"), DateType)), 4)
@@ -156,7 +162,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DayOfMonth(Cast(Literal("2000-02-29"), DateType)), 29)
     checkEvaluation(DayOfMonth(Literal.create(null, DateType)), null)
     checkEvaluation(DayOfMonth(Literal(d)), 8)
-    checkEvaluation(DayOfMonth(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 8)
+    checkEvaluation(DayOfMonth(Cast(Literal(date), DateType, gmtId)), 8)
     checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType, gmtId)), 8)
 
     checkEvaluation(DayOfMonth(Cast(Literal("1582-04-28 13:10:15"), DateType)), 28)
@@ -200,7 +206,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("DayOfWeek") {
     checkEvaluation(DayOfWeek(Literal.create(null, DateType)), null)
     checkEvaluation(DayOfWeek(Literal(d)), Calendar.WEDNESDAY)
-    checkEvaluation(DayOfWeek(Cast(Literal(sdfDate.format(d)), DateType, gmtId)),
+    checkEvaluation(DayOfWeek(Cast(Literal(date), DateType, gmtId)),
       Calendar.WEDNESDAY)
     checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, gmtId)), Calendar.FRIDAY)
     checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, gmtId)), Calendar.FRIDAY)
@@ -214,7 +220,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("WeekDay") {
     checkEvaluation(WeekDay(Literal.create(null, DateType)), null)
     checkEvaluation(WeekDay(Literal(d)), 2)
-    checkEvaluation(WeekDay(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(date), DateType, gmtId)), 2)
     checkEvaluation(WeekDay(Cast(Literal(ts), DateType, gmtId)), 4)
     checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, gmtId)), 4)
     checkEvaluation(WeekDay(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))), 5)
@@ -225,7 +231,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
     checkEvaluation(WeekOfYear(Literal(d)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 15)
+    checkEvaluation(WeekOfYear(Cast(Literal(date), DateType, gmtId)), 15)
     checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId)), 45)
     checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, gmtId)), 18)
     checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 40)
