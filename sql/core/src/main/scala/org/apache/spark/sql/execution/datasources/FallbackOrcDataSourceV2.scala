@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
 class FallbackOrcDataSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(d @DataSourceV2Relation(table: OrcTable, _, _), _, _, _, _) =>
-      val v1FileFormat = classOf[OrcFileFormat].getConstructor().newInstance()
+      val v1FileFormat = new OrcFileFormat
       val relation = HadoopFsRelation(table.getFileIndex, table.getFileIndex.partitionSchema,
         table.schema(), None, v1FileFormat, d.options)(sparkSession)
       i.copy(table = LogicalRelation(relation))
