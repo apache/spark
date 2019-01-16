@@ -56,7 +56,7 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters,
-        DataSourceV2Relation(_, orcTable: OrcTable, _, options, _)) =>
+        DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         val scanBuilder = orcTable.newScanBuilder(new DataSourceOptions(options.asJava))
         scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
@@ -100,7 +100,7 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters,
-      DataSourceV2Relation(_, orcTable: OrcTable, _, options, _)) =>
+      DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         val scanBuilder = orcTable.newScanBuilder(new DataSourceOptions(options.asJava))
         scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)

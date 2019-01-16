@@ -210,7 +210,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         val objectMapper = new ObjectMapper()
         DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
       }
-      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption
+      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "true"
+      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption + checkFilesExistsOption
       val dsOptions = new DataSourceOptions(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
