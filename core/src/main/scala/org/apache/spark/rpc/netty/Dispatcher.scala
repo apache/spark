@@ -18,16 +18,17 @@
 package org.apache.spark.rpc.netty
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Promise
 import scala.util.control.NonFatal
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.RPC_NETTY_DISPATCHER_NUM_THREADS
 import org.apache.spark.network.client.RpcResponseCallback
+import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
 
@@ -194,18 +195,28 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     endpoints.containsKey(name)
   }
 
+  def getNumOfThreads(conf: SparkConf, defaultNumThreads: Int): Int = {
+    val isDriver = conf.get("spark.executor.id", "") == SparkContext.DRIVER_IDENTIFIER
+    val side = if (isDriver) "driver" else "executor"
+    val num = conf.getInt(s"spark.$side.rpc.netty.dispatcher.numThreads", defaultNumThreads)
+    if(num > 0) num else defaultNumThreads
+  }
+
   /** Thread pool used for dispatching messages. */
   private val threadpool: ThreadPoolExecutor = {
     val availableCores =
       if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
     val numThreads = nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
-      .getOrElse(math.max(2, availableCores))
-    val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
+        .getOrElse(math.max(2, availableCores))
+    val finalNumThreads = getNumOfThreads(nettyEnv.conf, numThreads)
+    val pool = ThreadUtils.newDaemonFixedThreadPool(finalNumThreads, "dispatcher-event-loop")
     for (i <- 0 until numThreads) {
       pool.execute(new MessageLoop)
     }
     pool
   }
+
+
 
   /** Message loop used for dispatching messages. */
   private class MessageLoop extends Runnable {

@@ -19,9 +19,8 @@ package org.apache.spark.network.netty
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.{ConfigProvider, NettyUtils, TransportConf}
-
 /**
  * Provides a utility for transforming from a SparkConf inside a Spark JVM (e.g., Executor,
  * Driver, or a standalone shuffle service) into a TransportConf with details on our environment
@@ -44,8 +43,11 @@ object SparkTransportConf {
     // assuming we have all the machine's cores).
     // NB: Only set if serverThreads/clientThreads not already set.
     val numThreads = NettyUtils.defaultNumThreads(numUsableCores)
-    conf.setIfMissing(s"spark.$module.io.serverThreads", numThreads.toString)
-    conf.setIfMissing(s"spark.$module.io.clientThreads", numThreads.toString)
+    val finalServerNumThreads = getNumOfThreads(conf, module, true, numThreads)
+    val finalClientNumThreads = getNumOfThreads(conf, module, false, numThreads)
+
+    conf.setIfMissing(s"spark.$module.io.serverThreads", finalServerNumThreads)
+    conf.setIfMissing(s"spark.$module.io.clientThreads", finalClientNumThreads)
 
     new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)
@@ -54,5 +56,25 @@ object SparkTransportConf {
         conf.getAll.toMap.asJava.entrySet()
       }
     })
+  }
+
+  /**
+    * Separate threads configuration of driver and executor
+    * @param conf the [[SparkConf]]
+    * @param module the module name
+    * @param server if true, it's for the serverThreads. Otherwise, it's for the clientThreads.
+    * @param defaultNumThreads default number of threads
+    * @return
+    */
+  def getNumOfThreads(conf: SparkConf, module: String, server: Boolean,
+                      defaultNumThreads: Int): String = {
+    val isDriver = conf.get("spark.executor.id", "") == SparkContext.DRIVER_IDENTIFIER
+    val side = if (isDriver) "driver" else "executor"
+
+    val num =
+      if (server) conf.getInt(s"spark.$side.$module.io.serverThreads", defaultNumThreads)
+      else conf.getInt(s"spark.$side.$module.io.clientThreads", defaultNumThreads)
+
+    if(num > 0) num.toString else defaultNumThreads.toString
   }
 }
