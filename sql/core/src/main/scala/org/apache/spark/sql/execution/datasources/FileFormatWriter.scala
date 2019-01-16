@@ -58,9 +58,11 @@ object FileFormatWriter extends Logging {
     override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
       nullSafeCodeGen(ctx, ev, c =>
         s"""if ($c.numBytes() == 0) {
-           |${ev.isNull} = true;
-           |${ev.value} = null; }
-           |else ${ev.value} = $c;""".stripMargin)
+           |  ${ev.isNull} = true;
+           |  ${ev.value} = null;
+           |} else {
+           |  ${ev.value} = $c;
+           |}""".stripMargin)
     }
   }
 
