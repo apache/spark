@@ -561,6 +561,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
 
+    case p @ Project(_, s: SerializeFromObject) if p.references != s.outputSet =>
+      val prunedSerializer = s.serializer.filter { expr =>
+        p.references.contains(expr.toAttribute)
+      }
+      p.copy(child = SerializeFromObject(prunedSerializer, s.child))
+
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
     case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
       a.copy(child = prunedChild(child, a.references))
