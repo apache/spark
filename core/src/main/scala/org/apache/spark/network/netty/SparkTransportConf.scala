@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.{ConfigProvider, NettyUtils, TransportConf}
+
 /**
  * Provides a utility for transforming from a SparkConf inside a Spark JVM (e.g., Executor,
  * Driver, or a standalone shuffle service) into a TransportConf with details on our environment
@@ -82,6 +83,6 @@ object SparkTransportConf {
         conf.getInt(s"spark.$side.$module.io.clientThreads", defaultNumThreads)
       }
 
-    if(num > 0) num.toString else defaultNumThreads.toString
+    if (num > 0) num.toString else defaultNumThreads.toString
   }
 }

@@ -198,7 +198,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     val isDriver = conf.get("spark.executor.id", "") == SparkContext.DRIVER_IDENTIFIER
     val side = if (isDriver) "driver" else "executor"
     val num = conf.getInt(s"spark.$side.rpc.netty.dispatcher.numThreads", defaultNumThreads)
-    if(num > 0) num else defaultNumThreads
+    if (num > 0) num else defaultNumThreads
   }
 
   /** Thread pool used for dispatching messages. */
@@ -214,8 +214,6 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     }
     pool
   }
-
-  
 
   /** Message loop used for dispatching messages. */
   private class MessageLoop extends Runnable {
