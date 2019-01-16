@@ -286,20 +286,21 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def completeTasks(partitionId: Int, stageId: Int, killTasks: Boolean): Unit = {
+  override def completeTasks(
+    partitionId: Int, stageId: Int, taskInfo: TaskInfo, killTasks: Boolean): Unit = {
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.partitionToIndex.get(partitionId) match {
         case Some(index) =>
-          val taskInfoList = tsm.taskAttempts(index)
-          taskInfoList.foreach { taskInfo =>
-            tsm.markPartitionCompleted(partitionId, taskInfo)
-            if (killTasks && taskInfo.running) {
+          tsm.markPartitionCompleted(index, taskInfo)
+          if (killTasks) {
+            val taskInfoList = tsm.taskAttempts(index)
+            taskInfoList.filter(_.running).foreach { tInfo =>
               try {
-                killTaskAttempt(taskInfo.taskId, false,
+                killTaskAttempt(tInfo.taskId, false,
                   s"Partition $partitionId is already completed")
               } catch {
                 case e: Exception =>
-                  logWarning(s"Unable to kill Task ID ${taskInfo.taskId}.")
+                  logWarning(s"Unable to kill Task ID ${tInfo.taskId}.")
               }
             }
           }

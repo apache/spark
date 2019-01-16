@@ -116,6 +116,6 @@ private[spark] trait TaskScheduler {
    * same partition. As a result, we do not see any Killed tasks due to
    * TaskCommitDenied Exceptions showing up in the UI.
    */
-  def completeTasks(partitionId: Int, stageId: Int, killTasks: Boolean): Unit
+  def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo, killTasks: Boolean): Unit
 
 }
