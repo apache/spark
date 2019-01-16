@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.noop
 
-import java.util.Optional
-
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.DataSourceRegister
@@ -32,39 +30,36 @@ import org.apache.spark.sql.types.StructType
  */
 class NoopDataSource
   extends DataSourceV2
-  with BatchWriteSupportProvider
+  with TableProvider
   with DataSourceRegister {
 
   override def shortName(): String = "noop"
-
-  override def createBatchWriteSupport(
-      queryId: String,
-      schema: StructType,
-      mode: SaveMode,
-      options: DataSourceOptions): Optional[BatchWriteSupport] = {
-    Optional.of(new NoopWriteSupport())
-  }
+  override def getTable(options: DataSourceOptions): Table = NoopTable
 }
 
-private[noop] class NoopWriteSupport extends BatchWriteSupport {
-  override def createBatchWriterFactory(): DataWriterFactory = {
-    new NoopWriterFactory()
-  }
+private[noop] object NoopTable extends Table with SupportsBatchWrite {
+  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = NoopWriteBuilder
+  override def name(): String = "noop-table"
+  override def schema(): StructType = new StructType()
+}
 
-  override def useCommitCoordinator(): Boolean = false
+private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsSaveMode {
+  override def buildForBatch(): BatchWrite = NoopBatchWrite
+  override def mode(mode: SaveMode): WriteBuilder = this
+}
+
+private[noop] object NoopBatchWrite extends BatchWrite {
+  override def createBatchWriterFactory(): DataWriterFactory = NoopWriterFactory
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }
 
-private[noop] class NoopWriterFactory extends DataWriterFactory {
-  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new NoopWriter()
-  }
+private[noop] object NoopWriterFactory extends DataWriterFactory {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = NoopWriter
 }
 
-private[noop] class NoopWriter extends DataWriter[InternalRow] {
+private[noop] object NoopWriter extends DataWriter[InternalRow] {
   override def write(record: InternalRow): Unit = {}
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = {}
 }
-
