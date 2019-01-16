@@ -62,11 +62,9 @@ private[noop] class NoopWriterFactory extends DataWriterFactory {
   }
 }
 
-private[noop] case object NoopWriterCommitMessage extends WriterCommitMessage
-
 private[noop] class NoopWriter extends DataWriter[InternalRow] {
   override def write(record: InternalRow): Unit = ()
-  override def commit(): WriterCommitMessage = NoopWriterCommitMessage
+  override def commit(): WriterCommitMessage = null
   override def abort(): Unit = ()
 }
 
