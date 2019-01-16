@@ -64,6 +64,12 @@ case class ShuffleBlockBatchId(shuffleId: Int, mapId: Int, reduceId: Int, numBlo
 }
 
 @DeveloperApi
+case class ArrayShuffleBlockId(blockIds: Seq[String])
+  extends BlockId {
+  override def name: String = blockIds.head + "-" + blockIds.last
+}
+
+@DeveloperApi
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
 }
