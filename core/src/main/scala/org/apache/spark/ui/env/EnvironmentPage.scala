@@ -76,33 +76,33 @@ private[ui] class EnvironmentPage(
               onClick="collapseTable('collapse-aggregated-hadoopProperties',
             'aggregated-hadoopProperties')">
           <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
+            <span class="collapse-table-arrow arrow-closed"></span>
             <a>Hadoop Properties</a>
           </h4>
         </span>
-        <div class="aggregated-hadoopProperties collapsible-table">
+        <div class="aggregated-hadoopProperties collapsible-table collapsed">
           {hadoopPropertiesTable}
         </div>
         <span class="collapse-aggregated-systemProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-systemProperties',
             'aggregated-systemProperties')">
           <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
+            <span class="collapse-table-arrow arrow-closed"></span>
             <a>System Properties</a>
           </h4>
         </span>
-        <div class="aggregated-systemProperties collapsible-table">
+        <div class="aggregated-systemProperties collapsible-table collapsed">
           {systemPropertiesTable}
         </div>
         <span class="collapse-aggregated-classpathEntries collapse-table"
             onClick="collapseTable('collapse-aggregated-classpathEntries',
             'aggregated-classpathEntries')">
           <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
+            <span class="collapse-table-arrow arrow-closed"></span>
             <a>Classpath Entries</a>
           </h4>
         </span>
-        <div class="aggregated-classpathEntries collapsible-table">
+        <div class="aggregated-classpathEntries collapsible-table collapsed">
           {classpathEntriesTable}
         </div>
       </span>
