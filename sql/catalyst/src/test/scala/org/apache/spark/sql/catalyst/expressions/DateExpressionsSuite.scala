@@ -41,9 +41,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val pstId = Option(TimeZonePST.getID)
   val jstId = Option(TimeZoneJST.getID)
 
-  val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-  sdf.setTimeZone(TimeZoneGMT)
-
   def toMillis(timestamp: String): Long = {
     val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", TimeZoneGMT)
     TimeUnit.MICROSECONDS.toMillis(tf.parse(timestamp))
@@ -185,7 +182,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Second(Literal.create(null, DateType), gmtId).resolved === false)
     assert(Second(Cast(Literal(d), TimestampType, gmtId), gmtId).resolved === true)
     checkEvaluation(Second(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
-    checkEvaluation(Second(Cast(Literal(sdf.format(d)), TimestampType, gmtId), gmtId), 15)
+    checkEvaluation(Second(Cast(Literal(date), TimestampType, gmtId), gmtId), 15)
     checkEvaluation(Second(Literal(ts), gmtId), 15)
 
     val c = Calendar.getInstance()
@@ -210,9 +207,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Calendar.WEDNESDAY)
     checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, gmtId)), Calendar.FRIDAY)
     checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, gmtId)), Calendar.FRIDAY)
-    checkEvaluation(DayOfWeek(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))),
+    checkEvaluation(DayOfWeek(Literal(new Date(toMillis("2017-05-27 13:10:15")))),
       Calendar.SATURDAY)
-    checkEvaluation(DayOfWeek(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))),
+    checkEvaluation(DayOfWeek(Literal(new Date(toMillis("1582-10-15 13:10:15")))),
       Calendar.FRIDAY)
     checkConsistencyBetweenInterpretedAndCodegen(DayOfWeek, DateType)
   }
@@ -223,8 +220,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WeekDay(Cast(Literal(date), DateType, gmtId)), 2)
     checkEvaluation(WeekDay(Cast(Literal(ts), DateType, gmtId)), 4)
     checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, gmtId)), 4)
-    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))), 5)
-    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 4)
+    checkEvaluation(WeekDay(Literal(new Date(toMillis("2017-05-27 13:10:15")))), 5)
+    checkEvaluation(WeekDay(Literal(new Date(toMillis("1582-10-15 13:10:15")))), 4)
     checkConsistencyBetweenInterpretedAndCodegen(WeekDay, DateType)
   }
 
@@ -234,8 +231,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WeekOfYear(Cast(Literal(date), DateType, gmtId)), 15)
     checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId)), 45)
     checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, gmtId)), 18)
-    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 40)
-    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 40)
+    checkEvaluation(WeekOfYear(Literal(new Date(toMillis("1582-10-15 13:10:15")))), 40)
+    checkEvaluation(WeekOfYear(Literal(new Date(toMillis("1582-10-04 13:10:15")))), 39)
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 
@@ -272,7 +269,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Hour(Literal.create(null, DateType), gmtId).resolved === false)
     assert(Hour(Literal(ts), gmtId).resolved === true)
     checkEvaluation(Hour(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
-    checkEvaluation(Hour(Cast(Literal(sdf.format(d)), TimestampType, gmtId), gmtId), 13)
+    checkEvaluation(Hour(Cast(Literal(date), TimestampType, gmtId), gmtId), 13)
     checkEvaluation(Hour(Literal(ts), gmtId), 13)
 
     val c = Calendar.getInstance()
@@ -299,7 +296,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Minute(Literal(ts), gmtId).resolved === true)
     checkEvaluation(Minute(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
     checkEvaluation(
-      Minute(Cast(Literal(sdf.format(d)), TimestampType, gmtId), gmtId), 10)
+      Minute(Cast(Literal(date), TimestampType, gmtId), gmtId), 10)
     checkEvaluation(Minute(Literal(ts), gmtId), 10)
 
     val c = Calendar.getInstance()
