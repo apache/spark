@@ -63,6 +63,10 @@ class SparkContext(object):
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD} and
     broadcast variables on that cluster.
+
+    .. note:: :class:`SparkContext` instance is not supported to share across multiple
+        processes out of the box, and PySpark does not guarantee multi-processing execution.
+        Use threads instead for concurrent processing purpose.
     """
 
     _gateway = None
