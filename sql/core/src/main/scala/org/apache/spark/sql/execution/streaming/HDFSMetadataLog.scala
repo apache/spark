@@ -457,8 +457,7 @@ object HDFSMetadataLog {
   }
 
   /**
-   * Verify if batchIds are continuous and between `startId` and `endId` (both inclusive and
-   * startId assumed to be <= endId).
+   * Verify if batchIds are continuous and between `startId` and `endId`.
    *
    * @param batchIds the sorted ids to verify.
    * @param startId the start id. If it's set, batchIds should start with this id.
