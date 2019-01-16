@@ -31,11 +31,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.storage._
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
 /**
@@ -284,8 +283,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
-    getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1, null,
-      fetchContinuousShuffleBlocksInBatch = false)
+    getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1)
   }
 
   /**
@@ -297,12 +295,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
    *         describing the shuffle blocks that are stored at that block manager.
    */
-  def getMapSizesByExecutorId(
-      shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
-      localExecutorId: String,
-      fetchContinuousShuffleBlocksInBatch: Boolean)
+  def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long)])]
 
   /**
@@ -653,19 +646,13 @@ private[spark] class MapOutputTrackerMaster(
 
   // Get blocks sizes by executor Id. Note that zero-sized blocks are excluded in the result.
   // This method is only called in local-mode.
-  def getMapSizesByExecutorId(
-      shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
-      localExecutorId: String,
-      fetchContinuousShuffleBlocksInBatch: Boolean)
+  def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
-          MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
-            localExecutorId, fetchContinuousShuffleBlocksInBatch)
+          MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
         }
       case None =>
         Iterator.empty
@@ -696,18 +683,12 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   private val fetching = new HashSet[Int]
 
   // Get blocks sizes by executor Id. Note that zero-sized blocks are excluded in the result.
-  override def getMapSizesByExecutorId(
-      shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
-      localExecutorId: String,
-      fetchContinuousShuffleBlocksInBatch: Boolean)
+  override def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     val statuses = getStatuses(shuffleId)
     try {
-      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
-        localExecutorId, fetchContinuousShuffleBlocksInBatch)
+      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
@@ -883,8 +864,6 @@ private[spark] object MapOutputTracker extends Logging {
    * @param startPartition Start of map output partition ID range (included in range)
    * @param endPartition End of map output partition ID range (excluded from range)
    * @param statuses List of map statuses, indexed by map ID.
-   * @param fetchContinuousShuffleBlocksInBatch if true, fetch contiguous partitions in batch for
-   *                                            local blocks
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block ID, shuffle block size) tuples
    *         describing the shuffle blocks that are stored at that block manager.
@@ -893,10 +872,7 @@ private[spark] object MapOutputTracker extends Logging {
       shuffleId: Int,
       startPartition: Int,
       endPartition: Int,
-      statuses: Array[MapStatus],
-      localExecutorId: String,
-      fetchContinuousShuffleBlocksInBatch: Boolean)
-      : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      statuses: Array[MapStatus]): Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long)]]
     for ((status, mapId) <- statuses.iterator.zipWithIndex) {
@@ -905,20 +881,11 @@ private[spark] object MapOutputTracker extends Logging {
         logError(errorMessage)
         throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
       } else {
-        if (fetchContinuousShuffleBlocksInBatch && status.location.executorId == localExecutorId) {
-          val totalSize: Long = (startPartition until endPartition).map(status.getSizeForBlock).sum
-          if (totalSize != 0) {
+        for (part <- startPartition until endPartition) {
+          val size = status.getSizeForBlock(part)
+          if (size != 0) {
             splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-              ((ShuffleBlockBatchId(shuffleId, mapId,
-                startPartition, endPartition - startPartition), totalSize))
-          }
-        } else {
-          for (part <- startPartition until endPartition) {
-            val size: Long = status.getSizeForBlock(part)
-            if (size != 0) {
-              splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
-            }
+                ((ShuffleBlockId(shuffleId, mapId, part), size))
           }
         }
       }
