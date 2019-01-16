@@ -230,7 +230,7 @@ final class ShuffleBlockFetcherIterator(
       req.blocks.map(_._1.toString)
     } else {
       req.blocks.head._1 match {
-        case bid: ArrayShuffleBlockId => bid.blockIds
+        case bid: ArrayShuffleBlockString => bid.blockIds
         case bid => Seq(bid.toString)
       }
     }
@@ -239,7 +239,7 @@ final class ShuffleBlockFetcherIterator(
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockIds: Array[String], buf: ManagedBuffer): Unit = {
         val blockId = if (blockIds.length > 1) {
-          ArrayShuffleBlockId(blockIds)
+          ArrayShuffleBlockString(blockIds)
         } else {
           BlockId(blockIds.head)
         }
@@ -343,6 +343,25 @@ final class ShuffleBlockFetcherIterator(
     remoteRequests
   }
 
+  private[this] def fetchData(arrayShuffleBlockId: ArrayShuffleBlockId): Boolean = {
+    var success = true
+    try {
+      val buf = blockManager.getBlockData(arrayShuffleBlockId)
+      shuffleMetrics.incLocalBlocksFetched(arrayShuffleBlockId.blockIds.length)
+      shuffleMetrics.incLocalBytesRead(buf.size)
+      buf.retain()
+      results.put(new SuccessFetchResult(arrayShuffleBlockId, blockManager.blockManagerId,
+        buf.size(), buf, false))
+    } catch {
+      case e: Exception =>
+        // If we see an exception, stop immediately.
+        logError(s"Error occurred while fetching local blocks", e)
+        results.put(new FailureFetchResult(arrayShuffleBlockId, blockManager.blockManagerId, e))
+        success = false
+    }
+    success
+  }
+
   /**
    * Fetch the local blocks while we are fetching remote blocks. This is ok because
    * `ManagedBuffer`'s memory is allocated lazily when we create the input stream, so all we
@@ -351,23 +370,20 @@ final class ShuffleBlockFetcherIterator(
   private[this] def fetchLocalBlocks() {
     logDebug(s"Start fetching local blocks: ${localBlocks.mkString(", ")}")
     val iter = localBlocks.iterator
+    val blockIds = new ArrayBuffer[ShuffleBlockId]
     while (iter.hasNext) {
-      val blockId = iter.next()
-      try {
-        val buf = blockManager.getBlockData(blockId)
-        shuffleMetrics.incLocalBlocksFetched(1)
-        shuffleMetrics.incLocalBytesRead(buf.size)
-        buf.retain()
-        results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId,
-          buf.size(), buf, false))
-      } catch {
-        case e: Exception =>
-          // If we see an exception, stop immediately.
-          logError(s"Error occurred while fetching local blocks", e)
-          results.put(new FailureFetchResult(blockId, blockManager.blockManagerId, e))
+      val curBlockId = iter.next().asInstanceOf[ShuffleBlockId]
+      if (blockIds.isEmpty || curBlockId.mapId == blockIds.head.mapId) {
+        blockIds += curBlockId
+      } else {
+        if (!fetchData(ArrayShuffleBlockId(blockIds))) {
           return
+        }
+        blockIds.clear()
+        blockIds += curBlockId
       }
     }
+    fetchData(ArrayShuffleBlockId(blockIds))
   }
 
   private[this] def initialize(): Unit = {
@@ -421,9 +437,9 @@ final class ShuffleBlockFetcherIterator(
       shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
 
       result match {
-        case _ @ SuccessFetchResult(
-          blockId, address, size, buf, isNetworkReqDone) =>
+        case _ @ SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
           val numBlocksFetched = blockId match {
+            case id: ArrayShuffleBlockString => id.blockIds.length
             case id: ArrayShuffleBlockId => id.blockIds.length
             case _ => 1
           }
@@ -509,7 +525,12 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, address, e) =>
-          numBlocksProcessed += 1
+          val numBlocksFetched = blockId match {
+            case id: ArrayShuffleBlockString => id.blockIds.length
+            case id: ArrayShuffleBlockId => id.blockIds.length
+            case _ => 1
+          }
+          numBlocksProcessed += numBlocksFetched
           throwFetchFailedException(blockId, address, e)
       }
 

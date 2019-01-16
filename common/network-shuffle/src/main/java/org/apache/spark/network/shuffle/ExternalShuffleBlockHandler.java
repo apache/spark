@@ -271,7 +271,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
-      // When fetch again happens (corrupted), openBlocks could contain ShuffleBlockBatchId
       if (fetchContinuousShuffleBlocksInBatch) {
         mergeShuffleBlockIds(blockIds);
       } else {
