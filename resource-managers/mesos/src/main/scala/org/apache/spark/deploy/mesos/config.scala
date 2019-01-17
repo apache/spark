@@ -63,22 +63,10 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("30s")
 
-  private[spark] val RECOVERY_MODE =
-    ConfigBuilder("spark.deploy.recoveryMode")
-      .stringConf
-      .createWithDefault("NONE")
-
   private[spark] val DISPATCHER_WEBUI_URL =
     ConfigBuilder("spark.mesos.dispatcher.webui.url")
       .doc("Set the Spark Mesos dispatcher webui_url for interacting with the " +
         "framework. If unset it will point to Spark's internal web UI.")
-      .stringConf
-      .createOptional
-
-  private[spark] val ZOOKEEPER_URL =
-    ConfigBuilder("spark.deploy.zookeeper.url")
-      .doc("When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this " +
-        "configuration is used to set the zookeeper URL to connect to.")
       .stringConf
       .createOptional
 

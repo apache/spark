@@ -274,14 +274,13 @@ object SparkEnv extends Logging {
       }
     }
 
-    // Create an instance of the class named by the given SparkConf property, or defaultClassName
+    // Create an instance of the class named by the given SparkConf property
     // if the property is not set, possibly initializing it with our conf
-    def instantiateClassFromConf[T](propertyName: String, defaultClassName: String): T = {
-      instantiateClass[T](conf.get(propertyName, defaultClassName))
+    def instantiateClassFromConf[T](propertyName: ConfigEntry[String]): T = {
+      instantiateClass[T](conf.get(propertyName))
     }
 
-    val serializer = instantiateClassFromConf[Serializer](
-      "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
+    val serializer = instantiateClassFromConf[Serializer](SERIALIZER)
     logDebug(s"Using serializer: ${serializer.getClass}")
 
     val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)

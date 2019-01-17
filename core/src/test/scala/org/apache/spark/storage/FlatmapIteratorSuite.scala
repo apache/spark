@@ -17,7 +17,7 @@
 package org.apache.spark.storage
 
 import org.apache.spark._
-
+import org.apache.spark.internal.config._
 
 class FlatmapIteratorSuite extends SparkFunSuite with LocalSparkContext {
   /* Tests the ability of Spark to deal with user provided iterators from flatMap
@@ -55,7 +55,7 @@ class FlatmapIteratorSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Serializer Reset") {
     val sconf = new SparkConf().setMaster("local").setAppName("serializer_reset_test")
-      .set("spark.serializer.objectStreamReset", "10")
+      .set(SERIALIZER_OBJECT_STREAM_RESET, 10)
     sc = new SparkContext(sconf)
     val expand_size = 500
     val data = sc.parallelize(Seq(1, 2)).
