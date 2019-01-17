@@ -40,12 +40,10 @@ object DateTimeTestUtils {
   def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
     val originalDefaultTimeZone = TimeZone.getDefault
     try {
-      DateTimeUtils.resetThreadLocals()
       TimeZone.setDefault(newDefaultTimeZone)
       block
     } finally {
       TimeZone.setDefault(originalDefaultTimeZone)
-      DateTimeUtils.resetThreadLocals()
     }
   }
 }

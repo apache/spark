@@ -23,6 +23,8 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+
 sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to microseconds.
@@ -54,12 +56,6 @@ class Iso8601TimestampFormatter(
     } else {
       Instant.from(temporalAccessor)
     }
-  }
-
-  private def instantToMicros(instant: Instant): Long = {
-    val sec = Math.multiplyExact(instant.getEpochSecond, DateTimeUtils.MICROS_PER_SECOND)
-    val result = Math.addExact(sec, instant.getNano / DateTimeUtils.NANOS_PER_MICROS)
-    result
   }
 
   override def parse(s: String): Long = instantToMicros(toInstant(s))

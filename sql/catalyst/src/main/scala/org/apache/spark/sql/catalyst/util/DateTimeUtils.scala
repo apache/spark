@@ -18,13 +18,12 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.text.{DateFormat, SimpleDateFormat}
+import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime}
+import java.time.Year.isLeap
+import java.time.temporal.IsoFields
 import java.util.{Calendar, Locale, TimeZone}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.{Function => JFunction}
-import javax.xml.bind.DatatypeConverter
-
-import scala.annotation.tailrec
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -53,30 +52,12 @@ object DateTimeUtils {
   final val NANOS_PER_MICROS = 1000L
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
 
-  // number of days in 400 years by Gregorian calendar
-  final val daysIn400Years: Int = 146097
-
-  // In the Julian calendar every year that is exactly divisible by 4 is a leap year without any
-  // exception. But in the Gregorian calendar every year that is exactly divisible by four
-  // is a leap year, except for years that are exactly divisible by 100, but these centurial years
-  // are leap years if they are exactly divisible by 400.
-  // So there are 3 extra days in the Julian calendar within a 400 years cycle compared to the
-  // Gregorian calendar.
-  final val extraLeapDaysIn400YearsJulian = 3
-
-  // number of days in 400 years by Julian calendar
-  final val daysIn400YearsInJulian: Int = daysIn400Years + extraLeapDaysIn400YearsJulian
-
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
 
   // this is year -17999, calculation: 50 * daysIn400Year
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
-
-  // days to year -17999 in Julian calendar
-  final val toYearZeroInJulian = toYearZero + 49 * extraLeapDaysIn400YearsJulian
-
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
@@ -84,13 +65,6 @@ object DateTimeUtils {
   val TIMEZONE_OPTION = "timeZone"
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
-
-  // Reuse the Calendar object in each thread as it is expensive to create in each method call.
-  private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
-    override protected def initialValue: Calendar = {
-      Calendar.getInstance(TimeZoneGMT)
-    }
-  }
 
   private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
   private val computeTimeZone = new JFunction[String, TimeZone] {
@@ -133,27 +107,6 @@ object DateTimeUtils {
       formatted + timestampString.substring(19)
     } else {
       formatted
-    }
-  }
-
-  @tailrec
-  def stringToTime(s: String): java.util.Date = {
-    val indexOfGMT = s.indexOf("GMT")
-    if (indexOfGMT != -1) {
-      // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
-      val s0 = s.substring(0, indexOfGMT)
-      val s1 = s.substring(indexOfGMT + 3)
-      // Mapped to 2000-01-01T00:00+01:00
-      stringToTime(s0 + s1)
-    } else if (!s.contains('T')) {
-      // JDBC escape string
-      if (s.contains(' ')) {
-        Timestamp.valueOf(s)
-      } else {
-        Date.valueOf(s)
-      }
-    } else {
-      DatatypeConverter.parseDateTime(s).getTime()
     }
   }
 
@@ -388,23 +341,35 @@ object DateTimeUtils {
       return None
     }
 
-    val c = if (tz.isEmpty) {
-      Calendar.getInstance(timeZone)
+    val zoneId = if (tz.isEmpty) {
+      timeZone.toZoneId
     } else {
-      Calendar.getInstance(
-        getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+      getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d").toZoneId
     }
-    c.set(Calendar.MILLISECOND, 0)
-
-    if (justTime) {
-      c.set(Calendar.HOUR_OF_DAY, segments(3))
-      c.set(Calendar.MINUTE, segments(4))
-      c.set(Calendar.SECOND, segments(5))
+    val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
+    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+    val localDate = if (justTime) {
+      LocalDate.now(zoneId)
     } else {
-      c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
+      LocalDate.of(segments(0), segments(1), segments(2))
     }
+    val localDateTime = LocalDateTime.of(localDate, localTime)
+    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+    val instant = Instant.from(zonedDateTime)
 
-    Some(c.getTimeInMillis * 1000 + segments(6))
+    Some(instantToMicros(instant))
+  }
+
+  def instantToMicros(instant: Instant): Long = {
+    val sec = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
+    val result = Math.addExact(sec, instant.getNano / NANOS_PER_MICROS)
+    result
+  }
+
+  def instantToDays(instant: Instant): Int = {
+    val seconds = instant.getEpochSecond
+    val days = Math.floorDiv(seconds, SECONDS_PER_DAY)
+    days.toInt
   }
 
   /**
@@ -457,11 +422,9 @@ object DateTimeUtils {
       return None
     }
 
-    val c = threadLocalGmtCalendar.get()
-    c.clear()
-    c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
-    Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
+    val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+    val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
+    Some(instantToDays(instant))
   }
 
   /**
@@ -472,9 +435,9 @@ object DateTimeUtils {
       return true
     }
     if (month == 2) {
-      if (isLeapYear(year) && day > 29) {
+      if (isLeap(year) && day > 29) {
         return true
-      } else if (!isLeapYear(year) && day > 28) {
+      } else if (!isLeap(year) && day > 28) {
         return true
       }
     } else if (!MonthOf31Days.contains(month) && day > 30) {
@@ -544,78 +507,12 @@ object DateTimeUtils {
     ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND) % 60).toInt
   }
 
-  private[this] def isLeapYear(year: Int): Boolean = {
-    (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
-  }
-
-  /**
-   * Return the number of days since the start of 400 year period.
-   * The second year of a 400 year period (year 1) starts on day 365.
-   */
-  private[this] def yearBoundary(year: Int, isGregorian: Boolean): Int = {
-    if (isGregorian) {
-      year * 365 + ((year / 4) - (year / 100) + (year / 400))
-    } else {
-      year * 365 + (year / 4)
-    }
-  }
-
-  /**
-   * Calculates the number of years for the given number of days. This depends
-   * on a 400 year period.
-   * @param days days since the beginning of the 400 year period
-   * @param isGregorian indicates whether leap years should be calculated according to Gregorian
-   *                    (or Julian) calendar
-   * @return (number of year, days in year)
-   */
-  private[this] def numYears(days: Int, isGregorian: Boolean): (Int, Int) = {
-    val year = days / 365
-    val boundary = yearBoundary(year, isGregorian)
-    if (days > boundary) {
-      (year, days - boundary)
-    } else {
-      (year - 1, days - yearBoundary(year - 1, isGregorian))
-    }
-  }
-
-  /**
-   * Calculates the year and the number of the day in the year for the given
-   * number of days. The given days is the number of days since 1.1.1970.
-   *
-   * The calculation uses the fact that the period 1.1.2001 until 31.12.2400 is
-   * equals to the period 1.1.1601 until 31.12.2000.
-   */
-  private[this] def getYearAndDayInYear(daysSince1970: SQLDate): (Int, Int) = {
-    // Since Julian calendar was replaced with the Gregorian calendar,
-    // the 10 days after Oct. 4 were skipped.
-    // (1582-10-04) -141428 days since 1970-01-01
-    if (daysSince1970 <= -141428) {
-      getYearAndDayInYear(daysSince1970 - 10, toYearZeroInJulian, daysIn400YearsInJulian, false)
-    } else {
-      getYearAndDayInYear(daysSince1970, toYearZero, daysIn400Years, true)
-    }
-  }
-
-  private def getYearAndDayInYear(
-      daysSince1970: SQLDate,
-      toYearZero: SQLDate,
-      daysIn400Years: SQLDate,
-      isGregorian: Boolean): (Int, Int) = {
-    // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
-    val daysNormalized = daysSince1970 + toYearZero
-    val numOfQuarterCenturies = daysNormalized / daysIn400Years
-    val daysInThis400 = daysNormalized % daysIn400Years + 1
-    val (years, dayInYear) = numYears(daysInThis400, isGregorian)
-    val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
-    (year, dayInYear)
-  }
-
   /**
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
    */
   def getDayInYear(date: SQLDate): Int = {
-    getYearAndDayInYear(date)._2
+    LocalDate.ofEpochDay(date).getDayOfYear
   }
 
   /**
@@ -623,7 +520,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getYear(date: SQLDate): Int = {
-    getYearAndDayInYear(date)._1
+    LocalDate.ofEpochDay(date).getYear
   }
 
   /**
@@ -631,19 +528,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getQuarter(date: SQLDate): Int = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    if (isLeapYear(year)) {
-      dayInYear = dayInYear - 1
-    }
-    if (dayInYear <= 90) {
-      1
-    } else if (dayInYear <= 181) {
-      2
-    } else if (dayInYear <= 273) {
-      3
-    } else {
-      4
-    }
+    LocalDate.ofEpochDay(date).get(IsoFields.QUARTER_OF_YEAR)
   }
 
   /**
@@ -651,43 +536,8 @@ object DateTimeUtils {
    * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
    */
   def splitDate(date: SQLDate): (Int, Int, Int, Int) = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    val isLeap = isLeapYear(year)
-    if (isLeap && dayInYear == 60) {
-      (year, 2, 29, 0)
-    } else {
-      if (isLeap && dayInYear > 60) dayInYear -= 1
-
-      if (dayInYear <= 181) {
-        if (dayInYear <= 31) {
-          (year, 1, dayInYear, 31 - dayInYear)
-        } else if (dayInYear <= 59) {
-          (year, 2, dayInYear - 31, if (isLeap) 60 - dayInYear else 59 - dayInYear)
-        } else if (dayInYear <= 90) {
-          (year, 3, dayInYear - 59, 90 - dayInYear)
-        } else if (dayInYear <= 120) {
-          (year, 4, dayInYear - 90, 120 - dayInYear)
-        } else if (dayInYear <= 151) {
-          (year, 5, dayInYear - 120, 151 - dayInYear)
-        } else {
-          (year, 6, dayInYear - 151, 181 - dayInYear)
-        }
-      } else {
-        if (dayInYear <= 212) {
-          (year, 7, dayInYear - 181, 212 - dayInYear)
-        } else if (dayInYear <= 243) {
-          (year, 8, dayInYear - 212, 243 - dayInYear)
-        } else if (dayInYear <= 273) {
-          (year, 9, dayInYear - 243, 273 - dayInYear)
-        } else if (dayInYear <= 304) {
-          (year, 10, dayInYear - 273, 304 - dayInYear)
-        } else if (dayInYear <= 334) {
-          (year, 11, dayInYear - 304, 334 - dayInYear)
-        } else {
-          (year, 12, dayInYear - 334, 365 - dayInYear)
-        }
-      }
-    }
+    val ld = LocalDate.ofEpochDay(date)
+    (ld.getYear, ld.getMonthValue, ld.getDayOfMonth, ld.lengthOfMonth() - ld.getDayOfMonth)
   }
 
   /**
@@ -695,40 +545,7 @@ object DateTimeUtils {
    * since 1.1.1970. January is month 1.
    */
   def getMonth(date: SQLDate): Int = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    if (isLeapYear(year)) {
-      if (dayInYear == 60) {
-        return 2
-      } else if (dayInYear > 60) {
-        dayInYear = dayInYear - 1
-      }
-    }
-
-    if (dayInYear <= 31) {
-      1
-    } else if (dayInYear <= 59) {
-      2
-    } else if (dayInYear <= 90) {
-      3
-    } else if (dayInYear <= 120) {
-      4
-    } else if (dayInYear <= 151) {
-      5
-    } else if (dayInYear <= 181) {
-      6
-    } else if (dayInYear <= 212) {
-      7
-    } else if (dayInYear <= 243) {
-      8
-    } else if (dayInYear <= 273) {
-      9
-    } else if (dayInYear <= 304) {
-      10
-    } else if (dayInYear <= 334) {
-      11
-    } else {
-      12
-    }
+    LocalDate.ofEpochDay(date).getMonthValue
   }
 
   /**
@@ -736,40 +553,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayOfMonth(date: SQLDate): Int = {
-    var (year, dayInYear) = getYearAndDayInYear(date)
-    if (isLeapYear(year)) {
-      if (dayInYear == 60) {
-        return 29
-      } else if (dayInYear > 60) {
-        dayInYear = dayInYear - 1
-      }
-    }
-
-    if (dayInYear <= 31) {
-      dayInYear
-    } else if (dayInYear <= 59) {
-      dayInYear - 31
-    } else if (dayInYear <= 90) {
-      dayInYear - 59
-    } else if (dayInYear <= 120) {
-      dayInYear - 90
-    } else if (dayInYear <= 151) {
-      dayInYear - 120
-    } else if (dayInYear <= 181) {
-      dayInYear - 151
-    } else if (dayInYear <= 212) {
-      dayInYear - 181
-    } else if (dayInYear <= 243) {
-      dayInYear - 212
-    } else if (dayInYear <= 273) {
-      dayInYear - 243
-    } else if (dayInYear <= 304) {
-      dayInYear - 273
-    } else if (dayInYear <= 334) {
-      dayInYear - 304
-    } else {
-      dayInYear - 334
-    }
+    LocalDate.ofEpochDay(date).getDayOfMonth
   }
 
   /**
@@ -785,7 +569,7 @@ object DateTimeUtils {
     val absoluteYear = absoluteMonth / 12
     var monthInYear = absoluteMonth - absoluteYear * 12
     var date = getDateFromYear(absoluteYear)
-    if (monthInYear >= 2 && isLeapYear(absoluteYear + YearZero)) {
+    if (monthInYear >= 2 && isLeap(absoluteYear + YearZero)) {
       date += 1
     }
     while (monthInYear > 0) {
@@ -816,7 +600,7 @@ object DateTimeUtils {
     val currentMonthInYear = nonNegativeMonth % 12
     val currentYear = nonNegativeMonth / 12
 
-    val leapDay = if (currentMonthInYear == 1 && isLeapYear(currentYear + YearZero)) 1 else 0
+    val leapDay = if (currentMonthInYear == 1 && isLeap(currentYear + YearZero)) 1 else 0
     val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
 
     val currentDayInMonth = if (daysToMonthEnd == 0 || dayOfMonth >= lastDayOfMonth) {
@@ -938,8 +722,8 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getLastDayOfMonth(date: SQLDate): SQLDate = {
-    val (_, _, _, daysToMonthEnd) = splitDate(date)
-    date + daysToMonthEnd
+    val localDate = LocalDate.ofEpochDay(date)
+    (date - localDate.getDayOfMonth) + localDate.lengthOfMonth()
   }
 
   // Visible for testing.
@@ -1122,12 +906,5 @@ object DateTimeUtils {
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
     convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
-  }
-
-  /**
-   * Re-initialize the current thread's thread locals. Exposed for testing.
-   */
-  private[util] def resetThreadLocals(): Unit = {
-    threadLocalGmtCalendar.remove()
   }
 }
