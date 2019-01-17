@@ -34,12 +34,12 @@ private[spark] class HistoryAppStatusListener(
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     val execInfo = event.executorInfo
     val newExecInfo = new ExecutorInfo(execInfo.executorHost, execInfo.totalCores,
-      renewLogUrls(execInfo), execInfo.attributes)
+      replaceLogUrls(execInfo), execInfo.attributes)
 
     super.onExecutorAdded(event.copy(executorInfo = newExecInfo))
   }
 
-  def renewLogUrls(execInfo: ExecutorInfo): Map[String, String] = {
+  def replaceLogUrls(execInfo: ExecutorInfo): Map[String, String] = {
     val oldLogUrlMap = execInfo.logUrlMap
     val attributes = execInfo.attributes
 
@@ -49,7 +49,7 @@ private[spark] class HistoryAppStatusListener(
 
         val allPatterns = pattern.findAllMatchIn(logUrlPattern).map(_.group(1)).toSet
         val allPatternsExceptFileName = allPatterns.filter(_ != "FILE_NAME")
-        val allAttributeKeys = attributes.keys.toSet
+        val allAttributeKeys = attributes.keySet
         val allAttributeKeysExceptLogFiles = allAttributeKeys.filter(_ != "LOG_FILES")
 
         if (allPatternsExceptFileName.diff(allAttributeKeysExceptLogFiles).nonEmpty) {
@@ -62,20 +62,18 @@ private[spark] class HistoryAppStatusListener(
           return oldLogUrlMap
         }
 
-        var replacingUrl = logUrlPattern
-
-        allPatternsExceptFileName.foreach { pattern =>
+        val updatedUrl = allPatternsExceptFileName.foldLeft(logUrlPattern) { case( orig, patt) =>
           // we already checked the existence of attribute when comparing keys
-          replacingUrl = replacingUrl.replace(s"{{$pattern}}", attributes(pattern))
+          orig.replace(s"{{$patt}}", attributes(patt))
         }
 
         if (allPatterns.contains("FILE_NAME")) {
           // allAttributeKeys should contain "LOG_FILES"
           attributes("LOG_FILES").split(",").map { file =>
-            file -> replacingUrl.replace("{{FILE_NAME}}", file)
+            file -> updatedUrl.replace("{{FILE_NAME}}", file)
           }.toMap
         } else {
-          Map("log" -> replacingUrl)
+          Map("log" -> updatedUrl)
         }
 
       case None => oldLogUrlMap

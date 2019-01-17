@@ -1216,12 +1216,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val executorLogUrlMap = Map("stdout" -> s"$logUrlPrefix/stdout",
       "stderr" -> s"$logUrlPrefix/stderr")
 
-    val executorAttributes = if (includingLogFiles) {
-      Map("LOG_FILES" -> "stdout,stderr", "CONTAINER_ID" -> container,
-        "CLUSTER_ID" -> cluster, "USER" -> user)
-    } else {
-      Map("CONTAINER_ID" -> container, "CLUSTER_ID" -> cluster, "USER" -> user)
-    }
+    val extraAttributes = if (includingLogFiles) Map("LOG_FILES" -> "stdout,stderr") else Map.empty
+    val executorAttributes = Map("CONTAINER_ID" -> container, "CLUSTER_ID" -> cluster,
+      "USER" -> user) ++ extraAttributes
 
     new ExecutorInfo(host, 1, executorLogUrlMap, executorAttributes)
   }
