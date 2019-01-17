@@ -128,12 +128,6 @@ private[spark] object HiveUtils extends Logging {
     .toSequence
     .createWithDefault(jdbcPrefixes)
 
-  val HIVE_INPUT_FORMAT_OPTIMIZER_ENABLED =
-    buildConf("spark.sql.hive.inputFormat.optimizer.enabled")
-    .doc("When true, enable the optimizer of `fileInputFormat` in Spark SQL.")
-    .booleanConf
-    .createWithDefault(false)
-
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 

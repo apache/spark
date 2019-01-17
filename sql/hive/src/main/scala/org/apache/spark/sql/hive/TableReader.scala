@@ -361,15 +361,8 @@ class HadoopTableReader(
    */
   private def getInputFormat(
     inputClassName: String): Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]] = {
-
-    var ifc = Utils.classForName(inputClassName)
+    Utils.classForName(inputClassName)
       .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]]
-    if (conf.getConf(HiveUtils.HIVE_INPUT_FORMAT_OPTIMIZER_ENABLED) &&
-      "org.apache.hadoop.mapred.TextInputFormat".equals(inputClassName)) {
-        ifc = Utils.classForName("org.apache.hadoop.mapred.lib.CombineTextInputFormat")
-          .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]]
-    }
-    ifc
   }
 
   /**
@@ -379,15 +372,8 @@ class HadoopTableReader(
    */
   private def getNewInputFormat(
     inputClassName: String): Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]] = {
-
-    var ifc = Utils.classForName(inputClassName)
+    Utils.classForName(inputClassName)
       .asInstanceOf[java.lang.Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]]]
-    if (conf.getConf(HiveUtils.HIVE_INPUT_FORMAT_OPTIMIZER_ENABLED) &&
-      "org.apache.hadoop.mapreduce.lib.input.TextInputFormat".equals(inputClassName)) {
-      ifc = Utils.classForName("org.apache.hadoop.mapreduce.lib.input.CombineTextInputFormat")
-        .asInstanceOf[java.lang.Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]]]
-    }
-    ifc
   }
 
   /**
