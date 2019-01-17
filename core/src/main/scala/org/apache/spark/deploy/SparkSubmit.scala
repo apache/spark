@@ -437,7 +437,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if (localPyFiles != null) {
-      sparkConf.set("spark.submit.pyFiles", localPyFiles)
+      sparkConf.set(SUBMIT_PYTHON_FILES, localPyFiles.split(",").toSeq)
     }
 
     // In YARN mode for an R app, add the SparkR package archive and the R package
@@ -614,11 +614,11 @@ private[spark] class SparkSubmit extends Logging {
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python and R files, the primary resource is already distributed as a regular file
     if (!isYarnCluster && !args.isPython && !args.isR) {
-      var jars = sparkConf.getOption("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
+      var jars = sparkConf.get(JARS)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
-      sparkConf.set("spark.jars", jars.mkString(","))
+      sparkConf.set(JARS, jars)
     }
 
     // In standalone cluster mode, use the REST client to submit the application (Spark 1.3+).
@@ -681,7 +681,7 @@ private[spark] class SparkSubmit extends Logging {
         // Second argument is main class
         childArgs += (args.primaryResource, "")
         if (args.pyFiles != null) {
-          sparkConf.set("spark.submit.pyFiles", args.pyFiles)
+          sparkConf.set(SUBMIT_PYTHON_FILES, args.pyFiles.split(",").toSeq)
         }
       } else if (args.isR) {
         // Second argument is main class
@@ -748,18 +748,17 @@ private[spark] class SparkSubmit extends Logging {
     // Resolve and format python file paths properly before adding them to the PYTHONPATH.
     // The resolving part is redundant in the case of --py-files, but necessary if the user
     // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
-    sparkConf.getOption("spark.submit.pyFiles").foreach { pyFiles =>
-      val resolvedPyFiles = Utils.resolveURIs(pyFiles)
-      val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
-        PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
-      } else {
-        // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
-        // support dealing with remote python files, they could distribute and add python files
-        // locally.
-        resolvedPyFiles
-      }
-      sparkConf.set("spark.submit.pyFiles", formattedPyFiles)
+    val pyFiles = sparkConf.get(SUBMIT_PYTHON_FILES)
+    val resolvedPyFiles = Utils.resolveURIs(pyFiles.mkString(","))
+    val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
+      PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+    } else {
+      // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
+      // support dealing with remote python files, they could distribute and add python files
+      // locally.
+      resolvedPyFiles
     }
+    sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
     (childArgs, childClasspath, sparkConf, childMainClass)
   }

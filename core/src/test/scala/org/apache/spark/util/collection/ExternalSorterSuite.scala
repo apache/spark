@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
@@ -268,12 +269,12 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   private def createSparkConf(loadDefaults: Boolean, kryo: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
     if (kryo) {
-      conf.set("spark.serializer", classOf[KryoSerializer].getName)
+      conf.set(SERIALIZER, classOf[KryoSerializer].getName)
     } else {
       // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
       // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
-      conf.set("spark.serializer.objectStreamReset", "1")
-      conf.set("spark.serializer", classOf[JavaSerializer].getName)
+      conf.set(SERIALIZER_OBJECT_STREAM_RESET, 1)
+      conf.set(SERIALIZER, classOf[JavaSerializer].getName)
     }
     conf.set("spark.shuffle.sort.bypassMergeThreshold", "0")
     // Ensure that we actually have multiple batches per spill file
