@@ -169,7 +169,7 @@ class DynamicPartitionDataWriter(
 
   /** Extracts the partition values out of an input row. */
   private lazy val getPartitionValues: InternalRow => UnsafeRow = {
-    val proj = UnsafeProjection.create(description.normalizedPartitionExpression,
+    val proj = UnsafeProjection.create(description.normalizedPartitionExpressions,
       description.allColumns)
     row => proj(row)
   }
@@ -284,7 +284,7 @@ class WriteJobDescription(
     val allColumns: Seq[Attribute],
     val dataColumns: Seq[Attribute],
     val partitionColumns: Seq[Attribute],
-    val normalizedPartitionExpression: Seq[Expression],
+    val normalizedPartitionExpressions: Seq[Expression],
     val bucketIdExpression: Option[Expression],
     val path: String,
     val customPartitionLocations: Map[TablePartitionSpec, String],

@@ -120,7 +120,7 @@ object FileFormatWriter extends Logging {
     val outputWriterFactory =
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
-    val normalizedPartitionExpression = partitionColumns.map { attr =>
+    val normalizedPartitionExpressions = partitionColumns.map { attr =>
       if (attr.dataType == StringType && attr.nullable) Empty2Null(attr) else attr
     }
 
@@ -131,7 +131,7 @@ object FileFormatWriter extends Logging {
       allColumns = outputSpec.outputColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
-      normalizedPartitionExpression = normalizedPartitionExpression,
+      normalizedPartitionExpressions = normalizedPartitionExpressions,
       bucketIdExpression = bucketIdExpression,
       path = outputSpec.outputPath,
       customPartitionLocations = outputSpec.customPartitionLocations,
@@ -143,7 +143,7 @@ object FileFormatWriter extends Logging {
     )
 
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
-    val requiredOrdering = normalizedPartitionExpression ++ bucketIdExpression ++ sortColumns
+    val requiredOrdering = normalizedPartitionExpressions ++ bucketIdExpression ++ sortColumns
     // the sort order doesn't matter
     val actualOrdering = plan.outputOrdering.map(_.child)
     val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
