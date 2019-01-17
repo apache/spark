@@ -21,7 +21,9 @@ import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetTest}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
 
 class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
@@ -30,6 +32,16 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
   override def shortName(): String = "parquet"
 
   override def getTable(options: DataSourceOptions): Table = {
+    new DummyReadOnlyFileTable
+  }
+}
+
+class DummyReadOnlyFileTable extends Table with SupportsBatchRead {
+  override def name(): String = "dummy"
+
+  override def schema(): StructType = StructType(Nil)
+
+  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
     throw new AnalysisException("Dummy file reader")
   }
 }
@@ -50,13 +62,13 @@ class FileDataSourceV2FallBackSuite extends QueryTest with ParquetTest with Shar
 
       // Dummy File reader should fail as expected.
       val exception = intercept[AnalysisException] {
-        spark.read.format(dummyParquetReaderV2).load(path)
+        spark.read.format(dummyParquetReaderV2).load(path).collect()
       }
       assert(exception.message.equals("Dummy file reader"))
     }
   }
 
-  test("Fall back read path to v1 with configuration DISABLED_V2_FILE_DATA_SOURCE_READERS") {
+  test("Fall back read path to v1 with configuration USE_V1_SOURCE_READER_LIST") {
     val df = spark.range(10).toDF()
     withTempPath { file =>
       val path = file.getCanonicalPath
@@ -76,7 +88,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with ParquetTest with Shar
       withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "foo,bar") {
         // Dummy File reader should fail as DISABLED_V2_FILE_DATA_SOURCE_READERS doesn't include it.
         val exception = intercept[AnalysisException] {
-          spark.read.format(dummyParquetReaderV2).load(path)
+          spark.read.format(dummyParquetReaderV2).load(path).collect()
         }
         assert(exception.message.equals("Dummy file reader"))
       }
