@@ -812,7 +812,7 @@ private[spark] object Utils extends Logging {
     } else {
       if (conf.getenv("MESOS_SANDBOX") != null && shuffleServiceEnabled) {
         logInfo("MESOS_SANDBOX available but not using provided Mesos sandbox because " +
-          "spark.shuffle.service.enabled is enabled.")
+          s"${config.SHUFFLE_SERVICE_ENABLED.key} is enabled.")
       }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
