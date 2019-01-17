@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.internal.config.package$;
 
 import java.util.Random;
 
@@ -105,8 +106,8 @@ public class RowBasedKeyValueBatchSuite {
   public void setup() {
     memoryManager = new TestMemoryManager(new SparkConf()
             .set("spark.memory.offHeap.enabled", "false")
-            .set("spark.shuffle.spill.compress", "false")
-            .set("spark.shuffle.compress", "false"));
+            .set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false)
+            .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   }
 

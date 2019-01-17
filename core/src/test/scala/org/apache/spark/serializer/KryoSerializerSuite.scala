@@ -524,8 +524,8 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
   conf.set(SERIALIZER, classOf[KryoSerializer].getName)
   conf.set(KRYO_USER_REGISTRATORS, classOf[RegistratorWithoutAutoReset].getName)
   conf.set(KRYO_REFERENCE_TRACKING, true)
-  conf.set("spark.shuffle.manager", "sort")
-  conf.set("spark.shuffle.sort.bypassMergeThreshold", "200")
+  conf.set(SHUFFLE_MANAGER, "sort")
+  conf.set(SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD, 200)
 
   test("sort-shuffle with bypassMergeSort (SPARK-7873)") {
     val myObject = ("Hello", "World")

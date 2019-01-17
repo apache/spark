@@ -28,7 +28,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
@@ -49,7 +49,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
     .set("spark.cleaner.referenceTracking.blocking", "true")
     .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
     .set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
-    .set("spark.shuffle.manager", shuffleManager.getName)
+    .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
 
   before {
     sc = new SparkContext(conf)
@@ -319,7 +319,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
       .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
-      .set("spark.shuffle.manager", shuffleManager.getName)
+      .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
     sc = new SparkContext(conf2)
 
     val numRdds = 10

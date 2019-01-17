@@ -21,6 +21,7 @@ import java.util.Random
 import java.util.function.Supplier
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
@@ -172,7 +173,7 @@ object ShuffleExchangeExec {
     val conf = SparkEnv.get.conf
     val shuffleManager = SparkEnv.get.shuffleManager
     val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager]
-    val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+    val bypassMergeThreshold = conf.get(config.SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD)
     val numParts = partitioner.numPartitions
     if (sortBasedShuffleOn) {
       if (numParts <= bypassMergeThreshold) {
