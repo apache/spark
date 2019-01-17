@@ -36,9 +36,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -1551,28 +1552,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
     val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
+    def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
+      f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
+        throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
+      }
+    }
     try {
       valueType match {
-        case "DATE" =>
-          val castedValue = Cast(
-            Literal(value),
-            DateType,
-            Some(SQLConf.get.sessionLocalTimeZone)).eval()
-          if (castedValue == null) {
-            throw new ParseException(s"Cannot parse the date value: $value", ctx)
-          } else {
-            Literal(castedValue, DateType)
-          }
+        case "DATE" => toLiteral(stringToDate, DateType)
         case "TIMESTAMP" =>
-          val castedValue = Cast(
-            Literal(value),
-            TimestampType,
-            Some(SQLConf.get.sessionLocalTimeZone)).eval()
-          if (castedValue == null) {
-            throw new ParseException(s"Cannot parse the timestamp value: $value", ctx)
-          } else {
-            Literal(castedValue, TimestampType)
-          }
+          val timeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
+          toLiteral(stringToTimestamp(_, timeZone), TimestampType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
