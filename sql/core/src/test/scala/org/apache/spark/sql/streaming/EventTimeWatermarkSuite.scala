@@ -302,6 +302,71 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     )
   }
 
+  test("multiple aggregates in append mode") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .withColumn("inputtime", $"value".cast("timestamp"))
+      .withWatermark("inputtime", "10 seconds")
+      .groupBy(window($"inputtime", "5 seconds") as 'window1, $"inputtime").count()
+      .select($"window1.end".as("windowtime"), $"count".as("num"))
+      .withWatermark("windowtime", "5 seconds")
+      .groupBy(window($"windowtime", "5 seconds") as 'window2, $"num").count()
+      .select($"window2.start".cast("long").as[Long], $"num", $"count")
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 11, 12, 12),
+      CheckNewAnswer(),
+      AddData(inputData, 25), // watermark -> group1 = 15, group2 = 10
+      CheckNewAnswer(),
+      assertNumTotalStateRows(3),
+      AddData(inputData, 26, 26, 27),
+      CheckNewAnswer(),
+      AddData(inputData, 40), // watermark -> group1 = 30 , group2 = 25
+      CheckNewAnswer((15, 1, 1), (15, 2, 2))
+    )
+  }
+
+  test("multiple aggregates in append mode recovery") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .withColumn("inputtime", $"value".cast("timestamp"))
+      .withWatermark("inputtime", "10 seconds")
+      .groupBy(window($"inputtime", "5 seconds") as 'window1, $"inputtime").count()
+      .select($"window1.end".as("windowtime"), $"count".as("num"))
+      .withWatermark("windowtime", "5 seconds")
+      .groupBy(window($"windowtime", "5 seconds") as 'window2, $"num").count()
+      .select($"window2.start".cast("long").as[Long], $"num", $"count")
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 11, 12, 12),
+      CheckNewAnswer(),
+      AddData(inputData, 25), // watermark -> group1 = 15, group2 = 10
+                              // window1 [10-15] (10, 1) (11, 2), (12, 2)
+                              // window2 [15-20] (1, 1), (2, 2)
+      CheckNewAnswer(),
+      AddData(inputData, 26, 26, 27),
+      CheckNewAnswer(),
+      AddData(inputData, 40), // watermark -> group1 = 30 , group2 = 25
+                              // window1 [25-30] (25, 1), (26, 2), (27, 1)
+                              // window2 [30-35] (1, 2), (2, 1)
+      CheckNewAnswer((15, 1, 1), (15, 2, 2)),
+      StopStream,
+      AssertOnQuery { q => // purge commit and clear the sink
+        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
+        q.commitLog.purge(commit)
+        q.sink.asInstanceOf[MemorySink].clear()
+        true
+      },
+      StartStream(),
+      AddData(inputData, 55), // watermark -> group1 = 45, group2 = 40
+                              // window1 -> [40-45] (40, 1)
+                              // window2 -> [45-50] (1, 1)
+      CheckAnswer((30, 1, 2), (30, 2, 1))
+    )
+  }
+
   test("delay in months and years handled correctly") {
     val currentTimeMs = System.currentTimeMillis
     val currentTime = new Date(currentTimeMs)
@@ -724,6 +789,13 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
+    true
+  }
+
+  private def assertNumTotalStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.lastOption.get
+    assert(progressWithData.stateOperators.map(_.numRowsTotal).sum === numTotalRows)
     true
   }
 

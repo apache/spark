@@ -84,10 +84,10 @@ object UnsupportedOperationChecker {
           " or the output mode is not append on a streaming DataFrames/Datasets")(plan)
     }
 
-    // Disallow multiple streaming aggregations
     val aggregates = collectStreamingAggregates(plan)
 
-    if (aggregates.size > 1) {
+    // multiple aggregates are supported only in append mode
+    if (outputMode != InternalOutputModes.Append && aggregates.size > 1) {
       throwError(
         "Multiple streaming aggregations are not supported with " +
           "streaming DataFrames/Datasets")(plan)
@@ -96,20 +96,20 @@ object UnsupportedOperationChecker {
     // Disallow some output mode
     outputMode match {
       case InternalOutputModes.Append if aggregates.nonEmpty =>
-        val aggregate = aggregates.head
+        aggregates.foreach(aggregate => {
+          // Find any attributes that are associated with an eventTime watermark.
+          val watermarkAttributes = aggregate.groupingExpressions.collect {
+            case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+          }
 
-        // Find any attributes that are associated with an eventTime watermark.
-        val watermarkAttributes = aggregate.groupingExpressions.collect {
-          case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
-        }
-
-        // We can append rows to the sink once the group is under the watermark. Without this
-        // watermark a group is never "finished" so we would never output anything.
-        if (watermarkAttributes.isEmpty) {
-          throwError(
-            s"$outputMode output mode not supported when there are streaming aggregations on " +
+          // We can append rows to the sink once the group is under the watermark. Without this
+          // watermark a group is never "finished" so we would never output anything.
+          if (watermarkAttributes.isEmpty) {
+            throwError(
+              s"$outputMode output mode not supported when there are streaming aggregations on " +
                 s"streaming DataFrames/DataSets without watermark")(plan)
-        }
+          }
+        })
 
       case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(

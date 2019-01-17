@@ -120,6 +120,13 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     }
   }
 
+  /**
+   * Gets watermark associated with the state operator
+   */
+  protected def getWatermark(metadata: OffsetSeqMetadata): Long = stateInfo
+    .flatMap(s => metadata.operatorWatermarks.get(s.operatorId))
+    .getOrElse(metadata.batchWatermarkMs)
+
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(sqlContext.conf.stateStoreProviderClass)
     provider.supportedCustomMetrics.map {
@@ -420,7 +427,7 @@ case class StateStoreSaveExec(
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermark.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermark.get
+      getWatermark(newMetadata) > eventTimeWatermark.get
   }
 }
 
@@ -490,7 +497,7 @@ case class StreamingDeduplicateExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
-    eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+    eventTimeWatermark.isDefined && getWatermark(newMetadata) > eventTimeWatermark.get
   }
 }
 

@@ -101,9 +101,15 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Update)
 
   assertNotSupportedInStreamingPlan(
-    "aggregate - multiple streaming aggregations",
+    "aggregate - multiple streaming aggregations in update mode",
     Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
     outputMode = Update,
+    expectedMsgs = Seq("multiple streaming aggregations"))
+
+  assertNotSupportedInStreamingPlan(
+    "aggregate - multiple streaming aggregations in complete mode",
+    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
+    outputMode = Complete,
     expectedMsgs = Seq("multiple streaming aggregations"))
 
   assertSupportedInStreamingPlan(
@@ -124,6 +130,32 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInStreamingPlan(
     "aggregate - streaming aggregations without watermark in append mode",
     Aggregate(Nil, aggExprs("d"), streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("streaming aggregations", "without watermark"))
+
+  assertSupportedInStreamingPlan(
+    "aggregate - multiple streaming aggregations in append mode with watermark",
+    Aggregate(Seq(attributeWithWatermark), aggExprs("c"),
+      Aggregate(Seq(attributeWithWatermark), aggExprs("d"), streamRelation)),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "aggregate - multiple streaming aggregations without watermark in append mode",
+    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
+    outputMode = Append,
+    expectedMsgs = Seq("streaming aggregations", "without watermark"))
+
+  assertNotSupportedInStreamingPlan(
+    "aggregate - multiple streaming aggregations, watermark for second aggregate in append mode",
+    Aggregate(Nil, aggExprs("c"),
+      Aggregate(Seq(attributeWithWatermark), aggExprs("d"), streamRelation)),
+    outputMode = Append,
+    expectedMsgs = Seq("streaming aggregations", "without watermark"))
+
+  assertNotSupportedInStreamingPlan(
+    "aggregate - multiple streaming aggregations, watermark for first aggregate in append mode",
+    Aggregate(Seq(attributeWithWatermark), aggExprs("c"),
+      Aggregate(Nil, aggExprs("d"), streamRelation)),
     outputMode = Append,
     expectedMsgs = Seq("streaming aggregations", "without watermark"))
 

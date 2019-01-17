@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -80,10 +80,36 @@ case object MaxWatermark extends MultipleWatermarkPolicy {
 /** Tracks the watermark value of a streaming query based on a given `policy` */
 case class WatermarkTracker(policy: MultipleWatermarkPolicy) extends Logging {
   private val operatorToWatermarkMap = mutable.HashMap[Int, Long]()
+  private val statefulOperatorToWatermark = mutable.HashMap[Long, Long]()
+  private val statefulOperatorToEventTimeMap = mutable.HashMap[Long, mutable.HashMap[Int, Long]]()
+
   private var globalWatermarkMs: Long = 0
+
+  private def updateWaterMarkMap(eventTimeExecs: Seq[EventTimeWatermarkExec],
+                                 map: mutable.HashMap[Int, Long]): Unit = {
+    eventTimeExecs.zipWithIndex.foreach {
+      case (e, index) if e.eventTimeStats.value.count > 0 =>
+        logDebug(s"Observed event time stats $index: ${e.eventTimeStats.value}")
+        val newWatermarkMs = e.eventTimeStats.value.max - e.delayMs
+        val prevWatermarkMs = map.get(index)
+        if (prevWatermarkMs.isEmpty || newWatermarkMs > prevWatermarkMs.get) {
+          map.put(index, newWatermarkMs)
+        }
+
+      // Populate 0 if we haven't seen any data yet for this watermark node.
+      case (_, index) =>
+        if (!map.isDefinedAt(index)) {
+          map.put(index, 0)
+        }
+    }
+  }
 
   def setWatermark(newWatermarkMs: Long): Unit = synchronized {
     globalWatermarkMs = newWatermarkMs
+  }
+
+  def setOperatorWatermarks(operatorWatermarks: Map[Long, Long]): Unit = synchronized {
+    statefulOperatorToWatermark ++= operatorWatermarks
   }
 
   def updateWatermark(executedPlan: SparkPlan): Unit = synchronized {
@@ -92,21 +118,45 @@ case class WatermarkTracker(policy: MultipleWatermarkPolicy) extends Logging {
     }
     if (watermarkOperators.isEmpty) return
 
-    watermarkOperators.zipWithIndex.foreach {
-      case (e, index) if e.eventTimeStats.value.count > 0 =>
-        logDebug(s"Observed event time stats $index: ${e.eventTimeStats.value}")
-        val newWatermarkMs = e.eventTimeStats.value.max - e.delayMs
-        val prevWatermarkMs = operatorToWatermarkMap.get(index)
-        if (prevWatermarkMs.isEmpty || newWatermarkMs > prevWatermarkMs.get) {
-          operatorToWatermarkMap.put(index, newWatermarkMs)
-        }
+    updateWaterMarkMap(watermarkOperators, operatorToWatermarkMap)
 
-      // Populate 0 if we haven't seen any data yet for this watermark node.
-      case (_, index) =>
-        if (!operatorToWatermarkMap.isDefinedAt(index)) {
-          operatorToWatermarkMap.put(index, 0)
-        }
+    // compute the per stateful operator watermark
+    val statefulOperators = executedPlan.collect {
+      case s: StatefulOperator => s
     }
+
+    statefulOperators.foreach(statefulOperator => {
+      // find the first event time child node(s)
+      val eventTimeExecs = statefulOperator match {
+        case op: UnaryExecNode =>
+          op.collectFirst {
+            case e: EventTimeWatermarkExec => e
+          }.map(Seq(_)).getOrElse(Seq())
+        case op: BinaryExecNode =>
+          val left = op.left.collectFirst {
+            case e: EventTimeWatermarkExec => e
+          }.map(Seq(_)).getOrElse(Seq())
+          val right = op.right.collectFirst {
+            case e: EventTimeWatermarkExec => e
+          }.map(Seq(_)).getOrElse(Seq())
+          left ++ right
+      }
+
+      // compute watermark for the stateful operator node
+      statefulOperator.stateInfo.foreach(state => {
+        if (eventTimeExecs.nonEmpty) {
+          updateWaterMarkMap(eventTimeExecs,
+            statefulOperatorToEventTimeMap.getOrElseUpdate(state.operatorId,
+              new mutable.HashMap[Int, Long]()))
+          val newWatermarkMs = statefulOperatorToEventTimeMap(state.operatorId).values.toSeq.min
+          val prevWatermarkMs = statefulOperatorToWatermark.get(state.operatorId)
+          if (prevWatermarkMs.isEmpty || newWatermarkMs > prevWatermarkMs.get) {
+            statefulOperatorToWatermark.put(state.operatorId, newWatermarkMs)
+          }
+        }
+      })
+    })
+
 
     // Update the global watermark to the minimum of all watermark nodes.
     // This is the safest option, because only the global watermark is fault-tolerant. Making
@@ -121,7 +171,16 @@ case class WatermarkTracker(policy: MultipleWatermarkPolicy) extends Logging {
     }
   }
 
+  def statefulOperatorWatermark(id: Long): Option[Long] = synchronized {
+    statefulOperatorToWatermark.get(id)
+  }
+
   def currentWatermark: Long = synchronized { globalWatermarkMs }
+
+  def currentOperatorWatermarks: Map[Long, Long] = synchronized {
+    statefulOperatorToWatermark.toMap
+  }
+
 }
 
 object WatermarkTracker {

@@ -85,7 +85,7 @@ case class FlatMapGroupsWithStateExec(
         true  // Always run batches to process timeouts
       case EventTimeTimeout =>
         // Process another non-data batch only if the watermark has changed in this executed plan
-        eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+        eventTimeWatermark.isDefined && getWatermark(newMetadata) > eventTimeWatermark.get
       case _ =>
         false
     }

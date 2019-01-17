@@ -268,9 +268,11 @@ class MicroBatchExecution(
         nextOffsets.metadata.foreach { metadata =>
           OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
           offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf,
+            metadata.operatorWatermarks)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
           watermarkTracker.setWatermark(metadata.batchWatermarkMs)
+          watermarkTracker.setOperatorWatermarks(metadata.operatorWatermarks)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
@@ -297,6 +299,7 @@ class MicroBatchExecution(
               committedOffsets ++= availableOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
+              watermarkTracker.setOperatorWatermarks(commitMetadata.operatorWatermarks)
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(s"Batch completion log latest batch id is " +
                 s"${latestCommittedBatchId}, which is not trailing " +
@@ -369,7 +372,8 @@ class MicroBatchExecution(
     // Update the query metadata
     offsetSeqMetadata = offsetSeqMetadata.copy(
       batchWatermarkMs = watermarkTracker.currentWatermark,
-      batchTimestampMs = triggerClock.getTimeMillis())
+      batchTimestampMs = triggerClock.getTimeMillis(),
+      operatorWatermarks = watermarkTracker.currentOperatorWatermarks)
 
     // Check whether next batch should be constructed
     val lastExecutionRequiresAnotherBatch = noDataBatchesEnabled &&
@@ -559,7 +563,8 @@ class MicroBatchExecution(
     withProgressLocked {
       sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
-      commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
+      commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark,
+        watermarkTracker.currentOperatorWatermarks))
       committedOffsets ++= availableOffsets
     }
     logDebug(s"Completed batch ${currentBatchId}")

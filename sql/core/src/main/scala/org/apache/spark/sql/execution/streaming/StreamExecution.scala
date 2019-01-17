@@ -134,7 +134,8 @@ abstract class StreamExecution(
 
   /** Metadata associated with the offset seq of a batch in the query. */
   protected var offsetSeqMetadata = OffsetSeqMetadata(
-    batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
+    batchWatermarkMs = 0, batchTimestampMs = 0, sessionConf = sparkSession.conf,
+    operatorWatermarks = Map.empty)
 
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
@@ -277,7 +278,8 @@ abstract class StreamExecution(
       // Disable cost-based join optimization as we do not want stateful operations to be rearranged
       sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
       offsetSeqMetadata = OffsetSeqMetadata(
-        batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
+        batchWatermarkMs = 0, batchTimestampMs = 0, sessionConf = sparkSessionForStream.conf,
+        operatorWatermarks = Map.empty)
 
       if (state.compareAndSet(INITIALIZING, ACTIVE)) {
         // Unblock `awaitInitialization`

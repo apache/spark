@@ -193,7 +193,7 @@ case class StreamingSymmetricHashJoinExec(
 
     // Latest watermark value is more than that used in this previous executed plan
     val watermarkHasChanged =
-      eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+      eventTimeWatermark.isDefined &&  getWatermark(newMetadata) > eventTimeWatermark.get
 
     watermarkUsedForStateCleanup && watermarkHasChanged
   }

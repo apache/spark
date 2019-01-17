@@ -101,6 +101,12 @@ class IncrementalExecution(
       numStateStores)
   }
 
+  // the watermark for the stateful operation if available or the batch watermark
+  private def getWatermark(operatorId: Long): Long = {
+    offsetSeqMetadata.operatorWatermarks
+      .getOrElse(operatorId, offsetSeqMetadata.batchWatermarkMs)
+  }
+
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
 
@@ -108,12 +114,12 @@ class IncrementalExecution(
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
                StateStoreRestoreExec(_, None, _, child))) =>
-        val aggStateInfo = nextStatefulOperationStateInfo
+        val aggStateInfo = nextStatefulOperationStateInfo()
         StateStoreSaveExec(
           keys,
           Some(aggStateInfo),
           Some(outputMode),
-          Some(offsetSeqMetadata.batchWatermarkMs),
+          Some(getWatermark(aggStateInfo.operatorId)),
           stateFormatVersion,
           agg.withNewChildren(
             StateStoreRestoreExec(
@@ -123,30 +129,33 @@ class IncrementalExecution(
               child) :: Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None) =>
+        val stateInfo = nextStatefulOperationStateInfo()
         StreamingDeduplicateExec(
           keys,
           child,
-          Some(nextStatefulOperationStateInfo),
-          Some(offsetSeqMetadata.batchWatermarkMs))
+          Some(stateInfo),
+          Some(getWatermark(stateInfo.operatorId)))
 
       case m: FlatMapGroupsWithStateExec =>
+        val stateInfo = nextStatefulOperationStateInfo()
         m.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(stateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
+          eventTimeWatermark = Some(getWatermark(stateInfo.operatorId)))
 
       case j: StreamingSymmetricHashJoinExec =>
+        val stateInfo = nextStatefulOperationStateInfo()
         j.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
-          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
+          stateInfo = Some(stateInfo),
+          eventTimeWatermark = Some(getWatermark(stateInfo.operatorId)),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              Some(offsetSeqMetadata.batchWatermarkMs)))
+              Some(getWatermark(stateInfo.operatorId))))
 
       case l: StreamingGlobalLimitExec =>
         l.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           outputMode = Some(outputMode))
     }
   }
