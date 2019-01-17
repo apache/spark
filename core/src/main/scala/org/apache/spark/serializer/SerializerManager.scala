@@ -110,7 +110,6 @@ private[spark] class SerializerManager(
     blockId match {
       case _: ShuffleBlockId => compressShuffle
       case _: ShuffleBlockBatchId => compressShuffle
-      case _: ArrayShuffleBlockString => compressShuffle
       case _: ArrayShuffleBlockId => compressShuffle
       case _: BroadcastBlockId => compressBroadcast
       case _: RDDBlockId => compressRdds

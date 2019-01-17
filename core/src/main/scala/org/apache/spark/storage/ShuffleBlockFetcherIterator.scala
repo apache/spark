@@ -230,7 +230,7 @@ final class ShuffleBlockFetcherIterator(
       req.blocks.map(_._1.toString)
     } else {
       req.blocks.head._1 match {
-        case bid: ArrayShuffleBlockString => bid.blockIds
+        case bid: ArrayShuffleBlockId => bid.blockIds.map(_.toString)
         case bid => Seq(bid.toString)
       }
     }
@@ -239,7 +239,7 @@ final class ShuffleBlockFetcherIterator(
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockIds: Array[String], buf: ManagedBuffer): Unit = {
         val blockId = if (blockIds.length > 1) {
-          ArrayShuffleBlockString(blockIds)
+          ArrayShuffleBlockId(blockIds.map(BlockId.apply))
         } else {
           BlockId(blockIds.head)
         }
@@ -343,11 +343,11 @@ final class ShuffleBlockFetcherIterator(
     remoteRequests
   }
 
-  private[this] def fetchData(blockId: ShuffleBlock): Boolean = {
+  private[this] def fetchData(blockId: BlockId): Boolean = {
     var success = true
     try {
       val buf = blockManager.getBlockData(blockId)
-      shuffleMetrics.incLocalBlocksFetched(blockId.numBlocks)
+      shuffleMetrics.incLocalBlocksFetched(getNumBlocks(blockId))
       shuffleMetrics.incLocalBytesRead(buf.size)
       buf.retain()
       results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId,
@@ -428,6 +428,15 @@ final class ShuffleBlockFetcherIterator(
 
   override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
 
+  private def getNumBlocks(blockId: BlockId) = {
+    blockId match {
+      case bid: ArrayShuffleBlockId => bid.blockIds.length
+      case _: ShuffleBlockId => 1
+      case _ =>
+        throw new IllegalArgumentException("unexpected shuffle block id format: " + blockId)
+    }
+  }
+
   /**
    * Fetches the next (BlockId, InputStream). If a task fails, the ManagedBuffers
    * underlying each InputStream will be freed by the cleanup() method registered with the
@@ -455,7 +464,7 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case _ @ SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
-          val numBlocksFetched = blockId.asInstanceOf[ShuffleBlock].numBlocks
+          val numBlocksFetched = getNumBlocks(blockId)
           numBlocksProcessed += numBlocksFetched
           if (address != blockManager.blockManagerId) {
             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
@@ -464,8 +473,6 @@ final class ShuffleBlockFetcherIterator(
               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
             }
             shuffleMetrics.incRemoteBlocksFetched(numBlocksFetched)
-          }
-          if (!localBlocks.contains(blockId)) {
             bytesInFlight -= size
           }
           if (isNetworkReqDone) {
@@ -538,7 +545,7 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, address, e) =>
-          numBlocksProcessed += blockId.asInstanceOf[ShuffleBlock].numBlocks
+          numBlocksProcessed += getNumBlocks(blockId)
           throwFetchFailedException(blockId, address, e)
       }
 

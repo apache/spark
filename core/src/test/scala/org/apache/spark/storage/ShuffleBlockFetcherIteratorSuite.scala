@@ -597,15 +597,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val remoteBlocks = Map[BlockId, ManagedBuffer](
-      ArrayShuffleBlockString(Seq("shuffle_0_3_0", "shuffle_0_3_1")) -> createMockManagedBuffer(2),
+      ArrayShuffleBlockId(Seq(ShuffleBlockId(0, 3, 0), ShuffleBlockId(0, 3, 1))) ->
+        createMockManagedBuffer(2),
       ShuffleBlockId(0, 4, 0) -> createMockManagedBuffer())
     val transfer = mock(classOf[BlockTransferService])
     when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any(), any()))
       .thenAnswer(new Answer[Unit] {
         override def answer(invocation: InvocationOnMock): Unit = {
           val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
-          listener.onBlockFetchSuccess(Array("shuffle_0_3_0", "shuffle_0_3_1"),
-            remoteBlocks(ArrayShuffleBlockString(Seq("shuffle_0_3_0", "shuffle_0_3_1"))))
+          listener.onBlockFetchSuccess(Array("shuffle_0_3_0", "shuffle_0_3_1"), remoteBlocks(
+              ArrayShuffleBlockId(Seq(ShuffleBlockId(0, 3, 0), ShuffleBlockId(0, 3, 1)))))
           listener.onBlockFetchSuccess(Array("shuffle_0_4_0"),
             remoteBlocks(ShuffleBlockId(0, 4, 0)))
         }

@@ -50,14 +50,10 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   override def name: String = "rdd_" + rddId + "_" + splitIndex
 }
 
-sealed trait ShuffleBlock extends BlockId {
-  def numBlocks: Int = 1
-}
-
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
 @DeveloperApi
-case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends ShuffleBlock {
+case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
@@ -69,17 +65,8 @@ case class ShuffleBlockBatchId(shuffleId: Int, mapId: Int, reduceId: Int, numBlo
 }
 
 @DeveloperApi
-case class ArrayShuffleBlockString(blockIds: Seq[String]) extends ShuffleBlock {
+case class ArrayShuffleBlockId(blockIds: Seq[BlockId]) extends BlockId {
   override def name: String = blockIds.head + "-" + blockIds.last
-
-  override def numBlocks: Int = blockIds.length
-}
-
-@DeveloperApi
-case class ArrayShuffleBlockId(blockIds: Seq[BlockId]) extends ShuffleBlock {
-  override def name: String = blockIds.head + "-" + blockIds.last
-
-  override def numBlocks: Int = blockIds.length
 }
 
 @DeveloperApi
