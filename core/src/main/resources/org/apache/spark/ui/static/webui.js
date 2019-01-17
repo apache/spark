@@ -63,6 +63,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-finishedDrivers','aggregated-finishedDrivers');
   collapseTablePageLoad('collapse-aggregated-runtimeInformation','aggregated-runtimeInformation');
   collapseTablePageLoad('collapse-aggregated-sparkProperties','aggregated-sparkProperties');
+  collapseTablePageLoad('collapse-aggregated-hadoopProperties','aggregated-hadoopProperties');
   collapseTablePageLoad('collapse-aggregated-systemProperties','aggregated-systemProperties');
   collapseTablePageLoad('collapse-aggregated-classpathEntries','aggregated-classpathEntries');
   collapseTablePageLoad('collapse-aggregated-activeJobs','aggregated-activeJobs');

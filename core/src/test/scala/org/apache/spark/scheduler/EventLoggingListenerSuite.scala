@@ -108,8 +108,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val secretPassword = "secret_password"
     val conf = getLoggingConf(testDirPath, None)
       .set(key, secretPassword)
+    val hadoopconf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
-    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val envDetails = SparkEnv.environmentDetails(conf, hadoopconf, "FIFO", Seq.empty, Seq.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
     assert(redactedProps(key) == "*********(redacted)")
