@@ -1559,7 +1559,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             DateType,
             Some(SQLConf.get.sessionLocalTimeZone)).eval()
           if (castedValue == null) {
-            throw new ParseException(s"Cannot parse the date value: ${value}", ctx)
+            throw new ParseException(s"Cannot parse the date value: $value", ctx)
           } else {
             Literal(castedValue, DateType)
           }
@@ -1569,7 +1569,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             TimestampType,
             Some(SQLConf.get.sessionLocalTimeZone)).eval()
           if (castedValue == null) {
-            throw new ParseException(s"Cannot parse the timestamp value: ${value}", ctx)
+            throw new ParseException(s"Cannot parse the timestamp value: $value", ctx)
           } else {
             Literal(castedValue, TimestampType)
           }
