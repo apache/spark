@@ -631,7 +631,7 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 #' @rdname union
 setGeneric("union", function(x, y) { standardGeneric("union") })
 
-#' @rdname union
+#' @rdname unionAll
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
@@ -1478,6 +1478,10 @@ setGeneric("spark.associationRules", function(object) { standardGeneric("spark.a
 #' @rdname spark.prefixSpan
 setGeneric("spark.findFrequentSequentialPatterns",
             function(data, ...) { standardGeneric("spark.findFrequentSequentialPatterns") })
+
+#' @rdname spark.powerIterationClustering
+setGeneric("spark.assignClusters",
+            function(data, ...) { standardGeneric("spark.assignClusters") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

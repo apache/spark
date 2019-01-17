@@ -171,11 +171,13 @@ private[spark] object JsonProtocol {
     val environmentDetails = environmentUpdate.environmentDetails
     val jvmInformation = mapToJson(environmentDetails("JVM Information").toMap)
     val sparkProperties = mapToJson(environmentDetails("Spark Properties").toMap)
+    val hadoopProperties = mapToJson(environmentDetails("Hadoop Properties").toMap)
     val systemProperties = mapToJson(environmentDetails("System Properties").toMap)
     val classpathEntries = mapToJson(environmentDetails("Classpath Entries").toMap)
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.environmentUpdate) ~
     ("JVM Information" -> jvmInformation) ~
     ("Spark Properties" -> sparkProperties) ~
+    ("Hadoop Properties" -> hadoopProperties) ~
     ("System Properties" -> systemProperties) ~
     ("Classpath Entries" -> classpathEntries)
   }
@@ -394,10 +396,10 @@ private[spark] object JsonProtocol {
 
   /** Convert executor metrics to JSON. */
   def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
-    val metrics = ExecutorMetricType.values.map{ metricType =>
-      JField(metricType.name, executorMetrics.getMetricValue(metricType))
-     }
-    JObject(metrics: _*)
+    val metrics = ExecutorMetricType.metricToOffset.map { case (m, _) =>
+      JField(m, executorMetrics.getMetricValue(m))
+    }
+    JObject(metrics.toSeq: _*)
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -611,10 +613,10 @@ private[spark] object JsonProtocol {
   /** Extract the executor metrics from JSON. */
   def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
     val metrics =
-      ExecutorMetricType.values.map { metric =>
-        metric.name -> jsonOption(json \ metric.name).map(_.extract[Long]).getOrElse(0L)
-      }.toMap
-    new ExecutorMetrics(metrics)
+      ExecutorMetricType.metricToOffset.map { case (metric, _) =>
+        metric -> jsonOption(json \ metric).map(_.extract[Long]).getOrElse(0L)
+      }
+    new ExecutorMetrics(metrics.toMap)
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {
@@ -653,9 +655,13 @@ private[spark] object JsonProtocol {
   }
 
   def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {
+    // For compatible with previous event logs
+    val hadoopProperties = jsonOption(json \ "Hadoop Properties").map(mapFromJson(_).toSeq)
+      .getOrElse(Seq.empty)
     val environmentDetails = Map[String, Seq[(String, String)]](
       "JVM Information" -> mapFromJson(json \ "JVM Information").toSeq,
       "Spark Properties" -> mapFromJson(json \ "Spark Properties").toSeq,
+      "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> mapFromJson(json \ "System Properties").toSeq,
       "Classpath Entries" -> mapFromJson(json \ "Classpath Entries").toSeq)
     SparkListenerEnvironmentUpdate(environmentDetails)

@@ -100,10 +100,10 @@ function getColumnNameForTaskMetricSummary(columnKey) {
             return "Scheduler Delay";
 
         case "diskBytesSpilled":
-            return "Shuffle spill (disk)";
+            return "Spill (disk)";
 
         case "memoryBytesSpilled":
-            return "Shuffle spill (memory)";
+            return "Spill (memory)";
 
         case "shuffleReadMetrics":
             return "Shuffle Read Size / Records";
@@ -221,7 +221,10 @@ function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
             "searching": false,
             "order": [[0, "asc"]],
             "bSort": false,
-            "bAutoWidth": false
+            "bAutoWidth": false,
+            "oLanguage": {
+                "sEmptyTable": "No tasks have reported metrics yet"
+            }
         };
         taskSummaryMetricsDataTable = $(taskMetricsTable).DataTable(taskConf);
     }
@@ -426,7 +429,10 @@ $(document).ready(function () {
                         }
                     ],
                     "order": [[0, "asc"]],
-                    "bAutoWidth": false
+                    "bAutoWidth": false,
+                    "oLanguage": {
+                        "sEmptyTable": "No data to show yet"
+                    }
                 }
                 var executorSummaryTableSelector =
                     $("#summary-executor-table").DataTable(executorSummaryConf);
@@ -610,7 +616,8 @@ $(document).ready(function () {
                 $("#accumulator-table").DataTable(accumulatorConf);
 
                 // building tasks table that uses server side functionality
-                var totalTasksToShow = responseBody.numCompleteTasks + responseBody.numActiveTasks;
+                var totalTasksToShow = responseBody.numCompleteTasks + responseBody.numActiveTasks +
+                    responseBody.numKilledTasks + responseBody.numFailedTasks;
                 var taskTable = "#active-tasks-table";
                 var taskConf = {
                     "serverSide": true,
@@ -661,8 +668,8 @@ $(document).ready(function () {
                         {data : "launchTime", name: "Launch Time", render: formatDate},
                         {
                             data : function (row, type) {
-                                if (row.duration) {
-                                    return type === 'display' ? formatDuration(row.duration) : row.duration;
+                                if (row.taskMetrics && row.taskMetrics.executorRunTime) {
+                                    return type === 'display' ? formatDuration(row.taskMetrics.executorRunTime) : row.taskMetrics.executorRunTime;
                                 } else {
                                     return "";
                                 }
@@ -835,7 +842,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Memory)"
+                            name: "Spill (Memory)"
                         },
                         {
                             data : function (row, type) {
@@ -845,7 +852,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Disk)"
+                            name: "Spill (Disk)"
                         },
                         {
                             data : function (row, type) {
@@ -921,7 +928,7 @@ $(document).ready(function () {
 
                 // title number and toggle list
                 $("#summaryMetricsTitle").html("Summary Metrics for " + "<a href='#tasksTitle'>" + responseBody.numCompleteTasks + " Completed Tasks" + "</a>");
-                $("#tasksTitle").html("Task (" + totalTasksToShow + ")");
+                $("#tasksTitle").html("Tasks (" + totalTasksToShow + ")");
 
                 // hide or show the accumulate update table
                 if (accumulatorTable.length == 0) {

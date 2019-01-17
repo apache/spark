@@ -110,6 +110,14 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
+    .doc("When set to true,  Spark will try to use built-in data source writer " +
+      "instead of Hive serde in CTAS. This flag is effective only if " +
+      "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
+      "enabled respectively for Parquet and ORC formats")
+    .booleanConf
+    .createWithDefault(true)
+
   val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
@@ -434,52 +442,6 @@ private[spark] object HiveUtils extends Logging {
     SparkHadoopUtil.get.appendSparkHadoopConfigs(sys.props.toMap, propMap)
 
     propMap.toMap
-  }
-
-  protected val primitiveTypes =
-    Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-      ShortType, DateType, TimestampType, BinaryType)
-
-  protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
-    case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-      }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
-      map.map {
-        case (key, value) =>
-          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-      }.toSeq.sorted.mkString("{", ",", "}")
-    case (null, _) => "NULL"
-    case (d: Int, DateType) => new DateWritable(d).toString
-    case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
-    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-    case (decimal: java.math.BigDecimal, DecimalType()) =>
-      // Hive strips trailing zeros so use its toString
-      HiveDecimal.create(decimal).toString
-    case (other, _ : UserDefinedType[_]) => other.toString
-    case (other, tpe) if primitiveTypes contains tpe => other.toString
-  }
-
-  /** Hive outputs fields of structs slightly differently than top level attributes. */
-  protected def toHiveStructString(a: (Any, DataType)): String = a match {
-    case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-      }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
-      map.map {
-        case (key, value) =>
-          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-      }.toSeq.sorted.mkString("{", ",", "}")
-    case (null, _) => "null"
-    case (s: String, StringType) => "\"" + s + "\""
-    case (decimal, DecimalType()) => decimal.toString
-    case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 
   /**

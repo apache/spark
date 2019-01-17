@@ -50,17 +50,33 @@ object DateTimeUtils {
   final val MILLIS_PER_SECOND = 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
   final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
-
+  final val NANOS_PER_MICROS = 1000L
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
 
-  // number of days in 400 years
+  // number of days in 400 years by Gregorian calendar
   final val daysIn400Years: Int = 146097
+
+  // In the Julian calendar every year that is exactly divisible by 4 is a leap year without any
+  // exception. But in the Gregorian calendar every year that is exactly divisible by four
+  // is a leap year, except for years that are exactly divisible by 100, but these centurial years
+  // are leap years if they are exactly divisible by 400.
+  // So there are 3 extra days in the Julian calendar within a 400 years cycle compared to the
+  // Gregorian calendar.
+  final val extraLeapDaysIn400YearsJulian = 3
+
+  // number of days in 400 years by Julian calendar
+  final val daysIn400YearsInJulian: Int = daysIn400Years + extraLeapDaysIn400YearsJulian
+
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
 
   // this is year -17999, calculation: 50 * daysIn400Year
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
+
+  // days to year -17999 in Julian calendar
+  final val toYearZeroInJulian = toYearZero + 49 * extraLeapDaysIn400YearsJulian
+
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
@@ -76,32 +92,6 @@ object DateTimeUtils {
     }
   }
 
-  // `SimpleDateFormat` is not thread-safe.
-  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-    }
-  }
-
-  def getThreadLocalTimestampFormat(timeZone: TimeZone): DateFormat = {
-    val sdf = threadLocalTimestampFormat.get()
-    sdf.setTimeZone(timeZone)
-    sdf
-  }
-
-  // `SimpleDateFormat` is not thread-safe.
-  private val threadLocalDateFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    }
-  }
-
-  def getThreadLocalDateFormat(timeZone: TimeZone): DateFormat = {
-    val sdf = threadLocalDateFormat.get()
-    sdf.setTimeZone(timeZone)
-    sdf
-  }
-
   private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
   private val computeTimeZone = new JFunction[String, TimeZone] {
     override def apply(timeZoneId: String): TimeZone = TimeZone.getTimeZone(timeZoneId)
@@ -109,16 +99,6 @@ object DateTimeUtils {
 
   def getTimeZone(timeZoneId: String): TimeZone = {
     computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
-  }
-
-  def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
-    val sdf = new SimpleDateFormat(formatString, Locale.US)
-    sdf.setTimeZone(timeZone)
-    // Enable strict parsing, if the input date/format is invalid, it will throw an exception.
-    // e.g. to parse invalid date '2016-13-12', or '2016-01-12' with  invalid format 'yyyy-aa-dd',
-    // an exception will be throwed.
-    sdf.setLenient(false)
-    sdf
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -143,24 +123,11 @@ object DateTimeUtils {
     millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
   }
 
-  def dateToString(days: SQLDate): String =
-    getThreadLocalDateFormat(defaultTimeZone()).format(toJavaDate(days))
-
-  def dateToString(days: SQLDate, timeZone: TimeZone): String = {
-    getThreadLocalDateFormat(timeZone).format(toJavaDate(days))
-  }
-
   // Converts Timestamp to string according to Hive TimestampWritable convention.
-  def timestampToString(us: SQLTimestamp): String = {
-    timestampToString(us, defaultTimeZone())
-  }
-
-  // Converts Timestamp to string according to Hive TimestampWritable convention.
-  def timestampToString(us: SQLTimestamp, timeZone: TimeZone): String = {
+  def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
     val ts = toJavaTimestamp(us)
     val timestampString = ts.toString
-    val timestampFormat = getThreadLocalTimestampFormat(timeZone)
-    val formatted = timestampFormat.format(ts)
+    val formatted = tf.format(us)
 
     if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
       formatted + timestampString.substring(19)
@@ -585,20 +552,30 @@ object DateTimeUtils {
    * Return the number of days since the start of 400 year period.
    * The second year of a 400 year period (year 1) starts on day 365.
    */
-  private[this] def yearBoundary(year: Int): Int = {
-    year * 365 + ((year / 4 ) - (year / 100) + (year / 400))
+  private[this] def yearBoundary(year: Int, isGregorian: Boolean): Int = {
+    if (isGregorian) {
+      year * 365 + ((year / 4) - (year / 100) + (year / 400))
+    } else {
+      year * 365 + (year / 4)
+    }
   }
 
   /**
    * Calculates the number of years for the given number of days. This depends
    * on a 400 year period.
    * @param days days since the beginning of the 400 year period
+   * @param isGregorian indicates whether leap years should be calculated according to Gregorian
+   *                    (or Julian) calendar
    * @return (number of year, days in year)
    */
-  private[this] def numYears(days: Int): (Int, Int) = {
+  private[this] def numYears(days: Int, isGregorian: Boolean): (Int, Int) = {
     val year = days / 365
-    val boundary = yearBoundary(year)
-    if (days > boundary) (year, days - boundary) else (year - 1, days - yearBoundary(year - 1))
+    val boundary = yearBoundary(year, isGregorian)
+    if (days > boundary) {
+      (year, days - boundary)
+    } else {
+      (year - 1, days - yearBoundary(year - 1, isGregorian))
+    }
   }
 
   /**
@@ -609,18 +586,26 @@ object DateTimeUtils {
    * equals to the period 1.1.1601 until 31.12.2000.
    */
   private[this] def getYearAndDayInYear(daysSince1970: SQLDate): (Int, Int) = {
-    // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
-    var  daysSince1970Tmp = daysSince1970
     // Since Julian calendar was replaced with the Gregorian calendar,
     // the 10 days after Oct. 4 were skipped.
     // (1582-10-04) -141428 days since 1970-01-01
     if (daysSince1970 <= -141428) {
-      daysSince1970Tmp -= 10
+      getYearAndDayInYear(daysSince1970 - 10, toYearZeroInJulian, daysIn400YearsInJulian, false)
+    } else {
+      getYearAndDayInYear(daysSince1970, toYearZero, daysIn400Years, true)
     }
-    val daysNormalized = daysSince1970Tmp + toYearZero
+  }
+
+  private def getYearAndDayInYear(
+      daysSince1970: SQLDate,
+      toYearZero: SQLDate,
+      daysIn400Years: SQLDate,
+      isGregorian: Boolean): (Int, Int) = {
+    // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
+    val daysNormalized = daysSince1970 + toYearZero
     val numOfQuarterCenturies = daysNormalized / daysIn400Years
     val daysInThis400 = daysNormalized % daysIn400Years + 1
-    val (years, dayInYear) = numYears(daysInThis400)
+    val (years, dayInYear) = numYears(daysInThis400, isGregorian)
     val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
     (year, dayInYear)
   }
@@ -1144,7 +1129,5 @@ object DateTimeUtils {
    */
   private[util] def resetThreadLocals(): Unit = {
     threadLocalGmtCalendar.remove()
-    threadLocalTimestampFormat.remove()
-    threadLocalDateFormat.remove()
   }
 }

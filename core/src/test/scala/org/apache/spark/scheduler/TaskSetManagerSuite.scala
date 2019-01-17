@@ -22,7 +22,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Matchers.{any, anyInt, anyString}
+import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -166,7 +166,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   private val conf = new SparkConf
 
-  val LOCALITY_WAIT_MS = conf.getTimeAsMs("spark.locality.wait", "3s")
+  val LOCALITY_WAIT_MS = conf.get(config.LOCALITY_WAIT)
   val MAX_TASK_FAILURES = 4
 
   var sched: FakeTaskScheduler = null
@@ -429,7 +429,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       set(config.BLACKLIST_ENABLED, true).
       set(config.BLACKLIST_TIMEOUT_CONF, rescheduleDelay).
       // don't wait to jump locality levels in this test
-      set("spark.locality.wait", "0")
+      set(config.LOCALITY_WAIT.key, "0")
 
     sc = new SparkContext("local", "test", conf)
     // two executors on same host, one on different.
@@ -655,7 +655,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("abort the job if total size of results is too large") {
-    val conf = new SparkConf().set("spark.driver.maxResultSize", "2m")
+    val conf = new SparkConf().set(config.MAX_RESULT_SIZE.key, "2m")
     sc = new SparkContext("local", "test", conf)
 
     def genBytes(size: Int): (Int) => Array[Byte] = { (x: Int) =>
@@ -1319,7 +1319,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     when(taskSetManagerSpy.addPendingTask(anyInt())).thenAnswer(
       new Answer[Unit] {
         override def answer(invocationOnMock: InvocationOnMock): Unit = {
-          val task = invocationOnMock.getArgumentAt(0, classOf[Int])
+          val task: Int = invocationOnMock.getArgument(0)
           assert(taskSetManager.taskSetBlacklistHelperOpt.get.
             isExecutorBlacklistedForTask(exec, task))
         }

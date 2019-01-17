@@ -229,8 +229,11 @@ pod template that will always be overwritten by Spark. Therefore, users of this 
 the pod template file only lets Spark start with a template pod instead of an empty pod during the pod-building process.
 For details, see the [full list](#pod-template-properties) of pod template values that will be overwritten by spark.
 
-Pod template files can also define multiple containers. In such cases, Spark will always assume that the first container in
-the list will be the driver or executor container.
+Pod template files can also define multiple containers. In such cases, you can use the spark properties
+`spark.kubernetes.driver.podTemplateContainerName` and `spark.kubernetes.executor.podTemplateContainerName`
+to indicate which container should be used as a basis for the driver or executor.
+If not specified, or if the container name is not valid, Spark will assume that the first container in the list
+will be the driver or executor container.
 
 ## Using Kubernetes Volumes
 
@@ -932,16 +935,39 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.podTemplateFile</code></td>
   <td>(none)</td>
   <td>
-   Specify the local file that contains the driver [pod template](#pod-template). For example
-   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml`</code>
+   Specify the local file that contains the driver <a href="#pod-template">pod template</a>. For example
+   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.podTemplateContainerName</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the container name to be used as a basis for the driver in the given <a href="#pod-template">pod template</a>.
+   For example <code>spark.kubernetes.driver.podTemplateContainerName=spark-driver</code>
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.podTemplateFile</code></td>
   <td>(none)</td>
   <td>
-   Specify the local file that contains the executor [pod template](#pod-template). For example
-   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml`</code>
+   Specify the local file that contains the executor <a href="#pod-template">pod template</a>. For example
+   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.podTemplateContainerName</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the container name to be used as a basis for the executor in the given <a href="#pod-template">pod template</a>.
+   For example <code>spark.kubernetes.executor.podTemplateContainerName=spark-executor</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.deleteOnTermination</code></td>
+  <td>true</td>
+  <td>
+  Specify whether executor pods should be deleted in case of failure or normal termination.
   </td>
 </tr>
 </table>

@@ -27,3 +27,5 @@ select current_date = current_date(), current_timestamp = current_timestamp(), a
 select a, b from ttf2 order by a, current_date;
 
 select weekday('2007-02-03'), weekday('2009-07-30'), weekday('2017-05-27'), weekday(null), weekday('1582-10-15 13:10:15');
+
+select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01');

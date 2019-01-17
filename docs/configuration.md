@@ -169,7 +169,7 @@ of the most common options to set are:
     The amount of off-heap memory to be allocated per driver in cluster mode, in MiB unless
     otherwise specified. This is memory that accounts for things like VM overheads, interned strings, 
     other native overheads, etc. This tends to grow with the container size (typically 6-10%). 
-    This option is currently supported on YARN and Kubernetes.
+    This option is currently supported on YARN, Mesos and Kubernetes.
   </td>
 </tr>
 <tr>
@@ -190,6 +190,8 @@ of the most common options to set are:
     and it is up to the application to avoid exceeding the overhead memory space
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
+
+    NOTE: Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
   </td>
 </tr>
 <tr>
@@ -1197,51 +1199,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.memory.useLegacyMode</code></td>
-  <td>false</td>
-  <td>
-    Whether to enable the legacy memory management mode used in Spark 1.5 and before.
-    The legacy mode rigidly partitions the heap space into fixed-size regions,
-    potentially leading to excessive spilling if the application was not tuned.
-    The following deprecated memory fraction configurations are not read unless this is enabled:
-    <code>spark.shuffle.memoryFraction</code><br>
-    <code>spark.storage.memoryFraction</code><br>
-    <code>spark.storage.unrollFraction</code>
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.2</td>
-  <td>
-    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
-    Fraction of Java heap to use for aggregation and cogroups during shuffles.
-    At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.storage.memoryFraction</code></td>
-  <td>0.6</td>
-  <td>
-    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
-    increase it if you configure your own old generation size.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.storage.unrollFraction</code></td>
-  <td>0.2</td>
-  <td>
-    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
-    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
-    This is dynamically allocated by dropping existing blocks when there is not enough free
-    storage space to unroll the new block in its entirety.
-  </td>
-</tr>
-<tr>
   <td><code>spark.storage.replication.proactive</code></td>
   <td>false</td>
   <td>
@@ -1382,14 +1339,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.files.maxPartitionBytes</code></td>
-  <td>134217728 (128 MB)</td>
+  <td>134217728 (128 MiB)</td>
   <td>
     The maximum number of bytes to pack into a single partition when reading files.
   </td>
 </tr>
 <tr>
   <td><code>spark.files.openCostInBytes</code></td>
-  <td>4194304 (4 MB)</td>
+  <td>4194304 (4 MiB)</td>
   <td>
     The estimated cost to open a file, measured by the number of bytes could be scanned at the same
     time. This is used when putting multiple files into a partition. It is better to overestimate,
@@ -1443,7 +1400,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rpc.message.maxSize</code></td>
   <td>128</td>
   <td>
-    Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
+    Maximum message size (in MiB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
     jobs with many thousands of map and reduce tasks and see messages about the RPC message size.
   </td>
@@ -1502,6 +1459,16 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
+</tr>
+<tr>
+  <td><code>spark.network.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    If enabled then off-heap buffer allocations are preferred by the shared allocators.
+    Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
+    turn this off to force all allocations to be on-heap.
+    </td>
 </tr>
 <tr>
   <td><code>spark.port.maxRetries</code></td>

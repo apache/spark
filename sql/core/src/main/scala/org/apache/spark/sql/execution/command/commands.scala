@@ -154,7 +154,7 @@ case class ExplainCommand(
         // output mode does not matter since there is no `Sink`.
         new IncrementalExecution(
           sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
-          UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+          UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
       } else {
         sparkSession.sessionState.executePlan(logicalPlan)
       }

@@ -171,17 +171,23 @@ private[csv] class CsvOutputWriter(
 
   private var univocityGenerator: Option[UnivocityGenerator] = None
 
-  override def write(row: InternalRow): Unit = {
-    val gen = univocityGenerator.getOrElse {
-      val charset = Charset.forName(params.charset)
-      val os = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
-      val newGen = new UnivocityGenerator(dataSchema, os, params)
-      univocityGenerator = Some(newGen)
-      newGen
-    }
+  if (params.headerFlag) {
+    val gen = getGen()
+    gen.writeHeaders()
+  }
 
+  private def getGen(): UnivocityGenerator = univocityGenerator.getOrElse {
+    val charset = Charset.forName(params.charset)
+    val os = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
+    val newGen = new UnivocityGenerator(dataSchema, os, params)
+    univocityGenerator = Some(newGen)
+    newGen
+  }
+
+  override def write(row: InternalRow): Unit = {
+    val gen = getGen()
     gen.write(row)
   }
 
-  override def close(): Unit = univocityGenerator.map(_.close())
+  override def close(): Unit = univocityGenerator.foreach(_.close())
 }
