@@ -29,6 +29,10 @@ class ExecutorInfo(
    val logUrlMap: Map[String, String],
    val attributes: Map[String, String]) {
 
+  def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String]) = {
+    this(executorHost, totalCores, logUrlMap, Map.empty)
+  }
+
   def canEqual(other: Any): Boolean = other.isInstanceOf[ExecutorInfo]
 
   override def equals(other: Any): Boolean = other match {
