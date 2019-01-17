@@ -239,8 +239,8 @@ class HadoopTableReader(
 
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
-      val rdd = getRDD(partDesc.getInputFileFormatClassName, localTableDesc, inputPathStr)
-      rdd.mapPartitions { iter =>
+      getRDD(partDesc.getInputFileFormatClassName, localTableDesc, inputPathStr)
+        .mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.getConstructor().newInstance()
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
