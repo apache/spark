@@ -828,6 +828,10 @@ class ChunkedStream(object):
         write_int(-1, self.wrapped)
         self.wrapped.close()
 
+    @property
+    def closed(self):
+        return self.wrapped.closed
+
 
 if __name__ == '__main__':
     import doctest
