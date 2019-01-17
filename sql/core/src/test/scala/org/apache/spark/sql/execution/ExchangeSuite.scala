@@ -161,8 +161,5 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     } (BroadcastExchangeExec.executionContext)
     ThreadUtils.awaitResult(ef, 3 seconds)
     assert(executed)
-
-    // for other test
-    initializeSession()
   }
 }
