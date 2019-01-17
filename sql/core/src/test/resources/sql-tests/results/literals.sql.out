@@ -254,12 +254,10 @@ pattern%	no-pattern\%	pattern\%	pattern\\%
 select '\'', '"', '\n', '\r', '\t', 'Z'
 -- !query 27 schema
 struct<':string,":string,
-:string,
-:string,	:string,Z:string>
+:string,:string,	:string,Z:string>
 -- !query 27 output
 '	"	
-	
-			Z
+				Z
 
 
 -- !query 28
