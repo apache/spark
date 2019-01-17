@@ -40,6 +40,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 
@@ -829,7 +830,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
     conf.set("spark.master", "yarn")
-    conf.set("spark.submit.deployMode", "client")
+    conf.set(SUBMIT_DEPLOY_MODE, "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "false")) === false)
