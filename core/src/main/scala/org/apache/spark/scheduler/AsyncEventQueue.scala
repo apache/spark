@@ -46,8 +46,9 @@ private class AsyncEventQueue(
 
   // Cap the capacity of the queue so we get an explicit error (rather than an OOM exception) if
   // it's perpetually being added to more quickly than it's being drained.
+  val defaultQueueCapacity = conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY)
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](
-    conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+    conf.getInt("spark.scheduler.listenerbus.eventqueue.$name.capacity", defaultQueueCapacity))
 
   // Keep the event count separately, so that waitUntilEmpty() can be implemented properly;
   // this allows that method to return only when the events in the queue have been fully
