@@ -66,6 +66,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
       "JVM Information" -> Seq(("GC speed", "9999 objects/s"), ("Java home", "Land of coffee")),
       "Spark Properties" -> Seq(("Job throughput", "80000 jobs/s, regardless of job type")),
+      "Hadoop Properties" -> Seq(("hadoop.tmp.dir", "/usr/local/hadoop/tmp")),
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
@@ -1760,6 +1761,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  },
       |  "Spark Properties": {
       |    "Job throughput": "80000 jobs/s, regardless of job type"
+      |  },
+      |  "Hadoop Properties": {
+      |    "hadoop.tmp.dir": "/usr/local/hadoop/tmp"
       |  },
       |  "System Properties": {
       |    "Username": "guest",
