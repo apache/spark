@@ -29,8 +29,10 @@ from pyspark.util import _exception_message
 
 if sys.version < '3':
     import cPickle as pickle
+    protocol = 2
 else:
     import pickle
+    protocol = 3
     unicode = str
 
 __all__ = ['Broadcast']
@@ -110,7 +112,7 @@ class Broadcast(object):
 
     def dump(self, value, f):
         try:
-            pickle.dump(value, f, 2)
+            pickle.dump(value, f, protocol)
         except pickle.PickleError:
             raise
         except Exception as e:

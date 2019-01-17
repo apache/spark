@@ -620,7 +620,7 @@ class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
         try:
-            return cloudpickle.dumps(obj, 2)
+            return cloudpickle.dumps(obj, protocol)
         except pickle.PickleError:
             raise
         except Exception as e:
