@@ -197,8 +197,6 @@ private[spark] class IndexShuffleBlockResolver(
         val endReducer = blockIds.last
         getBlockData(startReducer.shuffleId, startReducer.mapId, startReducer.reduceId,
           endReducer.reduceId - startReducer.reduceId + 1)
-      case ShuffleBlockBatchId(shuffleId, mapId, reduceId, numBlocks) =>
-        getBlockData(shuffleId, mapId, reduceId, numBlocks)
       case ShuffleBlockId(shuffleId, mapId, reduceId) =>
         getBlockData(shuffleId, mapId, reduceId, 1)
       case _ =>

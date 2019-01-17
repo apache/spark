@@ -48,30 +48,23 @@ class NettyBlockRpcServer(
 
   private val streamManager = new OneForOneStreamManager()
 
-  private def mergeShuffleBlockIds(blockIds: Array[String]) = {
-    val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
-    var shuffleBlockBatchIds = ArrayBuffer.empty[ShuffleBlockBatchId]
-
-    def sameMapFile(index: Int) = {
-      shuffleBlockIds(index).shuffleId == shuffleBlockIds(index - 1).shuffleId &&
-        shuffleBlockIds(index).mapId == shuffleBlockIds(index - 1).mapId
-    }
-
-    if (shuffleBlockIds.nonEmpty) {
-      var prev = 0
-      (1 until shuffleBlockIds.length + 1).foreach { idx =>
-        if (idx == shuffleBlockIds.length || !sameMapFile(idx)) {
-          shuffleBlockBatchIds += ShuffleBlockBatchId(
-            shuffleBlockIds(prev).shuffleId,
-            shuffleBlockIds(prev).mapId,
-            shuffleBlockIds(prev).reduceId,
-            shuffleBlockIds(idx - 1).reduceId - shuffleBlockIds(prev).reduceId + 1
-          )
-          prev = idx
-        }
+  private def mergeShuffleBlockIds(iter: Iterator[String]) = {
+    val arrayShuffleBlockIds = new ArrayBuffer[ArrayShuffleBlockId]
+    var blockIds = new ArrayBuffer[ShuffleBlockId]
+    while (iter.hasNext) {
+      val curBlockId = BlockId(iter.next()).asInstanceOf[ShuffleBlockId]
+      if (blockIds.isEmpty || curBlockId.mapId == blockIds.head.mapId) {
+        blockIds += curBlockId
+      } else {
+        arrayShuffleBlockIds += ArrayShuffleBlockId(blockIds)
+        blockIds = new ArrayBuffer[ShuffleBlockId]
+        blockIds += curBlockId
       }
     }
-    shuffleBlockBatchIds.toArray
+    if (blockIds.nonEmpty) {
+      arrayShuffleBlockIds += ArrayShuffleBlockId(blockIds)
+    }
+    arrayShuffleBlockIds.toArray
   }
 
   override def receive(
@@ -85,7 +78,7 @@ class NettyBlockRpcServer(
       case openBlocks: OpenBlocks =>
         val blockIds =
           if (openBlocks.fetchContinuousShuffleBlocksInBatch) {
-            mergeShuffleBlockIds(openBlocks.blockIds)
+            mergeShuffleBlockIds(openBlocks.blockIds.iterator)
           } else {
             openBlocks.blockIds.map(BlockId.apply)
           }

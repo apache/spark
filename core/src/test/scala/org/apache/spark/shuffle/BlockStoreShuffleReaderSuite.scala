@@ -25,7 +25,7 @@ import org.mockito.Mockito.{mock, when}
 import org.apache.spark._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
-import org.apache.spark.storage.{BlockManager, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{ArrayShuffleBlockId, BlockManager, BlockManagerId, ShuffleBlockId}
 
 /**
  * Wrapper for a managed buffer that keeps track of how many times retain and release are called.
@@ -93,8 +93,8 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
 
       // Setup the blockManager mock so the buffer gets returned when the shuffle code tries to
       // fetch shuffle data.
-      val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
-      when(blockManager.getBlockData(shuffleBlockId)).thenReturn(managedBuffer)
+      val arrayShuffleBlockId = ArrayShuffleBlockId(ShuffleBlockId(shuffleId, mapId, reduceId))
+      when(blockManager.getBlockData(arrayShuffleBlockId)).thenReturn(managedBuffer)
       managedBuffer
     }
 

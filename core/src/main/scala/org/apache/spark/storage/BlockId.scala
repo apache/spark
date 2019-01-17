@@ -38,8 +38,7 @@ sealed abstract class BlockId {
   // convenience methods
   def asRDDId: Option[RDDBlockId] = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
   def isRDD: Boolean = isInstanceOf[RDDBlockId]
-  def isShuffle: Boolean = isInstanceOf[ShuffleBlockId] || isInstanceOf[ShuffleBlockBatchId] ||
-    isInstanceOf[ArrayShuffleBlockId]
+  def isShuffle: Boolean = isInstanceOf[ShuffleBlockId] || isInstanceOf[ArrayShuffleBlockId]
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
 
   override def toString: String = name
@@ -58,13 +57,6 @@ case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends Blo
 }
 
 @DeveloperApi
-case class ShuffleBlockBatchId(shuffleId: Int, mapId: Int, reduceId: Int, numBlocks: Int)
-  extends BlockId {
-  override def name: String =
-    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + numBlocks
-}
-
-@DeveloperApi
 case class ArrayShuffleBlockId(blockIds: Seq[ShuffleBlockId]) extends BlockId {
   override def name: String = {
     if (blockIds.length == 1) {
@@ -72,6 +64,12 @@ case class ArrayShuffleBlockId(blockIds: Seq[ShuffleBlockId]) extends BlockId {
     } else {
       "array_shuffle_" + blockIds.head + "-" + blockIds.last
     }
+  }
+}
+
+object ArrayShuffleBlockId {
+  def apply(blockId: ShuffleBlockId): ArrayShuffleBlockId = {
+    new ArrayShuffleBlockId(Seq(blockId))
   }
 }
 
@@ -123,7 +121,6 @@ class UnrecognizedBlockId(name: String)
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
-  val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
@@ -138,8 +135,6 @@ object BlockId {
       RDDBlockId(rddId.toInt, splitIndex.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case SHUFFLE_BATCH(shuffleId, mapId, reduceId, numBlocks) =>
-      ShuffleBlockBatchId(shuffleId.toInt, mapId.toInt, reduceId.toInt, numBlocks.toInt)
     case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
       ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
     case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
