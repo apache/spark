@@ -193,8 +193,8 @@ private[spark] class IndexShuffleBlockResolver(
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     blockId match {
       case ArrayShuffleBlockId(blockIds) =>
-        val startReducer = blockIds.head.asInstanceOf[ShuffleBlockId]
-        val endReducer = blockIds.last.asInstanceOf[ShuffleBlockId]
+        val startReducer = blockIds.head
+        val endReducer = blockIds.last
         getBlockData(startReducer.shuffleId, startReducer.mapId, startReducer.reduceId,
           endReducer.reduceId - startReducer.reduceId + 1)
       case ShuffleBlockBatchId(shuffleId, mapId, reduceId, numBlocks) =>

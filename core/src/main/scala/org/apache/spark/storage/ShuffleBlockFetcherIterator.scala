@@ -235,7 +235,8 @@ final class ShuffleBlockFetcherIterator(
 
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockIds: Array[String], buf: ManagedBuffer): Unit = {
-        val blockId = ArrayShuffleBlockId(blockIds.map(BlockId.apply))
+        val blockId =
+          ArrayShuffleBlockId(blockIds.map(BlockId.apply(_).asInstanceOf[ShuffleBlockId]))
         // Only add the buffer to results queue if the iterator is not zombie,
         // i.e. cleanup() has not been called yet.
         ShuffleBlockFetcherIterator.this.synchronized {
@@ -259,7 +260,8 @@ final class ShuffleBlockFetcherIterator(
 
       override def onBlockFetchFailure(blockIds: Array[String], e: Throwable): Unit = {
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        val blockId = ArrayShuffleBlockId(blockIds.map(BlockId.apply))
+        val blockId =
+          ArrayShuffleBlockId(blockIds.map(BlockId.apply(_).asInstanceOf[ShuffleBlockId]))
         results.put(new FailureFetchResult(blockId, address, e))
       }
     }
@@ -336,7 +338,7 @@ final class ShuffleBlockFetcherIterator(
     remoteRequests
   }
 
-  private[this] def fetchData(arrayBlockId: ArrayShuffleBlockId): Boolean = {
+  private[this] def fetchBlockData(arrayBlockId: ArrayShuffleBlockId): Boolean = {
     var success = true
     try {
       val buf = blockManager.getBlockData(arrayBlockId)
@@ -362,20 +364,22 @@ final class ShuffleBlockFetcherIterator(
       if (blockIds.isEmpty || curBlockId.mapId == blockIds.head.mapId) {
         blockIds += curBlockId
       } else {
-        if (!fetchData(ArrayShuffleBlockId(blockIds))) {
+        if (!fetchBlockData(ArrayShuffleBlockId(blockIds))) {
           return
         }
         blockIds.clear()
         blockIds += curBlockId
       }
     }
-    fetchData(ArrayShuffleBlockId(blockIds))
+    if (blockIds.nonEmpty) {
+      fetchBlockData(ArrayShuffleBlockId(blockIds))
+    }
   }
 
   private[this] def singleFetchLocalBlocks(iter: Iterator[BlockId]): Unit = {
     while (iter.hasNext) {
       val blockId = iter.next().asInstanceOf[ShuffleBlockId]
-      if (!fetchData(ArrayShuffleBlockId(Array(blockId)))) {
+      if (!fetchBlockData(ArrayShuffleBlockId(Array(blockId)))) {
         return
       }
     }
@@ -601,7 +605,7 @@ final class ShuffleBlockFetcherIterator(
       case ShuffleBlockId(shufId, mapId, reduceId) =>
         throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, e)
       case ArrayShuffleBlockId(blockIds) =>
-        val bid = blockIds.head.asInstanceOf[ShuffleBlockId]
+        val bid = blockIds.head
         throw new FetchFailedException(address, bid.shuffleId, bid.mapId, bid.reduceId, e)
       case _ =>
         throw new SparkException(
