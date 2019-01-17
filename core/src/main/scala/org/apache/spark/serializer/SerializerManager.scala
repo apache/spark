@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.storage._
@@ -63,11 +64,11 @@ private[spark] class SerializerManager(
   }
 
   // Whether to compress broadcast variables that are stored
-  private[this] val compressBroadcast = conf.getBoolean("spark.broadcast.compress", true)
+  private[this] val compressBroadcast = conf.get(config.BROADCAST_COMPRESS)
   // Whether to compress shuffle output that are stored
   private[this] val compressShuffle = conf.getBoolean("spark.shuffle.compress", true)
   // Whether to compress RDD partitions that are stored serialized
-  private[this] val compressRdds = conf.getBoolean("spark.rdd.compress", false)
+  private[this] val compressRdds = conf.get(config.RDD_COMPRESS)
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 

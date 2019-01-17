@@ -27,6 +27,7 @@ import scala.util.Try
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.Utils
 
@@ -124,7 +125,8 @@ private[spark] class RRunner[U](
       partitionIndex: Int): Unit = {
     val env = SparkEnv.get
     val taskContext = TaskContext.get()
-    val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+    val bufferSize = System.getProperty(BUFFER_SIZE.key,
+      BUFFER_SIZE.defaultValueString).toInt
     val stream = new BufferedOutputStream(output, bufferSize)
 
     new Thread("writer for R") {

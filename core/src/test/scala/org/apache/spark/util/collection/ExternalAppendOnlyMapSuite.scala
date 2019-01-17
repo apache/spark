@@ -54,11 +54,11 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val conf = new SparkConf(loadDefaults)
     // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
     // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
-    conf.set("spark.serializer.objectStreamReset", "1")
-    conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
+    conf.set(SERIALIZER_OBJECT_STREAM_RESET, 1)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
     conf.set("spark.shuffle.spill.compress", codec.isDefined.toString)
     conf.set("spark.shuffle.compress", codec.isDefined.toString)
-    codec.foreach { c => conf.set("spark.io.compression.codec", c) }
+    codec.foreach { c => conf.set(IO_COMPRESSION_CODEC, c) }
     // Ensure that we actually have multiple batches per spill file
     conf.set("spark.shuffle.spill.batchSize", "10")
     conf

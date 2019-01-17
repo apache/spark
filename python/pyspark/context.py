@@ -66,6 +66,10 @@ class SparkContext(object):
 
     .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
         the active :class:`SparkContext` before creating a new one.
+
+    .. note:: :class:`SparkContext` instance is not supported to share across multiple
+        processes out of the box, and PySpark does not guarantee multi-processing execution.
+        Use threads instead for concurrent processing purpose.
     """
 
     _gateway = None

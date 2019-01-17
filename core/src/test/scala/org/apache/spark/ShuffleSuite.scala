@@ -23,6 +23,7 @@ import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.internal.config.SERIALIZER
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
@@ -215,7 +216,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
   test("sort with Java non serializable class - Kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    val myConf = conf.clone().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    val myConf = conf.clone().set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", myConf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>

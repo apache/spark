@@ -28,6 +28,7 @@ import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -123,7 +124,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
     for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
-    set("spark.jars", jars.filter(_ != null).mkString(","))
+    set(JARS, jars.filter(_ != null))
   }
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
@@ -201,12 +202,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
-    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').map(_.trim)
+    allClassNames ++= get(KRYO_CLASSES_TO_REGISTER).map(_.trim)
       .filter(!_.isEmpty)
     allClassNames ++= classes.map(_.getName)
 
-    set("spark.kryo.classesToRegister", allClassNames.mkString(","))
-    set("spark.serializer", classOf[KryoSerializer].getName)
+    set(KRYO_CLASSES_TO_REGISTER, allClassNames.toSeq)
+    set(SERIALIZER, classOf[KryoSerializer].getName)
     this
   }
 
@@ -532,7 +533,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
 
     // Validate memory fractions
-    for (key <- Seq("spark.memory.fraction", "spark.memory.storageFraction")) {
+    for (key <- Seq(MEMORY_FRACTION.key, MEMORY_STORAGE_FRACTION.key)) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
         throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
@@ -547,20 +548,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         case "yarn-cluster" =>
           logWarning(warning)
           set("spark.master", "yarn")
-          set("spark.submit.deployMode", "cluster")
+          set(SUBMIT_DEPLOY_MODE, "cluster")
         case "yarn-client" =>
           logWarning(warning)
           set("spark.master", "yarn")
-          set("spark.submit.deployMode", "client")
+          set(SUBMIT_DEPLOY_MODE, "client")
         case _ => // Any other unexpected master will be checked when creating scheduler backend.
       }
     }
 
-    if (contains("spark.submit.deployMode")) {
-      get("spark.submit.deployMode") match {
+    if (contains(SUBMIT_DEPLOY_MODE)) {
+      get(SUBMIT_DEPLOY_MODE) match {
         case "cluster" | "client" =>
-        case e => throw new SparkException("spark.submit.deployMode can only be \"cluster\" or " +
-          "\"client\".")
+        case e => throw new SparkException(s"${SUBMIT_DEPLOY_MODE.key} can only be " +
+          "\"cluster\" or \"client\".")
       }
     }
 
@@ -664,7 +665,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
         // Translate old value to a duration, with 10s wait time per try.
         translation = s => s"${s.toLong * 10}s")),
-    "spark.reducer.maxSizeInFlight" -> Seq(
+    REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
     "spark.kryoserializer.buffer" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
@@ -675,9 +676,9 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
     EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
-    "spark.io.compression.snappy.blockSize" -> Seq(
+    IO_COMPRESSION_SNAPPY_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
-    "spark.io.compression.lz4.blockSize" -> Seq(
+    IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
     "spark.rpc.numRetries" -> Seq(
       AlternateConfig("spark.akka.num.retries", "1.4")),
