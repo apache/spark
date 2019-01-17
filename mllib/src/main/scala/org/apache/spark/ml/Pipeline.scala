@@ -134,7 +134,7 @@ class Pipeline @Since("1.4.0") (
    */
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PipelineModel = instrumented(
-      instr => instr.withFitEvent(this, dataset, logging = true) {
+      instr => instr.withFitEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
     // Search for the last estimator.
@@ -205,7 +205,7 @@ object Pipeline extends MLReadable[Pipeline] {
     SharedReadWrite.validateStages(instance.getStages)
 
     override def save(path: String): Unit =
-      instrumented(_.withSaveInstanceEvent(this, path, logging = true)(super.save(path)))
+      instrumented(_.withSaveInstanceEvent(this, path)(super.save(path)))
     override protected def saveImpl(path: String): Unit =
       SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
   }
@@ -215,8 +215,7 @@ object Pipeline extends MLReadable[Pipeline] {
     /** Checked against metadata when loading model */
     private val className = classOf[Pipeline].getName
 
-    override def load(path: String): Pipeline = instrumented(_.withLoadInstanceEvent(
-        this, path, logging = true) {
+    override def load(path: String): Pipeline = instrumented(_.withLoadInstanceEvent(this, path) {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
       new Pipeline(uid).setStages(stages)
     })
@@ -310,7 +309,7 @@ class PipelineModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = instrumented(instr =>
-      instr.withTransformEvent(this, dataset, logging = true) {
+      instr.withTransformEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
     stages.foldLeft(dataset.toDF)((cur, transformer) =>
       instr.withTransformEvent(transformer, cur)(transformer.transform(cur)))
@@ -346,7 +345,7 @@ object PipelineModel extends MLReadable[PipelineModel] {
     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
 
     override def save(path: String): Unit =
-      instrumented(_.withSaveInstanceEvent(this, path, logging = true)(super.save(path)))
+      instrumented(_.withSaveInstanceEvent(this, path)(super.save(path)))
     override protected def saveImpl(path: String): Unit = SharedReadWrite.saveImpl(instance,
       instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
   }
@@ -357,7 +356,7 @@ object PipelineModel extends MLReadable[PipelineModel] {
     private val className = classOf[PipelineModel].getName
 
     override def load(path: String): PipelineModel = instrumented(_.withLoadInstanceEvent(
-        this, path, logging = true) {
+        this, path) {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
       val transformers = stages map {
         case stage: Transformer => stage
