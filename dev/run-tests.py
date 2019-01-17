@@ -29,7 +29,7 @@ from collections import namedtuple
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
-from sparktestsupport.toposort import toposort_flatten, toposort
+from sparktestsupport.toposort import toposort_flatten
 import sparktestsupport.modules as modules
 
 
@@ -443,7 +443,6 @@ def run_python_packaging_tests():
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
-    pass
 
 
 def run_sparkr_tests():
@@ -495,7 +494,7 @@ def main():
               " install one and retry.")
         sys.exit(2)
 
-    java_version = determine_java_version(java_exe)
+    #java_version = determine_java_version(java_exe)
 
     # install SparkR
     if which("R"):

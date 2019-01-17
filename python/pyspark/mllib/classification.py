@@ -20,12 +20,10 @@ import sys
 import warnings
 
 import numpy
-from numpy import array
 
 from pyspark import RDD, since
-from pyspark.streaming import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
-from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import (
     LabeledPoint, LinearModel, _regression_train_wrapper,
     StreamingLinearAlgorithm)

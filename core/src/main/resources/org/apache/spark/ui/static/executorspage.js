@@ -114,7 +114,6 @@ $(document).ready(function () {
 
         var endPoint = createRESTEndPointForExecutorsPage(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
-            var summary = [];
             var allExecCnt = 0;
             var allRDDBlocks = 0;
             var allMemoryUsed = 0;
@@ -505,7 +504,7 @@ $(document).ready(function () {
                         {data: 'allTotalTasks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatDuration(row.allTotalDuration, type) + ' (' + formatDuration(row.allTotalGCTime, type) + ')') : row.allTotalDuration
+                                return type === 'display' ? (formatDuration(row.allTotalDuration) + ' (' + formatDuration(row.allTotalGCTime) + ')') : row.allTotalDuration
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 if (oData.allTotalDuration > 0) {
