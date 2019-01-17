@@ -28,6 +28,7 @@ import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -123,7 +124,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
     for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
-    set("spark.jars", jars.filter(_ != null).mkString(","))
+    set(JARS, jars.filter(_ != null))
   }
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
@@ -201,12 +202,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
-    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').map(_.trim)
+    allClassNames ++= get(KRYO_CLASSES_TO_REGISTER).map(_.trim)
       .filter(!_.isEmpty)
     allClassNames ++= classes.map(_.getName)
 
-    set("spark.kryo.classesToRegister", allClassNames.mkString(","))
-    set("spark.serializer", classOf[KryoSerializer].getName)
+    set(KRYO_CLASSES_TO_REGISTER, allClassNames.toSeq)
+    set(SERIALIZER, classOf[KryoSerializer].getName)
     this
   }
 
@@ -547,20 +548,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         case "yarn-cluster" =>
           logWarning(warning)
           set("spark.master", "yarn")
-          set("spark.submit.deployMode", "cluster")
+          set(SUBMIT_DEPLOY_MODE, "cluster")
         case "yarn-client" =>
           logWarning(warning)
           set("spark.master", "yarn")
-          set("spark.submit.deployMode", "client")
+          set(SUBMIT_DEPLOY_MODE, "client")
         case _ => // Any other unexpected master will be checked when creating scheduler backend.
       }
     }
 
-    if (contains("spark.submit.deployMode")) {
-      get("spark.submit.deployMode") match {
+    if (contains(SUBMIT_DEPLOY_MODE)) {
+      get(SUBMIT_DEPLOY_MODE) match {
         case "cluster" | "client" =>
-        case e => throw new SparkException("spark.submit.deployMode can only be \"cluster\" or " +
-          "\"client\".")
+        case e => throw new SparkException(s"${SUBMIT_DEPLOY_MODE.key} can only be " +
+          "\"cluster\" or \"client\".")
       }
     }
 

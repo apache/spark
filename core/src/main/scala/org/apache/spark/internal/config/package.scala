@@ -961,4 +961,35 @@ package object config {
       .intConf
       .createWithDefault(4)
 
+  private[spark] val SERIALIZER = ConfigBuilder("spark.serializer")
+    .stringConf
+    .createWithDefault("org.apache.spark.serializer.JavaSerializer")
+
+  private[spark] val SERIALIZER_OBJECT_STREAM_RESET =
+    ConfigBuilder("spark.serializer.objectStreamReset")
+      .intConf
+      .createWithDefault(100)
+
+  private[spark] val SERIALIZER_EXTRA_DEBUG_INFO = ConfigBuilder("spark.serializer.extraDebugInfo")
+    .booleanConf
+    .createWithDefault(true)
+
+  private[spark] val JARS = ConfigBuilder("spark.jars")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val FILES = ConfigBuilder("spark.files")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val SUBMIT_DEPLOY_MODE = ConfigBuilder("spark.submit.deployMode")
+    .stringConf
+    .createWithDefault("client")
+
+  private[spark] val SUBMIT_PYTHON_FILES = ConfigBuilder("spark.submit.pyFiles")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 }

@@ -443,7 +443,7 @@ private object YarnClusterDriver extends Logging with Matchers {
 
       // If we are running in yarn-cluster mode, verify that driver logs links and present and are
       // in the expected format.
-      if (conf.get("spark.submit.deployMode") == "cluster") {
+      if (conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
         assert(listener.driverLogs.nonEmpty)
         val driverLogs = listener.driverLogs.get
         assert(driverLogs.size === 2)

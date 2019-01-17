@@ -68,7 +68,7 @@ private[spark] class Client(
   private val yarnClient = YarnClient.createYarnClient
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
-  private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
+  private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -1532,8 +1532,8 @@ private[spark] class YarnClusterApplication extends SparkApplication {
   override def start(args: Array[String], conf: SparkConf): Unit = {
     // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
     // so remove them from sparkConf here for yarn mode.
-    conf.remove("spark.jars")
-    conf.remove("spark.files")
+    conf.remove(JARS)
+    conf.remove(FILES)
 
     new Client(new ClientArguments(args), conf).run()
   }

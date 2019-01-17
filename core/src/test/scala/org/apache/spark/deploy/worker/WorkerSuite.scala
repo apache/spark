@@ -32,6 +32,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.internal.config.Worker._
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 
 class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
@@ -100,7 +101,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedExecutors (small number of executors)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedExecutors", 2.toString)
+    conf.set(WORKER_UI_RETAINED_EXECUTORS, 2)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 5) {
@@ -124,7 +125,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedExecutors (more executors)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedExecutors", 30.toString)
+    conf.set(WORKER_UI_RETAINED_EXECUTORS, 30)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 50) {
@@ -157,7 +158,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedDrivers (small number of drivers)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedDrivers", 2.toString)
+    conf.set(WORKER_UI_RETAINED_DRIVERS, 2)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 5) {
@@ -181,7 +182,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedDrivers (more drivers)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedDrivers", 30.toString)
+    conf.set(WORKER_UI_RETAINED_DRIVERS, 30)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 50) {

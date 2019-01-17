@@ -109,21 +109,22 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   private def additionalJavaProperties(resource: String): Map[String, String] = {
-    resourceType(APP_RESOURCE_TYPE_JAVA) ++ mergeFileList("spark.jars", Seq(resource))
+    resourceType(APP_RESOURCE_TYPE_JAVA) ++ mergeFileList(JARS, Seq(resource))
   }
 
   private def additionalPythonProperties(resource: String): Map[String, String] = {
     resourceType(APP_RESOURCE_TYPE_PYTHON) ++
-      mergeFileList("spark.files", Seq(resource) ++ conf.pyFiles)
+      mergeFileList(FILES, Seq(resource) ++ conf.pyFiles)
   }
 
   private def additionalRProperties(resource: String): Map[String, String] = {
-    resourceType(APP_RESOURCE_TYPE_R) ++ mergeFileList("spark.files", Seq(resource))
+    resourceType(APP_RESOURCE_TYPE_R) ++ mergeFileList(FILES, Seq(resource))
   }
 
-  private def mergeFileList(key: String, filesToAdd: Seq[String]): Map[String, String] = {
-    val existing = Utils.stringToSeq(conf.get(key, ""))
-    Map(key -> (existing ++ filesToAdd).distinct.mkString(","))
+  private def mergeFileList(key: ConfigEntry[Seq[String]], filesToAdd: Seq[String])
+    : Map[String, String] = {
+    val existing = conf.get(key)
+    Map(key.key -> (existing ++ filesToAdd).distinct.mkString(","))
   }
 
   private def resourceType(resType: String): Map[String, String] = {
