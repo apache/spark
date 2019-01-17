@@ -288,7 +288,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     outputCommitCoordinator.taskCompleted(stage, stageAttempt - 1, partition,
       attemptNumber = taskAttempt,
       reason = Success)
-    // attempts of current stage is authorized for committing
+    // attempts of latest retry stage is authorized for committing
     assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, taskAttempt))
   }
 }

@@ -181,9 +181,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       partition: Int,
       attemptNumber: Int): Boolean = synchronized {
     stageStates.get(stage) match {
-      case Some(state) if attemptInvalidOrFailed(state, stageAttempt, partition, attemptNumber) =>
+      case Some(state) if attemptOutdatedOrFailed(state, stageAttempt, partition, attemptNumber) =>
         logInfo(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
-          s"task attempt $attemptNumber already marked as failed.")
+          s"task attempt $attemptNumber already outdated or marked as failed.")
         false
       case Some(state) =>
         val existing = state.authorizedCommitters(partition)
@@ -204,7 +204,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     }
   }
 
-  private def attemptInvalidOrFailed(
+  private def attemptOutdatedOrFailed(
       stageState: StageState,
       stageAttempt: Int,
       partition: Int,
