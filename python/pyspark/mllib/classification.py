@@ -124,9 +124,9 @@ class LogisticRegressionModel(LinearClassificationModel):
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data), iterations=10)
-    >>> lrm.predict(array([0.0, 1.0]))
+    >>> lrm.predict(numpy.array([0.0, 1.0]))
     1
-    >>> lrm.predict(array([1.0, 0.0]))
+    >>> lrm.predict(numpy.array([1.0, 0.0]))
     0
     >>> lrm.predict(SparseVector(2, {1: 1.0}))
     1
@@ -136,7 +136,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
     >>> sameModel = LogisticRegressionModel.load(sc, path)
-    >>> sameModel.predict(array([0.0, 1.0]))
+    >>> sameModel.predict(numpy.array([0.0, 1.0]))
     1
     >>> sameModel.predict(SparseVector(2, {0: 1.0}))
     0
@@ -422,7 +422,7 @@ class SVMModel(LinearClassificationModel):
     >>> svm.predict(sc.parallelize([[1.0]])).collect()
     [1]
     >>> svm.clearThreshold()
-    >>> svm.predict(array([1.0]))
+    >>> svm.predict(numpy.array([1.0]))
     1.44...
 
     >>> sparse_data = [
@@ -575,9 +575,9 @@ class NaiveBayesModel(Saveable, Loader):
     ...     LabeledPoint(1.0, [1.0, 0.0]),
     ... ]
     >>> model = NaiveBayes.train(sc.parallelize(data))
-    >>> model.predict(array([0.0, 1.0]))
+    >>> model.predict(numpy.array([0.0, 1.0]))
     0.0
-    >>> model.predict(array([1.0, 0.0]))
+    >>> model.predict(numpy.array([1.0, 0.0]))
     1.0
     >>> model.predict(sc.parallelize([[1.0, 0.0]])).collect()
     [1.0]
