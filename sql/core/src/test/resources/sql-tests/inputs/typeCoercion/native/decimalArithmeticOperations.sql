@@ -54,6 +54,37 @@ select 12345678912345678912345678912.1234567 + 9999999999999999999999999999999.1
 select 123456789123456789.1234567890 * 1.123456789123456789;
 select 12345678912345.123456789123 / 0.000000012345678;
 
+-- use a higher minimum adjusted scale and repeat the above
+set spark.sql.decimalOperations.minimumAdjustedScale=12;
+
+-- test decimal operations
+select id, a+b, a-b, a*b, a/b from decimals_test order by id;
+
+-- test operations between decimals and constants
+select id, a*10, b/10 from decimals_test order by id;
+
+-- test operations on constants
+select 10.3 * 3.0;
+select 10.3000 * 3.0;
+select 10.30000 * 30.0;
+select 10.300000000000000000 * 3.000000000000000000;
+select 10.300000000000000000 * 3.0000000000000000000;
+select 2.35E10 * 1.0;
+
+-- arithmetic operations causing an overflow return NULL
+select (5e36 + 0.1) + 5e36;
+select (-4e36 - 0.1) - 7e36;
+select 12345678901234567890.0 * 12345678901234567890.0;
+select 1e35 / 0.1;
+select 1.2345678901234567890E30 * 1.2345678901234567890E25;
+
+-- arithmetic operations causing an overflow at adjusted scale 7, return NULL
+select 12345678912345678912345678912.1234567 + 9999999999999999999999999999999.12345;
+
+-- arithmetic operations causing a precision loss are truncated
+select 123456789123456789.1234567890 * 1.123456789123456789;
+select 12345678912345.123456789123 / 0.000000012345678;
+
 -- return NULL instead of rounding, according to old Spark versions' behavior
 set spark.sql.decimalOperations.allowPrecisionLoss=false;
 

@@ -1347,6 +1347,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECIMAL_OPERATIONS_MINIMUM_ADJUSTED_SCALE =
+    buildConf("spark.sql.decimalOperations.minimumAdjustedScale")
+      .internal()
+      .doc("Decimal operations' minimum adjusted scale when " +
+        "spark.sql.decimalOperations.allowPrecisionLoss is true")
+      .intConf
+      .checkValue(scale => scale >= 0 && scale < 38, "valid scale should be in [0, 38)")
+      .createWithDefault(org.apache.spark.sql.types.DecimalType.DEFAULT_MINIMUM_ADJUSTED_SCALE)
+
   val LITERAL_PICK_MINIMUM_PRECISION =
     buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
@@ -2001,6 +2010,9 @@ class SQLConf extends Serializable with Logging {
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def decimalOperationsMinimumAdjustedScale: Int =
+    getConf(DECIMAL_OPERATIONS_MINIMUM_ADJUSTED_SCALE)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 

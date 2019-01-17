@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The data type representing `java.math.BigDecimal` values.
@@ -117,7 +118,7 @@ object DecimalType extends AbstractDataType {
   val MAX_SCALE = 38
   val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
   val USER_DEFAULT: DecimalType = DecimalType(10, 0)
-  val MINIMUM_ADJUSTED_SCALE = 6
+  val DEFAULT_MINIMUM_ADJUSTED_SCALE = 6
 
   // The decimal types compatible with other numeric types
   private[sql] val BooleanDecimal = DecimalType(1, 0)
@@ -153,6 +154,10 @@ object DecimalType extends AbstractDataType {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
   }
 
+  def minimumAdjustedScale: Int = {
+    SQLConf.get.decimalOperationsMinimumAdjustedScale
+  }
+
   /**
    * Scale adjustment implementation is based on Hive's one, which is itself inspired to
    * SQLServer's one. In particular, when a result precision is greater than
@@ -176,9 +181,9 @@ object DecimalType extends AbstractDataType {
     } else {
       // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
       val intDigits = precision - scale
-      // If original scale is less than MINIMUM_ADJUSTED_SCALE, use original scale value; otherwise
-      // preserve at least MINIMUM_ADJUSTED_SCALE fractional digits
-      val minScaleValue = Math.min(scale, MINIMUM_ADJUSTED_SCALE)
+      // If original scale is less than minimumAdjustedScale, use original scale value; otherwise
+      // preserve at least minimumAdjustedScale fractional digits
+      val minScaleValue = Math.min(scale, minimumAdjustedScale)
       // The resulting scale is the maximum between what is available without causing a loss of
       // digits for the integer part of the decimal and the minimum guaranteed scale, which is
       // computed above

@@ -133,7 +133,7 @@ object DecimalPrecision extends TypeCoercionRule {
         // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
         // Scale: max(6, s1 + p2 + 1)
         val intDig = p1 - s1 + s2
-        val scale = max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + p2 + 1)
+        val scale = max(DecimalType.minimumAdjustedScale, s1 + p2 + 1)
         val prec = intDig + scale
         DecimalType.adjustPrecisionScale(prec, scale)
       } else {
