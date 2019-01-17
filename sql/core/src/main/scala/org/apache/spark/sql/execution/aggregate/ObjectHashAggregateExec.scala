@@ -77,7 +77,7 @@ case class ObjectHashAggregateExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time")
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build")
   )
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
