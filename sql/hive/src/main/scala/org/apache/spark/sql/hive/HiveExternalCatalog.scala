@@ -129,7 +129,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val invalidKeys = table.properties.keys.filter(_.startsWith(SPARK_SQL_PREFIX))
     if (invalidKeys.nonEmpty) {
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
-        s"as table property keys may not start with '$SPARK_SQL_PREFIX': " +
+        s"as table property keys may start with '$SPARK_SQL_PREFIX': " +
         invalidKeys.mkString("[", ", ", "]"))
     }
     // External users are not allowed to set/switch the table type. In Hive metastore, the table
