@@ -21,6 +21,7 @@ import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.util.{Locale, TimeZone}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
@@ -30,7 +31,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -65,9 +66,7 @@ object PartitioningUtils {
     require(columnNames.size == literals.size)
   }
 
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.unescapePathName
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.{escapePathName, unescapePathName, DEFAULT_PARTITION_NAME}
 
   /**
    * Given a group of qualified paths, tries to parse them and returns a partition specification.
@@ -556,6 +555,35 @@ object PartitioningUtils {
         throw new AnalysisException(s"Partition column `$col` not found in schema $schemaCatalog")
       }
     }).asNullable
+  }
+
+  def mergeDataAndPartitionSchema(
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      caseSensitive: Boolean): (StructType, Map[String, StructField]) = {
+    val overlappedPartCols = mutable.Map.empty[String, StructField]
+    partitionSchema.foreach { partitionField =>
+      val partitionFieldName = getColName(partitionField, caseSensitive)
+      if (dataSchema.exists(getColName(_, caseSensitive) == partitionFieldName)) {
+        overlappedPartCols += partitionFieldName -> partitionField
+      }
+    }
+
+    // When data and partition schemas have overlapping columns, the output
+    // schema respects the order of the data schema for the overlapping columns, and it
+    // respects the data types of the partition schema.
+    val fullSchema =
+    StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f, caseSensitive), f)) ++
+      partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f, caseSensitive))))
+    (fullSchema, overlappedPartCols.toMap)
+  }
+
+  def getColName(f: StructField, caseSensitive: Boolean): String = {
+    if (caseSensitive) {
+      f.name
+    } else {
+      f.name.toLowerCase(Locale.ROOT)
+    }
   }
 
   private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {
