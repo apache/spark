@@ -37,10 +37,7 @@ import org.apache.spark.sql._
 
 
 class MLEventsSuite
-    extends SparkFunSuite
-    with BeforeAndAfterEach
-    with MLlibTestSparkContext
-    with Eventually {
+  extends SparkFunSuite with BeforeAndAfterEach with MLlibTestSparkContext with Eventually {
 
   private val events = mutable.ArrayBuffer.empty[MLEvent]
   private val listener: SparkListener = new SparkListener {
