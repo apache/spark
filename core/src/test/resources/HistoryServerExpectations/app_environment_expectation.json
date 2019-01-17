@@ -32,7 +32,7 @@
     [ "spark.app.id", "app-20161116163331-0000" ],
     [ "spark.task.maxFailures", "4" ]
   ],
-  "systemProperties" : [
+  "hadoopProperties" : [
     [ "mapreduce.jobtracker.address", "local" ],
     [ "yarn.resourcemanager.scheduler.monitor.policies", "org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity.ProportionalCapacityPreemptionPolicy" ],
     [ "mapreduce.jobhistory.client.thread-count", "10" ]
