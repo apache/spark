@@ -343,33 +343,26 @@ final class ShuffleBlockFetcherIterator(
     remoteRequests
   }
 
-  private[this] def fetchData(arrayShuffleBlockId: ArrayShuffleBlockId): Boolean = {
+  private[this] def fetchData(blockId: ShuffleBlock): Boolean = {
     var success = true
     try {
-      val buf = blockManager.getBlockData(arrayShuffleBlockId)
-      shuffleMetrics.incLocalBlocksFetched(arrayShuffleBlockId.blockIds.length)
+      val buf = blockManager.getBlockData(blockId)
+      shuffleMetrics.incLocalBlocksFetched(blockId.numBlocks)
       shuffleMetrics.incLocalBytesRead(buf.size)
       buf.retain()
-      results.put(new SuccessFetchResult(arrayShuffleBlockId, blockManager.blockManagerId,
+      results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId,
         buf.size(), buf, false))
     } catch {
       case e: Exception =>
         // If we see an exception, stop immediately.
         logError(s"Error occurred while fetching local blocks", e)
-        results.put(new FailureFetchResult(arrayShuffleBlockId, blockManager.blockManagerId, e))
+        results.put(new FailureFetchResult(blockId, blockManager.blockManagerId, e))
         success = false
     }
     success
   }
 
-  /**
-   * Fetch the local blocks while we are fetching remote blocks. This is ok because
-   * `ManagedBuffer`'s memory is allocated lazily when we create the input stream, so all we
-   * track in-memory are the ManagedBuffer references themselves.
-   */
-  private[this] def fetchLocalBlocks() {
-    logDebug(s"Start fetching local blocks: ${localBlocks.mkString(", ")}")
-    val iter = localBlocks.iterator
+  private[this] def batchFetchLocalBlocks(iter: Iterator[BlockId]): Unit = {
     val blockIds = new ArrayBuffer[ShuffleBlockId]
     while (iter.hasNext) {
       val curBlockId = iter.next().asInstanceOf[ShuffleBlockId]
@@ -384,6 +377,30 @@ final class ShuffleBlockFetcherIterator(
       }
     }
     fetchData(ArrayShuffleBlockId(blockIds))
+  }
+
+  private[this] def singleFetchLocalBlocks(iter: Iterator[BlockId]): Unit = {
+    while (iter.hasNext) {
+      val blockId = iter.next().asInstanceOf[ShuffleBlockId]
+      if (!fetchData(blockId)) {
+        return
+      }
+    }
+  }
+
+  /**
+   * Fetch the local blocks while we are fetching remote blocks. This is ok because
+   * `ManagedBuffer`'s memory is allocated lazily when we create the input stream, so all we
+   * track in-memory are the ManagedBuffer references themselves.
+   */
+  private[this] def fetchLocalBlocks() {
+    logDebug(s"Start fetching local blocks: ${localBlocks.mkString(", ")}")
+    val iter = localBlocks.iterator
+    if (fetchContinuousShuffleBlocksInBatch) {
+      batchFetchLocalBlocks(iter)
+    } else {
+      singleFetchLocalBlocks(iter)
+    }
   }
 
   private[this] def initialize(): Unit = {
@@ -438,11 +455,7 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case _ @ SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
-          val numBlocksFetched = blockId match {
-            case id: ArrayShuffleBlockString => id.blockIds.length
-            case id: ArrayShuffleBlockId => id.blockIds.length
-            case _ => 1
-          }
+          val numBlocksFetched = blockId.asInstanceOf[ShuffleBlock].numBlocks
           numBlocksProcessed += numBlocksFetched
           if (address != blockManager.blockManagerId) {
             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
@@ -525,12 +538,7 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, address, e) =>
-          val numBlocksFetched = blockId match {
-            case id: ArrayShuffleBlockString => id.blockIds.length
-            case id: ArrayShuffleBlockId => id.blockIds.length
-            case _ => 1
-          }
-          numBlocksProcessed += numBlocksFetched
+          numBlocksProcessed += blockId.asInstanceOf[ShuffleBlock].numBlocks
           throwFetchFailedException(blockId, address, e)
       }
 
