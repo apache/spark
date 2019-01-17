@@ -195,7 +195,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   }
 
   def getNumOfThreads(conf: SparkConf, defaultNumThreads: Int): Int = {
-    val isDriver = conf.get("spark.executor.id", "") == SparkContext.DRIVER_IDENTIFIER
+    val executorId = conf.get("spark.executor.id", "")
+    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER ||
+                    executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
     val side = if (isDriver) "driver" else "executor"
     val num = conf.getInt(s"spark.$side.rpc.netty.dispatcher.numThreads", defaultNumThreads)
     if (num > 0) num else defaultNumThreads

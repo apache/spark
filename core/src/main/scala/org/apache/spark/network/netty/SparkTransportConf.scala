@@ -72,8 +72,9 @@ object SparkTransportConf {
       module: String,
       server: Boolean,
       defaultNumThreads: Int): String = {
-
-    val isDriver = conf.get("spark.executor.id", "") == SparkContext.DRIVER_IDENTIFIER
+    val executorId = conf.get("spark.executor.id", "")
+    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER ||
+                    executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
     val side = if (isDriver) "driver" else "executor"
 
     val num =
