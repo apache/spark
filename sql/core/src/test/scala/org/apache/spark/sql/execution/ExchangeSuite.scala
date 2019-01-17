@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.execution
 
+import scala.concurrent.duration._
+import scala.concurrent.{Future, TimeoutException}
 import scala.util.Random
 
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+import org.apache.spark.util.ThreadUtils
 
 class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits._
@@ -134,10 +138,27 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-26601: Make broadcast-exchange thread pool configurable") {
+    val sparkConf = new SparkConf()
+      .set(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER.key, "1")
+      .set("spark.driver.allowMultipleContexts", "true")
+    val tss = new TestSparkSession(sparkConf)
+    SparkSession.setActiveSession(tss)
+    assert(SQLConf.get.getConf(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER) === 1)
 
-    withSQLConf(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER.key -> "1") {
-      assert(SQLConf.get.getConf(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER) === 1)
-      assert(BroadcastExchangeExec.executionContext != null)
+    Future {
+      Thread.sleep(5*1000)
+    }(BroadcastExchangeExec.executionContext)
+
+    val f = Future {}(BroadcastExchangeExec.executionContext)
+    intercept[TimeoutException] {
+      ThreadUtils.awaitResult(f, 3 seconds)
     }
+
+    var executed = false
+    val ef = Future {
+      executed = true
+    }(BroadcastExchangeExec.executionContext)
+    ThreadUtils.awaitResult(ef, 3 seconds)
+    assert(executed)
   }
 }
