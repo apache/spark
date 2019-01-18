@@ -436,9 +436,9 @@ case class DayOfWeek(child: Expression) extends DayWeek {
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-        ${ev.value} = java.time.LocalDate.ofEpochDay($time).getDayOfWeek().plus(1).getValue();
+        ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().plus(1).getValue();
       """
     })
   }
@@ -462,9 +462,9 @@ case class WeekDay(child: Expression) extends DayWeek {
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-         ${ev.value} = java.time.LocalDate.ofEpochDay($time).getDayOfWeek().ordinal();
+         ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().ordinal();
       """
     })
   }
@@ -475,10 +475,6 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = IntegerType
-
-  @transient protected lazy val cal: Calendar = {
-    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-  }
 }
 
 // scalastyle:off line.size.limit
