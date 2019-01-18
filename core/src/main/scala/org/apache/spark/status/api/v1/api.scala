@@ -21,7 +21,7 @@ import java.util.Date
 
 import scala.xml.{NodeSeq, Text}
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.{JsonIgnore, JsonIgnoreProperties}
 import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
@@ -78,35 +78,36 @@ class ExecutorStageSummary private[spark](
     val diskBytesSpilled : Long,
     val isBlacklistedForStage: Boolean)
 
-class ExecutorSummary private[spark](
-    val id: String,
-    val hostPort: String,
-    val isActive: Boolean,
-    val rddBlocks: Int,
-    val memoryUsed: Long,
-    val diskUsed: Long,
-    val totalCores: Int,
-    val maxTasks: Int,
-    val activeTasks: Int,
-    val failedTasks: Int,
-    val completedTasks: Int,
-    val totalTasks: Int,
-    val totalDuration: Long,
-    val totalGCTime: Long,
-    val totalInputBytes: Long,
-    val totalShuffleRead: Long,
-    val totalShuffleWrite: Long,
-    val isBlacklisted: Boolean,
-    val maxMemory: Long,
-    val addTime: Date,
-    val removeTime: Option[Date],
-    val removeReason: Option[String],
-    val executorLogs: Map[String, String],
-    val memoryMetrics: Option[MemoryMetrics],
-    val blacklistedInStages: Set[Int],
+case class ExecutorSummary private[spark](
+    id: String,
+    hostPort: String,
+    isActive: Boolean,
+    rddBlocks: Int,
+    memoryUsed: Long,
+    diskUsed: Long,
+    totalCores: Int,
+    maxTasks: Int,
+    activeTasks: Int,
+    failedTasks: Int,
+    completedTasks: Int,
+    totalTasks: Int,
+    totalDuration: Long,
+    totalGCTime: Long,
+    totalInputBytes: Long,
+    totalShuffleRead: Long,
+    totalShuffleWrite: Long,
+    isBlacklisted: Boolean,
+    maxMemory: Long,
+    addTime: Date,
+    removeTime: Option[Date],
+    removeReason: Option[String],
+    executorLogs: Map[String, String],
+    memoryMetrics: Option[MemoryMetrics],
+    blacklistedInStages: Set[Int],
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
-    val peakMemoryMetrics: Option[ExecutorMetrics])
+    peakMemoryMetrics: Option[ExecutorMetrics],
+    @JsonIgnore attributes: Map[String, String] = Map.empty)
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,

@@ -423,8 +423,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         app.attempts.foreach { attempt =>
           val appUi = provider.getAppUI(app.id, attempt.attemptId)
           appUi should not be null
-          val executors = appUi.get.ui.store.store.view(classOf[ExecutorSummaryWrapper])
-            .closeableIterator().asScala
+          val executors = appUi.get.ui.store.executorList(false).iterator
           executors should not be null
 
           val iterForExpectation = expectedLogUrlMap.iterator
@@ -434,8 +433,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
             val executor = executors.next()
             val expectation = iterForExpectation.next()
 
-            executor.host should be(expectation._1.executorHost)
-            executor.info.executorLogs should be(expectation._2)
+            executor.hostPort should startWith(expectation._1.executorHost)
+            executor.executorLogs should be(expectation._2)
 
             executorCount += 1
           }

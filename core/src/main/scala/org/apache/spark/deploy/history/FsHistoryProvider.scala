@@ -359,10 +359,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         return None
     }
 
-    val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
-      HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
-      attempt.info.startTime.getTime(),
-      attempt.info.appSparkVersion)
+    val ui = SparkUI.create(None, new HistoryAppStatusStore(conf, kvstore), conf, secManager,
+      app.info.name, HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
+      attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
     loadPlugins().foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
@@ -930,7 +929,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
     val replayBus = new ReplayListenerBus()
-    val listener = new HistoryAppStatusListener(trackingStore, replayConf, false,
+    val listener = new AppStatusListener(trackingStore, replayConf, false,
       lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)
 
