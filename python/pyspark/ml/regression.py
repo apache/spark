@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
