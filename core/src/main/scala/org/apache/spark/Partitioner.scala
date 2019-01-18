@@ -81,7 +81,7 @@ object Partitioner {
     // If the existing max partitioner is an eligible one, or its partitions number is larger
     // than the default number of partitions, use the existing partitioner.
     if (hasMaxPartitioner.nonEmpty && (isEligiblePartitioner(hasMaxPartitioner.get, rdds) ||
-        defaultNumPartitions < hasMaxPartitioner.get.getNumPartitions)) {
+        defaultNumPartitions <= hasMaxPartitioner.get.getNumPartitions)) {
       hasMaxPartitioner.get.partitioner.get
     } else {
       new HashPartitioner(defaultNumPartitions)
