@@ -405,6 +405,14 @@ private[spark] class MemoryStore(
 
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
+      val iterator = entries.values().iterator()
+      while (iterator.hasNext) {
+        val entry = iterator.next()
+        entry match {
+          case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
+          case _ =>
+        }
+      }
       entries.clear()
     }
     onHeapUnrollMemoryMap.clear()
