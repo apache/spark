@@ -49,7 +49,7 @@ public class JavaRankingMetricsSuite extends SharedSparkSession {
   public void rankingMetrics() {
     @SuppressWarnings("unchecked")
     RankingMetrics<?> metrics = RankingMetrics.of(predictionAndLabels);
-    Assert.assertEquals(0.355026, metrics.meanAveragePrecision(), 1e-5);
+    Assert.assertEquals(0.147989, metrics.meanAveragePrecision(), 1e-5);
     Assert.assertEquals(0.75 / 3.0, metrics.precisionAt(4), 1e-5);
   }
 }
