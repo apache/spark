@@ -17,12 +17,15 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -54,6 +57,13 @@ class ExpressionParserSuite extends PlanTest {
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
+  }
+
+  def assertEval(
+      sqlCommand: String,
+      expect: Any,
+      parser: ParserInterface = defaultParser): Unit = {
+    assert(parser.parseExpression(sqlCommand).eval() === expect)
   }
 
   test("star expressions") {
@@ -679,5 +689,37 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+  }
+
+  test("timestamp literals") {
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
+        def toMicros(time: LocalDateTime): Long = {
+          val seconds = time.atZone(timeZone.toZoneId).toInstant.getEpochSecond
+          TimeUnit.SECONDS.toMicros(seconds)
+        }
+        assertEval(
+          sqlCommand = "TIMESTAMP '2019-01-14 20:54:00.000'",
+          expect = toMicros(LocalDateTime.of(2019, 1, 14, 20, 54)))
+        assertEval(
+          sqlCommand = "Timestamp '2000-01-01T00:55:00'",
+          expect = toMicros(LocalDateTime.of(2000, 1, 1, 0, 55)))
+        // Parsing of the string does not depend on the SQL config because the string contains
+        // time zone offset already.
+        assertEval(
+          sqlCommand = "TIMESTAMP '2019-01-16 20:50:00.567000+01:00'",
+          expect = 1547668200567000L)
+      }
+    }
+  }
+
+  test("date literals") {
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        assertEval("DATE '2019-01-14'", 17910)
+        assertEval("DATE '2019-01'", 17897)
+        assertEval("DATE '2019'", 17897)
+      }
+    }
   }
 }
