@@ -431,20 +431,14 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 case class DayOfWeek(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    cal.get(Calendar.DAY_OF_WEEK)
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.getDayOfWeek.plus(1).getValue
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = "calDayOfWeek"
-      ctx.addImmutableStateIfNotExists(cal, c,
-        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
       s"""
-        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.value} = $c.get($cal.DAY_OF_WEEK);
+        ${ev.value} = java.time.LocalDate.ofEpochDay($time).getDayOfWeek().plus(1).getValue();
       """
     })
   }
