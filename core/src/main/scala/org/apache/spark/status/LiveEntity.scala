@@ -26,14 +26,13 @@ import scala.collection.mutable.HashMap
 import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
-import org.apache.spark.util.kvstore.KVStore
 
 /**
  * A mutable representation of a live entity in Spark (jobs, stages, tasks, et al). Every live
@@ -62,10 +61,11 @@ private[spark] abstract class LiveEntity {
 private class LiveJob(
     val jobId: Int,
     name: String,
-    submissionTime: Option[Date],
+    val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
-    numTasks: Int) extends LiveEntity {
+    numTasks: Int,
+    sqlExecutionId: Option[Long]) extends LiveEntity {
 
   var activeTasks = 0
   var completedTasks = 0
@@ -109,7 +109,7 @@ private class LiveJob(
       skippedStages.size,
       failedStages,
       killedSummary)
-    new JobDataWrapper(info, skippedStages)
+    new JobDataWrapper(info, skippedStages, sqlExecutionId)
   }
 
 }
@@ -268,6 +268,9 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
 
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
+  // peak values for executor level metrics
+  val peakExecutorMetrics = new ExecutorMetrics()
+
   def hostname: String = if (host != null) host else hostPort.split(":")(0)
 
   override protected def doUpdate(): Any = {
@@ -302,10 +305,10 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       Option(removeReason),
       executorLogs,
       memoryMetrics,
-      blacklistedInStages)
+      blacklistedInStages,
+      Some(peakExecutorMetrics).filter(_.isSet))
     new ExecutorSummaryWrapper(info)
   }
-
 }
 
 private class LiveExecutorStageSummary(
@@ -373,6 +376,8 @@ private class LiveStage extends LiveEntity {
   var metrics = createMetrics(default = 0L)
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
+
+  val activeTasksPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
 
   var blackListedExecutors = new HashSet[String]()
 
@@ -538,6 +543,10 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
     distributions.get(exec.executorId)
   }
 
+  def getPartitions(): scala.collection.Map[String, LiveRDDPartition] = partitions
+
+  def getDistributions(): scala.collection.Map[String, LiveRDDDistribution] = distributions
+
   override protected def doUpdate(): Any = {
     val dists = if (distributions.nonEmpty) {
       Some(distributions.values.map(_.toApi()).toSeq)
@@ -581,8 +590,7 @@ private object LiveEntityHelpers {
       .filter { acc =>
         // We don't need to store internal or SQL accumulables as their values will be shown in
         // other places, so drop them to reduce the memory usage.
-        !acc.internal && (!acc.metadata.isDefined ||
-          acc.metadata.get != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
+        !acc.internal && acc.metadata != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
       }
       .map { acc =>
         new v1.AccumulableInfo(

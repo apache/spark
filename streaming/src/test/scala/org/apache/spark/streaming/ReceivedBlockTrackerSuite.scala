@@ -26,7 +26,7 @@ import scala.language.{implicitConversions, postfixOps}
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doThrow, reset, spy}
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._

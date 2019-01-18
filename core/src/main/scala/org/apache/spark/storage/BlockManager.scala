@@ -35,7 +35,7 @@ import scala.util.control.NonFatal
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 
 import org.apache.spark._
-import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
@@ -43,12 +43,13 @@ import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.{ExternalShuffleClient, TempFileManager}
+import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -130,9 +131,7 @@ private[spark] class BlockManager(
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
   private[spark] val externalShuffleServiceEnabled =
-    conf.getBoolean("spark.shuffle.service.enabled", false)
-  private val chunkSize =
-    conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests", Int.MaxValue.toString).toInt
+    conf.get(config.SHUFFLE_SERVICE_ENABLED)
   private val remoteReadNioBufferConversion =
     conf.getBoolean("spark.network.remoteReadNioBufferConversion", false)
 
@@ -165,12 +164,13 @@ private[spark] class BlockManager(
   // Port used by the external shuffle service. In Yarn mode, this may be already be
   // set through the Hadoop configuration as the server is launched in the Yarn NM.
   private val externalShuffleServicePort = {
-    val tmpPort = Utils.getSparkOrYarnConfig(conf, "spark.shuffle.service.port", "7337").toInt
+    val tmpPort = Utils.getSparkOrYarnConfig(conf, config.SHUFFLE_SERVICE_PORT.key,
+      config.SHUFFLE_SERVICE_PORT.defaultValueString).toInt
     if (tmpPort == 0) {
       // for testing, we set "spark.shuffle.service.port" to 0 in the yarn config, so yarn finds
       // an open port.  But we still need to tell our spark apps the right port to use.  So
       // only if the yarn config has the port set to 0, we prefer the value in the spark config
-      conf.get("spark.shuffle.service.port").toInt
+      conf.get(config.SHUFFLE_SERVICE_PORT.key).toInt
     } else {
       tmpPort
     }
@@ -212,11 +212,11 @@ private[spark] class BlockManager(
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
-  // A TempFileManager used to track all the files of remote blocks which above the
+  // A DownloadFileManager used to track all the files of remote blocks which are above the
   // specified memory threshold. Files will be deleted automatically based on weak reference.
   // Exposed for test
   private[storage] val remoteBlockTempFileManager =
-    new BlockManager.RemoteBlockTempFileManager(this)
+    new BlockManager.RemoteBlockDownloadFileManager(this)
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   /**
@@ -233,10 +233,9 @@ private[spark] class BlockManager(
     shuffleClient.init(appId)
 
     blockReplicationPolicy = {
-      val priorityClass = conf.get(
-        "spark.storage.replication.policy", classOf[RandomBlockReplicationPolicy].getName)
+      val priorityClass = conf.get(config.STORAGE_REPLICATION_POLICY)
       val clazz = Utils.classForName(priorityClass)
-      val ret = clazz.newInstance.asInstanceOf[BlockReplicationPolicy]
+      val ret = clazz.getConstructor().newInstance().asInstanceOf[BlockReplicationPolicy]
       logInfo(s"Using $priorityClass for block replication policy")
       ret
     }
@@ -435,10 +434,8 @@ private[spark] class BlockManager(
         // stream.
         channel.close()
         // TODO SPARK-25035 Even if we're only going to write the data to disk after this, we end up
-        // using a lot of memory here.  With encryption, we'll read the whole file into a regular
-        // byte buffer and OOM.  Without encryption, we'll memory map the file and won't get a jvm
-        // OOM, but might get killed by the OS / cluster manager.  We could at least read the tmp
-        // file as a stream in both cases.
+        // using a lot of memory here. We'll read the whole file into a regular
+        // byte buffer and OOM.  We could at least read the tmp file as a stream.
         val buffer = securityManager.getIOEncryptionKey() match {
           case Some(key) =>
             // we need to pass in the size of the unencrypted block
@@ -450,7 +447,7 @@ private[spark] class BlockManager(
             new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
 
           case None =>
-            ChunkedByteBuffer.map(tmpFile, conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
+            ChunkedByteBuffer.fromFile(tmpFile)
         }
         putBytes(blockId, buffer, level)(classTag)
         tmpFile.delete()
@@ -694,9 +691,9 @@ private[spark] class BlockManager(
    */
   private def getRemoteValues[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
     val ct = implicitly[ClassTag[T]]
-    getRemoteBytes(blockId).map { data =>
+    getRemoteManagedBuffer(blockId).map { data =>
       val values =
-        serializerManager.dataDeserializeStream(blockId, data.toInputStream(dispose = true))(ct)
+        serializerManager.dataDeserializeStream(blockId, data.createInputStream())(ct)
       new BlockResult(values, DataReadMethod.Network, data.size)
     }
   }
@@ -719,14 +716,9 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Get block from remote block managers as serialized bytes.
+   * Get block from remote block managers as a ManagedBuffer.
    */
-  def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
-    // TODO if we change this method to return the ManagedBuffer, then getRemoteValues
-    // could just use the inputStream on the temp file, rather than memory-mapping the file.
-    // Until then, replication can cause the process to use too much memory and get killed
-    // by the OS / cluster manager (not a java OOM, since it's a memory-mapped file) even though
-    // we've read the data to disk.
+  private def getRemoteManagedBuffer(blockId: BlockId): Option[ManagedBuffer] = {
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
     var runningFailureCount = 0
@@ -791,19 +783,34 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
-        // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
-        // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
-        // new path is stable.
-        if (remoteReadNioBufferConversion) {
-          return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
-        } else {
-          return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
-        }
+        // If the ManagedBuffer is a BlockManagerManagedBuffer, the disposal of the
+        // byte buffers backing it may need to be handled after reading the bytes.
+        // In this case, since we just fetched the bytes remotely, we do not have
+        // a BlockManagerManagedBuffer. The assert here is to ensure that this holds
+        // true (or the disposal is handled).
+        assert(!data.isInstanceOf[BlockManagerManagedBuffer])
+        return Some(data)
       }
       logDebug(s"The value of block $blockId is null")
     }
     logDebug(s"Block $blockId not found")
     None
+  }
+
+  /**
+   * Get block from remote block managers as serialized bytes.
+   */
+  def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
+    getRemoteManagedBuffer(blockId).map { data =>
+      // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
+      // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
+      // new path is stable.
+      if (remoteReadNioBufferConversion) {
+        new ChunkedByteBuffer(data.nioByteBuffer())
+      } else {
+        ChunkedByteBuffer.fromManagedBuffer(data)
+      }
+    }
   }
 
   /**
@@ -934,8 +941,8 @@ private[spark] class BlockManager(
       file: File,
       serializerInstance: SerializerInstance,
       bufferSize: Int,
-      writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
-    val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
+      writeMetrics: ShuffleWriteMetricsReporter): DiskBlockObjectWriter = {
+    val syncWrites = conf.get(config.SHUFFLE_SYNC)
     new DiskBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)
   }
@@ -1331,7 +1338,7 @@ private[spark] class BlockManager(
    */
   private def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = {
     peerFetchLock.synchronized {
-      val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds
+      val cachedPeersTtl = conf.get(config.STORAGE_CACHED_PEERS_TTL) // milliseconds
       val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
       if (cachedPeers == null || forceFetch || timeout) {
         cachedPeers = master.getPeers(blockManagerId).sortBy(_.hashCode)
@@ -1385,7 +1392,7 @@ private[spark] class BlockManager(
       classTag: ClassTag[_],
       existingReplicas: Set[BlockManagerId] = Set.empty): Unit = {
 
-    val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
+    val maxReplicationFailures = conf.get(config.STORAGE_MAX_REPLICATION_FAILURE)
     val tLevel = StorageLevel(
       useDisk = level.useDisk,
       useMemory = level.useMemory,
@@ -1663,23 +1670,28 @@ private[spark] object BlockManager {
     metricRegistry.registerAll(metricSet)
   }
 
-  class RemoteBlockTempFileManager(blockManager: BlockManager)
-      extends TempFileManager with Logging {
+  class RemoteBlockDownloadFileManager(blockManager: BlockManager)
+      extends DownloadFileManager with Logging {
+    // lazy because SparkEnv is set after this
+    lazy val encryptionKey = SparkEnv.get.securityManager.getIOEncryptionKey()
 
-    private class ReferenceWithCleanup(file: File, referenceQueue: JReferenceQueue[File])
-        extends WeakReference[File](file, referenceQueue) {
-      private val filePath = file.getAbsolutePath
+    private class ReferenceWithCleanup(
+        file: DownloadFile,
+        referenceQueue: JReferenceQueue[DownloadFile]
+        ) extends WeakReference[DownloadFile](file, referenceQueue) {
+
+      val filePath = file.path()
 
       def cleanUp(): Unit = {
         logDebug(s"Clean up file $filePath")
 
-        if (!new File(filePath).delete()) {
+        if (!file.delete()) {
           logDebug(s"Fail to delete file $filePath")
         }
       }
     }
 
-    private val referenceQueue = new JReferenceQueue[File]
+    private val referenceQueue = new JReferenceQueue[DownloadFile]
     private val referenceBuffer = Collections.newSetFromMap[ReferenceWithCleanup](
       new ConcurrentHashMap)
 
@@ -1691,11 +1703,21 @@ private[spark] object BlockManager {
     cleaningThread.setName("RemoteBlock-temp-file-clean-thread")
     cleaningThread.start()
 
-    override def createTempFile(): File = {
-      blockManager.diskBlockManager.createTempLocalBlock()._2
+    override def createTempFile(transportConf: TransportConf): DownloadFile = {
+      val file = blockManager.diskBlockManager.createTempLocalBlock()._2
+      encryptionKey match {
+        case Some(key) =>
+          // encryption is enabled, so when we read the decrypted data off the network, we need to
+          // encrypt it when writing to disk.  Note that the data may have been encrypted when it
+          // was cached on disk on the remote side, but it was already decrypted by now (see
+          // EncryptedBlockData).
+          new EncryptedDownloadFile(file, key)
+        case None =>
+          new SimpleDownloadFile(file, transportConf)
+      }
     }
 
-    override def registerTempFileToClean(file: File): Boolean = {
+    override def registerTempFileToClean(file: DownloadFile): Boolean = {
       referenceBuffer.add(new ReferenceWithCleanup(file, referenceQueue))
     }
 
@@ -1721,6 +1743,41 @@ private[spark] object BlockManager {
             logError("Error in cleaning thread", e)
         }
       }
+    }
+  }
+
+  /**
+   * A DownloadFile that encrypts data when it is written, and decrypts when it's read.
+   */
+  private class EncryptedDownloadFile(
+      file: File,
+      key: Array[Byte]) extends DownloadFile {
+
+    private val env = SparkEnv.get
+
+    override def delete(): Boolean = file.delete()
+
+    override def openForWriting(): DownloadFileWritableChannel = {
+      new EncryptedDownloadWritableChannel()
+    }
+
+    override def path(): String = file.getAbsolutePath
+
+    private class EncryptedDownloadWritableChannel extends DownloadFileWritableChannel {
+      private val countingOutput: CountingWritableChannel = new CountingWritableChannel(
+        Channels.newChannel(env.serializerManager.wrapForEncryption(new FileOutputStream(file))))
+
+      override def closeAndRead(): ManagedBuffer = {
+        countingOutput.close()
+        val size = countingOutput.getCount
+        new EncryptedManagedBuffer(new EncryptedBlockData(file, size, env.conf, key))
+      }
+
+      override def write(src: ByteBuffer): Int = countingOutput.write(src)
+
+      override def isOpen: Boolean = countingOutput.isOpen()
+
+      override def close(): Unit = countingOutput.close()
     }
   }
 }

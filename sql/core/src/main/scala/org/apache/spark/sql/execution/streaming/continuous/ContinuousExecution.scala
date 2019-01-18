@@ -28,14 +28,16 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, StreamingDataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2StreamingScanExec, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.Clock
 
 class ContinuousExecution(
     sparkSession: SparkSession,
@@ -117,6 +119,8 @@ class ContinuousExecution(
     // For at least once, we can just ignore those reports and risk duplicates.
     commitLog.getLatest() match {
       case Some((latestEpochId, _)) =>
+        updateStatusMessage("Starting new streaming query " +
+          s"and getting offsets from latest epoch $latestEpochId")
         val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
           throw new IllegalStateException(
             s"Batch $latestEpochId was committed without end epoch offsets!")
@@ -128,6 +132,7 @@ class ContinuousExecution(
         nextOffsets
       case None =>
         // We are starting this stream for the first time. Offsets are all None.
+        updateStatusMessage("Starting new streaming query")
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
         OffsetSeq.fill(continuousSources.map(_ => null): _*)
@@ -162,10 +167,10 @@ class ContinuousExecution(
         val readSupport = continuousSources(insertedSourceId)
         insertedSourceId += 1
         val newOutput = readSupport.fullSchema().toAttributes
-
+        val maxFields = SQLConf.get.maxToStringFields
         assert(output.size == newOutput.size,
-          s"Invalid reader: ${Utils.truncatedString(output, ",")} != " +
-            s"${Utils.truncatedString(newOutput, ",")}")
+          s"Invalid reader: ${truncatedString(output, ",", maxFields)} != " +
+            s"${truncatedString(newOutput, ",", maxFields)}")
         replacements ++= output.zip(newOutput)
 
         val loggedOffset = offsets.offsets(0)
@@ -198,6 +203,7 @@ class ContinuousExecution(
         withSink,
         outputMode,
         checkpointFile("state"),
+        id,
         runId,
         currentBatchId,
         offsetSeqMetadata)
@@ -205,10 +211,13 @@ class ContinuousExecution(
     }
 
     val (readSupport, scanConfig) = lastExecution.executedPlan.collect {
-      case scan: DataSourceV2ScanExec if scan.readSupport.isInstanceOf[ContinuousReadSupport] =>
+      case scan: DataSourceV2StreamingScanExec
+          if scan.readSupport.isInstanceOf[ContinuousReadSupport] =>
         scan.readSupport.asInstanceOf[ContinuousReadSupport] -> scan.scanConfig
     }.head
 
+    sparkSessionForQuery.sparkContext.setLocalProperty(
+      StreamExecution.IS_CONTINUOUS_PROCESSING, true.toString)
     sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
     // Add another random ID on top of the run ID, to distinguish epoch coordinators across
@@ -258,13 +267,19 @@ class ContinuousExecution(
       epochUpdateThread.setDaemon(true)
       epochUpdateThread.start()
 
+      updateStatusMessage("Running")
       reportTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(
-          sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
+          sparkSessionForQuery, lastExecution) {
+          // Materialize `executedPlan` so that accessing it when `toRdd` is running doesn't need to
+          // wait for a lock
+          lastExecution.executedPlan
+          lastExecution.toRdd
+        }
       }
     } catch {
-      case t: Throwable
-          if StreamExecution.isInterruptionException(t) && state.get() == RECONFIGURING =>
+      case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
+          state.get() == RECONFIGURING =>
         logInfo(s"Query $id ignoring exception from reconfiguring: $t")
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
@@ -312,6 +327,8 @@ class ContinuousExecution(
    * before this is called.
    */
   def commit(epoch: Long): Unit = {
+    updateStatusMessage(s"Committing epoch $epoch")
+
     assert(continuousSources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
 

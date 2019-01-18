@@ -29,7 +29,7 @@ public class TaskMemoryManagerSuite {
   @Test
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new StaticMemoryManager(
+      new UnifiedMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MAX_VALUE,
         Long.MAX_VALUE,
@@ -76,7 +76,7 @@ public class TaskMemoryManagerSuite {
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     c.freePage(dataPage);
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, dataPage.getPageNumber());
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, dataPage.pageNumber);
   }
 
   @Test(expected = AssertionError.class)

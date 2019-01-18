@@ -183,7 +183,7 @@ object Cast {
     case _ => false
   }
 
-  private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
+  def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 }
 
 /**
@@ -230,12 +230,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
+  private lazy val dateFormatter = DateFormatter()
+  private lazy val timestampFormatter = TimestampFormatter(timeZone)
+
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
+      t => UTF8String.fromString(DateTimeUtils.timestampToString(timestampFormatter, t)))
     case ArrayType(et, _) =>
       buildCast[ArrayData](_, array => {
         val builder = new UTF8StringBuilder
@@ -843,12 +846,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case BinaryType =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
       case DateType =>
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c));"""
+        val df = JavaCode.global(
+          ctx.addReferenceObj("dateFormatter", dateFormatter),
+          dateFormatter.getClass)
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(${df}.format($c));"""
       case TimestampType =>
-        val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
+          timestampFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($tf, $c));"""
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
@@ -924,27 +931,36 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
-      evPrim: ExprValue, evNull: ExprValue): Block =
-    code"""
-      if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
-        $evPrim = $d;
-      } else {
-        $evNull = true;
-      }
-    """
+      evPrim: ExprValue, evNull: ExprValue, canNullSafeCast: Boolean): Block = {
+    if (canNullSafeCast) {
+      code"""
+         |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
+         |$evPrim = $d;
+       """.stripMargin
+    } else {
+      code"""
+         |if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
+         |  $evPrim = $d;
+         |} else {
+         |  $evNull = true;
+         |}
+       """.stripMargin
+    }
+  }
 
   private[this] def castToDecimalCode(
       from: DataType,
       target: DecimalType,
       ctx: CodegenContext): CastFunction = {
     val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
+    val canNullSafeCast = Cast.canNullSafeCastToDecimal(from, target)
     from match {
       case StringType =>
         (c, evPrim, evNull) =>
           code"""
             try {
               Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
-              ${changePrecision(tmp, target, evPrim, evNull)}
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
@@ -953,7 +969,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = $c ? Decimal.apply(1) : Decimal.apply(0);
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case DateType =>
         // date can't cast to decimal in Hive
@@ -964,19 +980,19 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           code"""
             Decimal $tmp = Decimal.apply(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case DecimalType() =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = $c.clone();
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case x: IntegralType =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = Decimal.apply((long) $c);
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
@@ -984,7 +1000,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           code"""
             try {
               Decimal $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
-              ${changePrecision(tmp, target, evPrim, evNull)}
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }

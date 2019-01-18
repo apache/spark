@@ -29,13 +29,14 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
@@ -311,7 +312,7 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock),
 
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
@@ -352,7 +353,7 @@ class StreamSuite extends StreamTest {
 
       /* Stop then restart the Stream  */
       StopStream,
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
       /* -- batch 1 no rerun ----------------- */
       // batch 1 would not re-run because the latest batch id logged in commit log is 1
@@ -788,7 +789,7 @@ class StreamSuite extends StreamTest {
     val query = input
       .toDS()
       .map { i =>
-        while (!org.apache.spark.TaskContext.get().isInterrupted()) {
+        while (!TaskContext.get().isInterrupted()) {
           // keep looping till interrupted by query.stop()
           Thread.sleep(100)
         }
@@ -1027,6 +1028,34 @@ class StreamSuite extends StreamTest {
       CheckAnswerRowsByFunc(
         rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 8)),
         false))
+  }
+
+  test("is_continuous_processing property should be false for microbatch processing") {
+    val input = MemoryStream[Int]
+    val df = input.toDS()
+      .map(i => TaskContext.get().getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
+    testStream(df) (
+      AddData(input, 1),
+      CheckAnswer("false")
+    )
+  }
+
+  test("is_continuous_processing property should be true for continuous processing") {
+    val input = ContinuousMemoryStream[Int]
+    val stream = input.toDS()
+      .map(i => TaskContext.get().getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
+      .writeStream.format("memory")
+      .queryName("output")
+      .trigger(Trigger.Continuous("1 seconds"))
+      .start()
+    try {
+      input.addData(1)
+      stream.processAllAvailable()
+    } finally {
+      stream.stop()
+    }
+
+    checkAnswer(spark.sql("select * from output"), Row("true"))
   }
 
   for (e <- Seq(

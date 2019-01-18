@@ -24,9 +24,8 @@ import scala.concurrent.duration._
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
-import org.mockito.Matchers
-import org.mockito.Matchers._
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{any, anyInt, anyLong, anyString, eq => meq}
+import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mockito.MockitoSugar
@@ -262,7 +261,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("mesos doesn't register twice with the same shuffle service") {
-    setBackend(Map("spark.shuffle.service.enabled" -> "true"))
+    setBackend(Map(SHUFFLE_SERVICE_ENABLED.key -> "true"))
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
     val offer1 = createOffer("o1", "s1", mem, cpu)
@@ -697,9 +696,9 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       offerId: OfferID,
       filter: Boolean = false): Unit = {
     if (filter) {
-      verify(driver, times(1)).declineOffer(Matchers.eq(offerId), anyObject[Filters])
+      verify(driver, times(1)).declineOffer(meq(offerId), any[Filters]())
     } else {
-      verify(driver, times(1)).declineOffer(Matchers.eq(offerId))
+      verify(driver, times(1)).declineOffer(meq(offerId))
     }
   }
 

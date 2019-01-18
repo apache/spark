@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 
 import scala.util.Random
 
-import org.mockito.Mockito._
+import org.mockito.Mockito.mock
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
@@ -31,6 +31,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
 
 class MapStatusSuite extends SparkFunSuite {
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   test("compressSize") {
     assert(MapStatus.compressSize(0L) === 0)
@@ -60,7 +61,7 @@ class MapStatusSuite extends SparkFunSuite {
       stddev <- Seq(0.0, 0.01, 0.5, 1.0)
     ) {
       val sizes = Array.fill[Long](numSizes)(abs(round(Random.nextGaussian() * stddev)) + mean)
-      val status = MapStatus(BlockManagerId("a", "b", 10), sizes, 1)
+      val status = MapStatus(BlockManagerId("a", "b", 10), sizes)
       val status1 = compressAndDecompressMapStatus(status)
       for (i <- 0 until numSizes) {
         if (sizes(i) != 0) {
@@ -74,7 +75,7 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
     val sizes = Array.fill[Long](2001)(150L)
-    val status = MapStatus(null, sizes, 1)
+    val status = MapStatus(null, sizes)
     assert(status.isInstanceOf[HighlyCompressedMapStatus])
     assert(status.getSizeForBlock(10) === 150L)
     assert(status.getSizeForBlock(50) === 150L)
@@ -86,7 +87,7 @@ class MapStatusSuite extends SparkFunSuite {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
     val avg = sizes.sum / sizes.count(_ != 0)
     val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes, 1)
+    val status = MapStatus(loc, sizes)
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
@@ -108,7 +109,7 @@ class MapStatusSuite extends SparkFunSuite {
     val smallBlockSizes = sizes.filter(n => n > 0 && n < threshold)
     val avg = smallBlockSizes.sum / smallBlockSizes.length
     val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes, 1)
+    val status = MapStatus(loc, sizes)
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
@@ -164,7 +165,7 @@ class MapStatusSuite extends SparkFunSuite {
     SparkEnv.set(env)
     // Value of element in sizes is equal to the corresponding index.
     val sizes = (0L to 2000L).toArray
-    val status1 = MapStatus(BlockManagerId("exec-0", "host-0", 100), sizes, 1)
+    val status1 = MapStatus(BlockManagerId("exec-0", "host-0", 100), sizes)
     val arrayStream = new ByteArrayOutputStream(102400)
     val objectOutputStream = new ObjectOutputStream(arrayStream)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
@@ -180,40 +181,12 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("SPARK-21133 HighlyCompressedMapStatus#writeExternal throws NPE") {
     val conf = new SparkConf()
-      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .set(config.SERIALIZER, classOf[KryoSerializer].getName)
       .setMaster("local")
       .setAppName("SPARK-21133")
     withSpark(new SparkContext(conf)) { sc =>
       val count = sc.parallelize(0 until 3000, 10).repartition(2001).collect().length
       assert(count === 3000)
-    }
-  }
-
-  test("SPARK-24519: HighlyCompressedMapStatus has configurable threshold") {
-    val conf = new SparkConf()
-    val env = mock(classOf[SparkEnv])
-    doReturn(conf).when(env).conf
-    SparkEnv.set(env)
-    val sizes = Array.fill[Long](500)(150L)
-    // Test default value
-    val status = MapStatus(null, sizes, 1)
-    assert(status.isInstanceOf[CompressedMapStatus])
-    // Test Non-positive values
-    for (s <- -1 to 0) {
-      assertThrows[IllegalArgumentException] {
-        conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
-        val status = MapStatus(null, sizes, 1)
-      }
-    }
-    // Test positive values
-    Seq(1, 100, 499, 500, 501).foreach { s =>
-      conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
-      val status = MapStatus(null, sizes, 1)
-      if(sizes.length > s) {
-        assert(status.isInstanceOf[HighlyCompressedMapStatus])
-      } else {
-        assert(status.isInstanceOf[CompressedMapStatus])
-      }
     }
   }
 }

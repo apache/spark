@@ -235,8 +235,8 @@ def translate_component(component, commit_hash, warnings):
 # Parse components in the commit message
 # The returned components are already filtered and translated
 def find_components(commit, commit_hash):
-    components = re.findall("\[\w*\]", commit.lower())
-    components = [translate_component(c, commit_hash)
+    components = re.findall(r"\[\w*\]", commit.lower())
+    components = [translate_component(c, commit_hash, [])
                   for c in components if c in known_components]
     return components
 

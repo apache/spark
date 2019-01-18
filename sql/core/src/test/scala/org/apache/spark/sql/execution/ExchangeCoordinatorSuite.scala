@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -31,6 +32,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     originalActiveSparkSession = SparkSession.getActiveSession
     originalInstantiatedSparkSession = SparkSession.getDefaultSession
 
@@ -39,9 +41,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   override protected def afterAll(): Unit = {
-    // Set these states back.
-    originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSession(ctx))
-    originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
+    try {
+      // Set these states back.
+      originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSession(ctx))
+      originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
+    } finally {
+      super.afterAll()
+    }
   }
 
   private def checkEstimation(
@@ -50,7 +56,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       expectedPartitionStartIndices: Array[Int]): Unit = {
     val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
       case (bytesByPartitionId, index) =>
-        new MapOutputStatistics(index, bytesByPartitionId, Array[Long](1))
+        new MapOutputStatistics(index, bytesByPartitionId)
     }
     val estimatedPartitionStartIndices =
       coordinator.estimatePartitionStartIndices(mapOutputStatistics)
@@ -114,8 +120,8 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0, 0)
       val mapOutputStatistics =
         Array(
-          new MapOutputStatistics(0, bytesByPartitionId1, Array[Long](0)),
-          new MapOutputStatistics(1, bytesByPartitionId2, Array[Long](0)))
+          new MapOutputStatistics(0, bytesByPartitionId1),
+          new MapOutputStatistics(1, bytesByPartitionId2))
       intercept[AssertionError](coordinator.estimatePartitionStartIndices(mapOutputStatistics))
     }
 
@@ -257,8 +263,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       new SparkConf(false)
         .setMaster("local[*]")
         .setAppName("test")
-        .set("spark.ui.enabled", "false")
-        .set("spark.driver.allowMultipleContexts", "true")
+        .set(UI_ENABLED, false)
         .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")

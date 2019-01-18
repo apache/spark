@@ -19,11 +19,13 @@ package org.apache.spark
 
 import scala.collection.mutable
 
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ExternalClusterManager
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -154,7 +156,7 @@ class ExecutorAllocationManagerSuite
       .set("spark.dynamicAllocation.maxExecutors", "15")
       .set("spark.dynamicAllocation.minExecutors", "3")
       .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
-      .set("spark.executor.cores", cores.toString)
+      .set(config.EXECUTOR_CORES, cores)
     val sc = new SparkContext(conf)
     contexts += sc
     var manager = sc.executorAllocationManager.get
@@ -1092,7 +1094,7 @@ class ExecutorAllocationManagerSuite
     val maxExecutors = 2
     val conf = new SparkConf()
       .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.shuffle.service.enabled", "true")
+      .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
       .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
       .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
       .set("spark.dynamicAllocation.initialExecutors", initialExecutors.toString)
@@ -1165,7 +1167,7 @@ class ExecutorAllocationManagerSuite
       .set("spark.dynamicAllocation.testing", "true")
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
-      .set(TESTING_SCHEDULE_INTERVAL_KEY, "10000")
+      .set(TEST_SCHEDULE_INTERVAL, 10000L)
     val sc = new SparkContext(conf)
     contexts += sc
     sc

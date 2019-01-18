@@ -28,7 +28,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
@@ -49,7 +49,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
     .set("spark.cleaner.referenceTracking.blocking", "true")
     .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
     .set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
-    .set("spark.shuffle.manager", shuffleManager.getName)
+    .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
 
   before {
     sc = new SparkContext(conf)
@@ -207,54 +207,55 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
   }
 
   test("automatically cleanup normal checkpoint") {
-    val checkpointDir = Utils.createTempDir()
-    checkpointDir.delete()
-    var rdd = newPairRDD()
-    sc.setCheckpointDir(checkpointDir.toString)
-    rdd.checkpoint()
-    rdd.cache()
-    rdd.collect()
-    var rddId = rdd.id
+    withTempDir { checkpointDir =>
+      checkpointDir.delete()
+      var rdd = newPairRDD()
+      sc.setCheckpointDir(checkpointDir.toString)
+      rdd.checkpoint()
+      rdd.cache()
+      rdd.collect()
+      var rddId = rdd.id
 
-    // Confirm the checkpoint directory exists
-    assert(ReliableRDDCheckpointData.checkpointPath(sc, rddId).isDefined)
-    val path = ReliableRDDCheckpointData.checkpointPath(sc, rddId).get
-    val fs = path.getFileSystem(sc.hadoopConfiguration)
-    assert(fs.exists(path))
+      // Confirm the checkpoint directory exists
+      assert(ReliableRDDCheckpointData.checkpointPath(sc, rddId).isDefined)
+      val path = ReliableRDDCheckpointData.checkpointPath(sc, rddId).get
+      val fs = path.getFileSystem(sc.hadoopConfiguration)
+      assert(fs.exists(path))
 
-    // the checkpoint is not cleaned by default (without the configuration set)
-    var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Seq(rddId))
-    rdd = null // Make RDD out of scope, ok if collected earlier
-    runGC()
-    postGCTester.assertCleanup()
-    assert(!fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
+      // the checkpoint is not cleaned by default (without the configuration set)
+      var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Seq(rddId))
+      rdd = null // Make RDD out of scope, ok if collected earlier
+      runGC()
+      postGCTester.assertCleanup()
+      assert(!fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
 
-    // Verify that checkpoints are NOT cleaned up if the config is not enabled
-    sc.stop()
-    val conf = new SparkConf()
-      .setMaster("local[2]")
-      .setAppName("cleanupCheckpoint")
-      .set("spark.cleaner.referenceTracking.cleanCheckpoints", "false")
-    sc = new SparkContext(conf)
-    rdd = newPairRDD()
-    sc.setCheckpointDir(checkpointDir.toString)
-    rdd.checkpoint()
-    rdd.cache()
-    rdd.collect()
-    rddId = rdd.id
+      // Verify that checkpoints are NOT cleaned up if the config is not enabled
+      sc.stop()
+      val conf = new SparkConf()
+        .setMaster("local[2]")
+        .setAppName("cleanupCheckpoint")
+        .set("spark.cleaner.referenceTracking.cleanCheckpoints", "false")
+      sc = new SparkContext(conf)
+      rdd = newPairRDD()
+      sc.setCheckpointDir(checkpointDir.toString)
+      rdd.checkpoint()
+      rdd.cache()
+      rdd.collect()
+      rddId = rdd.id
 
-    // Confirm the checkpoint directory exists
-    assert(fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
+      // Confirm the checkpoint directory exists
+      assert(fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
 
-    // Reference rdd to defeat any early collection by the JVM
-    rdd.count()
+      // Reference rdd to defeat any early collection by the JVM
+      rdd.count()
 
-    // Test that GC causes checkpoint data cleanup after dereferencing the RDD
-    postGCTester = new CleanerTester(sc, Seq(rddId))
-    rdd = null // Make RDD out of scope
-    runGC()
-    postGCTester.assertCleanup()
-    assert(fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
+      // Test that GC causes checkpoint data cleanup after dereferencing the RDD
+      postGCTester = new CleanerTester(sc, Seq(rddId))
+      rdd = null // Make RDD out of scope
+      runGC()
+      postGCTester.assertCleanup()
+      assert(fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
+    }
   }
 
   test("automatically clean up local checkpoint") {
@@ -318,7 +319,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
       .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
-      .set("spark.shuffle.manager", shuffleManager.getName)
+      .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
     sc = new SparkContext(conf2)
 
     val numRdds = 10

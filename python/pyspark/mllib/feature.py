@@ -22,8 +22,6 @@ from __future__ import absolute_import
 
 import sys
 import warnings
-import random
-import binascii
 if sys.version >= '3':
     basestring = str
     unicode = str
@@ -59,7 +57,7 @@ class VectorTransformer(object):
 
 
 class Normalizer(VectorTransformer):
-    """
+    r"""
     Normalizes samples individually to unit L\ :sup:`p`\  norm
 
     For any 1 <= `p` < float('inf'), normalizes samples using

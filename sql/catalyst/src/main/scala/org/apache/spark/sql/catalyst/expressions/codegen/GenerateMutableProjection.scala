@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 
 // MutableProjection is not accessible in Java
@@ -35,13 +36,17 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     in.map(ExpressionCanonicalizer.execute)
 
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
+    bindReferences(in, inputSchema)
 
   def generate(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
       useSubexprElimination: Boolean): MutableProjection = {
     create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
+  }
+
+  def generate(expressions: Seq[Expression], useSubexprElimination: Boolean): MutableProjection = {
+    create(canonicalize(expressions), useSubexprElimination)
   }
 
   protected def create(expressions: Seq[Expression]): MutableProjection = {

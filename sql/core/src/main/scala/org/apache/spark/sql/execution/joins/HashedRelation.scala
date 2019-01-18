@@ -24,7 +24,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
-import org.apache.spark.memory.{MemoryConsumer, StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.memory._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
@@ -80,11 +80,6 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Release any used resources.
    */
   def close(): Unit
-
-  /**
-   * Returns the average number of probes per key lookup.
-   */
-  def getAverageProbesPerLookup: Double
 }
 
 private[execution] object HashedRelation {
@@ -99,7 +94,7 @@ private[execution] object HashedRelation {
       taskMemoryManager: TaskMemoryManager = null): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
-        new StaticMemoryManager(
+        new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Long.MaxValue,
           Long.MaxValue,
@@ -232,7 +227,7 @@ private[joins] class UnsafeHashedRelation(
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
-      new StaticMemoryManager(
+      new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Long.MaxValue,
         Long.MaxValue,
@@ -248,8 +243,7 @@ private[joins] class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
-      pageSizeBytes,
-      true)
+      pageSizeBytes)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -280,8 +274,6 @@ private[joins] class UnsafeHashedRelation(
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
     read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
-
-  override def getAverageProbesPerLookup: Double = binaryMap.getAverageProbesPerLookup
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -299,8 +291,7 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
       (sizeEstimate * 1.5 + 1).toInt,
-      pageSizeBytes,
-      true)
+      pageSizeBytes)
 
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
@@ -316,7 +307,9 @@ private[joins] object UnsafeHashedRelation {
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
           binaryMap.free()
-          throw new SparkException("There is no enough memory to build hash map")
+          // scalastyle:off throwerror
+          throw new SparkOutOfMemoryError("There is no enough memory to build hash map")
+          // scalastyle:on throwerror
         }
       }
     }
@@ -395,15 +388,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   // The number of unique keys.
   private var numKeys = 0L
 
-  // Tracking average number of probes per key lookup.
-  private var numKeyLookups = 0L
-  private var numProbes = 0L
-
   // needed by serializer
   def this() = {
     this(
       new TaskMemoryManager(
-        new StaticMemoryManager(
+        new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Long.MaxValue,
           Long.MaxValue,
@@ -424,7 +413,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
 
   private def init(): Unit = {
     if (mm != null) {
-      require(capacity < 512000000, "Cannot broadcast more than 512 millions rows")
+      require(capacity < 512000000, "Cannot broadcast 512 million or more rows")
       var n = 1
       while (n < capacity) n *= 2
       ensureAcquireMemory(n * 2L * 8 + (1 << 20))
@@ -483,8 +472,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
     if (isDense) {
-      numKeyLookups += 1
-      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -493,14 +480,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       }
     } else {
       var pos = firstSlot(key)
-      numKeyLookups += 1
-      numProbes += 1
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return getRow(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
-        numProbes += 1
       }
     }
     null
@@ -528,8 +512,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
     if (isDense) {
-      numKeyLookups += 1
-      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -538,14 +520,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       }
     } else {
       var pos = firstSlot(key)
-      numKeyLookups += 1
-      numProbes += 1
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return valueIter(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
-        numProbes += 1
       }
     }
     null
@@ -585,11 +564,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   private def updateIndex(key: Long, address: Long): Unit = {
     var pos = firstSlot(key)
     assert(numKeys < array.length / 2)
-    numKeyLookups += 1
-    numProbes += 1
     while (array(pos) != key && array(pos + 1) != 0) {
       pos = nextSlot(pos)
-      numProbes += 1
     }
     if (array(pos + 1) == 0) {
       // this is the first value for this key, put the address in array.
@@ -721,8 +697,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     writeLong(maxKey)
     writeLong(numKeys)
     writeLong(numValues)
-    writeLong(numKeyLookups)
-    writeLong(numProbes)
 
     writeLong(array.length)
     writeLongArray(writeBuffer, array, array.length)
@@ -764,8 +738,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     maxKey = readLong()
     numKeys = readLong()
     numValues = readLong()
-    numKeyLookups = readLong()
-    numProbes = readLong()
 
     val length = readLong().toInt
     mask = length - 2
@@ -783,11 +755,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   override def read(kryo: Kryo, in: Input): Unit = {
     read(() => in.readBoolean(), () => in.readLong(), in.readBytes)
   }
-
-  /**
-   * Returns the average number of probes per key lookup.
-   */
-  def getAverageProbesPerLookup: Double = numProbes.toDouble / numKeyLookups
 }
 
 private[joins] class LongHashedRelation(
@@ -839,8 +806,6 @@ private[joins] class LongHashedRelation(
     resultRow = new UnsafeRow(nFields)
     map = in.readObject().asInstanceOf[LongToUnsafeRowMap]
   }
-
-  override def getAverageProbesPerLookup: Double = map.getAverageProbesPerLookup
 }
 
 /**

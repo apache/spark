@@ -24,7 +24,7 @@ import scala.collection.mutable
 
 import com.codahale.metrics.Counter
 import org.eclipse.jetty.servlet.ServletContextHandler
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer

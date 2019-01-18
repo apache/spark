@@ -623,8 +623,8 @@ private[spark] class TaskSetManager(
    *
    * It is possible that this taskset has become impossible to schedule *anywhere* due to the
    * blacklist.  The most common scenario would be if there are fewer executors than
-   * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
-   * will hang.
+   * spark.task.maxFailures. We need to detect this so we can avoid the job from being hung.
+   * We try to acquire new executor/s by killing an existing idle blacklisted executor.
    *
    * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
    * would add extra time to each iteration of the scheduling loop. Here, we take the approach of
@@ -635,9 +635,9 @@ private[spark] class TaskSetManager(
    * failures (this is because the method picks one unscheduled task, and then iterates through each
    * executor until it finds one that the task isn't blacklisted on).
    */
-  private[scheduler] def abortIfCompletelyBlacklisted(
-      hostToExecutors: HashMap[String, HashSet[String]]): Unit = {
-    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
+  private[scheduler] def getCompletelyBlacklistedTaskIfAny(
+      hostToExecutors: HashMap[String, HashSet[String]]): Option[Int] = {
+    taskSetBlacklistHelperOpt.flatMap { taskSetBlacklist =>
       val appBlacklist = blacklistTracker.get
       // Only look for unschedulable tasks when at least one executor has registered. Otherwise,
       // task sets will be (unnecessarily) aborted in cases when no executors have registered yet.
@@ -658,11 +658,11 @@ private[spark] class TaskSetManager(
           }
         }
 
-        pendingTask.foreach { indexInTaskSet =>
+        pendingTask.find { indexInTaskSet =>
           // try to find some executor this task can run on.  Its possible that some *other*
           // task isn't schedulable anywhere, but we will discover that in some later call,
           // when that unschedulable task is the last task remaining.
-          val blacklistedEverywhere = hostToExecutors.forall { case (host, execsOnHost) =>
+          hostToExecutors.forall { case (host, execsOnHost) =>
             // Check if the task can run on the node
             val nodeBlacklisted =
               appBlacklist.isNodeBlacklisted(host) ||
@@ -679,19 +679,24 @@ private[spark] class TaskSetManager(
               }
             }
           }
-          if (blacklistedEverywhere) {
-            val partition = tasks(indexInTaskSet).partitionId
-            abort(s"""
-              |Aborting $taskSet because task $indexInTaskSet (partition $partition)
-              |cannot run anywhere due to node and executor blacklist.
-              |Most recent failure:
-              |${taskSetBlacklist.getLatestFailureReason}
-              |
-              |Blacklisting behavior can be configured via spark.blacklist.*.
-              |""".stripMargin)
-          }
         }
+      } else {
+        None
       }
+    }
+  }
+
+  private[scheduler] def abortSinceCompletelyBlacklisted(indexInTaskSet: Int): Unit = {
+    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
+      val partition = tasks(indexInTaskSet).partitionId
+      abort(s"""
+         |Aborting $taskSet because task $indexInTaskSet (partition $partition)
+         |cannot run anywhere due to node and executor blacklist.
+         |Most recent failure:
+         |${taskSetBlacklist.getLatestFailureReason}
+         |
+         |Blacklisting behavior can be configured via spark.blacklist.*.
+         |""".stripMargin)
     }
   }
 
@@ -712,7 +717,7 @@ private[spark] class TaskSetManager(
     calculatedTasks += 1
     if (maxResultSize > 0 && totalResultSize > maxResultSize) {
       val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
-        s"(${Utils.bytesToString(totalResultSize)}) is bigger than spark.driver.maxResultSize " +
+        s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
         s"(${Utils.bytesToString(maxResultSize)})"
       logError(msg)
       abort(msg)
@@ -1038,16 +1043,15 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get(config.LOCALITY_WAIT)
-    val localityWaitKey = level match {
-      case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
-      case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
-      case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
+    val localityWait = level match {
+      case TaskLocality.PROCESS_LOCAL => config.LOCALITY_WAIT_PROCESS
+      case TaskLocality.NODE_LOCAL => config.LOCALITY_WAIT_NODE
+      case TaskLocality.RACK_LOCAL => config.LOCALITY_WAIT_RACK
       case _ => null
     }
 
-    if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait.toString)
+    if (localityWait != null) {
+      conf.get(localityWait)
     } else {
       0L
     }

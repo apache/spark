@@ -159,9 +159,9 @@ case class MapKeys(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
-        [[1, 2], [2, 3], [3, 4]]
+       [{"0":1,"1":2},{"0":2,"1":3},{"0":3,"1":4}]
       > SELECT _FUNC_(array(1, 2), array(2, 3), array(3, 4));
-        [[1, 2, 3], [2, 3, 4]]
+       [{"0":1,"1":2,"2":3},{"0":2,"1":3,"2":4}]
   """,
   since = "2.4.0")
 case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
@@ -348,9 +348,9 @@ case class MapValues(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       [(1,"a"),(2,"b")]
+       [{"key":1,"value":"a"},{"key":2,"value":"b"}]
   """,
-  since = "2.4.0")
+  since = "3.0.0")
 case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
@@ -372,7 +372,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val values = childMap.valueArray()
     val length = childMap.numElements()
     val resultData = new Array[AnyRef](length)
-    var i = 0;
+    var i = 0
     while (i < length) {
       val key = keys.get(i, childDataType.keyType)
       val value = values.get(i, childDataType.valueType)
@@ -385,107 +385,123 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
+      val arrayData = ctx.freshName("arrayData")
       val numElements = ctx.freshName("numElements")
       val keys = ctx.freshName("keys")
       val values = ctx.freshName("values")
       val isKeyPrimitive = CodeGenerator.isPrimitiveType(childDataType.keyType)
       val isValuePrimitive = CodeGenerator.isPrimitiveType(childDataType.valueType)
-      val code = if (isKeyPrimitive && isValuePrimitive) {
-        genCodeForPrimitiveElements(ctx, keys, values, ev.value, numElements)
+
+      val wordSize = UnsafeRow.WORD_SIZE
+      val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + wordSize * 2
+      val (isPrimitive, elementSize) = if (isKeyPrimitive && isValuePrimitive) {
+        (true, structSize + wordSize)
       } else {
-        genCodeForAnyElements(ctx, keys, values, ev.value, numElements)
+        (false, -1)
       }
+
+      val allocation =
+        s"""
+           |ArrayData $arrayData = ArrayData.allocateArrayData(
+           |  $elementSize, $numElements, " $prettyName failed.");
+         """.stripMargin
+
+      val code = if (isPrimitive) {
+        val genCodeForPrimitive = genCodeForPrimitiveElements(
+          ctx, arrayData, keys, values, ev.value, numElements, structSize)
+        s"""
+           |if ($arrayData instanceof UnsafeArrayData) {
+           |  $genCodeForPrimitive
+           |} else {
+           |  ${genCodeForAnyElements(ctx, arrayData, keys, values, ev.value, numElements)}
+           |}
+         """.stripMargin
+      } else {
+        s"${genCodeForAnyElements(ctx, arrayData, keys, values, ev.value, numElements)}"
+      }
+
       s"""
          |final int $numElements = $c.numElements();
          |final ArrayData $keys = $c.keyArray();
          |final ArrayData $values = $c.valueArray();
+         |$allocation
          |$code
        """.stripMargin
     })
   }
 
-  private def getKey(varName: String) = CodeGenerator.getValue(varName, childDataType.keyType, "z")
+  private def getKey(varName: String, index: String) =
+    CodeGenerator.getValue(varName, childDataType.keyType, index)
 
-  private def getValue(varName: String) = {
-    CodeGenerator.getValue(varName, childDataType.valueType, "z")
-  }
+  private def getValue(varName: String, index: String) =
+    CodeGenerator.getValue(varName, childDataType.valueType, index)
 
   private def genCodeForPrimitiveElements(
       ctx: CodegenContext,
+      arrayData: String,
       keys: String,
       values: String,
-      arrayData: String,
-      numElements: String): String = {
-    val unsafeRow = ctx.freshName("unsafeRow")
+      resultArrayData: String,
+      numElements: String,
+      structSize: Int): String = {
     val unsafeArrayData = ctx.freshName("unsafeArrayData")
+    val baseObject = ctx.freshName("baseObject")
+    val unsafeRow = ctx.freshName("unsafeRow")
     val structsOffset = ctx.freshName("structsOffset")
+    val offset = ctx.freshName("offset")
+    val z = ctx.freshName("z")
     val calculateHeader = "UnsafeArrayData.calculateHeaderPortionInBytes"
 
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val wordSize = UnsafeRow.WORD_SIZE
-    val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + wordSize * 2
-    val structSizeAsLong = structSize + "L"
-    val keyTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
-    val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.valueType)
+    val structSizeAsLong = s"${structSize}L"
 
-    val valueAssignment = s"$unsafeRow.set$valueTypeName(1, ${getValue(values)});"
-    val valueAssignmentChecked = if (childDataType.valueContainsNull) {
-      s"""
-         |if ($values.isNullAt(z)) {
-         |  $unsafeRow.setNullAt(1);
-         |} else {
-         |  $valueAssignment
-         |}
-       """.stripMargin
-    } else {
-      valueAssignment
-    }
+    val setKey = CodeGenerator.setColumn(unsafeRow, childDataType.keyType, 0, getKey(keys, z))
 
-    val assignmentLoop = (byteArray: String) =>
-      s"""
-         |final int $structsOffset = $calculateHeader($numElements) + $numElements * $wordSize;
-         |UnsafeRow $unsafeRow = new UnsafeRow(2);
-         |for (int z = 0; z < $numElements; z++) {
-         |  long offset = $structsOffset + z * $structSizeAsLong;
-         |  $unsafeArrayData.setLong(z, (offset << 32) + $structSizeAsLong);
-         |  $unsafeRow.pointTo($byteArray, $baseOffset + offset, $structSize);
-         |  $unsafeRow.set$keyTypeName(0, ${getKey(keys)});
-         |  $valueAssignmentChecked
-         |}
-         |$arrayData = $unsafeArrayData;
-       """.stripMargin
+    val valueAssignmentChecked = CodeGenerator.createArrayAssignment(
+      unsafeRow, childDataType.valueType, values, "1", z, childDataType.valueContainsNull)
 
-    ctx.createUnsafeArrayWithFallback(
-      unsafeArrayData,
-      numElements,
-      structSize + wordSize,
-      assignmentLoop,
-      genCodeForAnyElements(ctx, keys, values, arrayData, numElements))
+    s"""
+       |UnsafeArrayData $unsafeArrayData = (UnsafeArrayData)$arrayData;
+       |Object $baseObject = $unsafeArrayData.getBaseObject();
+       |final int $structsOffset = $calculateHeader($numElements) + $numElements * $wordSize;
+       |UnsafeRow $unsafeRow = new UnsafeRow(2);
+       |for (int $z = 0; $z < $numElements; $z++) {
+       |  long $offset = $structsOffset + $z * $structSizeAsLong;
+       |  $unsafeArrayData.setLong($z, ($offset << 32) + $structSizeAsLong);
+       |  $unsafeRow.pointTo($baseObject, $baseOffset + $offset, $structSize);
+       |  $setKey;
+       |  $valueAssignmentChecked
+       |}
+       |$resultArrayData = $arrayData;
+     """.stripMargin
   }
 
   private def genCodeForAnyElements(
       ctx: CodegenContext,
+      arrayData: String,
       keys: String,
       values: String,
-      arrayData: String,
+      resultArrayData: String,
       numElements: String): String = {
-    val genericArrayClass = classOf[GenericArrayData].getName
-    val rowClass = classOf[GenericInternalRow].getName
-    val data = ctx.freshName("internalRowArray")
-
+    val z = ctx.freshName("z")
     val isValuePrimitive = CodeGenerator.isPrimitiveType(childDataType.valueType)
     val getValueWithCheck = if (childDataType.valueContainsNull && isValuePrimitive) {
-      s"$values.isNullAt(z) ? null : (Object)${getValue(values)}"
+      s"$values.isNullAt($z) ? null : (Object)${getValue(values, z)}"
     } else {
-      getValue(values)
+      getValue(values, z)
     }
 
+    val rowClass = classOf[GenericInternalRow].getName
+    val genericArrayDataClass = classOf[GenericArrayData].getName
+    val genericArrayData = ctx.freshName("genericArrayData")
+    val rowObject = s"new $rowClass(new Object[]{${getKey(keys, z)}, $getValueWithCheck})"
     s"""
-       |final Object[] $data = new Object[$numElements];
-       |for (int z = 0; z < $numElements; z++) {
-       |  $data[z] = new $rowClass(new Object[]{${getKey(keys)}, $getValueWithCheck});
+       |$genericArrayDataClass $genericArrayData = ($genericArrayDataClass)$arrayData;
+       |for (int $z = 0; $z < $numElements; $z++) {
+       |  $genericArrayData.update($z, $rowObject);
        |}
-       |$arrayData = new $genericArrayClass($data);
+       |$resultArrayData = $arrayData;
      """.stripMargin
   }
 
@@ -500,18 +516,23 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
-       [[1 -> "a"], [2 -> "b"], [2 -> "c"], [3 -> "d"]]
+       {1:"a",2:"c",3:"d"}
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    var funcName = s"function $prettyName"
+    val funcName = s"function $prettyName"
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckFailure(
         s"input to $funcName should all be of type map, but it's " +
           children.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
+      val sameTypeCheck = TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
+      if (sameTypeCheck.isFailure) {
+        sameTypeCheck
+      } else {
+        TypeUtils.checkForMapKeyType(dataType.keyType)
+      }
     }
   }
 
@@ -525,51 +546,25 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
 
   override def nullable: Boolean = children.exists(_.nullable)
 
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
   override def eval(input: InternalRow): Any = {
-    val maps = children.map(_.eval(input))
+    val maps = children.map(_.eval(input).asInstanceOf[MapData])
     if (maps.contains(null)) {
       return null
     }
-    val keyArrayDatas = maps.map(_.asInstanceOf[MapData].keyArray())
-    val valueArrayDatas = maps.map(_.asInstanceOf[MapData].valueArray())
 
-    val numElements = keyArrayDatas.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-    if (numElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw new RuntimeException(s"Unsuccessful attempt to concat maps with $numElements " +
-        s"elements due to exceeding the map size limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+    for (map <- maps) {
+      mapBuilder.putAll(map.keyArray(), map.valueArray())
     }
-    val finalKeyArray = new Array[AnyRef](numElements.toInt)
-    val finalValueArray = new Array[AnyRef](numElements.toInt)
-    var position = 0
-    for (i <- keyArrayDatas.indices) {
-      val keyArray = keyArrayDatas(i).toObjectArray(dataType.keyType)
-      val valueArray = valueArrayDatas(i).toObjectArray(dataType.valueType)
-      Array.copy(keyArray, 0, finalKeyArray, position, keyArray.length)
-      Array.copy(valueArray, 0, finalValueArray, position, valueArray.length)
-      position += keyArray.length
-    }
-
-    new ArrayBasedMapData(new GenericArrayData(finalKeyArray),
-      new GenericArrayData(finalValueArray))
+    mapBuilder.build()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapCodes = children.map(_.genCode(ctx))
-    val keyType = dataType.keyType
-    val valueType = dataType.valueType
     val argsName = ctx.freshName("args")
     val hasNullName = ctx.freshName("hasNull")
-    val mapDataClass = classOf[MapData].getName
-    val arrayBasedMapDataClass = classOf[ArrayBasedMapData].getName
-    val arrayDataClass = classOf[ArrayData].getName
-
-    val init =
-      s"""
-        |$mapDataClass[] $argsName = new $mapDataClass[${mapCodes.size}];
-        |boolean ${ev.isNull}, $hasNullName = false;
-        |$mapDataClass ${ev.value} = null;
-      """.stripMargin
+    val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
 
     val assignments = mapCodes.zip(children.map(_.nullable)).zipWithIndex.map {
       case ((m, true), i) =>
@@ -592,10 +587,10 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
          """.stripMargin
     }
 
-    val codes = ctx.splitExpressionsWithCurrentInputs(
+    val prepareMaps = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
       funcName = "getMapConcatInputs",
-      extraArguments = (s"$mapDataClass[]", argsName) :: ("boolean", hasNullName) :: Nil,
+      extraArguments = (s"MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
       returnType = "boolean",
       makeSplitFunction = body =>
         s"""
@@ -606,133 +601,25 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     )
 
     val idxName = ctx.freshName("idx")
-    val numElementsName = ctx.freshName("numElems")
-    val finKeysName = ctx.freshName("finalKeys")
-    val finValsName = ctx.freshName("finalValues")
-
-    val keyConcat = if (CodeGenerator.isPrimitiveType(keyType)) {
-      genCodeForPrimitiveArrays(ctx, keyType, false)
-    } else {
-      genCodeForNonPrimitiveArrays(ctx, keyType)
-    }
-
-    val valueConcat =
-      if (valueType.sameType(keyType) &&
-          !(CodeGenerator.isPrimitiveType(valueType) && dataType.valueContainsNull)) {
-        keyConcat
-      } else if (CodeGenerator.isPrimitiveType(valueType)) {
-        genCodeForPrimitiveArrays(ctx, valueType, dataType.valueContainsNull)
-      } else {
-        genCodeForNonPrimitiveArrays(ctx, valueType)
-      }
-
-    val keyArgsName = ctx.freshName("keyArgs")
-    val valArgsName = ctx.freshName("valArgs")
-
     val mapMerge =
       s"""
-        |${ev.isNull} = $hasNullName;
-        |if (!${ev.isNull}) {
-        |  $arrayDataClass[] $keyArgsName = new $arrayDataClass[${mapCodes.size}];
-        |  $arrayDataClass[] $valArgsName = new $arrayDataClass[${mapCodes.size}];
-        |  long $numElementsName = 0;
-        |  for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
-        |    $keyArgsName[$idxName] = $argsName[$idxName].keyArray();
-        |    $valArgsName[$idxName] = $argsName[$idxName].valueArray();
-        |    $numElementsName += $argsName[$idxName].numElements();
-        |  }
-        |  if ($numElementsName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-        |    throw new RuntimeException("Unsuccessful attempt to concat maps with " +
-        |       $numElementsName + " elements due to exceeding the map size limit " +
-        |       "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
-        |  }
-        |  $arrayDataClass $finKeysName = $keyConcat($keyArgsName,
-        |    (int) $numElementsName);
-        |  $arrayDataClass $finValsName = $valueConcat($valArgsName,
-        |    (int) $numElementsName);
-        |  ${ev.value} = new $arrayBasedMapDataClass($finKeysName, $finValsName);
+        |for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
+        |  $builderTerm.putAll($argsName[$idxName].keyArray(), $argsName[$idxName].valueArray());
         |}
+        |${ev.value} = $builderTerm.build();
       """.stripMargin
 
     ev.copy(
       code = code"""
-        |$init
-        |$codes
-        |$mapMerge
+        |MapData[] $argsName = new MapData[${mapCodes.size}];
+        |boolean $hasNullName = false;
+        |$prepareMaps
+        |boolean ${ev.isNull} = $hasNullName;
+        |MapData ${ev.value} = null;
+        |if (!$hasNullName) {
+        |  $mapMerge
+        |}
       """.stripMargin)
-  }
-
-  private def genCodeForPrimitiveArrays(
-      ctx: CodegenContext,
-      elementType: DataType,
-      checkForNull: Boolean): String = {
-    val counter = ctx.freshName("counter")
-    val arrayData = ctx.freshName("arrayData")
-    val argsName = ctx.freshName("args")
-    val numElemName = ctx.freshName("numElements")
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-
-    val setterCode1 =
-      s"""
-         |$arrayData.set$primitiveValueTypeName(
-         |  $counter,
-         |  ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")}
-         |);""".stripMargin
-
-    val setterCode = if (checkForNull) {
-      s"""
-         |if ($argsName[y].isNullAt(z)) {
-         |  $arrayData.setNullAt($counter);
-         |} else {
-         |  $setterCode1
-         |}""".stripMargin
-    } else {
-      setterCode1
-    }
-
-    val concat = ctx.freshName("concat")
-    val concatDef =
-      s"""
-         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
-         |  ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
-         |  int $counter = 0;
-         |  for (int y = 0; y < ${children.length}; y++) {
-         |    for (int z = 0; z < $argsName[y].numElements(); z++) {
-         |      $setterCode
-         |      $counter++;
-         |    }
-         |  }
-         |  return $arrayData;
-         |}
-       """.stripMargin
-
-    ctx.addNewFunction(concat, concatDef)
-  }
-
-  private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
-    val genericArrayClass = classOf[GenericArrayData].getName
-    val arrayData = ctx.freshName("arrayObjects")
-    val counter = ctx.freshName("counter")
-    val argsName = ctx.freshName("args")
-    val numElemName = ctx.freshName("numElements")
-
-    val concat = ctx.freshName("concat")
-    val concatDef =
-      s"""
-         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
-         |  Object[] $arrayData = new Object[$numElemName];
-         |  int $counter = 0;
-         |  for (int y = 0; y < ${children.length}; y++) {
-         |    for (int z = 0; z < $argsName[y].numElements(); z++) {
-         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")};
-         |      $counter++;
-         |    }
-         |  }
-         |  return new $genericArrayClass($arrayData);
-         |}
-       """.stripMargin
-
-    ctx.addNewFunction(concat, concatDef)
   }
 
   override def prettyName: String = "map_concat"
@@ -768,187 +655,48 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
   @transient override lazy val dataType: MapType = dataTypeDetails.get._1
 
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
-    case Some(_) => TypeCheckResult.TypeCheckSuccess
+    case Some((mapType, _, _)) =>
+      TypeUtils.checkForMapKeyType(mapType.keyType)
     case None => TypeCheckResult.TypeCheckFailure(s"'${child.sql}' is of " +
       s"${child.dataType.catalogString} type. $prettyName accepts only arrays of pair structs.")
   }
 
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
   override protected def nullSafeEval(input: Any): Any = {
-    val arrayData = input.asInstanceOf[ArrayData]
-    val numEntries = arrayData.numElements()
+    val entries = input.asInstanceOf[ArrayData]
+    val numEntries = entries.numElements()
     var i = 0
-    if(nullEntries) {
+    if (nullEntries) {
       while (i < numEntries) {
-        if (arrayData.isNullAt(i)) return null
+        if (entries.isNullAt(i)) return null
         i += 1
       }
     }
-    val keyArray = new Array[AnyRef](numEntries)
-    val valueArray = new Array[AnyRef](numEntries)
+
     i = 0
     while (i < numEntries) {
-      val entry = arrayData.getStruct(i, 2)
-      val key = entry.get(0, dataType.keyType)
-      if (key == null) {
-        throw new RuntimeException("The first field from a struct (key) can't be null.")
-      }
-      keyArray.update(i, key)
-      val value = entry.get(1, dataType.valueType)
-      valueArray.update(i, value)
+      mapBuilder.put(entries.getStruct(i, 2))
       i += 1
     }
-    ArrayBasedMapData(keyArray, valueArray)
+    mapBuilder.build()
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val numEntries = ctx.freshName("numEntries")
-      val isKeyPrimitive = CodeGenerator.isPrimitiveType(dataType.keyType)
-      val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
-      val code = if (isKeyPrimitive && isValuePrimitive) {
-        genCodeForPrimitiveElements(ctx, c, ev.value, numEntries)
-      } else {
-        genCodeForAnyElements(ctx, c, ev.value, numEntries)
-      }
+      val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
+      val i = ctx.freshName("idx")
       ctx.nullArrayElementsSaveExec(nullEntries, ev.isNull, c) {
         s"""
            |final int $numEntries = $c.numElements();
-           |$code
+           |for (int $i = 0; $i < $numEntries; $i++) {
+           |  $builderTerm.put($c.getStruct($i, 2));
+           |}
+           |${ev.value} = $builderTerm.build();
          """.stripMargin
       }
     })
-  }
-
-  private def genCodeForAssignmentLoop(
-      ctx: CodegenContext,
-      childVariable: String,
-      mapData: String,
-      numEntries: String,
-      keyAssignment: (String, String) => String,
-      valueAssignment: (String, String) => String): String = {
-    val entry = ctx.freshName("entry")
-    val i = ctx.freshName("idx")
-
-    val nullKeyCheck = if (dataTypeDetails.get._2) {
-      s"""
-         |if ($entry.isNullAt(0)) {
-         |  throw new RuntimeException("The first field from a struct (key) can't be null.");
-         |}
-       """.stripMargin
-    } else {
-      ""
-    }
-
-    s"""
-       |for (int $i = 0; $i < $numEntries; $i++) {
-       |  InternalRow $entry = $childVariable.getStruct($i, 2);
-       |  $nullKeyCheck
-       |  ${keyAssignment(CodeGenerator.getValue(entry, dataType.keyType, "0"), i)}
-       |  ${valueAssignment(entry, i)}
-       |}
-     """.stripMargin
-  }
-
-  private def genCodeForPrimitiveElements(
-      ctx: CodegenContext,
-      childVariable: String,
-      mapData: String,
-      numEntries: String): String = {
-    val byteArraySize = ctx.freshName("byteArraySize")
-    val keySectionSize = ctx.freshName("keySectionSize")
-    val valueSectionSize = ctx.freshName("valueSectionSize")
-    val data = ctx.freshName("byteArray")
-    val unsafeMapData = ctx.freshName("unsafeMapData")
-    val keyArrayData = ctx.freshName("keyArrayData")
-    val valueArrayData = ctx.freshName("valueArrayData")
-
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
-    val keySize = dataType.keyType.defaultSize
-    val valueSize = dataType.valueType.defaultSize
-    val kByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $keySize)"
-    val vByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $valueSize)"
-    val keyTypeName = CodeGenerator.primitiveTypeName(dataType.keyType)
-    val valueTypeName = CodeGenerator.primitiveTypeName(dataType.valueType)
-
-    val keyAssignment = (key: String, idx: String) => s"$keyArrayData.set$keyTypeName($idx, $key);"
-    val valueAssignment = (entry: String, idx: String) => {
-      val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
-      val valueNullUnsafeAssignment = s"$valueArrayData.set$valueTypeName($idx, $value);"
-      if (dataType.valueContainsNull) {
-        s"""
-           |if ($entry.isNullAt(1)) {
-           |  $valueArrayData.setNullAt($idx);
-           |} else {
-           |  $valueNullUnsafeAssignment
-           |}
-         """.stripMargin
-      } else {
-        valueNullUnsafeAssignment
-      }
-    }
-    val assignmentLoop = genCodeForAssignmentLoop(
-      ctx,
-      childVariable,
-      mapData,
-      numEntries,
-      keyAssignment,
-      valueAssignment
-    )
-
-    s"""
-       |final long $keySectionSize = $kByteSize;
-       |final long $valueSectionSize = $vByteSize;
-       |final long $byteArraySize = 8 + $keySectionSize + $valueSectionSize;
-       |if ($byteArraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  ${genCodeForAnyElements(ctx, childVariable, mapData, numEntries)}
-       |} else {
-       |  final byte[] $data = new byte[(int)$byteArraySize];
-       |  UnsafeMapData $unsafeMapData = new UnsafeMapData();
-       |  Platform.putLong($data, $baseOffset, $keySectionSize);
-       |  Platform.putLong($data, ${baseOffset + 8}, $numEntries);
-       |  Platform.putLong($data, ${baseOffset + 8} + $keySectionSize, $numEntries);
-       |  $unsafeMapData.pointTo($data, $baseOffset, (int)$byteArraySize);
-       |  ArrayData $keyArrayData = $unsafeMapData.keyArray();
-       |  ArrayData $valueArrayData = $unsafeMapData.valueArray();
-       |  $assignmentLoop
-       |  $mapData = $unsafeMapData;
-       |}
-     """.stripMargin
-  }
-
-  private def genCodeForAnyElements(
-      ctx: CodegenContext,
-      childVariable: String,
-      mapData: String,
-      numEntries: String): String = {
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
-    val mapDataClass = classOf[ArrayBasedMapData].getName()
-
-    val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
-    val valueAssignment = (entry: String, idx: String) => {
-      val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
-      if (dataType.valueContainsNull && isValuePrimitive) {
-        s"$values[$idx] = $entry.isNullAt(1) ? null : (Object)$value;"
-      } else {
-        s"$values[$idx] = $value;"
-      }
-    }
-    val keyAssignment = (key: String, idx: String) => s"$keys[$idx] = $key;"
-    val assignmentLoop = genCodeForAssignmentLoop(
-      ctx,
-      childVariable,
-      mapData,
-      numEntries,
-      keyAssignment,
-      valueAssignment)
-
-    s"""
-       |final Object[] $keys = new Object[$numEntries];
-       |final Object[] $values = new Object[$numEntries];
-       |$assignmentLoop
-       |$mapData = $mapDataClass.apply($keys, $values);
-     """.stripMargin
   }
 
   override def prettyName: String = "map_from_entries"
@@ -1046,8 +794,9 @@ trait ArraySortLike extends ExpectsInputTypes {
       } else {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
-      val nonNullPrimitiveAscendingSort =
-        if (CodeGenerator.isPrimitiveType(elementType) && !containsNull) {
+      val canPerformFastSort =
+        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !containsNull
+      val nonNullPrimitiveAscendingSort = if (canPerformFastSort) {
           val javaType = CodeGenerator.javaType(elementType)
           val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
           s"""
@@ -1211,9 +960,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, 3, 5));
-       [3, 1, 5, 20]
+       [3,1,5,20]
       > SELECT _FUNC_(array(1, 20, null, 3));
-       [20, null, 3, 1]
+       [20,null,3,1]
   """,
   note = "The function is non-deterministic.",
   since = "2.4.0")
@@ -1262,40 +1011,15 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     ctx.addPartitionInitializationStatement(
       s"$rand = new $randomClass(${randomSeed.get}L + partitionIndex);")
 
-    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
-
     val numElements = ctx.freshName("numElements")
     val arrayData = ctx.freshName("arrayData")
-
-    val initialization = if (isPrimitiveType) {
-      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
-    } else {
-      val arrayDataClass = classOf[GenericArrayData].getName()
-      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
-    }
-
     val indices = ctx.freshName("indices")
     val i = ctx.freshName("i")
 
-    val getValue = CodeGenerator.getValue(childName, elementType, s"$indices[$i]")
-
-    val setFunc = if (isPrimitiveType) {
-      s"set${CodeGenerator.primitiveTypeName(elementType)}"
-    } else {
-      "update"
-    }
-
-    val assignment = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
-      s"""
-         |if ($childName.isNullAt($indices[$i])) {
-         |  $arrayData.setNullAt($i);
-         |} else {
-         |  $arrayData.$setFunc($i, $getValue);
-         |}
-       """.stripMargin
-    } else {
-      s"$arrayData.$setFunc($i, $getValue);"
-    }
+    val initialization = CodeGenerator.createArrayData(
+      arrayData, elementType, numElements, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(arrayData, elementType, childName,
+      i, s"$indices[$i]", dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |int $numElements = $childName.numElements();
@@ -1321,7 +1045,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       > SELECT _FUNC_('Spark SQL');
        LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
-       [3, 4, 1, 2]
+       [3,4,1,2]
   """,
   since = "1.5.0",
   note = "Reverse logic for arrays is available since 2.4.0."
@@ -1333,11 +1057,15 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
 
   override def dataType: DataType = child.dataType
 
-  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  override def nullSafeEval(input: Any): Any = doReverse(input)
 
-  override def nullSafeEval(input: Any): Any = input match {
-    case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
-    case s: UTF8String => s.reverse()
+  @transient private lazy val doReverse: Any => Any = dataType match {
+    case ArrayType(elementType, _) =>
+      input => {
+        val arrayData = input.asInstanceOf[ArrayData]
+        new GenericArrayData(arrayData.toObjectArray(elementType).reverse)
+      }
+    case StringType => _.asInstanceOf[UTF8String].reverse()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1353,40 +1081,17 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
 
   private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
 
-    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
-
     val numElements = ctx.freshName("numElements")
     val arrayData = ctx.freshName("arrayData")
-
-    val initialization = if (isPrimitiveType) {
-      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
-    } else {
-      val arrayDataClass = classOf[GenericArrayData].getName
-      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
-    }
 
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
 
-    val getValue = CodeGenerator.getValue(childName, elementType, i)
-
-    val setFunc = if (isPrimitiveType) {
-      s"set${CodeGenerator.primitiveTypeName(elementType)}"
-    } else {
-      "update"
-    }
-
-    val assignment = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
-      s"""
-         |if ($childName.isNullAt($i)) {
-         |  $arrayData.setNullAt($j);
-         |} else {
-         |  $arrayData.$setFunc($j, $getValue);
-         |}
-       """.stripMargin
-    } else {
-      s"$arrayData.$setFunc($j, $getValue);"
-    }
+    val elementType = dataType.asInstanceOf[ArrayType].elementType
+    val initialization = CodeGenerator.createArrayData(
+      arrayData, elementType, numElements, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      arrayData, elementType, childName, i, j, dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -1420,23 +1125,27 @@ case class ArrayContains(left: Expression, right: Expression)
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = right.dataType match {
-    case NullType => Seq.empty
-    case _ => left.dataType match {
-      case n @ ArrayType(element, _) => Seq(n, element)
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
       case _ => Seq.empty
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (right.dataType == NullType) {
-      TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
-    } else if (!left.dataType.isInstanceOf[ArrayType]
-      || !left.dataType.asInstanceOf[ArrayType].elementType.sameType(right.dataType)) {
-      TypeCheckResult.TypeCheckFailure(
-        "Arguments must be an array followed by a value of same type as the array members")
-    } else {
-      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    (left.dataType, right.dataType) match {
+      case (_, NullType) =>
+        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
   }
 
@@ -1464,17 +1173,29 @@ case class ArrayContains(left: Expression, right: Expression)
     nullSafeCodeGen(ctx, ev, (arr, value) => {
       val i = ctx.freshName("i")
       val getValue = CodeGenerator.getValue(arr, right.dataType, i)
-      s"""
-      for (int $i = 0; $i < $arr.numElements(); $i ++) {
-        if ($arr.isNullAt($i)) {
-          ${ev.isNull} = true;
-        } else if (${ctx.genEqual(right.dataType, value, getValue)}) {
-          ${ev.isNull} = false;
-          ${ev.value} = true;
-          break;
-        }
+      val loopBodyCode = if (nullable) {
+        s"""
+           |if ($arr.isNullAt($i)) {
+           |   ${ev.isNull} = true;
+           |} else if (${ctx.genEqual(right.dataType, value, getValue)}) {
+           |   ${ev.isNull} = false;
+           |   ${ev.value} = true;
+           |   break;
+           |}
+         """.stripMargin
+      } else {
+        s"""
+           |if (${ctx.genEqual(right.dataType, value, getValue)}) {
+           |  ${ev.value} = true;
+           |  break;
+           |}
+         """.stripMargin
       }
-     """
+      s"""
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |  $loopBodyCode
+         |}
+       """.stripMargin
     })
   }
 
@@ -1623,12 +1344,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val set = ctx.freshName("set")
     val addToSetFromSmallerCode = nullSafeElementCodegen(
       smaller, i, s"$set.add($getFromSmaller);", s"${ev.isNull} = true;")
+    val setIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
     val elementIsInSetCode = nullSafeElementCodegen(
       bigger,
       i,
       s"""
          |if ($set.contains($getFromBigger)) {
-         |  ${ev.isNull} = false;
+         |  $setIsNullCode
          |  ${ev.value} = true;
          |  break;
          |}
@@ -1653,12 +1375,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val j = ctx.freshName("j")
     val getFromSmaller = CodeGenerator.getValue(smaller, elementType, j)
     val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
+    val setIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
     val compareValues = nullSafeElementCodegen(
       smaller,
       j,
       s"""
          |if (${ctx.genEqual(elementType, getFromSmaller, getFromBigger)}) {
-         |  ${ev.isNull} = false;
+         |  $setIsNullCode
          |  ${ev.value} = true;
          |}
        """.stripMargin,
@@ -1788,38 +1511,24 @@ case class Slice(x: Expression, start: Expression, length: Expression)
       resLength: String): String = {
     val values = ctx.freshName("values")
     val i = ctx.freshName("i")
-    val getValue = CodeGenerator.getValue(inputArray, elementType, s"$i + $startIdx")
-    if (!CodeGenerator.isPrimitiveType(elementType)) {
-      val arrayClass = classOf[GenericArrayData].getName
-      s"""
-         |Object[] $values;
-         |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
-         |  $values = new Object[0];
-         |} else {
-         |  $values = new Object[$resLength];
-         |  for (int $i = 0; $i < $resLength; $i ++) {
-         |    $values[$i] = $getValue;
-         |  }
-         |}
-         |${ev.value} = new $arrayClass($values);
-       """.stripMargin
-    } else {
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-      s"""
-         |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
-         |  $resLength = 0;
-         |}
-         |${ctx.createUnsafeArray(values, resLength, elementType, s" $prettyName failed.")}
-         |for (int $i = 0; $i < $resLength; $i ++) {
-         |  if ($inputArray.isNullAt($i + $startIdx)) {
-         |    $values.setNullAt($i);
-         |  } else {
-         |    $values.set$primitiveValueTypeName($i, $getValue);
-         |  }
-         |}
-         |${ev.value} = $values;
-       """.stripMargin
-    }
+    val genericArrayData = classOf[GenericArrayData].getName
+
+    val allocation = CodeGenerator.createArrayData(
+      values, elementType, resLength, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
+      i, s"$i + $startIdx", dataType.asInstanceOf[ArrayType].containsNull)
+
+    s"""
+       |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
+       |  ${ev.value} = new $genericArrayData(new Object[0]);
+       |} else {
+       |  $allocation
+       |  for (int $i = 0; $i < $resLength; $i ++) {
+       |    $assignment
+       |  }
+       |  ${ev.value} = $values;
+       |}
+     """.stripMargin
   }
 }
 
@@ -2151,18 +1860,23 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val elementType = left.dataType match {
-      case t: ArrayType => t.elementType
-      case _ => AnyDataType
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
     }
-    Seq(ArrayType, elementType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
   }
 
@@ -2212,7 +1926,7 @@ case class ArrayPosition(left: Expression, right: Expression)
       > SELECT _FUNC_(array(1, 2, 3), 2);
        2
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
-       "b"
+       b
   """,
   since = "2.4.0")
 case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
@@ -2229,29 +1943,44 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(ArrayType, MapType),
-      left.dataType match {
-        case _: ArrayType => IntegerType
-        case _: MapType => mapKeyType
-        case _ => AnyDataType // no match for a wrong 'left' expression type
-      }
-    )
+    (left.dataType, right.dataType) match {
+      case (arr: ArrayType, e2: IntegralType) if (e2 != LongType) =>
+        Seq(arr, IntegerType)
+      case (MapType(keyType, valueType, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(keyType, e2) match {
+          case Some(dt) => Seq(MapType(dt, valueType, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case (l, r) => Seq.empty
+
+    }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess if left.dataType.isInstanceOf[MapType] =>
-        TypeUtils.checkForOrderingExpr(mapKeyType, s"function $prettyName")
-      case TypeCheckResult.TypeCheckSuccess => TypeCheckResult.TypeCheckSuccess
+    (left.dataType, right.dataType) match {
+      case (_: ArrayType, e2) if e2 != IntegerType =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+          s"been ${ArrayType.simpleString} followed by a ${IntegerType.simpleString}, but it's " +
+          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case (MapType(e1, _, _), e2) if (!e2.sameType(e1)) =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+          s"been ${MapType.simpleString} followed by a value of same key type, but it's " +
+          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case (e1, _) if (!e1.isInstanceOf[MapType] && !e1.isInstanceOf[ArrayType]) =>
+        TypeCheckResult.TypeCheckFailure(s"The first argument to function $prettyName should " +
+          s"have been ${ArrayType.simpleString} or ${MapType.simpleString} type, but its " +
+          s"${left.dataType.catalogString} type.")
+      case _ => TypeCheckResult.TypeCheckSuccess
     }
   }
 
   override def nullable: Boolean = true
 
-  override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    left.dataType match {
-      case _: ArrayType =>
+  override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
+
+  @transient private lazy val doElementAt: (Any, Any) => Any = left.dataType match {
+    case _: ArrayType =>
+      (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
@@ -2270,9 +1999,9 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
             array.get(idx, dataType)
           }
         }
-      case _: MapType =>
-        getValueEval(value, ordinal, mapKeyType, ordering)
-    }
+      }
+    case _: MapType =>
+      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2327,8 +2056,9 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
- |     [1,2,3,4,5,6]
-  """)
+       [1,2,3,4,5,6]
+  """,
+  note = "Concat logic for arrays is available since 2.4.0.")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
@@ -2362,33 +2092,41 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def eval(input: InternalRow): Any = dataType match {
+  override def eval(input: InternalRow): Any = doConcat(input)
+
+  @transient private lazy val doConcat: InternalRow => Any = dataType match {
     case BinaryType =>
-      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
-      ByteArray.concat(inputs: _*)
+      input => {
+        val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+        ByteArray.concat(inputs: _*)
+      }
     case StringType =>
-      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs : _*)
+      input => {
+        val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+        UTF8String.concat(inputs: _*)
+      }
     case ArrayType(elementType, _) =>
-      val inputs = children.toStream.map(_.eval(input))
-      if (inputs.contains(null)) {
-        null
-      } else {
-        val arrayData = inputs.map(_.asInstanceOf[ArrayData])
-        val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-        if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
-            " elements due to exceeding the array size limit " +
-            ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+      input => {
+        val inputs = children.toStream.map(_.eval(input))
+        if (inputs.contains(null)) {
+          null
+        } else {
+          val arrayData = inputs.map(_.asInstanceOf[ArrayData])
+          val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
+          if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+            throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
+              " elements due to exceeding the array size limit " +
+              ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+          }
+          val finalData = new Array[AnyRef](numberOfElements.toInt)
+          var position = 0
+          for (ad <- arrayData) {
+            val arr = ad.toObjectArray(elementType)
+            Array.copy(arr, 0, finalData, position, arr.length)
+            position += arr.length
+          }
+          new GenericArrayData(finalData)
         }
-        val finalData = new Array[AnyRef](numberOfElements.toInt)
-        var position = 0
-        for(ad <- arrayData) {
-          val arr = ad.toObjectArray(elementType)
-          Array.copy(arr, 0, finalData, position, arr.length)
-          position += arr.length
-        }
-        new GenericArrayData(finalData)
       }
   }
 
@@ -2437,11 +2175,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       case StringType =>
         ("UTF8String.concat", s"UTF8String[] $args = new UTF8String[${evals.length}];")
       case ArrayType(elementType, containsNull) =>
-        val concat = if (CodeGenerator.isPrimitiveType(elementType)) {
-          genCodeForPrimitiveArrays(ctx, elementType, containsNull)
-        } else {
-          genCodeForNonPrimitiveArrays(ctx, elementType)
-        }
+        val concat = genCodeForArrays(ctx, elementType, containsNull)
         (concat, s"ArrayData[] $args = new ArrayData[${evals.length}];")
     }
 
@@ -2460,93 +2194,48 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
     val numElements = ctx.freshName("numElements")
+    val z = ctx.freshName("z")
     val code = s"""
         |long $numElements = 0L;
-        |for (int z = 0; z < ${children.length}; z++) {
-        |  $numElements += args[z].numElements();
-        |}
-        |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-        |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
-        |    " elements due to exceeding the array size limit" +
-        |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
+        |for (int $z = 0; $z < ${children.length}; $z++) {
+        |  $numElements += args[$z].numElements();
         |}
       """.stripMargin
 
     (code, numElements)
   }
 
-  private def genCodeForPrimitiveArrays(
+  private def genCodeForArrays(
       ctx: CodegenContext,
       elementType: DataType,
       checkForNull: Boolean): String = {
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
+    val y = ctx.freshName("y")
+    val z = ctx.freshName("z")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-
-    val setterCode =
-      s"""
-         |$arrayData.set$primitiveValueTypeName(
-         |  $counter,
-         |  ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
-         |);
-       """.stripMargin
-
-    val nullSafeSetterCode = if (checkForNull) {
-      s"""
-         |if (args[y].isNullAt(z)) {
-         |  $arrayData.setNullAt($counter);
-         |} else {
-         |  $setterCode
-         |}
-       """.stripMargin
-    } else {
-      setterCode
-    }
+    val initialization = CodeGenerator.createArrayData(
+      arrayData, elementType, numElemName, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      arrayData, elementType, s"args[$y]", counter, z,
+      dataType.asInstanceOf[ArrayType].containsNull)
 
     val concat = ctx.freshName("concat")
     val concatDef =
       s"""
          |private ArrayData $concat(ArrayData[] args) {
          |  $numElemCode
-         |  ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
+         |  $initialization
          |  int $counter = 0;
-         |  for (int y = 0; y < ${children.length}; y++) {
-         |    for (int z = 0; z < args[y].numElements(); z++) {
-         |      $nullSafeSetterCode
+         |  for (int $y = 0; $y < ${children.length}; $y++) {
+         |    for (int $z = 0; $z < args[$y].numElements(); $z++) {
+         |      $assignment
          |      $counter++;
          |    }
          |  }
          |  return $arrayData;
-         |}
-       """.stripMargin
-
-    ctx.addNewFunction(concat, concatDef)
-  }
-
-  private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
-    val genericArrayClass = classOf[GenericArrayData].getName
-    val arrayData = ctx.freshName("arrayObjects")
-    val counter = ctx.freshName("counter")
-
-    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
-
-    val concat = ctx.freshName("concat")
-    val concatDef =
-      s"""
-         |private ArrayData $concat(ArrayData[] args) {
-         |  $numElemCode
-         |  Object[] $arrayData = new Object[(int)$numElemName];
-         |  int $counter = 0;
-         |  for (int y = 0; y < ${children.length}; y++) {
-         |    for (int z = 0; z < args[y].numElements(); z++) {
-         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"args[y]", elementType, "z")};
-         |      $counter++;
-         |    }
-         |  }
-         |  return new $genericArrayClass($arrayData);
          |}
        """.stripMargin
 
@@ -2565,7 +2254,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   usage = "_FUNC_(arrayOfArrays) - Transforms an array of arrays into a single array.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(array(1, 2), array(3, 4));
+      > SELECT _FUNC_(array(array(1, 2), array(3, 4)));
        [1,2,3,4]
   """,
   since = "2.4.0")
@@ -2615,11 +2304,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
-      val code = if (CodeGenerator.isPrimitiveType(elementType)) {
-        genCodeForFlattenOfPrimitiveElements(ctx, c, ev.value)
-      } else {
-        genCodeForFlattenOfNonPrimitiveElements(ctx, c, ev.value)
-      }
+      val code = genCodeForFlatten(ctx, c, ev.value)
       ctx.nullArrayElementsSaveExec(childDataType.containsNull, ev.isNull, c)(code)
     })
   }
@@ -2633,69 +2318,40 @@ case class Flatten(child: Expression) extends UnaryExpression {
       |for (int z = 0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
       |}
-      |if ($variableName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-      |    $variableName + " elements due to exceeding the array size limit" +
-      |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
-      |}
       """.stripMargin
     (code, variableName)
   }
 
-  private def genCodeForFlattenOfPrimitiveElements(
+  private def genCodeForFlatten(
       ctx: CodegenContext,
       childVariableName: String,
       arrayDataName: String): String = {
     val counter = ctx.freshName("counter")
     val tempArrayDataName = ctx.freshName("tempArrayData")
+    val k = ctx.freshName("k")
+    val l = ctx.freshName("l")
+    val arr = ctx.freshName("arr")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+    val allocation = CodeGenerator.createArrayData(
+      tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      tempArrayDataName, elementType, arr, counter, l,
+      dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
     |$numElemCode
-    |${ctx.createUnsafeArray(tempArrayDataName, numElemName, elementType, s" $prettyName failed.")}
+    |$allocation
     |int $counter = 0;
-    |for (int k = 0; k < $childVariableName.numElements(); k++) {
-    |  ArrayData arr = $childVariableName.getArray(k);
-    |  for (int l = 0; l < arr.numElements(); l++) {
-    |   if (arr.isNullAt(l)) {
-    |     $tempArrayDataName.setNullAt($counter);
-    |   } else {
-    |     $tempArrayDataName.set$primitiveValueTypeName(
-    |       $counter,
-    |       ${CodeGenerator.getValue("arr", elementType, "l")}
-    |     );
-    |   }
+    |for (int $k = 0; $k < $childVariableName.numElements(); $k++) {
+    |  ArrayData $arr = $childVariableName.getArray($k);
+    |  for (int $l = 0; $l < $arr.numElements(); $l++) {
+    |   $assignment
     |   $counter++;
     | }
     |}
     |$arrayDataName = $tempArrayDataName;
-    """.stripMargin
-  }
-
-  private def genCodeForFlattenOfNonPrimitiveElements(
-      ctx: CodegenContext,
-      childVariableName: String,
-      arrayDataName: String): String = {
-    val genericArrayClass = classOf[GenericArrayData].getName
-    val arrayName = ctx.freshName("arrayObject")
-    val counter = ctx.freshName("counter")
-    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
-
-    s"""
-    |$numElemCode
-    |Object[] $arrayName = new Object[(int)$numElemName];
-    |int $counter = 0;
-    |for (int k = 0; k < $childVariableName.numElements(); k++) {
-    |  ArrayData arr = $childVariableName.getArray(k);
-    |  for (int l = 0; l < arr.numElements(); l++) {
-    |    $arrayName[$counter] = ${CodeGenerator.getValue("arr", elementType, "l")};
-    |    $counter++;
-    |  }
-    |}
-    |$arrayDataName = new $genericArrayClass($arrayName);
     """.stripMargin
   }
 
@@ -2727,11 +2383,11 @@ case class Flatten(child: Expression) extends UnaryExpression {
   examples = """
     Examples:
       > SELECT _FUNC_(1, 5);
-       [1, 2, 3, 4, 5]
+       [1,2,3,4,5]
       > SELECT _FUNC_(5, 1);
-       [5, 4, 3, 2, 1]
+       [5,4,3,2,1]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
-       [2018-01-01, 2018-02-01, 2018-03-01]
+       [2018-01-01,2018-02-01,2018-03-01]
   """,
   since = "2.4.0"
 )
@@ -3105,7 +2761,7 @@ object Sequence {
   examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
-       ['123', '123']
+       ["123","123"]
   """,
   since = "2.4.0")
 case class ArrayRepeat(left: Expression, right: Expression)
@@ -3140,11 +2796,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val count = rightGen.value
     val et = dataType.elementType
 
-    val coreLogic = if (CodeGenerator.isPrimitiveType(et)) {
-      genCodeForPrimitiveElement(ctx, et, element, count, leftGen.isNull, ev.value)
-    } else {
-      genCodeForNonPrimitiveElement(ctx, element, count, leftGen.isNull, ev.value)
-    }
+    val coreLogic = genCodeForElement(ctx, et, element, count, leftGen.isNull, ev.value)
     val resultCode = nullElementsProtection(ev, rightGen.isNull, coreLogic)
 
     ev.copy(code =
@@ -3183,17 +2835,12 @@ case class ArrayRepeat(left: Expression, right: Expression)
          |if ($count > 0) {
          |  $numElements = $count;
          |}
-         |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-         |  throw new RuntimeException("Unsuccessful try to create array with " + $numElements +
-         |    " elements due to exceeding the array size limit" +
-         |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
-         |}
        """.stripMargin
 
     (numElements, numElementsCode)
   }
 
-  private def genCodeForPrimitiveElement(
+  private def genCodeForElement(
       ctx: CodegenContext,
       elementType: DataType,
       element: String,
@@ -3201,45 +2848,27 @@ case class ArrayRepeat(left: Expression, right: Expression)
       leftIsNull: String,
       arrayDataName: String): String = {
     val tempArrayDataName = ctx.freshName("tempArrayData")
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val errorMessage = s" $prettyName failed."
+    val k = ctx.freshName("k")
     val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
+
+    val allocation = CodeGenerator.createArrayData(
+      tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
+    val assignment =
+      CodeGenerator.setArrayElement(tempArrayDataName, elementType, k, element)
 
     s"""
        |$numElemCode
-       |${ctx.createUnsafeArray(tempArrayDataName, numElemName, elementType, errorMessage)}
+       |$allocation
        |if (!$leftIsNull) {
-       |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
-       |    $tempArrayDataName.set$primitiveValueTypeName(k, $element);
+       |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
+       |    $assignment
        |  }
        |} else {
-       |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
-       |    $tempArrayDataName.setNullAt(k);
+       |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
+       |    $tempArrayDataName.setNullAt($k);
        |  }
        |}
        |$arrayDataName = $tempArrayDataName;
-     """.stripMargin
-  }
-
-  private def genCodeForNonPrimitiveElement(
-      ctx: CodegenContext,
-      element: String,
-      count: String,
-      leftIsNull: String,
-      arrayDataName: String): String = {
-    val genericArrayClass = classOf[GenericArrayData].getName
-    val arrayName = ctx.freshName("arrayObject")
-    val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
-
-    s"""
-       |$numElemCode
-       |Object[] $arrayName = new Object[(int)$numElemName];
-       |if (!$leftIsNull) {
-       |  for (int k = 0; k < $numElemName; k++) {
-       |    $arrayName[k] = $element;
-       |  }
-       |}
-       |$arrayDataName = new $genericArrayClass($arrayName);
      """.stripMargin
   }
 
@@ -3261,25 +2890,30 @@ case class ArrayRemove(left: Expression, right: Expression)
   override def dataType: DataType = left.dataType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val elementType = left.dataType match {
-      case t: ArrayType => t.elementType
-      case _ => AnyDataType
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
     }
-    Seq(ArrayType, elementType)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+    }
   }
 
   private def elementType: DataType = left.dataType.asInstanceOf[ArrayType].elementType
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
-    }
-  }
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
     val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements())
@@ -3324,49 +2958,116 @@ case class ArrayRemove(left: Expression, right: Expression)
     val pos = ctx.freshName("pos")
     val getValue = CodeGenerator.getValue(inputArray, elementType, i)
     val isEqual = ctx.genEqual(elementType, value, getValue)
-    if (!CodeGenerator.isPrimitiveType(elementType)) {
-      val arrayClass = classOf[GenericArrayData].getName
-      s"""
-         |int $pos = 0;
-         |Object[] $values = new Object[$newArraySize];
-         |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-         |  if ($inputArray.isNullAt($i)) {
-         |    $values[$pos] = null;
-         |    $pos = $pos + 1;
-         |  }
-         |  else {
-         |    if (!($isEqual)) {
-         |      $values[$pos] = $getValue;
-         |      $pos = $pos + 1;
-         |    }
-         |  }
-         |}
-         |${ev.value} = new $arrayClass($values);
-       """.stripMargin
-    } else {
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-      s"""
-         |${ctx.createUnsafeArray(values, newArraySize, elementType, s" $prettyName failed.")}
-         |int $pos = 0;
-         |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-         |  if ($inputArray.isNullAt($i)) {
-         |      $values.setNullAt($pos);
-         |      $pos = $pos + 1;
-         |  }
-         |  else {
-         |    if (!($isEqual)) {
-         |      $values.set$primitiveValueTypeName($pos, $getValue);
-         |      $pos = $pos + 1;
-         |    }
-         |  }
-         |}
-         |${ev.value} = $values;
-       """.stripMargin
-    }
+
+    val allocation = CodeGenerator.createArrayData(
+      values, elementType, newArraySize, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      values, elementType, inputArray, pos, i, false)
+
+    s"""
+       |$allocation
+       |int $pos = 0;
+       |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
+       |  if ($inputArray.isNullAt($i)) {
+       |    $values.setNullAt($pos);
+       |    $pos = $pos + 1;
+       |  }
+       |  else {
+       |    if (!($isEqual)) {
+       |      $assignment
+       |      $pos = $pos + 1;
+       |    }
+       |  }
+       |}
+       |${ev.value} = $values;
+     """.stripMargin
   }
 
   override def prettyName: String = "array_remove"
 }
+
+/**
+ * Will become common base class for [[ArrayDistinct]], [[ArrayUnion]], [[ArrayIntersect]],
+ * and [[ArrayExcept]].
+ */
+trait ArraySetLike {
+  protected def dt: DataType
+  protected def et: DataType
+
+  @transient protected lazy val canUseSpecializedHashSet = et match {
+    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
+    case _ => false
+  }
+
+  @transient protected lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(et)
+
+  protected def genGetValue(array: String, i: String): String =
+    CodeGenerator.getValue(array, et, i)
+
+  @transient protected lazy val (hsPostFix, hsTypeName) = {
+    val ptName = CodeGenerator.primitiveTypeName(et)
+    et match {
+      // we cast byte/short to int when writing to the hash set.
+      case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
+      case LongType => ("$mcJ$sp", ptName)
+      case FloatType => ("$mcF$sp", ptName)
+      case DoubleType => ("$mcD$sp", ptName)
+    }
+  }
+
+  // we cast byte/short to int when writing to the hash set.
+  @transient protected lazy val hsValueCast = et match {
+    case ByteType | ShortType => "(int) "
+    case _ => ""
+  }
+
+  // When hitting a null value, put a null holder in the ArrayBuilder. Finally we will
+  // convert ArrayBuilder to ArrayData and setNull on the slot with null holder.
+  @transient protected lazy val nullValueHolder = et match {
+    case ByteType => "(byte) 0"
+    case ShortType => "(short) 0"
+    case _ => "0"
+  }
+
+  protected def withResultArrayNullCheck(
+      body: String,
+      value: String,
+      nullElementIndex: String): String = {
+    if (dt.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |$body
+         |if ($nullElementIndex >= 0) {
+         |  // result has null element
+         |  $value.setNullAt($nullElementIndex);
+         |}
+       """.stripMargin
+    } else {
+      body
+    }
+  }
+
+  def buildResultArray(
+      builder: String,
+      value : String,
+      size : String,
+      nullElementIndex : String): String = withResultArrayNullCheck(
+    s"""
+       |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  throw new RuntimeException("Cannot create array with " + $size +
+       |  " elements of data due to exceeding the limit " +
+       |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.");
+       |}
+       |
+       |if (!UnsafeArrayData.shouldUseGenericArrayData(${et.defaultSize}, $size)) {
+       |  $value = UnsafeArrayData.fromPrimitiveArray($builder.result());
+       |} else {
+       |  $value = new ${classOf[GenericArrayData].getName}($builder.result());
+       |}
+     """.stripMargin, value, nullElementIndex)
+
+}
+
 
 /**
  * Removes duplicate values from the array.
@@ -3379,7 +3080,7 @@ case class ArrayRemove(left: Expression, right: Expression)
        [1,2,3,null]
   """, since = "2.4.0")
 case class ArrayDistinct(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -3387,8 +3088,8 @@ case class ArrayDistinct(child: Expression)
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
-  @transient private lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(elementType)
+  override protected def dt: DataType = dataType
+  override protected def et: DataType = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -3396,28 +3097,6 @@ case class ArrayDistinct(child: Expression)
       case TypeCheckResult.TypeCheckSuccess =>
         TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
     }
-  }
-
-  @transient protected lazy val canUseSpecializedHashSet = elementType match {
-    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
-    case _ => false
-  }
-
-  @transient protected lazy val (hsPostFix, hsTypeName) = {
-    val ptName = CodeGenerator.primitiveTypeName(elementType)
-    elementType match {
-      // we cast byte/short to int when writing to the hash set.
-      case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
-      case LongType => ("$mcJ$sp", ptName)
-      case FloatType => ("$mcF$sp", ptName)
-      case DoubleType => ("$mcD$sp", ptName)
-    }
-  }
-
-  // we cast byte/short to int when writing to the hash set.
-  @transient protected lazy val hsValueCast = elementType match {
-    case ByteType | ShortType => "(int) "
-    case _ => ""
   }
 
   override def nullSafeEval(array: Any): Any = {
@@ -3456,28 +3135,73 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val i = ctx.freshName("i")
+    val value = ctx.freshName("value")
+    val size = ctx.freshName("size")
+
     if (canUseSpecializedHashSet) {
+      val jt = CodeGenerator.javaType(elementType)
+      val ptName = CodeGenerator.primitiveTypeName(jt)
+
       nullSafeCodeGen(ctx, ev, (array) => {
-        val i = ctx.freshName("i")
-        val sizeOfDistinctArray = ctx.freshName("sizeOfDistinctArray")
         val foundNullElement = ctx.freshName("foundNullElement")
+        val nullElementIndex = ctx.freshName("nullElementIndex")
+        val builder = ctx.freshName("builder")
         val openHashSet = classOf[OpenHashSet[_]].getName
-        val hs = ctx.freshName("hs")
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
-        val getValue = CodeGenerator.getValue(array, elementType, i)
+        val hashSet = ctx.freshName("hashSet")
+        val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
+        val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+
+        // Only need to track null element index when array's element is nullable.
+        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |boolean $foundNullElement = false;
+             |int $nullElementIndex = -1;
+           """.stripMargin
+        } else {
+          ""
+        }
+
+        def withArrayNullAssignment(body: String) =
+          if (dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($array.isNullAt($i)) {
+               |  if (!$foundNullElement) {
+               |    $nullElementIndex = $size;
+               |    $foundNullElement = true;
+               |    $size++;
+               |    $builder.$$plus$$eq($nullValueHolder);
+               |  }
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          } else {
+            body
+          }
+
+        val processArray = withArrayNullAssignment(
+          s"""
+             |$jt $value = ${genGetValue(array, i)};
+             |if (!$hashSet.contains($hsValueCast$value)) {
+             |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+             |    break;
+             |  }
+             |  $hashSet.add$hsPostFix($hsValueCast$value);
+             |  $builder.$$plus$$eq($value);
+             |}
+           """.stripMargin)
+
         s"""
-           |int $sizeOfDistinctArray = 0;
-           |boolean $foundNullElement = false;
-           |$openHashSet $hs = new $openHashSet($classTag);
-           |for (int $i = 0; $i < $array.numElements(); $i ++) {
-           |  if ($array.isNullAt($i)) {
-           |    $foundNullElement = true;
-           |  } else {
-           |    $hs.add$hsPostFix($hsValueCast$getValue);
-           |  }
+           |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
+           |$declareNullTrackVariables
+           |$arrayBuilderClass $builder = new $arrayBuilderClass();
+           |int $size = 0;
+           |for (int $i = 0; $i < $array.numElements(); $i++) {
+           |  $processArray
            |}
-           |$sizeOfDistinctArray = $hs.size() + ($foundNullElement ? 1 : 0);
-           |${genCodeForResult(ctx, ev, array, sizeOfDistinctArray)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
       })
     } else {
@@ -3488,73 +3212,16 @@ case class ArrayDistinct(child: Expression)
     }
   }
 
-  private def setNull(
-      foundNullElement: String,
-      distinctArray: String,
-      pos: String): String = {
-    val setNullValue = s"$distinctArray.setNullAt($pos)"
-    s"""
-       |if (!($foundNullElement)) {
-       |  $setNullValue;
-       |  $pos = $pos + 1;
-       |  $foundNullElement = true;
-       |}
-    """.stripMargin
-  }
-
-  private def setValue(
-      hs: String,
-      distinctArray: String,
-      pos: String,
-      getValue1: String,
-      primitiveValueTypeName: String): String = {
-    s"""
-       |if (!($hs.contains$hsPostFix($hsValueCast$getValue1))) {
-       |  $hs.add$hsPostFix($hsValueCast$getValue1);
-       |  $distinctArray.set$primitiveValueTypeName($pos, $getValue1);
-       |  $pos = $pos + 1;
-       |}
-    """.stripMargin
-  }
-
-  def genCodeForResult(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      inputArray: String,
-      size: String): String = {
-    val distinctArray = ctx.freshName("distinctArray")
-    val i = ctx.freshName("i")
-    val pos = ctx.freshName("pos")
-    val getValue1 = CodeGenerator.getValue(inputArray, elementType, i)
-    val foundNullElement = ctx.freshName("foundNullElement")
-    val hs = ctx.freshName("hs")
-    val openHashSet = classOf[OpenHashSet[_]].getName
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
-
-    s"""
-       |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
-       |int $pos = 0;
-       |boolean $foundNullElement = false;
-       |$openHashSet $hs = new $openHashSet($classTag);
-       |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-       |  if ($inputArray.isNullAt($i)) {
-       |    ${setNull(foundNullElement, distinctArray, pos)}
-       |  } else {
-       |    ${setValue(hs, distinctArray, pos, getValue1, primitiveValueTypeName)}
-       |  }
-       |}
-       |${ev.value} = $distinctArray;
-    """.stripMargin
-  }
-
   override def prettyName: String = "array_distinct"
 }
 
 /**
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
-abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
+trait ArrayBinaryLike extends BinaryArrayExpressionWithImplicitCast with ArraySetLike {
+  override protected def dt: DataType = dataType
+  override protected def et: DataType = elementType
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
@@ -3564,81 +3231,9 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
       typeCheckResult
     }
   }
-
-  @transient protected lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(elementType)
-
-  @transient protected lazy val canUseSpecializedHashSet = elementType match {
-    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
-    case _ => false
-  }
-
-  protected def genGetValue(array: String, i: String): String =
-    CodeGenerator.getValue(array, elementType, i)
-
-  @transient protected lazy val (hsPostFix, hsTypeName) = {
-    val ptName = CodeGenerator.primitiveTypeName (elementType)
-    elementType match {
-      // we cast byte/short to int when writing to the hash set.
-      case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
-      case LongType => ("$mcJ$sp", ptName)
-      case FloatType => ("$mcF$sp", ptName)
-      case DoubleType => ("$mcD$sp", ptName)
-    }
-  }
-
-  // we cast byte/short to int when writing to the hash set.
-  @transient protected lazy val hsValueCast = elementType match {
-    case ByteType | ShortType => "(int) "
-    case _ => ""
-  }
-
-  // When hitting a null value, put a null holder in the ArrayBuilder. Finally we will
-  // convert ArrayBuilder to ArrayData and setNull on the slot with null holder.
-  @transient protected lazy val nullValueHolder = elementType match {
-    case ByteType => "(byte) 0"
-    case ShortType => "(short) 0"
-    case _ => "0"
-  }
-
-  protected def withResultArrayNullCheck(
-      body: String,
-      value: String,
-      nullElementIndex: String): String = {
-    if (dataType.asInstanceOf[ArrayType].containsNull) {
-      s"""
-         |$body
-         |if ($nullElementIndex >= 0) {
-         |  // result has null element
-         |  $value.setNullAt($nullElementIndex);
-         |}
-       """.stripMargin
-    } else {
-      body
-    }
-  }
-
-  def buildResultArray(
-      builder: String,
-      value : String,
-      size : String,
-      nullElementIndex : String): String = withResultArrayNullCheck(
-    s"""
-       |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw new RuntimeException("Cannot create array with " + $size +
-       |  " bytes of data due to exceeding the limit " +
-       |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.");
-       |}
-       |
-       |if (!UnsafeArrayData.shouldUseGenericArrayData(${elementType.defaultSize}, $size)) {
-       |  $value = UnsafeArrayData.fromPrimitiveArray($builder.result());
-       |} else {
-       |  $value = new ${classOf[GenericArrayData].getName}($builder.result());
-       |}
-     """.stripMargin, value, nullElementIndex)
 }
 
-object ArraySetLike {
+object ArrayBinaryLike {
   def throwUnionLengthOverflowException(length: Int): Unit = {
     throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
       s"elements due to exceeding the array size limit " +
@@ -3658,10 +3253,10 @@ object ArraySetLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 2, 3, 5)
+       [1,2,3,5]
   """,
   since = "2.4.0")
-case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
+case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
   @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
@@ -3682,7 +3277,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
               val elem = array.get(i, elementType)
               if (!hs.contains(elem)) {
                 if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                  ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.size)
+                  ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
                 }
                 arrayBuffer += elem
                 hs.add(elem)
@@ -3717,7 +3312,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
           }
           if (!found) {
             if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.length)
+              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
             }
             arrayBuffer += elem
           }
@@ -3849,7 +3444,7 @@ object ArrayUnion {
       }
       if (!found) {
         if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.length)
+          ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
         }
         arrayBuffer += elem
       }
@@ -3869,10 +3464,10 @@ object ArrayUnion {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 3)
+       [1,3]
   """,
   since = "2.4.0")
-case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetLike
+case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
   override def dataType: DataType = {
     dataTypeCheck
@@ -4110,10 +3705,10 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(2)
+       [2]
   """,
   since = "2.4.0")
-case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
+case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
   override def dataType: DataType = {

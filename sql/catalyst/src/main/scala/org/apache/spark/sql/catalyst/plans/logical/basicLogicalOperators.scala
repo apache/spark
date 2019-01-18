@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier}
+import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -64,7 +64,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   }
 
   override def validConstraints: Set[Expression] =
-    child.constraints.union(getAliasedConstraints(projectList))
+    getAllValidConstraints(projectList)
 }
 
 /**
@@ -288,7 +288,8 @@ case class Join(
     left: LogicalPlan,
     right: LogicalPlan,
     joinType: JoinType,
-    condition: Option[Expression])
+    condition: Option[Expression],
+    hint: JoinHint)
   extends BinaryNode with PredicateHelper {
 
   override def output: Seq[Attribute] = {
@@ -349,6 +350,17 @@ case class Join(
     case NaturalJoin(_) => false
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
+  }
+
+  // Ignore hint for canonicalization
+  protected override def doCanonicalize(): LogicalPlan =
+    super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+
+  // Do not include an empty join hint in string description
+  protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
+    (!e.isInstanceOf[JoinHint]
+      || e.asInstanceOf[JoinHint].leftHint.isDefined
+      || e.asInstanceOf[JoinHint].rightHint.isDefined)
   }
 }
 
@@ -468,7 +480,7 @@ case class View(
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 }
@@ -484,8 +496,8 @@ case class View(
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def simpleString: String = {
-    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+  override def simpleString(maxFields: Int): String = {
+    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]", maxFields)
     s"CTE $cteAliases"
   }
 
@@ -557,7 +569,7 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Int): String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
   }
 
@@ -575,6 +587,18 @@ case class Range(
   }
 }
 
+/**
+ * This is a Group by operator with the aggregate functions and projections.
+ *
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                             [[AggregateFunction]]s.
+ *
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
+ */
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
@@ -595,7 +619,7 @@ case class Aggregate(
 
   override def validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
-    child.constraints.union(getAliasedConstraints(nonAgg))
+    getAllValidConstraints(nonAgg)
   }
 }
 

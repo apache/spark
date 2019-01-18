@@ -1,0 +1,75 @@
+================================================================================================
+Join Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Join w long:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Join w long wholestage off                    4464 / 4483          4.7         212.9       1.0X
+Join w long wholestage on                      289 /  339         72.6          13.8      15.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Join w long duplicated:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Join w long duplicated wholestage off         5662 / 5678          3.7         270.0       1.0X
+Join w long duplicated wholestage on           332 /  345         63.1          15.8      17.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Join w 2 ints:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Join w 2 ints wholestage off              173174 / 173183          0.1        8257.6       1.0X
+Join w 2 ints wholestage on               166350 / 198362          0.1        7932.2       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Join w 2 longs:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Join w 2 longs wholestage off                 7055 / 7214          3.0         336.4       1.0X
+Join w 2 longs wholestage on                  1869 / 1985         11.2          89.1       3.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Join w 2 longs duplicated:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Join w 2 longs duplicated wholestage off    19256 / 20283          1.1         918.2       1.0X
+Join w 2 longs duplicated wholestage on       2467 / 2544          8.5         117.7       7.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+outer join w long:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+outer join w long wholestage off              3756 / 3761          5.6         179.1       1.0X
+outer join w long wholestage on                218 /  250         96.2          10.4      17.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+semi join w long:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+semi join w long wholestage off               2393 / 2416          8.8         114.1       1.0X
+semi join w long wholestage on                 214 /  218         97.9          10.2      11.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+sort merge join:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+sort merge join wholestage off                     2318 / 2392          0.9        1105.3       1.0X
+sort merge join wholestage on                      1669 / 1811          1.3         795.9       1.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+sort merge join with duplicates:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+sort merge join with duplicates wholestage off      2966 / 2976          0.7        1414.5       1.0X
+sort merge join with duplicates wholestage on      2413 / 2641          0.9        1150.5       1.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+shuffle hash join:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+shuffle hash join wholestage off              1475 / 1479          2.8         351.7       1.0X
+shuffle hash join wholestage on               1209 / 1238          3.5         288.3       1.2X
+
+

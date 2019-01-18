@@ -79,8 +79,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop() // stop the state store maintenance thread and unload store providers
+    try {
+      super.afterAll()
+    } finally {
+      StateStore.stop() // stop the state store maintenance thread and unload store providers
+    }
   }
 
   protected val defaultTrigger = Trigger.ProcessingTime(0)

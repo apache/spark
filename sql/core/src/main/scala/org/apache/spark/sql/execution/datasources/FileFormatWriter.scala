@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
@@ -145,9 +146,8 @@ object FileFormatWriter extends Logging {
         // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
         // the physical plan may have different attribute ids due to optimizer removing some
         // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-        val orderingExpr = requiredOrdering
-          .map(SortOrder(_, Ascending))
-          .map(BindReferences.bindReference(_, outputSpec.outputColumns))
+        val orderingExpr = bindReferences(
+          requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
         SortExec(
           orderingExpr,
           global = false,
@@ -183,15 +183,15 @@ object FileFormatWriter extends Logging {
       val commitMsgs = ret.map(_.commitMsg)
 
       committer.commitJob(job, commitMsgs)
-      logInfo(s"Job ${job.getJobID} committed.")
+      logInfo(s"Write Job ${description.uuid} committed.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
-      logInfo(s"Finished processing stats for job ${job.getJobID}.")
+      logInfo(s"Finished processing stats for write job ${description.uuid}.")
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
     } catch { case cause: Throwable =>
-      logError(s"Aborting job ${job.getJobID}.", cause)
+      logError(s"Aborting job ${description.uuid}.", cause)
       committer.abortJob(job)
       throw new SparkException("Job aborted.", cause)
     }

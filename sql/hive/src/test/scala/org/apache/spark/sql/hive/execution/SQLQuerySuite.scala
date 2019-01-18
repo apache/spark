@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -690,8 +692,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
-          "create a partitioned table using Hive's file formats"))
+        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
+          "the partition columns of the target table"))
       }
     }
   }
@@ -1912,13 +1914,83 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sql("LOAD DATA LOCAL INPATH '/non-exist-folder/*part*' INTO TABLE load_t")
         }.getMessage
         assert(m.contains("LOAD DATA input path does not exist"))
-
-        val m2 = intercept[AnalysisException] {
-          sql(s"LOAD DATA LOCAL INPATH '$path*/*part*' INTO TABLE load_t")
-        }.getMessage
-        assert(m2.contains("LOAD DATA input path allows only filename wildcard"))
       }
     }
+  }
+
+  test("SPARK-23425 Test LOAD DATA LOCAL INPATH with space in file name") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t") {
+        sql("CREATE TABLE load_t (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000 1' INTO TABLE load_t")
+        checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1")))
+      }
+    }
+  }
+
+  test("Support wildcard character in folderlevel for LOAD DATA LOCAL INPATH") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t_folder_wildcard") {
+        sql("CREATE TABLE load_t (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '${
+          path.substring(0, path.length - 1)
+            .concat("*")
+        }/' INTO TABLE load_t")
+        checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
+        val m = intercept[AnalysisException] {
+          sql(s"LOAD DATA LOCAL INPATH '${
+            path.substring(0, path.length - 1).concat("_invalid_dir") concat ("*")
+          }/' INTO TABLE load_t")
+        }.getMessage
+        assert(m.contains("LOAD DATA input path does not exist"))
+      }
+    }
+  }
+
+  test("SPARK-17796 Support wildcard '?'char in middle as part of local file path") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t1") {
+        sql("CREATE TABLE load_t1 (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000?' INTO TABLE load_t1")
+        checkAnswer(sql("SELECT * FROM load_t1"), Seq(Row("1"), Row("2"), Row("3")))
+      }
+    }
+  }
+
+  test("SPARK-17796 Support wildcard '?'char in start as part of local file path") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t2") {
+        sql("CREATE TABLE load_t2 (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/?art-r-00001' INTO TABLE load_t2")
+        checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
+      }
+    }
+  }
+
+  test("SPARK-25738: defaultFs can have a port") {
+    val defaultURI = new URI("hdfs://fizz.buzz.com:8020")
+    val r = LoadDataCommand.makeQualified(defaultURI, new Path("/foo/bar"), new Path("/flim/flam"))
+    assert(r === new Path("hdfs://fizz.buzz.com:8020/flim/flam"))
   }
 
   test("Insert overwrite with partition") {
@@ -2200,6 +2272,60 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-25271: Hive ctas commands should use data source if it is convertible") {
+    withTempView("p") {
+      Seq(1, 2, 3).toDF("id").createOrReplaceTempView("p")
+
+      Seq("orc", "parquet").foreach { format =>
+        Seq(true, false).foreach { isConverted =>
+          withSQLConf(
+            HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+            HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
+            Seq(true, false).foreach { isConvertedCtas =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> s"$isConvertedCtas") {
+
+                val targetTable = "targetTable"
+                withTable(targetTable) {
+                  val df = sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
+                  checkAnswer(sql(s"SELECT id FROM $targetTable"),
+                    Row(1) :: Row(2) :: Row(3) :: Nil)
+
+                  val ctasDSCommand = df.queryExecution.analyzed.collect {
+                    case _: OptimizedCreateHiveTableAsSelectCommand => true
+                  }.headOption
+                  val ctasCommand = df.queryExecution.analyzed.collect {
+                    case _: CreateHiveTableAsSelectCommand => true
+                  }.headOption
+
+                  if (isConverted && isConvertedCtas) {
+                    assert(ctasDSCommand.nonEmpty)
+                    assert(ctasCommand.isEmpty)
+                  } else {
+                    assert(ctasDSCommand.isEmpty)
+                    assert(ctasCommand.nonEmpty)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-26181 hasMinMaxStats method of ColumnStatsMap is not correct") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("all_null") {
+        sql("create table all_null (attr1 int, attr2 int)")
+        sql("insert into all_null values (null, null)")
+        sql("analyze table all_null compute statistics for columns attr1, attr2")
+        // check if the stats can be calculated without Cast exception.
+        sql("select * from all_null where attr1 < 1").queryExecution.stringWithStats
+        sql("select * from all_null where attr1 < attr2").queryExecution.stringWithStats
       }
     }
   }

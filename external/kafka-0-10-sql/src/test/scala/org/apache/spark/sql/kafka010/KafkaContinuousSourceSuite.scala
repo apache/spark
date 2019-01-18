@@ -17,12 +17,159 @@
 
 package org.apache.spark.sql.kafka010
 
+import org.apache.kafka.clients.producer.ProducerRecord
+
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2StreamingScanExec
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.streaming.Trigger
 
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.
-class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest
+class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest {
+  import testImplicits._
+
+  test("read Kafka transactional messages: read_committed") {
+    val table = "kafka_continuous_source_test"
+    withTable(table) {
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+      testUtils.withTranscationalProducer { producer =>
+        val df = spark
+          .readStream
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("kafka.isolation.level", "read_committed")
+          .option("startingOffsets", "earliest")
+          .option("subscribe", topic)
+          .load()
+          .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+          .as[(String, String)]
+          .map(kv => kv._2.toInt)
+
+        val q = df
+          .writeStream
+          .format("memory")
+          .queryName(table)
+          .trigger(ContinuousTrigger(100))
+          .start()
+        try {
+          producer.beginTransaction()
+          (1 to 5).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+
+          // Should not read any messages before they are committed
+          assert(spark.table(table).isEmpty)
+
+          producer.commitTransaction()
+
+          eventually(timeout(streamingTimeout)) {
+            // Should read all committed messages
+            checkAnswer(spark.table(table), (1 to 5).toDF)
+          }
+
+          producer.beginTransaction()
+          (6 to 10).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.abortTransaction()
+
+          // Should not read aborted messages
+          checkAnswer(spark.table(table), (1 to 5).toDF)
+
+          producer.beginTransaction()
+          (11 to 15).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.commitTransaction()
+
+          eventually(timeout(streamingTimeout)) {
+            // Should skip aborted messages and read new committed ones.
+            checkAnswer(spark.table(table), ((1 to 5) ++ (11 to 15)).toDF)
+          }
+        } finally {
+          q.stop()
+        }
+      }
+    }
+  }
+
+  test("read Kafka transactional messages: read_uncommitted") {
+    val table = "kafka_continuous_source_test"
+    withTable(table) {
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+      testUtils.withTranscationalProducer { producer =>
+        val df = spark
+          .readStream
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("kafka.isolation.level", "read_uncommitted")
+          .option("startingOffsets", "earliest")
+          .option("subscribe", topic)
+          .load()
+          .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+          .as[(String, String)]
+          .map(kv => kv._2.toInt)
+
+        val q = df
+          .writeStream
+          .format("memory")
+          .queryName(table)
+          .trigger(ContinuousTrigger(100))
+          .start()
+        try {
+          producer.beginTransaction()
+          (1 to 5).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+
+          eventually(timeout(streamingTimeout)) {
+            // Should read uncommitted messages
+            checkAnswer(spark.table(table), (1 to 5).toDF)
+          }
+
+          producer.commitTransaction()
+
+          eventually(timeout(streamingTimeout)) {
+            // Should read all committed messages
+            checkAnswer(spark.table(table), (1 to 5).toDF)
+          }
+
+          producer.beginTransaction()
+          (6 to 10).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.abortTransaction()
+
+          eventually(timeout(streamingTimeout)) {
+            // Should read aborted messages
+            checkAnswer(spark.table(table), (1 to 10).toDF)
+          }
+
+          producer.beginTransaction()
+          (11 to 15).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+
+          eventually(timeout(streamingTimeout)) {
+            // Should read all messages including committed, aborted and uncommitted messages
+            checkAnswer(spark.table(table), (1 to 15).toDF)
+          }
+
+          producer.commitTransaction()
+
+          eventually(timeout(streamingTimeout)) {
+            // Should read all messages including committed and aborted messages
+            checkAnswer(spark.table(table), (1 to 15).toDF)
+          }
+        } finally {
+          q.stop()
+        }
+      }
+    }
+  }
+}
 
 class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
   import testImplicits._
@@ -60,10 +207,10 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
         testUtils.createTopic(topic2, partitions = 5)
         eventually(timeout(streamingTimeout)) {
           assert(
-            query.lastExecution.logical.collectFirst {
-              case r: StreamingDataSourceV2Relation
-                  if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-                r.scanConfigBuilder.build().asInstanceOf[KafkaContinuousScanConfig]
+            query.lastExecution.executedPlan.collectFirst {
+              case scan: DataSourceV2StreamingScanExec
+                if scan.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+                scan.scanConfig.asInstanceOf[KafkaContinuousScanConfig]
             }.exists { config =>
               // Ensure the new topic is present and the old topic is gone.
               config.knownPartitions.exists(_.topic == topic2)

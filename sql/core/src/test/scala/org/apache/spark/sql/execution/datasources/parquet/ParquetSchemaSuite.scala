@@ -427,7 +427,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       assert(errMsg.startsWith("Parquet column cannot be converted in file"))
       val file = errMsg.substring("Parquet column cannot be converted in file ".length,
         errMsg.indexOf(". "))
-      val col = spark.read.parquet(file).schema.fields.filter(_.name.equals("a"))
+      val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
         assert(errMsg.contains("Column: [a], Expected: int, Found: BINARY"))

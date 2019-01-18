@@ -22,8 +22,8 @@ import java.net.{URI, URL, URLEncoder}
 import java.nio.channels.Channels
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.xbean.asm6._
-import org.apache.xbean.asm6.Opcodes._
+import org.apache.xbean.asm7._
+import org.apache.xbean.asm7.Opcodes._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -33,8 +33,11 @@ import org.apache.spark.util.ParentClassLoader
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or Spark RPC endpoint, used to load
  * classes defined by the interpreter when the REPL is used. Allows the user to specify if user
- * class path should be first. This class loader delegates getting/finding resources to parent
- * loader, which makes sense until REPL never provide resource dynamically.
+ * class path should be first.
+ * This class loader delegates getting/finding resources to parent loader, which makes sense because
+ * the REPL never produce resources dynamically. One exception is when getting a Class file as
+ * resource stream, in which case we will try to fetch the Class file in the same way as loading
+ * the class, so that dynamically generated Classes from the REPL can be picked up.
  *
  * Note: [[ClassLoader]] will preferentially load class from parent. Only when parent is null or
  * the load failed, that it will call the overridden `findClass` function. To avoid the potential
@@ -69,6 +72,30 @@ class ExecutorClassLoader(
 
   override def getResources(name: String): java.util.Enumeration[URL] = {
     parentLoader.getResources(name)
+  }
+
+  override def getResourceAsStream(name: String): InputStream = {
+    if (userClassPathFirst) {
+      val res = getClassResourceAsStreamLocally(name)
+      if (res != null) res else parentLoader.getResourceAsStream(name)
+    } else {
+      val res = parentLoader.getResourceAsStream(name)
+      if (res != null) res else getClassResourceAsStreamLocally(name)
+    }
+  }
+
+  private def getClassResourceAsStreamLocally(name: String): InputStream = {
+    // Class files can be dynamically generated from the REPL. Allow this class loader to
+    // load such files for purposes other than loading the class.
+    try {
+      if (name.endsWith(".class")) fetchFn(name) else null
+    } catch {
+      // The helper functions referenced by fetchFn throw CNFE to indicate failure to fetch
+      // the class. It matches what IOException was supposed to be used for, and
+      // ClassLoader.getResourceAsStream() catches IOException and returns null in that case.
+      // So we follow that model and handle CNFE here.
+      case _: ClassNotFoundException => null
+    }
   }
 
   override def findClass(name: String): Class[_] = {
@@ -187,7 +214,7 @@ class ExecutorClassLoader(
 }
 
 class ConstructorCleaner(className: String, cv: ClassVisitor)
-extends ClassVisitor(ASM6, cv) {
+extends ClassVisitor(ASM7, cv) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     val mv = cv.visitMethod(access, name, desc, sig, exceptions)

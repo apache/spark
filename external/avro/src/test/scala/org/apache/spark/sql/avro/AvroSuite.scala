@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   import testImplicits._
@@ -137,7 +138,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("test NULL avro type") {
     withTempPath { dir =>
       val fields =
-        Seq(new Field("null", Schema.create(Type.NULL), "doc", null)).asJava
+        Seq(new Field("null", Schema.create(Type.NULL), "doc", null.asInstanceOf[AnyVal])).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
       val datumWriter = new GenericDatumWriter[GenericRecord](schema)
@@ -160,7 +161,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroSchema: Schema = {
         val union =
           Schema.createUnion(List(Schema.create(Type.INT), Schema.create(Type.LONG)).asJava)
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -188,7 +189,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroSchema: Schema = {
         val union =
           Schema.createUnion(List(Schema.create(Type.FLOAT), Schema.create(Type.DOUBLE)).asJava)
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -220,7 +221,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
             Schema.create(Type.NULL)
           ).asJava
         )
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -246,7 +247,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("Union of a single type") {
     withTempPath { dir =>
       val UnionOfOne = Schema.createUnion(List(Schema.create(Type.INT)).asJava)
-      val fields = Seq(new Field("field1", UnionOfOne, "doc", null)).asJava
+      val fields = Seq(new Field("field1", UnionOfOne, "doc", null.asInstanceOf[AnyVal])).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
 
@@ -273,10 +274,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val complexUnionType = Schema.createUnion(
         List(Schema.create(Type.INT), Schema.create(Type.STRING), fixedSchema, enumSchema).asJava)
       val fields = Seq(
-        new Field("field1", complexUnionType, "doc", null),
-        new Field("field2", complexUnionType, "doc", null),
-        new Field("field3", complexUnionType, "doc", null),
-        new Field("field4", complexUnionType, "doc", null)
+        new Field("field1", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field2", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field3", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field4", complexUnionType, "doc", null.asInstanceOf[AnyVal])
       ).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
@@ -339,6 +340,48 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val df = spark.createDataFrame(rdd, schema)
       df.write.format("avro").save(dir.toString)
       assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+    }
+  }
+
+  private def createDummyCorruptFile(dir: File): Unit = {
+    Utils.tryWithResource {
+      FileUtils.forceMkdir(dir)
+      val corruptFile = new File(dir, "corrupt.avro")
+      new BufferedWriter(new FileWriter(corruptFile))
+    } { writer =>
+      writer.write("corrupt")
+    }
+  }
+
+  test("Ignore corrupt Avro file if flag IGNORE_CORRUPT_FILES enabled") {
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      withTempPath { dir =>
+        createDummyCorruptFile(dir)
+        val message = intercept[FileNotFoundException] {
+          spark.read.format("avro").load(dir.getAbsolutePath).schema
+        }.getMessage
+        assert(message.contains("No Avro files found."))
+
+        val srcFile = new File("src/test/resources/episodes.avro")
+        val destFile = new File(dir, "episodes.avro")
+        FileUtils.copyFile(srcFile, destFile)
+
+        val result = spark.read.format("avro").load(srcFile.getAbsolutePath).collect()
+        checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
+      }
+    }
+  }
+
+  test("Throws IOException on reading corrupt Avro file if flag IGNORE_CORRUPT_FILES disabled") {
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      withTempPath { dir =>
+        createDummyCorruptFile(dir)
+        val message = intercept[org.apache.spark.SparkException] {
+          spark.read.format("avro").load(dir.getAbsolutePath)
+        }.getMessage
+
+        assert(message.contains("Could not read file"))
+      }
     }
   }
 
@@ -465,7 +508,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val union2 = spark.read.format("avro").load(testAvro).select("union_float_double").collect()
     assert(
       union2
-        .map(x => new java.lang.Double(x(0).toString))
+        .map(x => java.lang.Double.valueOf(x(0).toString))
         .exists(p => Math.abs(p - Math.PI) < 0.001))
 
     val fixed = spark.read.format("avro").load(testAvro).select("fixed3").collect()
@@ -898,7 +941,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroArrayType = resolveNullable(Schema.createArray(avroType), nullable)
       val avroMapType = resolveNullable(Schema.createMap(avroType), nullable)
       val name = "foo"
-      val avroField = new Field(name, avroType, "", null)
+      val avroField = new Field(name, avroType, "", null.asInstanceOf[AnyVal])
       val recordSchema = Schema.createRecord("name", "doc", "space", true, Seq(avroField).asJava)
       val avroRecordType = resolveNullable(recordSchema, nullable)
 
@@ -1082,7 +1125,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val schema = getAvroSchemaStringFromFiles(dir.toString)
       assert(schema.contains("\"namespace\":\"topLevelRecord\""))
       assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
-      assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))
     }
   }
 
@@ -1097,6 +1139,47 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       // Check if the written DataFrame is equals than read DataFrame
       assert(readDf.collect().sameElements(writeDf.collect()))
     }
+  }
+
+  test("check namespace - toAvroType") {
+    val sparkSchema = StructType(Seq(
+      StructField("name", StringType, nullable = false),
+      StructField("address", StructType(Seq(
+        StructField("city", StringType, nullable = false),
+        StructField("state", StringType, nullable = false))),
+        nullable = false)))
+    val employeeType = SchemaConverters.toAvroType(sparkSchema,
+      recordName = "employee",
+      nameSpace = "foo.bar")
+
+    assert(employeeType.getFullName == "foo.bar.employee")
+    assert(employeeType.getName == "employee")
+    assert(employeeType.getNamespace == "foo.bar")
+
+    val addressType = employeeType.getField("address").schema()
+    assert(addressType.getFullName == "foo.bar.employee.address")
+    assert(addressType.getName == "address")
+    assert(addressType.getNamespace == "foo.bar.employee")
+  }
+
+  test("check empty namespace - toAvroType") {
+    val sparkSchema = StructType(Seq(
+      StructField("name", StringType, nullable = false),
+      StructField("address", StructType(Seq(
+        StructField("city", StringType, nullable = false),
+        StructField("state", StringType, nullable = false))),
+        nullable = false)))
+    val employeeType = SchemaConverters.toAvroType(sparkSchema,
+      recordName = "employee")
+
+    assert(employeeType.getFullName == "employee")
+    assert(employeeType.getName == "employee")
+    assert(employeeType.getNamespace == null)
+
+    val addressType = employeeType.getField("address").schema()
+    assert(addressType.getFullName == "employee.address")
+    assert(addressType.getName == "address")
+    assert(addressType.getNamespace == "employee")
   }
 
   case class NestedMiddleArray(id: Int, data: Array[NestedBottom])
@@ -1225,5 +1308,70 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkCodec(df, path, "bzip2")
       checkCodec(df, path, "xz")
     }
+  }
+
+  private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
+    val message = intercept[IncompatibleSchemaException] {
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
+    }.getMessage
+
+    assert(message.contains("Found recursive reference in Avro schema"))
+  }
+
+  test("Detect recursive loop") {
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},             // each element has a long
+      |    {"name": "next", "type": ["null", "LongList"]} // optional next element
+      |  ]
+      |}
+    """.stripMargin)
+
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields": [
+      |    {
+      |      "name": "value",
+      |      "type": {
+      |        "type": "record",
+      |        "name": "foo",
+      |        "fields": [
+      |          {
+      |            "name": "parent",
+      |            "type": "LongList"
+      |          }
+      |        ]
+      |      }
+      |    }
+      |  ]
+      |}
+    """.stripMargin)
+
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},
+      |    {"name": "array", "type": {"type": "array", "items": "LongList"}}
+      |  ]
+      |}
+    """.stripMargin)
+
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},
+      |    {"name": "map", "type": {"type": "map", "values": "LongList"}}
+      |  ]
+      |}
+    """.stripMargin)
   }
 }

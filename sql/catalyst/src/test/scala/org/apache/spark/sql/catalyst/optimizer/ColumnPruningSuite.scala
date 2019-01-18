@@ -34,6 +34,7 @@ class ColumnPruningSuite extends PlanTest {
     val batches = Batch("Column pruning", FixedPoint(100),
       PushDownPredicate,
       ColumnPruning,
+      RemoveNoopOperators,
       CollapseProject) :: Nil
   }
 
@@ -340,10 +341,8 @@ class ColumnPruningSuite extends PlanTest {
   test("Column pruning on Union") {
     val input1 = LocalRelation('a.int, 'b.string, 'c.double)
     val input2 = LocalRelation('c.int, 'd.string, 'e.double)
-    val query = Project('b :: Nil,
-      Union(input1 :: input2 :: Nil)).analyze
-    val expected = Project('b :: Nil,
-      Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil)).analyze
+    val query = Project('b :: Nil, Union(input1 :: input2 :: Nil)).analyze
+    val expected = Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil).analyze
     comparePlans(Optimize.execute(query), expected)
   }
 
@@ -354,15 +353,15 @@ class ColumnPruningSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          ResolvedHint(SubqueryAlias("y", input)), Inner, None)).analyze
+          SubqueryAlias("y", input), Inner, None, JoinHint.NONE)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
-        ResolvedHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
-        Inner, None).analyze
+        Project(Seq($"y.key"), SubqueryAlias("y", input)),
+        Inner, None, JoinHint.NONE).analyze
 
     comparePlans(optimized, expected)
   }
@@ -401,5 +400,14 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
+    val testRelation = LocalRelation('_1.int, '_2.int)
+    val serializerObject = CatalystSerde.serialize[(Int, Int)](
+      CatalystSerde.deserialize[(Int, Int)](testRelation))
+    val query = serializerObject.select('_1)
+    val optimized = Optimize.execute(query.analyze)
+    val expected = serializerObject.copy(serializer = Seq(serializerObject.serializer.head)).analyze
+    comparePlans(optimized, expected)
+  }
   // todo: add more tests for column pruning
 }

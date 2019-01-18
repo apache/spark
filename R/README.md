@@ -17,7 +17,7 @@ export R_HOME=/home/username/R
 
 #### Build Spark
 
-Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
+Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 
 ```bash
 build/mvn -DskipTests -Psparkr package
@@ -39,15 +39,7 @@ To set other options like driver memory, executor memory etc. you can pass in th
 
 #### Using SparkR from RStudio
 
-If you wish to use SparkR from RStudio or other R frontends you will need to set some environment variables which point SparkR to your Spark installation. For example
-```R
-# Set this to where Spark is installed
-Sys.setenv(SPARK_HOME="/Users/username/spark")
-# This line loads SparkR from the installed directory
-.libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths()))
-library(SparkR)
-sparkR.session()
-```
+If you wish to use SparkR from RStudio, please refer [SparkR documentation](https://spark.apache.org/docs/latest/sparkr.html#starting-up-from-rstudio).
 
 #### Making changes to SparkR
 

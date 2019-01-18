@@ -36,13 +36,15 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
-import org.apache.spark.util.collection.{OpenHashMap, Utils => collectionUtils}
+import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
+  Utils => collectionUtils}
 import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
   SamplingUtils}
 
@@ -396,7 +398,20 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
-    map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
+    def removeDuplicatesInPartition(partition: Iterator[T]): Iterator[T] = {
+      // Create an instance of external append only map which ignores values.
+      val map = new ExternalAppendOnlyMap[T, Null, Null](
+        createCombiner = value => null,
+        mergeValue = (a, b) => a,
+        mergeCombiners = (a, b) => a)
+      map.insertAll(partition.map(_ -> null))
+      map.iterator.map(_._1)
+    }
+    partitioner match {
+      case Some(p) if numPartitions == partitions.length =>
+        mapPartitions(removeDuplicatesInPartition, preservesPartitioning = true)
+      case _ => map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
+    }
   }
 
   /**
@@ -462,8 +477,9 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
-        new HashPartitioner(numPartitions)),
+        new ShuffledRDD[Int, T, T](
+          mapPartitionsWithIndexInternal(distributePartition, isOrderSensitive = true),
+          new HashPartitioner(numPartitions)),
         numPartitions,
         partitionCoalescer).values
     } else {
@@ -807,16 +823,21 @@ abstract class RDD[T: ClassTag](
    * serializable and don't require closure cleaning.
    *
    * @param preservesPartitioning indicates whether the input function preserves the partitioner,
-   * which should be `false` unless this is a pair RDD and the input function doesn't modify
-   * the keys.
+   *                              which should be `false` unless this is a pair RDD and the input
+   *                              function doesn't modify the keys.
+   * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
+   *                         sensitive, it may return totally different result when the input order
+   *                         is changed. Mostly stateful functions are order-sensitive.
    */
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+      preservesPartitioning: Boolean = false,
+      isOrderSensitive: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
       (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
-      preservesPartitioning)
+      preservesPartitioning = preservesPartitioning,
+      isOrderSensitive = isOrderSensitive)
   }
 
   /**
@@ -1238,7 +1259,7 @@ abstract class RDD[T: ClassTag](
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is greater
    * than `p`) would trigger sparse representation of registers, which may reduce the memory
@@ -1270,7 +1291,7 @@ abstract class RDD[T: ClassTag](
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -1329,7 +1350,7 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
-    val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
+    val scaleUpFactor = Math.max(conf.get(RDD_LIMIT_SCALE_UP_FACTOR), 2)
     if (num == 0) {
       new Array[T](0)
     } else {
@@ -1637,6 +1658,16 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return whether this RDD is reliably checkpointed and materialized.
+   */
+  private[rdd] def isReliablyCheckpointed: Boolean = {
+    checkpointData match {
+      case Some(reliable: ReliableRDDCheckpointData[_]) if reliable.isCheckpointed => true
+      case _ => false
+    }
+  }
+
+  /**
    * Gets the name of the directory to which this RDD was checkpointed.
    * This is not defined if the RDD is checkpointed locally.
    */
@@ -1649,7 +1680,15 @@ abstract class RDD[T: ClassTag](
 
   /**
    * :: Experimental ::
-   * Indicates that Spark must launch the tasks together for the current stage.
+   * Marks the current stage as a barrier stage, where Spark must launch all tasks together.
+   * In case of a task failure, instead of only restarting the failed task, Spark will abort the
+   * entire stage and re-launch all tasks for this stage.
+   * The barrier execution mode feature is experimental and it only handles limited scenarios.
+   * Please read the linked SPIP and design docs to understand the limitations and future plans.
+   * @return an [[RDDBarrier]] instance that provides actions within a barrier stage
+   * @see [[org.apache.spark.BarrierTaskContext]]
+   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24374">SPIP: Barrier Execution Mode</a>
+   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24582">Design Doc</a>
    */
   @Experimental
   @Since("2.4.0")
@@ -1865,6 +1904,63 @@ abstract class RDD[T: ClassTag](
   // RDD chain.
   @transient protected lazy val isBarrier_ : Boolean =
     dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
+
+  /**
+   * Returns the deterministic level of this RDD's output. Please refer to [[DeterministicLevel]]
+   * for the definition.
+   *
+   * By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is DETERMINATE. For
+   * RDDs with parents, we will generate a deterministic level candidate per parent according to
+   * the dependency. The deterministic level of the current RDD is the deterministic level
+   * candidate that is deterministic least. Please override [[getOutputDeterministicLevel]] to
+   * provide custom logic of calculating output deterministic level.
+   */
+  // TODO: make it public so users can set deterministic level to their custom RDDs.
+  // TODO: this can be per-partition. e.g. UnionRDD can have different deterministic level for
+  // different partitions.
+  private[spark] final lazy val outputDeterministicLevel: DeterministicLevel.Value = {
+    if (isReliablyCheckpointed) {
+      DeterministicLevel.DETERMINATE
+    } else {
+      getOutputDeterministicLevel
+    }
+  }
+
+  @DeveloperApi
+  protected def getOutputDeterministicLevel: DeterministicLevel.Value = {
+    val deterministicLevelCandidates = dependencies.map {
+      // The shuffle is not really happening, treat it like narrow dependency and assume the output
+      // deterministic level of current RDD is same as parent.
+      case dep: ShuffleDependency[_, _, _] if dep.rdd.partitioner.exists(_ == dep.partitioner) =>
+        dep.rdd.outputDeterministicLevel
+
+      case dep: ShuffleDependency[_, _, _] =>
+        if (dep.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
+          // If map output was indeterminate, shuffle output will be indeterminate as well
+          DeterministicLevel.INDETERMINATE
+        } else if (dep.keyOrdering.isDefined && dep.aggregator.isDefined) {
+          // if aggregator specified (and so unique keys) and key ordering specified - then
+          // consistent ordering.
+          DeterministicLevel.DETERMINATE
+        } else {
+          // In Spark, the reducer fetches multiple remote shuffle blocks at the same time, and
+          // the arrival order of these shuffle blocks are totally random. Even if the parent map
+          // RDD is DETERMINATE, the reduce RDD is always UNORDERED.
+          DeterministicLevel.UNORDERED
+        }
+
+      // For narrow dependency, assume the output deterministic level of current RDD is same as
+      // parent.
+      case dep => dep.rdd.outputDeterministicLevel
+    }
+
+    if (deterministicLevelCandidates.isEmpty) {
+      // By default we assume the root RDD is determinate.
+      DeterministicLevel.DETERMINATE
+    } else {
+      deterministicLevelCandidates.maxBy(_.id)
+    }
+  }
 }
 
 
@@ -1917,4 +2013,19 @@ object RDD {
     : DoubleRDDFunctions = {
     new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
   }
+}
+
+/**
+ * The deterministic level of RDD's output (i.e. what `RDD#compute` returns). This explains how
+ * the output will diff when Spark reruns the tasks for the RDD. There are 3 deterministic levels:
+ * 1. DETERMINATE: The RDD output is always the same data set in the same order after a rerun.
+ * 2. UNORDERED: The RDD output is always the same data set but the order can be different
+ *               after a rerun.
+ * 3. INDETERMINATE. The RDD output can be different after a rerun.
+ *
+ * Note that, the output of an RDD usually relies on the parent RDDs. When the parent RDD's output
+ * is INDETERMINATE, it's very likely the RDD's output is also INDETERMINATE.
+ */
+private[spark] object DeterministicLevel extends Enumeration {
+  val DETERMINATE, UNORDERED, INDETERMINATE = Value
 }

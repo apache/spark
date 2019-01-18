@@ -88,6 +88,10 @@ a.kill-link {
   float: right;
 }
 
+a.name-link {
+  word-wrap: break-word;
+}
+
 span.expand-details {
   font-size: 10pt;
   cursor: pointer;
@@ -251,4 +255,110 @@ a.expandbutton {
 
 .table-cell-width-limited td {
   max-width: 600px;
+}
+
+.paginate_button.active > a {
+    color: #999999;
+    text-decoration: underline;
+}
+
+.title-table {
+  clear: left;
+  display: inline-block;
+}
+
+.table-dataTable {
+  width: 100%;
+}
+
+.container-fluid-div {
+  width: 200px;
+}
+
+.scheduler-delay-checkbox-div {
+  width: 120px;
+}
+
+.task-deserialization-time-checkbox-div {
+  width: 175px;
+}
+
+.shuffle-read-blocked-time-checkbox-div {
+  width: 187px;
+}
+
+.shuffle-remote-reads-checkbox-div {
+  width: 157px;
+}
+
+.result-serialization-time-checkbox-div {
+  width: 171px;
+}
+
+.getting-result-time-checkbox-div {
+  width: 141px;
+}
+
+.peak-execution-memory-checkbox-div {
+  width: 170px;
+}
+
+#active-tasks-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-tasks-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#accumulator-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#accumulator-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-executor-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-executor-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-metrics-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-metrics-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-execs-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-execs-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#active-executors-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-executors-table th:first-child {
+  border-left: 1px solid #dddddd;
 }

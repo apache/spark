@@ -28,12 +28,12 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer}
+import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -48,10 +48,31 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
   }
 
+  // Currently MapData just stores the key and value arrays. Its equality is not well implemented,
+  // as the order of the map entries should not matter for equality. This method creates MapData
+  // with the entries ordering preserved, so that we can deterministically test expressions with
+  // map input/output.
+  protected def create_map(entries: (_, _)*): ArrayBasedMapData = {
+    create_map(entries.map(_._1), entries.map(_._2))
+  }
+
+  protected def create_map(keys: Seq[_], values: Seq[_]): ArrayBasedMapData = {
+    assert(keys.length == values.length)
+    val keyArray = CatalystTypeConverters
+      .convertToCatalyst(keys)
+      .asInstanceOf[ArrayData]
+    val valueArray = CatalystTypeConverters
+      .convertToCatalyst(values)
+      .asInstanceOf[ArrayData]
+    new ArrayBasedMapData(keyArray, valueArray)
+  }
+
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val resolver = ResolveTimeZone(new SQLConf)
-    resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    val expr = resolver.resolveTimeZones(expression)
+    assert(expr.resolved)
+    serializer.deserialize(serializer.serialize(expr))
   }
 
   protected def checkEvaluation(
@@ -60,7 +81,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
-    checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
+    checkEvaluationWithMutableProjection(expr, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
       checkEvaluationWithUnsafeProjection(expr, catalystValue, inputRow)
     }
@@ -69,11 +90,22 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
 
   /**
    * Check the equality between result of expression and expected value, it will handle
-   * Array[Byte], Spread[Double], MapData and Row.
+   * Array[Byte], Spread[Double], MapData and Row. Also check whether nullable in expression is
+   * true if result is null
    */
-  protected def checkResult(result: Any, expected: Any, exprDataType: DataType): Boolean = {
+  protected def checkResult(result: Any, expected: Any, expression: Expression): Boolean = {
+    checkResult(result, expected, expression.dataType, expression.nullable)
+  }
+
+  protected def checkResult(
+      result: Any,
+      expected: Any,
+      exprDataType: DataType,
+      exprNullable: Boolean): Boolean = {
     val dataType = UserDefinedType.sqlType(exprDataType)
 
+    // The result is null for a non-nullable expression
+    assert(result != null || exprNullable, "exprNullable should be true if result is null")
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
@@ -83,24 +115,24 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         val st = dataType.asInstanceOf[StructType]
         assert(result.numFields == st.length && expected.numFields == st.length)
         st.zipWithIndex.forall { case (f, i) =>
-          checkResult(result.get(i, f.dataType), expected.get(i, f.dataType), f.dataType)
+          checkResult(
+            result.get(i, f.dataType), expected.get(i, f.dataType), f.dataType, f.nullable)
         }
       case (result: ArrayData, expected: ArrayData) =>
         result.numElements == expected.numElements && {
-          val et = dataType.asInstanceOf[ArrayType].elementType
+          val ArrayType(et, cn) = dataType.asInstanceOf[ArrayType]
           var isSame = true
           var i = 0
           while (isSame && i < result.numElements) {
-            isSame = checkResult(result.get(i, et), expected.get(i, et), et)
+            isSame = checkResult(result.get(i, et), expected.get(i, et), et, cn)
             i += 1
           }
           isSame
         }
       case (result: MapData, expected: MapData) =>
-        val kt = dataType.asInstanceOf[MapType].keyType
-        val vt = dataType.asInstanceOf[MapType].valueType
-        checkResult(result.keyArray, expected.keyArray, ArrayType(kt)) &&
-          checkResult(result.valueArray, expected.valueArray, ArrayType(vt))
+        val MapType(kt, vt, vcn) = dataType.asInstanceOf[MapType]
+        checkResult(result.keyArray, expected.keyArray, ArrayType(kt, false), false) &&
+          checkResult(result.valueArray, expected.valueArray, ArrayType(vt, vcn), false)
       case (result: Double, expected: Double) =>
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Float, expected: Float) =>
@@ -136,7 +168,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     // Make it as method to obtain fresh expression everytime.
     def expr = prepareEvaluation(expression)
     checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
-    checkException(evaluateWithGeneratedMutableProjection(expr, inputRow), "codegen mode")
+    checkException(evaluateWithMutableProjection(expr, inputRow), "codegen mode")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
       checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
     }
@@ -175,7 +207,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     val actual = try evaluateWithoutCodegen(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
-    if (!checkResult(actual, expected, expression.dataType)) {
+    if (!checkResult(actual, expected, expression)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect evaluation (codegen off): $expression, " +
         s"actual: $actual, " +
@@ -183,22 +215,28 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     }
   }
 
-  protected def checkEvaluationWithGeneratedMutableProjection(
-      expression: Expression,
+  protected def checkEvaluationWithMutableProjection(
+      expression: => Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-    val actual = evaluateWithGeneratedMutableProjection(expression, inputRow)
-    if (!checkResult(actual, expected, expression.dataType)) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail(s"Incorrect evaluation: $expression, actual: $actual, expected: $expected$input")
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (fallbackMode <- modes) {
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+        val actual = evaluateWithMutableProjection(expression, inputRow)
+        if (!checkResult(actual, expected, expression)) {
+          val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
+          fail(s"Incorrect evaluation (fallback mode = $fallbackMode): $expression, " +
+            s"actual: $actual, expected: $expected$input")
+        }
+      }
     }
   }
 
-  protected def evaluateWithGeneratedMutableProjection(
-      expression: Expression,
+  protected def evaluateWithMutableProjection(
+      expression: => Expression,
       inputRow: InternalRow = EmptyRow): Any = {
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
+      MutableProjection.create(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     plan.initialize(0)
 
@@ -215,18 +253,23 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow)
         val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 
+        val dataType = expression.dataType
+        if (!checkResult(unsafeRow.get(0, dataType), expected, dataType, expression.nullable)) {
+          fail("Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
+            s"$expression, actual: $unsafeRow, expected: $expected, " +
+            s"dataType: $dataType, nullable: ${expression.nullable}")
+        }
         if (expected == null) {
           if (!unsafeRow.isNullAt(0)) {
             val expectedRow = InternalRow(expected, expected)
-            fail("Incorrect evaluation in unsafe mode: " +
+            fail(s"Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
               s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
           }
         } else {
           val lit = InternalRow(expected, expected)
-          val expectedRow =
-            UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
+          val expectedRow = UnsafeProjection.create(Array(dataType, dataType)).apply(lit)
           if (unsafeRow != expectedRow) {
-            fail("Incorrect evaluation in unsafe mode: " +
+            fail(s"Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
               s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
           }
         }
@@ -255,9 +298,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation())
-    // We should analyze the plan first, otherwise we possibly optimize an unresolved plan.
-    val analyzedPlan = SimpleAnalyzer.execute(plan)
-    val optimizedPlan = SimpleTestOptimizer.execute(analyzedPlan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 
@@ -266,7 +307,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       expected: Spread[Double],
       inputRow: InternalRow = EmptyRow): Unit = {
     checkEvaluationWithoutCodegen(expression, expected)
-    checkEvaluationWithGeneratedMutableProjection(expression, expected)
+    checkEvaluationWithMutableProjection(expression, expected)
     checkEvaluationWithOptimization(expression, expected)
 
     var plan = generateProject(
@@ -274,15 +315,15 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       expression)
     plan.initialize(0)
     var actual = plan(inputRow).get(0, expression.dataType)
-    assert(checkResult(actual, expected, expression.dataType))
+    assert(checkResult(actual, expected, expression))
 
     plan = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     plan.initialize(0)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(
-      plan(inputRow)).get(0, expression.dataType)
-    assert(checkResult(actual, expected, expression.dataType))
+    val ref = new BoundReference(0, expression.dataType, nullable = true)
+    actual = GenerateSafeProjection.generate(ref :: Nil)(plan(inputRow)).get(0, expression.dataType)
+    assert(checkResult(actual, expected, expression))
   }
 
   /**
@@ -413,6 +454,17 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         s"$x or $y is extremely close to zero, so the relative tolerance is meaningless.", 0)
     } else {
       diff < eps * math.min(absX, absY)
+    }
+  }
+
+  def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (fallbackMode <- modes) {
+      test(s"$name with $fallbackMode") {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+          f
+        }
+      }
     }
   }
 }

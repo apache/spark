@@ -22,7 +22,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
-import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.clients.consumer.ConsumerConfig
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -33,9 +33,9 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
 import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchReadSupport
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
-import org.apache.spark.sql.sources.v2.{CustomMetrics, DataSourceOptions}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset, SupportsCustomReaderMetrics}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.UninterruptibleThread
 
@@ -61,8 +61,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     options: DataSourceOptions,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
-    failOnDataLoss: Boolean)
-  extends RateControlMicroBatchReadSupport with SupportsCustomReaderMetrics with Logging {
+    failOnDataLoss: Boolean) extends RateControlMicroBatchReadSupport with Logging {
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",
@@ -86,7 +85,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
 
   override def latestOffset(start: Offset): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets()
+    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
     endPartitionOffsets = KafkaSourceOffset(maxOffsetsPerTrigger.map { maxOffsets =>
       rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
     }.getOrElse {
@@ -124,7 +123,13 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     // Find deleted partitions, and report data loss if required
     val deletedPartitions = startPartitionOffsets.keySet.diff(endPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
-      reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed")
+      val message =
+        if (kafkaOffsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+          s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+        } else {
+          s"$deletedPartitions are gone. Some data may have been missed."
+        }
+      reportDataLoss(message)
     }
 
     // Use the end partitions to calculate offset ranges to ignore partitions that have
@@ -135,10 +140,21 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     }.toSeq
     logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
+    val fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets
+    val untilOffsets = endPartitionOffsets
+    untilOffsets.foreach { case (tp, untilOffset) =>
+      fromOffsets.get(tp).foreach { fromOffset =>
+        if (untilOffset < fromOffset) {
+          reportDataLoss(s"Partition $tp's offset was changed from " +
+            s"$fromOffset to $untilOffset, some data may have been missed")
+        }
+      }
+    }
+
     // Calculate offset ranges
     val offsetRanges = rangeCalculator.getRanges(
-      fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets,
-      untilOffsets = endPartitionOffsets,
+      fromOffsets = fromOffsets,
+      untilOffsets = untilOffsets,
       executorLocations = getSortedExecutorList())
 
     // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
@@ -154,13 +170,6 @@ private[kafka010] class KafkaMicroBatchReadSupport(
 
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
     KafkaMicroBatchReaderFactory
-  }
-
-  // TODO: figure out the life cycle of custom metrics, and make this method take `ScanConfig` as
-  // a parameter.
-  override def getCustomMetrics(): CustomMetrics = {
-    KafkaCustomMetrics(
-      kafkaOffsetReader.fetchLatestOffsets(), endPartitionOffsets.partitionToOffsets)
   }
 
   override def deserializeOffset(json: String): Offset = {
@@ -195,7 +204,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
         case EarliestOffsetRangeLimit =>
           KafkaSourceOffset(kafkaOffsetReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit =>
-          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets())
+          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) =>
           kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
       }
@@ -341,6 +350,7 @@ private[kafka010] case class KafkaMicroBatchPartitionReader(
       val record = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
       if (record != null) {
         nextRow = converter.toUnsafeRow(record)
+        nextOffset = record.offset + 1
         true
       } else {
         false
@@ -352,7 +362,6 @@ private[kafka010] case class KafkaMicroBatchPartitionReader(
 
   override def get(): UnsafeRow = {
     assert(nextRow != null)
-    nextOffset += 1
     nextRow
   }
 
@@ -383,19 +392,4 @@ private[kafka010] case class KafkaMicroBatchPartitionReader(
       range
     }
   }
-}
-
-/**
- * Currently reports per topic-partition lag.
- * This is the difference between the offset of the latest available data
- * in a topic-partition and the latest offset that has been processed.
- */
-private[kafka010] case class KafkaCustomMetrics(
-    latestOffsets: Map[TopicPartition, Long],
-    processedOffsets: Map[TopicPartition, Long]) extends CustomMetrics {
-  override def json(): String = {
-    JsonUtils.partitionLags(latestOffsets, processedOffsets)
-  }
-
-  override def toString: String = json()
 }

@@ -23,12 +23,11 @@ import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-import org.mockito.Matchers
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -77,7 +76,7 @@ class HeartbeatReceiverSuite
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
     heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
-    when(scheduler.executorHeartbeatReceived(any(), any(), any())).thenReturn(true)
+    when(scheduler.executorHeartbeatReceived(any(), any(), any(), any())).thenReturn(true)
   }
 
   /**
@@ -151,7 +150,7 @@ class HeartbeatReceiverSuite
     heartbeatReceiverClock.advance(executorTimeout)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
     // Only the second executor should be expired as a dead host
-    verify(scheduler).executorLost(Matchers.eq(executorId2), any())
+    verify(scheduler).executorLost(meq(executorId2), any())
     val trackedExecutors = getTrackedExecutors
     assert(trackedExecutors.size === 1)
     assert(trackedExecutors.contains(executorId1))
@@ -213,17 +212,20 @@ class HeartbeatReceiverSuite
       executorShouldReregister: Boolean): Unit = {
     val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
+    val executorUpdates = new ExecutorMetrics(Array(123456L, 543L, 12345L, 1234L, 123L,
+      12L, 432L, 321L, 654L, 765L))
     val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
-      Heartbeat(executorId, Array(1L -> metrics.accumulators()), blockManagerId))
+      Heartbeat(executorId, Array(1L -> metrics.accumulators()), blockManagerId, executorUpdates))
     if (executorShouldReregister) {
       assert(response.reregisterBlockManager)
     } else {
       assert(!response.reregisterBlockManager)
       // Additionally verify that the scheduler callback is called with the correct parameters
       verify(scheduler).executorHeartbeatReceived(
-        Matchers.eq(executorId),
-        Matchers.eq(Array(1L -> metrics.accumulators())),
-        Matchers.eq(blockManagerId))
+        meq(executorId),
+        meq(Array(1L -> metrics.accumulators())),
+        meq(blockManagerId),
+        meq(executorUpdates))
     }
   }
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import scala.collection.{GenMap, GenSeq}
-import scala.concurrent.ExecutionContext
+import scala.collection.parallel.ForkJoinTaskSupport
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -29,7 +29,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -40,7 +40,6 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
-import org.apache.spark.util.ThreadUtils.parmap
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -622,9 +621,8 @@ case class AlterTableRecoverPartitionsCommand(
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
     val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
       try {
-        implicit val ec = ExecutionContext.fromExecutor(evalPool)
         scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-          spark.sessionState.conf.resolver)
+          spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
       } finally {
         evalPool.shutdown()
       }
@@ -656,13 +654,23 @@ case class AlterTableRecoverPartitionsCommand(
       spec: TablePartitionSpec,
       partitionNames: Seq[String],
       threshold: Int,
-      resolver: Resolver)(implicit ec: ExecutionContext): Seq[(TablePartitionSpec, Path)] = {
+      resolver: Resolver,
+      evalTaskSupport: ForkJoinTaskSupport): GenSeq[(TablePartitionSpec, Path)] = {
     if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
 
-    val statuses = fs.listStatus(path, filter).toSeq
-    def handleStatus(st: FileStatus): Seq[(TablePartitionSpec, Path)] = {
+    val statuses = fs.listStatus(path, filter)
+    val statusPar: GenSeq[FileStatus] =
+      if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
+        // parallelize the list of partitions here, then we can have better parallelism later.
+        val parArray = statuses.par
+        parArray.tasksupport = evalTaskSupport
+        parArray
+      } else {
+        statuses
+      }
+    statusPar.flatMap { st =>
       val name = st.getPath.getName
       if (st.isDirectory && name.contains("=")) {
         val ps = name.split("=", 2)
@@ -671,7 +679,7 @@ case class AlterTableRecoverPartitionsCommand(
         val value = ExternalCatalogUtils.unescapePathName(ps(1))
         if (resolver(columnName, partitionNames.head)) {
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
-            partitionNames.drop(1), threshold, resolver)
+            partitionNames.drop(1), threshold, resolver, evalTaskSupport)
         } else {
           logWarning(
             s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
@@ -682,14 +690,6 @@ case class AlterTableRecoverPartitionsCommand(
         Seq.empty
       }
     }
-    val result = if (partitionNames.length > 1 &&
-        statuses.length > threshold || partitionNames.length > 2) {
-      parmap(statuses)(handleStatus _)
-    } else {
-      statuses.map(handleStatus)
-    }
-
-    result.flatten
   }
 
   private def gatherPartitionStats(
@@ -818,6 +818,14 @@ object DDLUtils {
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
     table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
+  }
+
+  def readHiveTable(table: CatalogTable): HiveTableRelation = {
+    HiveTableRelation(
+      table,
+      // Hive table columns are always nullable.
+      table.dataSchema.asNullable.toAttributes,
+      table.partitionSchema.asNullable.toAttributes)
   }
 
   /**

@@ -24,13 +24,15 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
-import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWritSupport, RateControlMicroBatchReadSupport}
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, RateControlMicroBatchReadSupport}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.Clock
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -146,6 +148,12 @@ class MicroBatchExecution(
     logInfo(s"Query $prettyIdString was stopped")
   }
 
+  /** Begins recording statistics about query progress for a given trigger. */
+  override protected def startTrigger(): Unit = {
+    super.startTrigger()
+    currentStatus = currentStatus.copy(isTriggerActive = true)
+  }
+
   /**
    * Repeatedly attempts to run batches as data arrives.
    */
@@ -239,6 +247,7 @@ class MicroBatchExecution(
    *  DONE
    */
   private def populateStartOffsets(sparkSessionToRunBatches: SparkSession): Unit = {
+    sinkCommitProgress = None
     offsetLog.getLatest() match {
       case Some((latestBatchId, nextOffsets)) =>
         /* First assume that we are re-executing the latest known batch
@@ -474,9 +483,10 @@ class MicroBatchExecution(
     val newBatchesPlan = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { dataPlan =>
+          val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == dataPlan.output.size,
-            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
-              s"${Utils.truncatedString(dataPlan.output, ",")}")
+            s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
+              s"${truncatedString(dataPlan.output, ",", maxFields)}")
 
           val aliases = output.zip(dataPlan.output).map { case (to, from) =>
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
@@ -505,12 +515,14 @@ class MicroBatchExecution(
           newAttributePlan.schema,
           outputMode,
           new DataSourceOptions(extraOptions.asJava))
-        WriteToDataSourceV2(new MicroBatchWritSupport(currentBatchId, writer), newAttributePlan)
+        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, writer), newAttributePlan)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
     sparkSessionToRunBatch.sparkContext.setLocalProperty(
       MicroBatchExecution.BATCH_ID_KEY, currentBatchId.toString)
+    sparkSessionToRunBatch.sparkContext.setLocalProperty(
+      StreamExecution.IS_CONTINUOUS_PROCESSING, false.toString)
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
@@ -518,6 +530,7 @@ class MicroBatchExecution(
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
+        id,
         runId,
         currentBatchId,
         offsetSeqMetadata)
@@ -527,7 +540,8 @@ class MicroBatchExecution(
     val nextBatch =
       new Dataset(sparkSessionToRunBatch, lastExecution, RowEncoder(lastExecution.analyzed.schema))
 
-    reportTimeTaken("addBatch") {
+    val batchSinkProgress: Option[StreamWriterCommitProgress] =
+      reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
@@ -535,10 +549,15 @@ class MicroBatchExecution(
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }
+        lastExecution.executedPlan match {
+          case w: WriteToDataSourceV2Exec => w.commitProgress
+          case _ => None
+        }
       }
     }
 
     withProgressLocked {
+      sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
       commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
       committedOffsets ++= availableOffsets
