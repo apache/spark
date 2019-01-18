@@ -94,6 +94,5 @@ private class DummyTaskScheduler extends TaskScheduler {
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId,
       executorMetrics: ExecutorMetrics): Boolean = true
-  override def completeTasks(
-    partitionId: Int, stageId: Int, taskInfo: TaskInfo, killTasks: Boolean): Unit = {}
+  override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {}
 }

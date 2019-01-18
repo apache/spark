@@ -286,29 +286,13 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def completeTasks(
-    partitionId: Int, stageId: Int, taskInfo: TaskInfo, killTasks: Boolean): Unit = {
+  override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.partitionToIndex.get(partitionId) match {
         case Some(index) =>
           tsm.markPartitionCompleted(index, taskInfo)
-          if (killTasks) {
-            val taskInfoList = tsm.taskAttempts(index)
-            taskInfoList.filter(_.running).foreach { tInfo =>
-              try {
-                killTaskAttempt(tInfo.taskId, false,
-                  s"Partition $partitionId is already completed")
-              } catch {
-                case e: Exception =>
-                  logWarning(s"Unable to kill Task ID ${tInfo.taskId}.")
-              }
-            }
-          }
 
         case None =>
-          throw new SparkException(s"No corresponding index found for" +
-            s" partition ID $partitionId in TaskSet ${tsm.name}. This is likely a bug" +
-            s" in the Spark TaskScheduler implementation. Please file a bug report")
       }
     }
   }

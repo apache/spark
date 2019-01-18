@@ -111,11 +111,11 @@ private[spark] trait TaskScheduler {
 
   /**
    * SPARK-25250: Whenever any Task gets successfully completed, we simply mark the
-   * corresponding partition id as completed in all attempts for that particular stage and
-   * additionally, for a Result Stage, we also kill the remaining task attempts running on the
-   * same partition. As a result, we do not see any Killed tasks due to
-   * TaskCommitDenied Exceptions showing up in the UI.
+   * corresponding partition id as completed in all attempts for that particular stage.
+   * This ensures that multiple attempts of the same task do not keep running even when the
+   * corresponding partition is completed. This method must be called from inside the DAGScheduler
+   * event loop, to ensure a consistent view of all task sets for the given stage.
    */
-  def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo, killTasks: Boolean): Unit
+  def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit
 
 }

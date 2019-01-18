@@ -160,8 +160,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
-    override def completeTasks(
-      partitionId: Int, stageId: Int, taskInfo: TaskInfo, killTasks: Boolean): Unit = {}
+    override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {}
   }
 
   /** Length of time to wait while draining listener events. */
@@ -669,8 +668,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
-      override def completeTasks(
-        partitionId: Int, stageId: Int, taskInfo: TaskInfo, killTasks: Boolean): Unit = {}
+      override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {}
     }
     val noKillScheduler = new DAGScheduler(
       sc,
