@@ -17,10 +17,7 @@
 
 from __future__ import print_function
 
-import os
-import sys
-
-from py4j.java_gateway import java_import, JavaObject
+from py4j.java_gateway import java_import
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
