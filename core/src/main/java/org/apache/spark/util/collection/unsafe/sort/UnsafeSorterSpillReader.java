@@ -60,10 +60,9 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     final ConfigEntry<Object> bufferSizeConfigEntry =
         package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
     // This value must be less than or equal to MAX_BUFFER_SIZE_BYTES. Cast to int is always safe.
-    final int DEFAULT_BUFFER_SIZE_BYTES = (int)(long)bufferSizeConfigEntry.defaultValue().get();
-    int bufferSizeBytes =
-        SparkEnv.get() == null ?
-            DEFAULT_BUFFER_SIZE_BYTES : (int)SparkEnv.get().conf().get(bufferSizeConfigEntry);
+    final int DEFAULT_BUFFER_SIZE_BYTES = ((Long)bufferSizeConfigEntry.defaultValue().get()).intValue();
+    int bufferSizeBytes = SparkEnv.get() == null ? DEFAULT_BUFFER_SIZE_BYTES :
+        ((Long)SparkEnv.get().conf().get(bufferSizeConfigEntry)).intValue();
 
     final boolean readAheadEnabled = SparkEnv.get() != null && (boolean)SparkEnv.get().conf().get(
         package$.MODULE$.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED());
