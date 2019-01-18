@@ -16,7 +16,6 @@
 #
 
 from __future__ import print_function
-import socket
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import write_int, UTF8Deserializer

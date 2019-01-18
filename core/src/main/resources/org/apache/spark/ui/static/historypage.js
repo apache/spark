@@ -103,12 +103,12 @@ $(document).ready(function() {
       pageLength: 20
     });
 
-    historySummary = $("#history-summary");
-    searchString = historySummary["context"]["location"]["search"];
-    requestedIncomplete = getParameterByName("showIncomplete", searchString);
+    var historySummary = $("#history-summary");
+    var searchString = historySummary["context"]["location"]["search"];
+    var requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    appParams = {
+    var appParams = {
       limit: appLimit,
       status: (requestedIncomplete ? "running" : "completed")
     };
@@ -116,7 +116,7 @@ $(document).ready(function() {
     $.getJSON(uiRoot + "/api/v1/applications", appParams, function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
-      for (i in response) {
+      for (var i in response) {
         var app = response[i];
         if (app["attempts"][0]["completed"] == requestedIncomplete) {
           continue; // if we want to show for Incomplete, we skip the completed apps; otherwise skip incomplete ones.
@@ -127,7 +127,7 @@ $(document).ready(function() {
             hasMultipleAttempts = true;
         }
         var num = app["attempts"].length;
-        for (j in app["attempts"]) {
+        for (var j in app["attempts"]) {
           var attempt = app["attempts"][j];
           attempt["startTime"] = formatTimeMillis(attempt["startTimeEpoch"]);
           attempt["endTime"] = formatTimeMillis(attempt["endTimeEpoch"]);
@@ -149,7 +149,7 @@ $(document).ready(function() {
         "applications": array,
         "hasMultipleAttempts": hasMultipleAttempts,
         "showCompletedColumns": !requestedIncomplete,
-      }
+      };
 
       $.get(uiRoot + "/static/historypage-template.html", function(template) {
         var sibling = historySummary.prev();
@@ -157,7 +157,7 @@ $(document).ready(function() {
         var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var attemptIdColumnName = 'attemptId';
         var startedColumnName = 'started';
-        var defaultSortColumn = completedColumnName = 'completed';
+        var completedColumnName = 'completed';
         var durationColumnName = 'duration';
         var conf = {
           "columns": [
