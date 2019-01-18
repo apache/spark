@@ -87,7 +87,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
   def writingCommandClass: Class[_]
 
   override def argString(maxFields: Int): String = {
-    s"[Database:${tableDesc.database}, " +
+    s"[Database: ${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
     s"${Utils.getSimpleName(writingCommandClass)}]"
   }
