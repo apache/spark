@@ -1082,4 +1082,11 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val SUBMIT_TASK_BINARY_WANRING_THRESHOLD =
+    ConfigBuilder("spark.submit.taskBinaryWarningThreshold")
+    .doc("Warning size Threshold for taskBinary to broadcast when submitting task, " +
+      "large task binary size may indicate unexpected data in RDD closure or potential risk.")
+      .bytesConf(ByteUnit.MiB)
+      .createWithDefaultString("100m")
 }
