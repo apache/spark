@@ -29,7 +29,7 @@ from collections import namedtuple
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
-from sparktestsupport.toposort import toposort_flatten, toposort
+from sparktestsupport.toposort import toposort_flatten
 import sparktestsupport.modules as modules
 
 
@@ -152,30 +152,6 @@ def determine_java_executable():
     # if the java_exe wasn't set, check for a `java` version on the $PATH
     return java_exe if java_exe else which("java")
 
-
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
-
-
-def determine_java_version(java_exe):
-    """Given a valid java executable will return its version in named tuple format
-    with accessors '.major', '.minor', '.patch', '.update'"""
-
-    raw_output = subprocess.check_output([java_exe, "-version"],
-                                         stderr=subprocess.STDOUT,
-                                         universal_newlines=True)
-
-    raw_output_lines = raw_output.split('\n')
-
-    # find raw version string, eg 'java version "1.8.0_25"'
-    raw_version_str = next(x for x in raw_output_lines if " version " in x)
-
-    match = re.search(r'(\d+)\.(\d+)\.(\d+)', raw_version_str)
-
-    major = int(match.group(1))
-    minor = int(match.group(2))
-    patch = int(match.group(3))
-
-    return JavaVersion(major, minor, patch)
 
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
@@ -443,7 +419,6 @@ def run_python_packaging_tests():
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
-    pass
 
 
 def run_sparkr_tests():
@@ -494,8 +469,6 @@ def main():
         print("[error] Cannot find a version of `java` on the system; please",
               " install one and retry.")
         sys.exit(2)
-
-    java_version = determine_java_version(java_exe)
 
     # install SparkR
     if which("R"):
