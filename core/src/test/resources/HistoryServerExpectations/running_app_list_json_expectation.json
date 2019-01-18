@@ -1,1 +1,17 @@
-[ ]
+[ {
+  "id" : "application_1547723113049_0006",
+  "name" : "Spark SQL basic example",
+  "attempts" : [ {
+    "attemptId" : "1",
+    "startTime" : "2019-01-18T05:14:14.200GMT",
+    "endTime" : "1969-12-31T23:59:59.999GMT",
+    "lastUpdated" : "",
+    "duration" : 0,
+    "sparkUser" : "spark",
+    "completed" : false,
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "startTimeEpoch" : 1547788454200,
+    "endTimeEpoch" : -1,
+    "lastUpdatedEpoch" : 0
+  } ]
+} ]

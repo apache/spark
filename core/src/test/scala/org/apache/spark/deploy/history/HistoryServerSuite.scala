@@ -189,6 +189,34 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
+  val casesCustomLogUrl = Seq(
+    "completed app executor list json apply custom log urls" ->
+      "applications/application_1547723113049_0005/1/executors",
+    "incomplete app executor list json apply custom log urls" ->
+      "applications/application_1547723113049_0006/1/executors",
+  )
+
+  casesCustomLogUrl.foreach { case (name, path) =>
+    test(name) {
+      // This only verifies whether applying custom log URLs is in effect for SHS.
+      // Validation of "custom log URLs" functionality will be covered from different UTs.
+
+      // restart server
+      try {
+        stop()
+        init((History.CUSTOM_EXECUTOR_LOG_URL.key, "http://newhost:9999/logs/clusters/" +
+          "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}})"))
+
+        val expectationFile = new File(expRoot, HistoryServerSuite.sanitizePath(name) +
+          "_expectation.json")
+        assertApiCallResponse(path, expectationFile)
+      } finally {
+        // make sure other UTs are not affected from relaunching HistoryServer
+        stop()
+      }
+    }
+  }
+
   // SPARK-10873 added the lastUpdated field for each application's attempt,
   // the REST API returns the last modified time of EVENT LOG file for this field.
   // It is not applicable to hard-code this dynamic field in a static expected file,
@@ -629,26 +657,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         val sc = TestUtils.httpResponseCode(new URL(url), headers = headers)
         assert(sc === expectedCode, s"Unexpected status code $sc for $url (user = $user)")
       }
-    }
-  }
-
-  test("Apply custom log urls") {
-    // This only verifies whether applying custom log URLs is in effect for SHS.
-    // Validation of "custom log URLs" functionality will be covered from different UTs.
-
-    // restart server
-    try {
-      stop()
-      init((History.CUSTOM_EXECUTOR_LOG_URL.key, "http://newhost:9999/logs/clusters/" +
-        "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}})"))
-
-      val path = "applications/application_1547723113049_0005/1/executors"
-      val expectation = "executor_list_json_apply_custom_log_urls_expectation.json"
-
-      assertApiCallResponse(path, new File(expRoot, expectation))
-    } finally {
-      // make sure other UTs are not affected from relaunching HistoryServer
-      stop()
     }
   }
 
