@@ -645,19 +645,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       val path = "applications/application_1547723113049_0005/1/executors"
       val expectation = "executor_list_json_apply_custom_log_urls_expectation.json"
 
-      val (code, jsonOpt, errOpt) = getContentAndCode(path)
-      code should be (HttpServletResponse.SC_OK)
-      jsonOpt should be ('defined)
-      errOpt should be (None)
-
-      val exp = IOUtils.toString(new FileInputStream(new File(expRoot, expectation)))
-      // compare the ASTs so formatting differences don't cause failures
-      import org.json4s._
-      import org.json4s.jackson.JsonMethods._
-      val jsonAst = parse(clearLastUpdated(jsonOpt.get))
-      val expAst = parse(exp)
-      assertValidDataInJson(jsonAst, expAst)
-
+      assertApiCallResponse(path, new File(expRoot, expectation))
     } finally {
       // make sure other UTs are not affected from relaunching HistoryServer
       stop()
