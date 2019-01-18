@@ -110,7 +110,7 @@ case class AnalyzePartitionCommand(
       val newTotalSize = CommandUtils.calculateLocationSize(
         sessionState, tableMeta.identifier, p.storage.locationUri)
       val newRowCount = rowCounts.get(p.spec)
-      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      val newStats = CommandUtils.compareAndGetNewStats(p.stats, newTotalSize, newRowCount)
       newStats.map(_ => p.copy(stats = newStats))
     }
 
