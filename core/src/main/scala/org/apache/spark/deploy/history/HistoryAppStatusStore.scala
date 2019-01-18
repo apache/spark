@@ -83,7 +83,7 @@ private[spark] class HistoryAppStatusStore(
       Map("log" -> updatedUrl)
     }
 
-    exec.copy(executorLogs = newLogUrlMap)
+    exec.replaceExecutorLogs(newLogUrlMap)
   }
 
   private def logFailToRenewLogUrls(

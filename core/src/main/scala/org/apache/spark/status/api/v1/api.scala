@@ -78,36 +78,45 @@ class ExecutorStageSummary private[spark](
     val diskBytesSpilled : Long,
     val isBlacklistedForStage: Boolean)
 
-case class ExecutorSummary private[spark](
-    id: String,
-    hostPort: String,
-    isActive: Boolean,
-    rddBlocks: Int,
-    memoryUsed: Long,
-    diskUsed: Long,
-    totalCores: Int,
-    maxTasks: Int,
-    activeTasks: Int,
-    failedTasks: Int,
-    completedTasks: Int,
-    totalTasks: Int,
-    totalDuration: Long,
-    totalGCTime: Long,
-    totalInputBytes: Long,
-    totalShuffleRead: Long,
-    totalShuffleWrite: Long,
-    isBlacklisted: Boolean,
-    maxMemory: Long,
-    addTime: Date,
-    removeTime: Option[Date],
-    removeReason: Option[String],
-    executorLogs: Map[String, String],
-    memoryMetrics: Option[MemoryMetrics],
-    blacklistedInStages: Set[Int],
+class ExecutorSummary private[spark](
+    val id: String,
+    val hostPort: String,
+    val isActive: Boolean,
+    val rddBlocks: Int,
+    val memoryUsed: Long,
+    val diskUsed: Long,
+    val totalCores: Int,
+    val maxTasks: Int,
+    val activeTasks: Int,
+    val failedTasks: Int,
+    val completedTasks: Int,
+    val totalTasks: Int,
+    val totalDuration: Long,
+    val totalGCTime: Long,
+    val totalInputBytes: Long,
+    val totalShuffleRead: Long,
+    val totalShuffleWrite: Long,
+    val isBlacklisted: Boolean,
+    val maxMemory: Long,
+    val addTime: Date,
+    val removeTime: Option[Date],
+    val removeReason: Option[String],
+    val executorLogs: Map[String, String],
+    val memoryMetrics: Option[MemoryMetrics],
+    val blacklistedInStages: Set[Int],
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
-    peakMemoryMetrics: Option[ExecutorMetrics],
-    @JsonIgnore attributes: Map[String, String] = Map.empty)
+    val peakMemoryMetrics: Option[ExecutorMetrics],
+    @JsonIgnore val attributes: Map[String, String]) {
+
+  def replaceExecutorLogs(newExecutorLogs: Map[String, String]): ExecutorSummary = {
+    new ExecutorSummary(id, hostPort, isActive, rddBlocks, memoryUsed, diskUsed, totalCores,
+      maxTasks, activeTasks, failedTasks, completedTasks, totalTasks, totalDuration,
+      totalGCTime, totalInputBytes, totalShuffleRead, totalShuffleWrite, isBlacklisted,
+      maxMemory, addTime, removeTime, removeReason, newExecutorLogs, memoryMetrics,
+      blacklistedInStages, peakMemoryMetrics, attributes)
+  }
+}
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,

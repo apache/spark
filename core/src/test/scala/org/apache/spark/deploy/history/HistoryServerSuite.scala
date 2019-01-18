@@ -183,19 +183,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   // in the test resource folder
   cases.foreach { case (name, path) =>
     test(name) {
-      val (code, jsonOpt, errOpt) = getContentAndCode(path)
-      code should be (HttpServletResponse.SC_OK)
-      jsonOpt should be ('defined)
-      errOpt should be (None)
-
-      val exp = IOUtils.toString(new FileInputStream(
-        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
-      // compare the ASTs so formatting differences don't cause failures
-      import org.json4s._
-      import org.json4s.jackson.JsonMethods._
-      val jsonAst = parse(clearLastUpdated(jsonOpt.get))
-      val expAst = parse(exp)
-      assertValidDataInJson(jsonAst, expAst)
+      val expectationFile = new File(expRoot, HistoryServerSuite.sanitizePath(name) +
+        "_expectation.json")
+      assertApiCallResponse(path, expectationFile)
     }
   }
 
@@ -642,6 +632,38 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
+  test("Apply custom log urls") {
+    // This only verifies whether applying custom log URLs is in effect for SHS.
+    // Validation of "custom log URLs" functionality will be covered from different UTs.
+
+    // restart server
+    try {
+      stop()
+      init((History.CUSTOM_EXECUTOR_LOG_URL.key, "http://newhost:9999/logs/clusters/" +
+        "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}})"))
+
+      val path = "applications/application_1547723113049_0005/1/executors"
+      val expectation = "executor_list_json_apply_custom_log_urls_expectation.json"
+
+      val (code, jsonOpt, errOpt) = getContentAndCode(path)
+      code should be (HttpServletResponse.SC_OK)
+      jsonOpt should be ('defined)
+      errOpt should be (None)
+
+      val exp = IOUtils.toString(new FileInputStream(new File(expRoot, expectation)))
+      // compare the ASTs so formatting differences don't cause failures
+      import org.json4s._
+      import org.json4s.jackson.JsonMethods._
+      val jsonAst = parse(clearLastUpdated(jsonOpt.get))
+      val expAst = parse(exp)
+      assertValidDataInJson(jsonAst, expAst)
+
+    } finally {
+      // make sure other UTs are not affected from relaunching HistoryServer
+      stop()
+    }
+  }
+
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
     HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
   }
@@ -661,6 +683,21 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     out.write(clearLastUpdated(json))
     out.write('\n')
     out.close()
+  }
+
+  private def assertApiCallResponse(path: String, expectationFile: File): Unit = {
+    val (code, jsonOpt, errOpt) = getContentAndCode(path)
+    code should be (HttpServletResponse.SC_OK)
+    jsonOpt should be ('defined)
+    errOpt should be (None)
+
+    val exp = IOUtils.toString(new FileInputStream(expectationFile))
+    // compare the ASTs so formatting differences don't cause failures
+    import org.json4s._
+    import org.json4s.jackson.JsonMethods._
+    val jsonAst = parse(clearLastUpdated(jsonOpt.get))
+    val expAst = parse(exp)
+    assertValidDataInJson(jsonAst, expAst)
   }
 
 }
