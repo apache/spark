@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -180,6 +181,29 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         spark.table(tableName).explain(extended = false)
       }
       assert(output.toString.contains(s"Scan hive default.$tableName"))
+    }
+  }
+
+  test("SPARK-26661: Show actual class name of the writing command in CTAS explain") {
+    Seq(true, false).foreach { convertCTAS =>
+
+      withSQLConf(
+          HiveUtils.CONVERT_METASTORE_CTAS.key -> convertCTAS.toString,
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertCTAS.toString) {
+
+        val tableName = "tab1"
+        checkKeywordsExist(
+          df = sql(s"EXPLAIN CREATE TABLE $tableName STORED AS PARQUET AS SELECT * FROM range(2)"),
+          (if (convertCTAS) {
+            Seq(
+              "Execute OptimizedCreateHiveTableAsSelectCommand",
+              "InsertIntoHadoopFsRelationCommand")
+          } else {
+            Seq(
+              "Execute CreateHiveTableAsSelectCommand",
+              "InsertIntoHiveTable")
+          }): _*)
+      }
     }
   }
 }

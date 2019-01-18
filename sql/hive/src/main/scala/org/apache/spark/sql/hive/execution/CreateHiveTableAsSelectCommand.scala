@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.hive.HiveSessionCatalog
+import org.apache.spark.util.Utils
 
 trait CreateHiveTableAsSelectBase extends DataWritingCommand {
   val tableDesc: CatalogTable
@@ -83,10 +84,12 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     tableDesc: CatalogTable,
     tableExists: Boolean): DataWritingCommand
 
+  def writingCommandClass: Class[_]
+
   override def argString(maxFields: Int): String = {
     s"[Database:${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
-    s"InsertIntoHiveTable]"
+    s"${Utils.getSimpleName(writingCommandClass)}]"
   }
 }
 
@@ -118,6 +121,8 @@ case class CreateHiveTableAsSelectCommand(
       ifPartitionNotExists = false,
       outputColumnNames = outputColumnNames)
   }
+
+  override def writingCommandClass: Class[_] = classOf[InsertIntoHiveTable]
 }
 
 /**
@@ -162,4 +167,6 @@ case class OptimizedCreateHiveTableAsSelectCommand(
       Some(hadoopRelation.location),
       query.output.map(_.name))
   }
+
+  override def writingCommandClass: Class[_] = classOf[InsertIntoHadoopFsRelationCommand]
 }
