@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
+import java.time.LocalDate
 import java.util.{Calendar, Locale, TimeZone}
 
 import scala.util.control.NonFatal
@@ -462,20 +463,14 @@ case class DayOfWeek(child: Expression) extends DayWeek {
 case class WeekDay(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    (cal.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.getDayOfWeek.ordinal()
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = "calWeekDay"
-      ctx.addImmutableStateIfNotExists(cal, c,
-        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
       s"""
-        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.value} = ($c.get($cal.DAY_OF_WEEK) + 5) % 7;
+         ${ev.value} = java.time.LocalDate.ofEpochDay($time).getDayOfWeek().ordinal();
       """
     })
   }
