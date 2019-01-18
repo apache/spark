@@ -170,7 +170,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
-    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt2")
+    spark.read.json(rdd2.toDS()).createOrReplaceTempView("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
