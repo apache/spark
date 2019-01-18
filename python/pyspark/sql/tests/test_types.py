@@ -206,8 +206,7 @@ class TypesTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
         ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
         actual = list(map(lambda r: int(r.value), ret))
-        expected = [0, 10]
-        assert actual == expected
+        self.assertEqual(actual, [0, 10])
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
