@@ -28,8 +28,6 @@ import org.apache.spark.io.ReadAheadInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.*;
 
@@ -38,7 +36,6 @@ import java.io.*;
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
   public static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
@@ -62,20 +59,21 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     assert (file.length() > 0);
     final ConfigEntry<Object> bufferSizeConfigEntry =
         package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
-    final long DEFAULT_BUFFER_SIZE_BYTES = (long)bufferSizeConfigEntry.defaultValue().get();
-    long bufferSizeBytes =
+    // This value must be less than or equal to MAX_BUFFER_SIZE_BYTES. Cast to int is always safe.
+    final int DEFAULT_BUFFER_SIZE_BYTES = (int)(long)bufferSizeConfigEntry.defaultValue().get();
+    int bufferSizeBytes =
         SparkEnv.get() == null ?
-            DEFAULT_BUFFER_SIZE_BYTES : (long)SparkEnv.get().conf().get(bufferSizeConfigEntry);
+            DEFAULT_BUFFER_SIZE_BYTES : (int)SparkEnv.get().conf().get(bufferSizeConfigEntry);
 
     final boolean readAheadEnabled = SparkEnv.get() != null && (boolean)SparkEnv.get().conf().get(
         package$.MODULE$.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED());
 
     final InputStream bs =
-        new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
+        new NioBufferedFileInputStream(file, bufferSizeBytes);
     try {
       if (readAheadEnabled) {
         this.in = new ReadAheadInputStream(serializerManager.wrapStream(blockId, bs),
-                (int) bufferSizeBytes);
+                bufferSizeBytes);
       } else {
         this.in = serializerManager.wrapStream(blockId, bs);
       }

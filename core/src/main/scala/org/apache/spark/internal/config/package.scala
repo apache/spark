@@ -735,16 +735,19 @@ package object config {
 
   private[spark] val UNSAFE_EXCEPTION_ON_MEMORY_LEAK =
     ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
+      .internal()
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED =
     ConfigBuilder("spark.unsafe.sorter.spill.read.ahead.enabled")
+      .internal()
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE =
     ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
+      .internal()
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => 1024 * 1024 <= v && v <= MAX_BUFFER_SIZE_BYTES,
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
