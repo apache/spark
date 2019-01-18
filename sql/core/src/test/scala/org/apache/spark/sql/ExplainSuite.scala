@@ -25,16 +25,25 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   /**
+   * Get the explain from a DataFrame and run the specified action on it.
+   */
+  private def withNormalizedExplain(df: DataFrame, extended: Boolean)(f: String => Unit) = {
+    val output = new java.io.ByteArrayOutputStream()
+    Console.withOut(output) {
+      df.explain(extended = extended)
+    }
+    val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
+    f(normalizedOutput)
+  }
+
+  /**
    * Runs the plan and makes sure the plans contains all of the keywords.
    */
   private def checkKeywordsExistsInExplain(df: DataFrame, keywords: String*): Unit = {
-    val output = new java.io.ByteArrayOutputStream()
-    Console.withOut(output) {
-      df.explain(extended = true)
-    }
-    val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
-    for (key <- keywords) {
-      assert(normalizedOutput.contains(key))
+    withNormalizedExplain(df, extended = true) { normalizedOutput =>
+      for (key <- keywords) {
+        assert(normalizedOutput.contains(key))
+      }
     }
   }
 
@@ -181,6 +190,15 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
       "Project [coalesce(cast(id#xL as string), x) AS ifnull(`id`, 'x')#x, " +
         "id#xL AS nullif(`id`, 'x')#xL, coalesce(cast(id#xL as string), x) AS nvl(`id`, 'x')#x, " +
         "x AS nvl2(`id`, 'x', 'y')#x]")
+  }
+
+  test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
+    withTable("temptable") {
+      val df = sql("create table temptable using parquet as select * from range(2)")
+      withNormalizedExplain(df, extended = false) { normalizedOutput =>
+        assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
+      }
+    }
   }
 }
 
