@@ -21,7 +21,7 @@ import java.util.Date
 
 import scala.xml.{NodeSeq, Text}
 
-import com.fasterxml.jackson.annotation.{JsonIgnore, JsonIgnoreProperties}
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
@@ -107,7 +107,7 @@ class ExecutorSummary private[spark](
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
-    @JsonIgnore val attributes: Map[String, String]) {
+    val attributes: Map[String, String]) {
 
   def replaceExecutorLogs(newExecutorLogs: Map[String, String]): ExecutorSummary = {
     new ExecutorSummary(id, hostPort, isActive, rddBlocks, memoryUsed, diskUsed, totalCores,
