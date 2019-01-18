@@ -345,7 +345,7 @@ private[spark] class MesosClusterScheduler(
       this.masterInfo = Some(masterInfo)
       this.schedulerDriver = driver
 
-      if (!pendingRecover.isEmpty) {
+      if (pendingRecover.nonEmpty) {
         // Start task reconciliation if we need to recover.
         val statuses = pendingRecover.collect {
           case (taskId, slaveId) =>
@@ -766,6 +766,10 @@ private[spark] class MesosClusterScheduler(
         val state = launchedDrivers(subId)
         // Check if the driver is supervise enabled and can be relaunched.
         if (state.driverDescription.supervise && shouldRelaunch(status.getState)) {
+          if (taskIsOutdated(taskId, state)) {
+            // Prevent outdated task from overwriting a more recent status
+            return
+          }
           removeFromLaunchedDrivers(subId)
           state.finishDate = Some(new Date())
           val retryState: Option[MesosClusterRetryState] = state.driverDescription.retryState
@@ -785,6 +789,15 @@ private[spark] class MesosClusterScheduler(
       }
     }
   }
+
+  /**
+   * Check if the task has already been launched or is pending
+   * If neither, the taskId is outdated and should be ignored
+   * This is to avoid scenarios where an outdated status update arrives
+   * after a supervised driver has already been relaunched
+   */
+  private def taskIsOutdated(taskId: String, state: MesosClusterSubmissionState): Boolean =
+    taskId != state.taskId.getValue && !pendingRetryDrivers.contains(state.driverDescription)
 
   private def retireDriver(
       submissionId: String,
