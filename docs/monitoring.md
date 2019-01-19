@@ -259,6 +259,15 @@ Security options for the Spark History Server are covered more detail in the
         For now, YARN mode only supports this configuration.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.custom.executor.log.url.applyIncompleteApplication</td>
+    <td>false</td>
+    <td>
+        Specifies whether apply custom spark executor log url to incomplete applications as well.
+        If executor logs for running applications should be provided as origin log urls, set this to `false`.
+        Please note that incomplete applications may include applications which didn't shutdown gracefully.
+    </td>
+  </tr>
 
 </table>
 

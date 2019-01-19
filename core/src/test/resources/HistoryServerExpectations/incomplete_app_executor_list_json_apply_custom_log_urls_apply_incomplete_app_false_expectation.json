@@ -1,0 +1,114 @@
+[ {
+  "id" : "driver",
+  "hostPort" : "node2:40675",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 0,
+  "maxTasks" : 0,
+  "activeTasks" : 0,
+  "failedTasks" : 0,
+  "completedTasks" : 0,
+  "totalTasks" : 0,
+  "totalDuration" : 0,
+  "totalGCTime" : 0,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : false,
+  "maxMemory" : 428762726,
+  "addTime" : "2019-01-18T05:14:05.481GMT",
+  "executorLogs" : {
+    "stdout" : "http://node2:8042/node/containerlogs/container_e01_1547723113049_0005_01_000001/spark/stdout?start=-4096",
+    "stderr" : "http://node2:8042/node/containerlogs/container_e01_1547723113049_0005_01_000001/spark/stderr?start=-4096"
+  },
+  "memoryMetrics" : {
+    "usedOnHeapStorageMemory" : 0,
+    "usedOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 428762726,
+    "totalOffHeapStorageMemory" : 0
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
+}, {
+  "id" : "2",
+  "hostPort" : "node4:44875",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 1,
+  "maxTasks" : 1,
+  "activeTasks" : 0,
+  "failedTasks" : 0,
+  "completedTasks" : 0,
+  "totalTasks" : 0,
+  "totalDuration" : 0,
+  "totalGCTime" : 0,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : false,
+  "maxMemory" : 384093388,
+  "addTime" : "2019-01-18T05:14:15.343GMT",
+  "executorLogs" : {
+    "stdout" : "http://node4:8042/node/containerlogs/container_e01_1547723113049_0005_01_000003/spark/stdout?start=-4096",
+    "stderr" : "http://node4:8042/node/containerlogs/container_e01_1547723113049_0005_01_000003/spark/stderr?start=-4096"
+  },
+  "memoryMetrics" : {
+    "usedOnHeapStorageMemory" : 0,
+    "usedOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 384093388,
+    "totalOffHeapStorageMemory" : 0
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : {
+    "NODE_HTTP_ADDRESS" : "node4:8042",
+    "USER" : "spark",
+    "LOG_FILES" : "stderr,stdout",
+    "CLUSTER_ID" : "yarn-cluster",
+    "HTTP_SCHEME" : "http://",
+    "CONTAINER_ID" : "container_e01_1547723113049_0005_01_000003"
+  }
+}, {
+  "id" : "1",
+  "hostPort" : "node3:35087",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 1,
+  "maxTasks" : 1,
+  "activeTasks" : 0,
+  "failedTasks" : 0,
+  "completedTasks" : 1,
+  "totalTasks" : 1,
+  "totalDuration" : 4025,
+  "totalGCTime" : 159,
+  "totalInputBytes" : 73,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : false,
+  "maxMemory" : 384093388,
+  "addTime" : "2019-01-18T05:14:14.209GMT",
+  "executorLogs" : {
+    "stdout" : "http://node3:8042/node/containerlogs/container_e01_1547723113049_0005_01_000002/spark/stdout?start=-4096",
+    "stderr" : "http://node3:8042/node/containerlogs/container_e01_1547723113049_0005_01_000002/spark/stderr?start=-4096"
+  },
+  "memoryMetrics" : {
+    "usedOnHeapStorageMemory" : 0,
+    "usedOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 384093388,
+    "totalOffHeapStorageMemory" : 0
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : {
+    "NODE_HTTP_ADDRESS" : "node3:8042",
+    "USER" : "spark",
+    "LOG_FILES" : "stderr,stdout",
+    "CLUSTER_ID" : "yarn-cluster",
+    "HTTP_SCHEME" : "http://",
+    "CONTAINER_ID" : "container_e01_1547723113049_0005_01_000002"
+  }
+} ]

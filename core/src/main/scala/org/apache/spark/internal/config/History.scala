@@ -133,4 +133,10 @@ private[spark] object History {
       "resource manager to refer which patterns are supported.")
     .stringConf
     .createOptional
+
+  val APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP =
+    ConfigBuilder("spark.history.custom.executor.log.url.applyIncompleteApplication")
+      .doc("Whether apply custom executor log url to incomplete application as well")
+      .booleanConf
+      .createWithDefault(true)
 }

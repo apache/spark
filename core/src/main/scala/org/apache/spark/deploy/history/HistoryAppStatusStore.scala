@@ -21,7 +21,7 @@ import scala.util.matching.Regex
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.History.CUSTOM_EXECUTOR_LOG_URL
+import org.apache.spark.internal.config.History.{APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP, CUSTOM_EXECUTOR_LOG_URL}
 import org.apache.spark.status.{AppStatusListener, AppStatusStore}
 import org.apache.spark.status.api.v1
 import org.apache.spark.status.api.v1.ExecutorSummary
@@ -36,19 +36,40 @@ private[spark] class HistoryAppStatusStore(
   import HistoryAppStatusStore._
 
   private val logUrlPattern: Option[String] = conf.get(CUSTOM_EXECUTOR_LOG_URL)
+  private val applyReplaceLogUrlToIncompleteApp: Boolean =
+    conf.get(APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP)
 
   override def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
+    val execList = super.executorList(activeOnly)
     logUrlPattern match {
-      case Some(pattern) => super.executorList(activeOnly).map(replaceLogUrls(_, pattern))
-      case None => super.executorList(activeOnly)
+      case Some(pattern) =>
+        if (applyReplaceLogUrlToIncompleteApp || isApplicationCompleted) {
+          execList.map(replaceLogUrls(_, pattern))
+        } else {
+          execList
+        }
+
+      case None => execList
     }
   }
 
   override def executorSummary(executorId: String): v1.ExecutorSummary = {
+    val execSummary = super.executorSummary(executorId)
     logUrlPattern match {
-      case Some(pattern) => replaceLogUrls(super.executorSummary(executorId), pattern)
-      case None => super.executorSummary(executorId)
+      case Some(pattern) =>
+        if (applyReplaceLogUrlToIncompleteApp || isApplicationCompleted) {
+          replaceLogUrls(execSummary, pattern)
+        } else {
+          execSummary
+        }
+
+      case None => execSummary
     }
+  }
+
+  private def isApplicationCompleted: Boolean = {
+    val appInfo = super.applicationInfo()
+    appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
   }
 
   private def replaceLogUrls(exec: ExecutorSummary, urlPattern: String): ExecutorSummary = {

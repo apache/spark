@@ -197,22 +197,29 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   )
 
   casesCustomLogUrl.foreach { case (name, path) =>
-    test(name) {
-      // This only verifies whether applying custom log URLs is in effect for SHS.
-      // Validation of "custom log URLs" functionality will be covered from different UTs.
+    Seq(true, false).foreach { applyToIncompleteApp =>
+      val newName = name + s" apply incomplete app $applyToIncompleteApp"
+      test(newName) {
+        // This only verifies whether applying custom log URLs is in effect for SHS.
+        // Validation of "custom log URLs" functionality will be covered from different UTs.
 
-      // restart server
-      try {
-        stop()
-        init((History.CUSTOM_EXECUTOR_LOG_URL.key, "http://newhost:9999/logs/clusters/" +
-          "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}})"))
+        // restart server
+        try {
+          stop()
+          init(
+            // compiler complains when using `->`, so made a tuple
+            (CUSTOM_EXECUTOR_LOG_URL.key, "http://newhost:9999/logs/clusters/" +
+              "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}})"),
+            APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP.key -> applyToIncompleteApp.toString
+          )
 
-        val expectationFile = new File(expRoot, HistoryServerSuite.sanitizePath(name) +
-          "_expectation.json")
-        assertApiCallResponse(path, expectationFile)
-      } finally {
-        // make sure other UTs are not affected from relaunching HistoryServer
-        stop()
+          val expectationFile = new File(expRoot, HistoryServerSuite.sanitizePath(newName) +
+            "_expectation.json")
+          assertApiCallResponse(path, expectationFile)
+        } finally {
+          // make sure other UTs are not affected from relaunching HistoryServer
+          stop()
+        }
       }
     }
   }
