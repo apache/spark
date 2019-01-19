@@ -21,8 +21,8 @@
     "maxMemory":428762726,
     "addTime":"2019-01-18T05:14:05.481GMT",
     "executorLogs":{
-      "stdout":"http://node2:8042/node/containerlogs/container_e01_1547723113049_0005_01_000001/spark/stdout?start=-4096",
-      "stderr":"http://node2:8042/node/containerlogs/container_e01_1547723113049_0005_01_000001/spark/stderr?start=-4096"
+      "stderr" : "http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000001/stderr",
+      "stdout" : "http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000001/stdout"
     },
     "memoryMetrics":{
       "usedOnHeapStorageMemory":0,
@@ -33,8 +33,13 @@
     "blacklistedInStages":[
 
     ],
-    "attributes":{
-
+    "attributes" : {
+      "NODE_HTTP_ADDRESS" : "node2:8042",
+      "USER" : "spark",
+      "LOG_FILES" : "stderr,stdout",
+      "CLUSTER_ID" : "yarn-cluster",
+      "HTTP_SCHEME" : "http://",
+      "CONTAINER_ID" : "container_e01_1547723113049_0005_01_000001"
     }
   },
   {
@@ -59,8 +64,8 @@
     "maxMemory":384093388,
     "addTime":"2019-01-18T05:14:15.343GMT",
     "executorLogs":{
-      "stderr":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000003/stderr)",
-      "stdout":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000003/stdout)"
+      "stderr":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000003/stderr",
+      "stdout":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000003/stdout"
     },
     "memoryMetrics":{
       "usedOnHeapStorageMemory":0,
@@ -102,8 +107,8 @@
     "maxMemory":384093388,
     "addTime":"2019-01-18T05:14:14.209GMT",
     "executorLogs":{
-      "stderr":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000002/stderr)",
-      "stdout":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000002/stdout)"
+      "stderr":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000002/stderr",
+      "stdout":"http://newhost:9999/logs/clusters/yarn-cluster/users/spark/containers/container_e01_1547723113049_0005_01_000002/stdout"
     },
     "memoryMetrics":{
       "usedOnHeapStorageMemory":0,

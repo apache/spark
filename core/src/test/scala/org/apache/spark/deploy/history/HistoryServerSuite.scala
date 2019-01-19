@@ -193,7 +193,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "completed app executor list json apply custom log urls" ->
       "applications/application_1547723113049_0005/1/executors",
     "incomplete app executor list json apply custom log urls" ->
-      "applications/application_1547723113049_0006/1/executors",
+      "applications/application_1547723113049_0006/1/executors"
   )
 
   casesCustomLogUrl.foreach { case (name, path) =>
@@ -209,9 +209,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
           init(
             // compiler complains when using `->`, so made a tuple
             (CUSTOM_EXECUTOR_LOG_URL.key, "http://newhost:9999/logs/clusters/" +
-              "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}})"),
-            APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP.key -> applyToIncompleteApp.toString
-          )
+              "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}}"),
+            APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP.key -> applyToIncompleteApp.toString)
 
           val expectationFile = new File(expRoot, HistoryServerSuite.sanitizePath(newName) +
             "_expectation.json")

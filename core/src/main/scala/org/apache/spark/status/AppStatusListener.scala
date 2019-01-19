@@ -131,6 +131,7 @@ private[spark] class AppStatusListener(
         .orElse(liveExecutors.get(SparkContext.LEGACY_DRIVER_IDENTIFIER))
       driver.foreach { d =>
         d.executorLogs = logs.toMap
+        d.attributes = event.driverAttributes.getOrElse(Map.empty).toMap
         update(d, System.nanoTime())
       }
     }

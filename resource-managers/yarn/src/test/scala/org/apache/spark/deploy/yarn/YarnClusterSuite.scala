@@ -28,6 +28,8 @@ import scala.io.Source
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.HadoopIllegalArgumentException
+import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -332,6 +334,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
   var driverLogs: Option[collection.Map[String, String]] = None
+  var driverAttributes: Option[collection.Map[String, String]] = None
 
   override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
@@ -339,6 +342,7 @@ private[spark] class SaveExecutorInfo extends SparkListener {
 
   override def onApplicationStart(appStart: SparkListenerApplicationStart): Unit = {
     driverLogs = appStart.driverLogs
+    driverAttributes = appStart.driverAttributes
   }
 }
 
@@ -443,6 +447,7 @@ private object YarnClusterDriver extends Logging with Matchers {
             s"Executor logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
           )
         }
+        assert(info.attributes.nonEmpty)
       }
 
       // If we are running in yarn-cluster mode, verify that driver logs links and present and are
@@ -461,9 +466,39 @@ private object YarnClusterDriver extends Logging with Matchers {
             s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
           )
         }
+
+        val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
+        val httpAddress = System.getenv(ApplicationConstants.Environment.NM_HOST.name()) +
+          ":" + System.getenv(ApplicationConstants.Environment.NM_HTTP_PORT.name())
+
+        // lookup appropriate http scheme for container log urls
+        val yarnHttpPolicy = yarnConf.get(
+          YarnConfiguration.YARN_HTTP_POLICY_KEY,
+          YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
+        )
+        val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
+
         val containerId = YarnSparkHadoopUtil.getContainerId
         val user = Utils.getCurrentUserName()
         assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
+
+        assert(listener.driverAttributes.nonEmpty)
+        val driverAttributes = listener.driverAttributes.get
+        val clusterId: Option[String] = try {
+          Some(YarnConfiguration.getClusterId(yarnConf))
+        } catch {
+          case _: HadoopIllegalArgumentException => None
+        }
+
+        val expectationAttributes = Map(
+          "HTTP_SCHEME" -> httpScheme,
+          "NODE_HTTP_ADDRESS" -> httpAddress,
+          "CLUSTER_ID" -> clusterId,
+          "CONTAINER_ID" -> containerId,
+          "USER" -> user,
+          "LOG_FILES" -> "stderr,stdout")
+
+        assert(driverAttributes === expectationAttributes)
       }
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)

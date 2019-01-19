@@ -30,7 +30,14 @@
     "totalOffHeapStorageMemory" : 0
   },
   "blacklistedInStages" : [ ],
-  "attributes" : { }
+  "attributes" : {
+    "NODE_HTTP_ADDRESS" : "node2:8042",
+    "USER" : "spark",
+    "LOG_FILES" : "stderr,stdout",
+    "CLUSTER_ID" : "yarn-cluster",
+    "HTTP_SCHEME" : "http://",
+    "CONTAINER_ID" : "container_e01_1547723113049_0005_01_000001"
+  }
 }, {
   "id" : "2",
   "hostPort" : "node4:44875",
