@@ -65,6 +65,7 @@ if sys.version < '3':
 else:
     import pickle
     xrange = range
+pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
 from pyspark.util import _exception_message
@@ -604,7 +605,7 @@ class PickleSerializer(FramedSerializer):
     """
 
     def dumps(self, obj):
-        return pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
+        return pickle.dumps(obj, pickle_protocol)
 
     if sys.version >= '3':
         def loads(self, obj, encoding="bytes"):
@@ -618,7 +619,7 @@ class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
         try:
-            return cloudpickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
+            return cloudpickle.dumps(obj, pickle_protocol)
         except pickle.PickleError:
             raise
         except Exception as e:

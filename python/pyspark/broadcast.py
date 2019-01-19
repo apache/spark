@@ -24,7 +24,7 @@ import threading
 
 from pyspark.cloudpickle import print_exec
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.serializers import ChunkedStream
+from pyspark.serializers import ChunkedStream, pickle_protocol
 from pyspark.util import _exception_message
 
 if sys.version < '3':
@@ -110,7 +110,7 @@ class Broadcast(object):
 
     def dump(self, value, f):
         try:
-            pickle.dump(value, f, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(value, f, pickle_protocol)
         except pickle.PickleError:
             raise
         except Exception as e:
