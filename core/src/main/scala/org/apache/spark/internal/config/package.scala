@@ -1150,52 +1150,6 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  private[spark] val RPC_ASK_TIMEOUT =
-    ConfigBuilder("spark.rpc.askTimeout")
-      .stringConf
-      .createOptional
-
-  private[spark] val RPC_CONNECT_THREADS =
-    ConfigBuilder("spark.rpc.connect.threads")
-      .intConf
-      .createWithDefault(64)
-
-  private[spark] val RPC_IO_NUM_CONNECTIONS_PER_PEER =
-    ConfigBuilder("spark.rpc.io.numConnectionsPerPeer")
-      .intConf
-      .createWithDefault(1)
-
-
-  private[spark] val RPC_IO_THREADS =
-    ConfigBuilder("spark.rpc.io.threads")
-      .intConf
-      .createOptional
-
-  private[spark] val RPC_LOOKUP_TIMEOUT =
-    ConfigBuilder("spark.rpc.lookupTimeout")
-      .stringConf
-      .createOptional
-
-  private[spark] val RPC_MESSAGE_MAX_SIZE =
-    ConfigBuilder("spark.rpc.message.maxSize")
-      .intConf
-      .createWithDefault(128)
-
-  private[spark] val RPC_NETTY_DISPATCHER_NUM_THREADS =
-    ConfigBuilder("spark.rpc.netty.dispatcher.numThreads")
-      .intConf
-      .createOptional
-
-  private[spark] val RPC_NUM_RETRIES =
-    ConfigBuilder("spark.rpc.numRetries")
-      .intConf
-      .createWithDefault(3)
-
-  private[spark] val RPC_RETRY_WAIT =
-    ConfigBuilder("spark.rpc.retry.wait")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("3s")
-
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")
       .stringConf
