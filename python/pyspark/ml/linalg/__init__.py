@@ -1160,6 +1160,11 @@ class Matrices(object):
 
 def _test():
     import doctest
+    try:
+        # Numpy 1.14+ changed it's string format.
+        np.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
         exit(-1)
