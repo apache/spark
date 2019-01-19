@@ -31,6 +31,7 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.HadoopIllegalArgumentException
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -493,8 +494,8 @@ private object YarnClusterDriver extends Logging with Matchers {
         val expectationAttributes = Map(
           "HTTP_SCHEME" -> httpScheme,
           "NODE_HTTP_ADDRESS" -> httpAddress,
-          "CLUSTER_ID" -> clusterId,
-          "CONTAINER_ID" -> containerId,
+          "CLUSTER_ID" -> clusterId.getOrElse(""),
+          "CONTAINER_ID" -> ConverterUtils.toString(containerId),
           "USER" -> user,
           "LOG_FILES" -> "stderr,stdout")
 
