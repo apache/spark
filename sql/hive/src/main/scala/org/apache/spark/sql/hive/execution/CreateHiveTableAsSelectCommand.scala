@@ -84,6 +84,8 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     tableDesc: CatalogTable,
     tableExists: Boolean): DataWritingCommand
 
+  // A subclass should override this with the Class of the concrete type expected to be
+  // returned from `getWritingCommand`.
   def writingCommandClass: Class[_]
 
   override def argString(maxFields: Int): String = {
