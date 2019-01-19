@@ -1159,7 +1159,8 @@ class ExecutorAllocationManagerSuite
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
       .set(config.DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
       .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutors)
-      .set(config.DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.key, s"${schedulerBacklogTimeout.toString}s")
+      .set(config.DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.key,
+        s"${schedulerBacklogTimeout.toString}s")
       .set(config.DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key,
         s"${sustainedSchedulerBacklogTimeout.toString}s")
       .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout.toString}s")
