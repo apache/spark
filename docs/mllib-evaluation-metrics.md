@@ -450,7 +450,7 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
     <tr>
       <td>Mean Average Precision</td>
       <td>
-        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{\left|R_i\right|} \sum_{j=0}^{\left|R_i\right|-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
+        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{\left|D_i\right|} \sum_{j=0}^{\left|R_i\right|-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
       </td>
       <td>
         <a href="https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Mean_average_precision">MAP</a> is a measure of how
@@ -462,10 +462,10 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
       <td>Normalized Discounted Cumulative Gain</td>
       <td>
         $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1}
-          \frac{rel_{D_i}(R_i(j))}{log_2(j+2)}} \\
+          \frac{rel_{D_i}(R_i(j))}{\text{log}_2(j+2)}} \\
         \text{Where} \\
         \hspace{5 mm} n = \text{min}\left(\text{max}\left(|R_i|,|D_i|\right),k\right) \\
-        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{log_2(j+2)}$
+        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{log}_2(j+2)}$
       </td>
       <td>
         <a href="https://en.wikipedia.org/wiki/Discounted_cumulative_gain#Normalized_DCG">NDCG at k</a> is a

@@ -100,7 +100,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
           }
           i += 1
         }
-        precSum / n
+        precSum / labSet.size
       } else {
         logWarning("Empty ground truth set, check input data")
         0.0
