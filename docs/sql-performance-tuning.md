@@ -40,6 +40,41 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 
 </table>
 
+## Scanning Input Table
+
+Spark SQL can increase the speed while scanning tables via tuning hadoop configurations.
+For example, setting the Max/Min size of input splits.
+
+When we use `TextInputFormat`, we can change the input format to `CombineTextInputFormat` so as to
+combine small files automatically while reading a table.
+
+It can be quite useful especially when we scanning a table with a lot of small files.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>mapreduce.input.fileinputformat.split.maxsize</code></td>
+  <td>as you set in your hadoop conf</td>
+  <td>
+    The maximum size chunk that map input should be split into when using CombineFileInputFormat.
+    By decreasing this value below the size of blocks in HDFS, you can increase the number of input tasks in your job.
+    For example, if we set the value to 1/3 of the size of a block, every split will receive 1/3 records of this block.
+    Thus to set the value to 128MB, you will specify 134217728 as the value for this property.
+  </td>
+</tr>
+<tr>
+  <td><code>mapreduce.input.fileinputformat.split.minsize</code></td>
+  <td>as you set in your hadoop conf</td>
+  <td>
+    The minimum size chunk that map input should be split into.
+    By increasing this value beyond the size of blocks in HDFS, you can decrease the number of input tasks in your job.
+    For example, if we set the value to 3x of the size of a block, every split will receive 3x records from several blocks.
+    Thus to set the value to 128MB, you will specify 134217728 as the value for this property. Note that if you do not set a max split size when using CombineFileInputFormat, your job will only use 1 task (which is probably not what you want)!
+  </td>
+</tr>
+</table>
+
+
 ## Other Configuration Options
 
 The following options can also be used to tune the performance of query execution. It is possible
