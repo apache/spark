@@ -476,7 +476,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
     val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
-    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+    checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, reduce") {
