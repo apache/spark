@@ -48,25 +48,6 @@ class NettyBlockRpcServer(
 
   private val streamManager = new OneForOneStreamManager()
 
-  private def mergeShuffleBlockIds(iter: Iterator[String]) = {
-    val arrayShuffleBlockIds = new ArrayBuffer[ArrayShuffleBlockId]
-    var blockIds = new ArrayBuffer[ShuffleBlockId]
-    while (iter.hasNext) {
-      val curBlockId = BlockId(iter.next()).asInstanceOf[ShuffleBlockId]
-      if (blockIds.isEmpty || curBlockId.mapId == blockIds.head.mapId) {
-        blockIds += curBlockId
-      } else {
-        arrayShuffleBlockIds += ArrayShuffleBlockId(blockIds)
-        blockIds = new ArrayBuffer[ShuffleBlockId]
-        blockIds += curBlockId
-      }
-    }
-    if (blockIds.nonEmpty) {
-      arrayShuffleBlockIds += ArrayShuffleBlockId(blockIds)
-    }
-    arrayShuffleBlockIds.toArray
-  }
-
   override def receive(
       client: TransportClient,
       rpcMessage: ByteBuffer,
@@ -76,12 +57,12 @@ class NettyBlockRpcServer(
 
     message match {
       case openBlocks: OpenBlocks =>
-        val blockIds =
-          if (openBlocks.fetchContinuousShuffleBlocksInBatch) {
-            mergeShuffleBlockIds(openBlocks.blockIds.iterator)
-          } else {
-            openBlocks.blockIds.map(BlockId.apply)
-          }
+        val blockIds = if (openBlocks.fetchContinuousShuffleBlocksInBatch) {
+          BlockManager.mergeContinuousShuffleBlockIds(
+            openBlocks.blockIds.iterator.map(BlockId.apply))
+        } else {
+          openBlocks.blockIds.map(BlockId.apply)
+        }
         val blocksNum = blockIds.length
         val blocks = for (i <- (0 until blocksNum).view)
           yield blockManager.getBlockData(blockIds(i))

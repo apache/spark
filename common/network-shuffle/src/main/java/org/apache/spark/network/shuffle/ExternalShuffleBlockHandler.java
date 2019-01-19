@@ -205,13 +205,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     }
   }
 
-  private boolean isShuffleBlock(String[] blockIdParts) {
-    // length == 4: ShuffleBlockId
-    // length == 5: ShuffleBlockBatchId
-    return (blockIdParts.length == 4 || blockIdParts.length == 5) &&
-      blockIdParts[0].equals("shuffle");
-  }
-
   private class ManagedBufferIterator implements Iterator<ManagedBuffer> {
 
     private int index = 0;
@@ -221,45 +214,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     // An array containing mapId, reduceId and numBlocks tuple
     private int[] shuffleBlockIds;
 
-    private String[] getBlockIdParts(String blockId) {
-      String[] blockIdParts = blockId.split("_");
-      if (!isShuffleBlock(blockIdParts)) {
-        throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
-      }
-      if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
-        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId + ", got:" + blockId);
-      }
-      return blockIdParts;
-    }
-
-    private void mergeShuffleBlockIds(String[] blockIds) {
-      ArrayList<int[]> originBlocks = new ArrayList<>(blockIds.length);
-      for (String blockId : blockIds) {
-        String[] blockIdParts = getBlockIdParts(blockId);
-        int[] parsedBlockId =
-          { Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) };
-        originBlocks.add(parsedBlockId);
-      }
-
-      int[] shuffleBlockBatchIds = new int[3 * blockIds.length];
-
-      int capacity = 0;
-      int prevIdx = 0;
-      int[] prevBlock = originBlocks.get(0);
-      for (int i = 1; i <= blockIds.length; i++) {
-        if (i == blockIds.length || originBlocks.get(i)[0] != prevBlock[0]) {
-          prevBlock = originBlocks.get(prevIdx);
-          shuffleBlockBatchIds[3 * capacity] = prevBlock[0];
-          shuffleBlockBatchIds[3 * capacity + 1] = prevBlock[1];
-          shuffleBlockBatchIds[3 * capacity + 2] = originBlocks.get(i - 1)[1] - prevBlock[1] + 1;
-          prevIdx = i;
-          capacity++;
-        }
-      }
-
-      this.shuffleBlockIds = Arrays.copyOfRange(shuffleBlockBatchIds, 0, capacity * 3);
-    }
-
     ManagedBufferIterator(
         String appId,
         String execId,
@@ -268,23 +222,29 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       this.appId = appId;
       this.execId = execId;
       String[] blockId0Parts = blockIds[0].split("_");
-      if (!isShuffleBlock(blockId0Parts)) {
+      if (!ExternalShuffleBlockResolver.isShuffleBlock(blockId0Parts)) {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       if (fetchContinuousShuffleBlocksInBatch) {
-        mergeShuffleBlockIds(blockIds);
+        ArrayList<ArrayList<int[]>> arrayShuffleBlockIds =
+          ExternalShuffleBlockResolver.mergeContinuousShuffleBlockIds(blockIds);
+        shuffleBlockIds = new int[arrayShuffleBlockIds.size() * 3];
+        for (int i = 0; i < arrayShuffleBlockIds.size(); i++) {
+          ArrayList<int[]> arrayShuffleBlockId = arrayShuffleBlockIds.get(i);
+          int[] startBlockId = arrayShuffleBlockId.get(0);
+          int[] endBlockId = arrayShuffleBlockId.get(arrayShuffleBlockId.size() - 1);
+          shuffleBlockIds[3 * i] = startBlockId[0];
+          shuffleBlockIds[3 * i + 1] = startBlockId[1];
+          shuffleBlockIds[3 * i + 2] = endBlockId[1] - startBlockId[1] + 1;
+        }
       } else {
         shuffleBlockIds = new int[3 * blockIds.length];
         for (int i = 0; i < blockIds.length; i++) {
-          String[] blockIdParts = getBlockIdParts(blockIds[i]);
-          shuffleBlockIds[3 * i] = Integer.parseInt(blockIdParts[2]);
-          shuffleBlockIds[3 * i + 1] = Integer.parseInt(blockIdParts[3]);
-          if (blockIdParts.length == 4) {
-            shuffleBlockIds[3 * i + 2] = 1;
-          } else {
-            shuffleBlockIds[3 * i + 2] = Integer.parseInt(blockIdParts[4]);
-          }
+          int[] blockIdParts = ExternalShuffleBlockResolver.getBlockIdParts(blockIds[i]);
+          shuffleBlockIds[3 * i] = blockIdParts[0];
+          shuffleBlockIds[3 * i + 1] = blockIdParts[1];
+          shuffleBlockIds[3 * i + 2] = 1;
         }
       }
     }

@@ -190,6 +190,42 @@ public class ExternalShuffleBlockResolver {
     return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId, numBlocks);
   }
 
+  static public boolean isShuffleBlock(String[] blockIdParts) {
+    // length == 4: ShuffleBlockId
+    // length == 5: ShuffleBlockBatchId
+    return (blockIdParts.length == 4 || blockIdParts.length == 5) &&
+      blockIdParts[0].equals("shuffle");
+  }
+
+  static public int[] getBlockIdParts(String blockId) {
+    String[] blockIdParts = blockId.split("_");
+    if (!isShuffleBlock(blockIdParts)) {
+      throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
+    }
+    return new int[] { Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) };
+  }
+
+  static public ArrayList<ArrayList<int[]>> mergeContinuousShuffleBlockIds(String[] blockIds) {
+    ArrayList<int[]> shuffleBlockIds = new ArrayList<>();
+    ArrayList<ArrayList<int[]>> arrayShuffleBlockIds = new ArrayList<>();
+
+    for (String blockId: blockIds) {
+      int[] blockIdParts = getBlockIdParts(blockId);
+      if (shuffleBlockIds.size() == 0) {
+        shuffleBlockIds.add(blockIdParts);
+      } else {
+        if (blockIdParts[0] != shuffleBlockIds.get(0)[0]) {
+          arrayShuffleBlockIds.add(shuffleBlockIds);
+          shuffleBlockIds = new ArrayList<>();
+        }
+        shuffleBlockIds.add(blockIdParts);
+      }
+    }
+    arrayShuffleBlockIds.add(shuffleBlockIds);
+
+    return arrayShuffleBlockIds;
+  }
+
   /**
    * Removes our metadata of all executors registered for the given application, and optionally
    * also deletes the local directories associated with the executors of that application in a

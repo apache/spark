@@ -25,7 +25,7 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -1639,6 +1639,27 @@ private[spark] class BlockManager(
 
 private[spark] object BlockManager {
   private val ID_GENERATOR = new IdGenerator
+
+  def mergeContinuousShuffleBlockIds(iter: Iterator[BlockId]): Array[ArrayShuffleBlockId] = {
+    var shuffleBlockIds = new ArrayBuffer[ShuffleBlockId]
+    val arrayShuffleBlockIds = new ArrayBuffer[ArrayShuffleBlockId]
+
+    while (iter.hasNext) {
+      val blockId = iter.next().asInstanceOf[ShuffleBlockId]
+      if (shuffleBlockIds.isEmpty) {
+        shuffleBlockIds += blockId
+      } else {
+        if (blockId.mapId != shuffleBlockIds.head.mapId) {
+          arrayShuffleBlockIds += ArrayShuffleBlockId(shuffleBlockIds)
+          shuffleBlockIds = new ArrayBuffer[ShuffleBlockId]
+        }
+        shuffleBlockIds += blockId
+      }
+    }
+    arrayShuffleBlockIds += ArrayShuffleBlockId(shuffleBlockIds)
+
+    arrayShuffleBlockIds.toArray
+  }
 
   def blockIdsToLocations(
       blockIds: Array[BlockId],

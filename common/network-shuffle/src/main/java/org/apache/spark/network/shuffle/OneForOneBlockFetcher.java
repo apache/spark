@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.ArrayList;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -105,24 +106,14 @@ public class OneForOneBlockFetcher {
   }
 
   private void initShuffleBlockIdIndices(String[] blockIds) {
-    int[] blockIdIndices = new int[streamHandle.numChunks + 1];
-    int chunkIndex = 0;
-    blockIdIndices[chunkIndex++] = 0;
-
-    String[] blockIdParts = blockIds[0].split("_");
-    int prevMapId = Integer.parseInt(blockIdParts[2]);
-
-    for (int i = 1; i < blockIds.length; i++) {
-      blockIdParts = blockIds[i].split("_");
-      int currMapId = Integer.parseInt(blockIdParts[2]);
-      if (currMapId != prevMapId) {
-        blockIdIndices[chunkIndex++] = i;
-        prevMapId = currMapId;
-      }
+    ArrayList<ArrayList<int[]>> arrayShuffleBlockIds =
+      ExternalShuffleBlockResolver.mergeContinuousShuffleBlockIds(blockIds);
+    assert(arrayShuffleBlockIds.size() == streamHandle.numChunks);
+    blockIdIndices = new int[arrayShuffleBlockIds.size() + 1];
+    blockIdIndices[0] = 0;
+    for (int i = 0; i < arrayShuffleBlockIds.size(); i++) {
+      blockIdIndices[i + 1] = blockIdIndices[i] + arrayShuffleBlockIds.get(i).size();
     }
-    blockIdIndices[chunkIndex] = blockIds.length;
-
-    this.blockIdIndices = blockIdIndices;
   }
 
   /**
