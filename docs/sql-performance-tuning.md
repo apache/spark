@@ -42,19 +42,19 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 
 ## Scanning Input Table
 
-Spark SQL can increase the speed while scanning tables via tuning hadoop configurations.
-For example, setting the Max/Min size of input splits.
+Spark SQL can increase the speed while scanning tables via tuning Hadoop configurations.
+For example, setting the max/min size of input splits.
 
-When we use `TextInputFormat`, we can change the input format to `CombineTextInputFormat` so as to
-combine small files automatically while reading a table.
+When we use `TextInputFormat`, we can set the input format to `CombineTextInputFormat`. So it will
+combine small files automatically when we read a table.
 
-It can be quite useful especially when we scanning a table with a lot of small files.
+It can be quite useful especially when scanning a table with a lot of small files.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>mapreduce.input.fileinputformat.split.maxsize</code></td>
-  <td>as you set in your hadoop conf</td>
+  <td>as you set in your Hadoop conf</td>
   <td>
     The maximum size chunk that map input should be split into when using CombineFileInputFormat.
     By decreasing this value below the size of blocks in HDFS, you can increase the number of input tasks in your job.
@@ -64,7 +64,7 @@ It can be quite useful especially when we scanning a table with a lot of small f
 </tr>
 <tr>
   <td><code>mapreduce.input.fileinputformat.split.minsize</code></td>
-  <td>as you set in your hadoop conf</td>
+  <td>as you set in your Hadoop conf</td>
   <td>
     The minimum size chunk that map input should be split into.
     By increasing this value beyond the size of blocks in HDFS, you can decrease the number of input tasks in your job.
