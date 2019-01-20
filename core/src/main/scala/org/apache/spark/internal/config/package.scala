@@ -115,11 +115,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_GC_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorGcMetrics.enabled")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS =
     ConfigBuilder("spark.eventLog.gcMetrics.youngGenerationGarbageCollectors")
       .doc("Names of supported young generation garbage collector. A name usually is " +

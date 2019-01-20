@@ -135,19 +135,17 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
-    if (SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS)) {
       ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
-        if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
-          gcMetrics(0) = mxBean.getCollectionCount
-          gcMetrics(1) = mxBean.getCollectionTime
-        } else if (oldGenerationGarbageCollector.contains(mxBean.getName)) {
-          gcMetrics(2) = mxBean.getCollectionCount
-          gcMetrics(3) = mxBean.getCollectionTime
-        } else {
-          logDebug(s"${mxBean.getName} is an unsupported garbage collector." +
-            s"Add it to ${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS} " +
-            s"or ${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS} to enable.")
-        }
+      if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
+        gcMetrics(0) = mxBean.getCollectionCount
+        gcMetrics(1) = mxBean.getCollectionTime
+      } else if (oldGenerationGarbageCollector.contains(mxBean.getName)) {
+        gcMetrics(2) = mxBean.getCollectionCount
+        gcMetrics(3) = mxBean.getCollectionTime
+      } else {
+        logDebug(s"${mxBean.getName} is an unsupported garbage collector." +
+          s"Add it to ${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key} " +
+          s"or ${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key} to enable.")
       }
     }
     gcMetrics
