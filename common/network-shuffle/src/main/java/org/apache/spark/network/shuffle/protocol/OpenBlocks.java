@@ -32,7 +32,9 @@ public class OpenBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
   public final String[] blockIds;
-  // When fetchContinuousShuffleBlocksInBatch == true, OpenBlocks could contain ShuffleBlockId only
+  // Indicates if the client wants server to read continuous shuffle blocks in batch, to
+  // reduce IO. When it is true, OpenBlocks could contain ShuffleBlockId only.
+  // This field is newly added in Spark 3.0, and will be encoded in the message only when it's true.
   public final boolean fetchContinuousShuffleBlocksInBatch;
 
   // This is only used in tests.
@@ -88,7 +90,7 @@ public class OpenBlocks extends BlockTransferMessage {
     return Encoders.Strings.encodedLength(appId)
       + Encoders.Strings.encodedLength(execId)
       + Encoders.StringArrays.encodedLength(blockIds)
-      + 1;
+      + (fetchContinuousShuffleBlocksInBatch ? 1 : 0);
   }
 
   @Override
@@ -96,7 +98,9 @@ public class OpenBlocks extends BlockTransferMessage {
     Encoders.Strings.encode(buf, appId);
     Encoders.Strings.encode(buf, execId);
     Encoders.StringArrays.encode(buf, blockIds);
-    buf.writeBoolean(fetchContinuousShuffleBlocksInBatch);
+    if (fetchContinuousShuffleBlocksInBatch) {
+      buf.writeBoolean(fetchContinuousShuffleBlocksInBatch);
+    }
   }
 
   public static OpenBlocks decode(ByteBuf buf) {
@@ -104,8 +108,11 @@ public class OpenBlocks extends BlockTransferMessage {
     String execId = Encoders.Strings.decode(buf);
     String[] blockIds = Encoders.StringArrays.decode(buf);
     boolean fetchContinuousShuffleBlocksInBatch = false;
-    if (buf.readableBytes() != 0) {
-      fetchContinuousShuffleBlocksInBatch = buf.readBoolean();
+    if (buf.readableBytes() >= 1) {
+      // A sanity check. In `encode` we write true, so here we should read true.
+      fetchContinuousShuffleBlocksInBatch = true;
+    } else {
+      fetchContinuousShuffleBlocksInBatch = false;
     }
     return new OpenBlocks(appId, execId, blockIds, fetchContinuousShuffleBlocksInBatch);
   }

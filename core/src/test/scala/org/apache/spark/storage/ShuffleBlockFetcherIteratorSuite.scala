@@ -586,7 +586,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(e.getMessage.contains("Received a zero-size buffer"))
   }
 
-  ignore("adaptive execution: successful 2 local blocks + 3 remote blocks") {
+  test("adaptive execution: successful 2 local blocks + 3 remote blocks") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
@@ -604,25 +604,25 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val remoteBlocks = Map[BlockId, ManagedBuffer](
       ArrayShuffleBlockId(Seq(ShuffleBlockId(0, 3, 0), ShuffleBlockId(0, 3, 1))) ->
         createMockManagedBuffer(2),
-      ShuffleBlockId(0, 4, 0) -> createMockManagedBuffer())
+      ArrayShuffleBlockId(Seq(ShuffleBlockId(0, 4, 0))) -> createMockManagedBuffer())
     val transfer = mock(classOf[BlockTransferService])
     when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any(), any()))
       .thenAnswer(new Answer[Unit] {
         override def answer(invocation: InvocationOnMock): Unit = {
           val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
           listener.onBlockFetchSuccess(Array("shuffle_0_3_0", "shuffle_0_3_1"), remoteBlocks(
-              ArrayShuffleBlockId(Seq(ShuffleBlockId(0, 3, 0), ShuffleBlockId(0, 3, 1)))))
+            ArrayShuffleBlockId(Seq(ShuffleBlockId(0, 3, 0), ShuffleBlockId(0, 3, 1)))))
           listener.onBlockFetchSuccess(Array("shuffle_0_4_0"),
-            remoteBlocks(ShuffleBlockId(0, 4, 0)))
+            remoteBlocks(ArrayShuffleBlockId(Seq(ShuffleBlockId(0, 4, 0)))))
         }
       })
 
+
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
-      (localBmId, Seq((ShuffleBlockId(0, 0, 0), 1.asInstanceOf[Long]),
-        (ShuffleBlockId(0, 0, 1), 1.asInstanceOf[Long]))),
-      (remoteBmId, Seq((ShuffleBlockId(0, 3, 0), 1.asInstanceOf[Long]),
-        (ShuffleBlockId(0, 3, 1), 1.asInstanceOf[Long]),
-        (ShuffleBlockId(0, 4, 0), 1.asInstanceOf[Long])))
+      (localBmId,
+        Seq(ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 0, 1)).map((_, 1.asInstanceOf[Long]))),
+      (remoteBmId, Seq(ShuffleBlockId(0, 3, 0), ShuffleBlockId(0, 3, 1),
+        ShuffleBlockId(0, 4, 0)).map((_, 1.asInstanceOf[Long])))
     ).toIterator
 
     val taskContext = TaskContext.empty()

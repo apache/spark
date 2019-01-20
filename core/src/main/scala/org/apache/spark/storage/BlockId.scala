@@ -67,12 +67,6 @@ case class ArrayShuffleBlockId(blockIds: Seq[ShuffleBlockId]) extends BlockId {
   }
 }
 
-object ArrayShuffleBlockId {
-  def apply(blockId: ShuffleBlockId): ArrayShuffleBlockId = {
-    new ArrayShuffleBlockId(Seq(blockId))
-  }
-}
-
 @DeveloperApi
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
