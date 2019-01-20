@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -120,8 +121,9 @@ class CacheManager extends Logging {
   def uncacheQuery(
       query: Dataset[_],
       cascade: Boolean,
-      blocking: Boolean = true): Unit =
+      blocking: Boolean = true): Unit = {
     uncacheQuery(query.sparkSession, query.logicalPlan, cascade, blocking)
+  }
 
   /**
    * Un-cache the given plan or all the cache entries that refer to the given plan.
@@ -136,21 +138,25 @@ class CacheManager extends Logging {
       plan: LogicalPlan,
       cascade: Boolean,
       blocking: Boolean): Unit = {
-    writeLock {
-      val shouldRemove: LogicalPlan => Boolean =
-        if (cascade) {
-          _.find(_.sameResult(plan)).isDefined
-        } else {
-          _.sameResult(plan)
-        }
+    val shouldRemove: LogicalPlan => Boolean =
+      if (cascade) {
+        _.find(_.sameResult(plan)).isDefined
+      } else {
+        _.sameResult(plan)
+      }
+    val toRemove = mutable.Buffer[CachedData]()
+    readLock {
       val it = cachedData.iterator()
       while (it.hasNext) {
         val cd = it.next()
         if (shouldRemove(cd.plan)) {
           cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
-          it.remove()
+          toRemove.append(cd)
         }
       }
+    }
+    writeLock {
+      toRemove.foreach(cachedData.remove(_))
     }
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
@@ -161,7 +167,7 @@ class CacheManager extends Logging {
   /**
    * Tries to re-cache all the cache entries that refer to the given plan.
    */
-  def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = readLock {
+  def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
     recacheByCondition(spark, _.find(_.sameResult(plan)).isDefined)
   }
 
@@ -170,7 +176,7 @@ class CacheManager extends Logging {
       condition: LogicalPlan => Boolean,
       clearCache: Boolean = true): Unit = {
     val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
-    writeLock {
+    readLock {
       val it = cachedData.iterator()
       while (it.hasNext) {
         val cd = it.next()
@@ -180,10 +186,12 @@ class CacheManager extends Logging {
           }
           // Remove the cache entry before we create a new one, so that we can have a different
           // physical plan.
-          it.remove()
           needToRecache += cd
         }
       }
+    }
+    writeLock {
+      needToRecache.foreach(cachedData.remove(_))
     }
     val recomputedPlans = needToRecache.map { cd =>
       val plan = spark.sessionState.executePlan(cd.plan).executedPlan
