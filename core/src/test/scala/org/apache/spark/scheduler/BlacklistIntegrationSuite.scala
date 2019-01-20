@@ -102,6 +102,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
+      config.BLACKLIST_ENABLED.key -> "true",
       TEST_N_HOSTS.key -> "2",
       TEST_N_EXECUTORS_HOST.key -> "1",
       TEST_N_CORES_EXECUTOR.key -> "1",
