@@ -440,11 +440,7 @@ object SparkEnv extends Logging {
 
     // Add Hadoop properties, it will not ignore configs including in Spark. Some spark
     // conf starting with "spark.hadoop" may overwrite it.
-    val hadoopProperties = if (!conf.get("spark.master").contains("local")) {
-      hadoopConf.asScala.map(entry => (entry.getKey, entry.getValue)).toSeq
-    } else {
-      Nil
-    }
+    val hadoopProperties = hadoopConf.asScala.map(entry => (entry.getKey, entry.getValue)).toSeq
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
       "Spark Properties" -> sparkProperties,
