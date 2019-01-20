@@ -413,13 +413,13 @@ A ranking system usually deals with a set of $M$ users
 
 $$U = \left\{u_0, u_1, ..., u_{M-1}\right\}$$
 
-Each user ($u_i$) having a set of $N$ ground truth relevant documents
+Each user ($u_i$) having a set of $N_i$ ground truth relevant documents
 
-$$D_i = \left\{d_0, d_1, ..., d_{N-1}\right\}$$
+$$D_i = \left\{d_0, d_1, ..., d_{N_i-1}\right\}$$
 
-And a list of $Q$ recommended documents, in order of decreasing relevance
+And a list of $Q_i$ recommended documents, in order of decreasing relevance
 
-$$R_i = \left[r_0, r_1, ..., r_{Q-1}\right]$$
+$$R_i = \left[r_0, r_1, ..., r_{Q_i-1}\right]$$
 
 The goal of the ranking system is to produce the most relevant set of documents for each user. The relevance of the
 sets and the effectiveness of the algorithms can be measured using the metrics listed below.
@@ -439,7 +439,7 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
         Precision at k
       </td>
       <td>
-        $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{\text{min}(\left|R_i\right|, k) - 1} rel_{D_i}(R_i(j))}$
+        $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{\text{min}(Q_i, k) - 1} rel_{D_i}(R_i(j))}$
       </td>
       <td>
         <a href="https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Precision_at_K">Precision at k</a> is a measure of
@@ -450,7 +450,7 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
     <tr>
       <td>Mean Average Precision</td>
       <td>
-        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{\left|D_i\right|} \sum_{j=0}^{\left|R_i\right|-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
+        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{N_i} \sum_{j=0}^{Q_i-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
       </td>
       <td>
         <a href="https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Mean_average_precision">MAP</a> is a measure of how
@@ -462,10 +462,10 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
       <td>Normalized Discounted Cumulative Gain</td>
       <td>
         $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1}
-          \frac{rel_{D_i}(R_i(j))}{\text{log}_2(j+2)}} \\
+          \frac{rel_{D_i}(R_i(j))}{\text{log}(j+2)}} \\
         \text{Where} \\
-        \hspace{5 mm} n = \text{min}\left(\text{max}\left(|R_i|,|D_i|\right),k\right) \\
-        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{log}_2(j+2)}$
+        \hspace{5 mm} n = \text{min}\left(\text{max}\left(Q_i, N_i\right),k\right) \\
+        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{log}(j+2)}$
       </td>
       <td>
         <a href="https://en.wikipedia.org/wiki/Discounted_cumulative_gain#Normalized_DCG">NDCG at k</a> is a
