@@ -192,7 +192,7 @@ debugging information by running `spark-submit` with the `--verbose` option.
 
 # Advanced Dependency Management
 When using `spark-submit`, the application jar along with any jars included with the `--jars` option
-will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included in the driver and executor classpaths. Directory expansion does not work with `--jars`.
+will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list won't be included in the driver and executor classpaths. You need to explicitly add them using `spark.driver.extraClassPath` and `spark.executor.extraClassPath`. Directory expansion does not work with `--jars`.
 
 Spark uses the following URL scheme to allow different strategies for disseminating jars:
 
