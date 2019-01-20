@@ -264,6 +264,11 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
+  private[spark] val STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT =
+    ConfigBuilder("spark.storage.blockManagerSlaveTimeoutMs")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
+
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
