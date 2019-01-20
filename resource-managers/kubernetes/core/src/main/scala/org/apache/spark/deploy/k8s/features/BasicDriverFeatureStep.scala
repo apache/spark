@@ -154,12 +154,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
 
-    Seq("spark.jars", "spark.files").foreach { key =>
-      conf.getOption(key).foreach { value =>
-        val resolved = KubernetesUtils.resolveFileUrisAndPath(Utils.stringToSeq(value))
-        if (resolved.nonEmpty) {
-          additionalProps.put(key, resolved.mkString(","))
-        }
+    Seq(JARS, FILES).foreach { key =>
+      val value = conf.get(key)
+      val resolved = KubernetesUtils.resolveFileUrisAndPath(value)
+      if (resolved.nonEmpty) {
+        additionalProps.put(key.key, resolved.mkString(","))
       }
     }
 

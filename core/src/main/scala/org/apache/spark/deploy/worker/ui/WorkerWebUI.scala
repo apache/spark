@@ -56,6 +56,4 @@ class WorkerWebUI(
 
 private[worker] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
-  val DEFAULT_RETAINED_DRIVERS = 1000
-  val DEFAULT_RETAINED_EXECUTORS = 1000
 }

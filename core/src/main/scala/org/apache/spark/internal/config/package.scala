@@ -25,6 +25,7 @@ import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
 
@@ -512,7 +513,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password".r)
+      .createWithDefault("(?i)secret|password|token".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -749,6 +750,96 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
+  private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.sort.initialBufferSize")
+      .internal()
+      .intConf
+      .checkValue(v => v > 0, "The value should be a positive integer.")
+      .createWithDefault(4096)
+
+  private[spark] val SHUFFLE_COMPRESS =
+    ConfigBuilder("spark.shuffle.compress")
+      .doc("Whether to compress shuffle output. Compression will use " +
+        "spark.io.compression.codec.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SPILL_COMPRESS =
+    ConfigBuilder("spark.shuffle.spill.compress")
+      .doc("Whether to compress data spilled during shuffles. Compression will use " +
+        "spark.io.compression.codec.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD =
+    ConfigBuilder("spark.shuffle.spill.initialMemoryThreshold")
+      .internal()
+      .doc("Initial threshold for the size of a collection before we start tracking its " +
+        "memory usage.")
+      .longConf
+      .createWithDefault(5 * 1024 * 1024)
+
+  private[spark] val SHUFFLE_SPILL_BATCH_SIZE =
+    ConfigBuilder("spark.shuffle.spill.batchSize")
+      .internal()
+      .doc("Size of object batches when reading/writing from serializers.")
+      .longConf
+      .createWithDefault(10000)
+
+  private[spark] val SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD =
+    ConfigBuilder("spark.shuffle.sort.bypassMergeThreshold")
+      .doc("In the sort-based shuffle manager, avoid merge-sorting data if there is no " +
+        "map-side aggregation and there are at most this many reduce partitions")
+      .intConf
+      .createWithDefault(200)
+
+  private[spark] val SHUFFLE_MANAGER =
+    ConfigBuilder("spark.shuffle.manager")
+      .stringConf
+      .createWithDefault("sort")
+
+  private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
+    ConfigBuilder("spark.shuffle.reduceLocality.enabled")
+      .doc("Whether to compute locality preferences for reduce tasks")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST =
+    ConfigBuilder("spark.shuffle.mapOutput.minSizeForBroadcast")
+      .doc("The size at which we use Broadcast to send the map output statuses to the executors.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("512k")
+
+  private[spark] val SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS =
+    ConfigBuilder("spark.shuffle.mapOutput.dispatcher.numThreads")
+      .intConf
+      .createWithDefault(8)
+
+  private[spark] val SHUFFLE_DETECT_CORRUPT =
+    ConfigBuilder("spark.shuffle.detectCorrupt")
+      .doc("Whether to detect any corruption in fetched blocks.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SYNC =
+    ConfigBuilder("spark.shuffle.sync")
+      .doc("Whether to force outstanding writes to disk.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_UNDAFE_FAST_MERGE_ENABLE =
+    ConfigBuilder("spark.shuffle.unsafe.fastMergeEnabled")
+      .doc("Whether to perform a fast spill merge.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SORT_USE_RADIXSORT =
+    ConfigBuilder("spark.shuffle.sort.useRadixSort")
+      .doc("Whether to use radix sort for sorting in-memory partition ids. Radix sort is much " +
+        "faster, but requires additional memory to be reserved memory as pointers are added.")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS =
     ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
       .internal()
@@ -808,6 +899,26 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
+
+  private[spark] val UNSAFE_EXCEPTION_ON_MEMORY_LEAK =
+    ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED =
+    ConfigBuilder("spark.unsafe.sorter.spill.read.ahead.enabled")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE =
+    ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => 1024 * 1024 <= v && v <= MAX_BUFFER_SIZE_BYTES,
+        s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
+      .createWithDefault(1024 * 1024)
 
   private[spark] val EXECUTOR_PLUGINS =
     ConfigBuilder("spark.executor.plugins")
@@ -961,4 +1072,35 @@ package object config {
       .intConf
       .createWithDefault(4)
 
+  private[spark] val SERIALIZER = ConfigBuilder("spark.serializer")
+    .stringConf
+    .createWithDefault("org.apache.spark.serializer.JavaSerializer")
+
+  private[spark] val SERIALIZER_OBJECT_STREAM_RESET =
+    ConfigBuilder("spark.serializer.objectStreamReset")
+      .intConf
+      .createWithDefault(100)
+
+  private[spark] val SERIALIZER_EXTRA_DEBUG_INFO = ConfigBuilder("spark.serializer.extraDebugInfo")
+    .booleanConf
+    .createWithDefault(true)
+
+  private[spark] val JARS = ConfigBuilder("spark.jars")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val FILES = ConfigBuilder("spark.files")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val SUBMIT_DEPLOY_MODE = ConfigBuilder("spark.submit.deployMode")
+    .stringConf
+    .createWithDefault("client")
+
+  private[spark] val SUBMIT_PYTHON_FILES = ConfigBuilder("spark.submit.pyFiles")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 }

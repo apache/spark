@@ -24,6 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -475,7 +476,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
     val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
-    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+    checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, reduce") {
@@ -1666,6 +1667,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val exceptDF = inputDF.filter(col("a").isin("0") or col("b") > "c")
     checkAnswer(inputDF.except(exceptDF), Seq(Row("1", null)))
+  }
+
+  test("SPARK-26619: Prune the unused serializers from SerializeFromObjec") {
+    val data = Seq(("a", 1), ("b", 2), ("c", 3))
+    val ds = data.toDS().map(t => (t._1, t._2 + 1)).select("_1")
+    val serializer = ds.queryExecution.optimizedPlan.collect {
+      case s: SerializeFromObject => s
+    }.head
+    assert(serializer.serializer.size == 1)
+    checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
 }
 
