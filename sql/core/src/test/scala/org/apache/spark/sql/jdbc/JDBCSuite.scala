@@ -1523,4 +1523,30 @@ class JDBCSuite extends QueryTest
     assert(e.contains("The driver could not open a JDBC connection. " +
       "Check the URL: jdbc:mysql://localhost/db"))
   }
+
+  test("parsing timestamp bounds") {
+    Seq(
+      ("2018-07-04 03:30:00.0", "2018-07-15 20:50:32.5", "2018-07-27 14:11:05.0"),
+      ("2019-01-20 12:00:00.502", "2019-01-20 12:00:00.751", "2019-01-20 12:00:01.000"),
+      ("2019-01-20T00:00:00.123456", "2019-01-20 00:05:00.123456", "2019-01-20T00:10:00.123456"),
+      ("1500-01-20T00:00:00.123456", "1500-01-20 00:05:00.123456", "1500-01-20T00:10:00.123456")
+    ).foreach { case (lower, middle, upper) =>
+      val df = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.DATETIME")
+        .option("partitionColumn", "t")
+        .option("lowerBound", lower)
+        .option("upperBound", upper)
+        .option("numPartitions", 2)
+        .load()
+
+      df.logicalPlan match {
+        case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+          val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+          assert(whereClauses === Set(
+            s""""T" < '$middle' or "T" is null""",
+            s""""T" >= '$middle'"""))
+      }
+    }
+  }
 }
