@@ -30,8 +30,9 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.HistogramBin
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -431,6 +432,55 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(stats.sizeInBytes === sizeInBytes)
     }
 
+    def listPartitions(ds: String):
+        Map[CatalogTypes.TablePartitionSpec, CatalogTablePartition] = {
+      val tableId = TableIdentifier(tableName)
+      spark.sessionState.catalog.listPartitions(tableId, Some(Map("ds" -> ds)))
+        .map(p => p.spec -> p).toMap
+    }
+
+    def assertPartitionStatsByListPartitions(
+        ds: String,
+        stats: Seq[PartitionStats]): Unit = {
+      val partitions = listPartitions(ds)
+      assert(partitions.size === stats.size)
+      stats.foreach{s =>
+        assert(s.rowCount === partitions(s.spec).stats.get.rowCount)
+        assert(s.sizeInBytes === partitions(s.spec).stats.get.sizeInBytes)
+      }
+    }
+
+    def listPartitionsByFilter(ds: String):
+        Map[CatalogTypes.TablePartitionSpec, CatalogTablePartition] = {
+      val tableId = TableIdentifier(tableName)
+      spark.sessionState.catalog.listPartitionsByFilter(tableId, Seq('ds.string === ds))
+        .map(p => p.spec -> p).toMap
+    }
+
+    def assertPartitionStatsByListPartitionsByFilter(
+        ds: String,
+        stats: Seq[PartitionStats]): Unit = {
+      val partitions = listPartitionsByFilter(ds)
+      assert(partitions.size === stats.size)
+      stats.foreach{s =>
+        assert(s.rowCount === partitions(s.spec).stats.get.rowCount)
+        assert(s.sizeInBytes === partitions(s.spec).stats.get.sizeInBytes)
+      }
+    }
+
+    case class PartitionStats(
+        spec: CatalogTypes.TablePartitionSpec,
+        rowCount: Option[BigInt],
+        sizeInBytes: BigInt)
+
+    def newPartitionStats(
+        ds: String,
+        hr: String,
+        rowCount: Option[BigInt],
+        sizeInBytes: BigInt): PartitionStats = {
+      PartitionStats(Map("ds" -> ds, "hr" -> hr), rowCount, sizeInBytes)
+    }
+
     def createPartition(ds: String, hr: Int, query: String): Unit = {
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
     }
@@ -451,12 +501,64 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
       assertPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000)
 
+      assertPartitionStatsByListPartitions(
+        "2010-01-01",
+        Seq(
+          newPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000),
+          newPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000))
+      )
+      assertPartitionStatsByListPartitions(
+        "2010-01-02",
+        Seq(
+          newPartitionStats("2010-01-02", "10", rowCount = None, sizeInBytes = 2000),
+          newPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000))
+      )
+
+      assertPartitionStatsByListPartitionsByFilter(
+        "2010-01-01",
+        Seq(
+          newPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000),
+          newPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000))
+      )
+      assertPartitionStatsByListPartitionsByFilter(
+        "2010-01-02",
+        Seq(
+          newPartitionStats("2010-01-02", "10", rowCount = None, sizeInBytes = 2000),
+          newPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000))
+      )
+
       sql(s"ANALYZE TABLE $tableName PARTITION (ds, hr) COMPUTE STATISTICS")
 
       assertPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000)
       assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
       assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
       assertPartitionStats("2010-01-02", "11", rowCount = Some(2*500), sizeInBytes = 2*2000)
+
+      assertPartitionStatsByListPartitions(
+        "2010-01-01",
+        Seq(
+          newPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000),
+          newPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000))
+      )
+      assertPartitionStatsByListPartitions(
+        "2010-01-02",
+        Seq(
+          newPartitionStats("2010-01-02", "10", rowCount = Some(500), sizeInBytes = 2000),
+          newPartitionStats("2010-01-02", "11", rowCount = Some(2*500), sizeInBytes = 2*2000))
+      )
+
+      assertPartitionStatsByListPartitionsByFilter(
+        "2010-01-01",
+        Seq(
+          newPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000),
+          newPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000))
+      )
+      assertPartitionStatsByListPartitionsByFilter(
+        "2010-01-02",
+        Seq(
+          newPartitionStats("2010-01-02", "10", rowCount = Some(500), sizeInBytes = 2000),
+          newPartitionStats("2010-01-02", "11", rowCount = Some(2*500), sizeInBytes = 2*2000))
+      )
     }
   }
 

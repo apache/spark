@@ -1217,7 +1217,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
     }
 
-    partialSpec match {
+    val filterPartial = partialSpec match {
       // This might be a bug of Hive: When the partition value inside the partial partition spec
       // contains dot, and we ask Hive to list partitions w.r.t. the partial partition spec, Hive
       // treats dot as matching any single character and may return more partitions than we
@@ -1226,6 +1226,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         res.filter(p => isPartialPartitionSpec(spec, p.spec))
       case _ => res
     }
+    filterPartial.map(p => restorePartitionMetadata(p, getTable(db, table)))
   }
 
   override def listPartitionsByFilter(
@@ -1242,7 +1243,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       client.getPartitionsByFilter(rawTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
-    prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
+    val prunedPartitions =
+      prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
+    prunedPartitions.map(p => restorePartitionMetadata(p, getTable(db, table)))
   }
 
   // --------------------------------------------------------------------------

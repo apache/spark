@@ -1040,6 +1040,11 @@ private[hive] object HiveClientImpl {
   /**
    * Reads statistics from Hive.
    * Note that this statistics could be overridden by Spark's statistics if that's available.
+   *
+   * Table level statistics would be overridden by Spark's in
+   * [[org.apache.spark.sql.hive.HiveExternalCatalog.restoreTableMetadata]]
+   * Partition level statistics would be overridden by Spark's in
+   * [[org.apache.spark.sql.hive.HiveExternalCatalog.restorePartitionMetadata]]
    */
   private def readHiveStats(properties: Map[String, String]): Option[CatalogStatistics] = {
     val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
