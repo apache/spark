@@ -44,10 +44,10 @@ case class BroadcastExchangeExec(
     child: SparkPlan) extends Exchange {
 
   override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
-    "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
-    "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
-    "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
+    "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
+    "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 

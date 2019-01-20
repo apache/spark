@@ -826,7 +826,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("block compression") {
     try {
-      conf.set("spark.shuffle.compress", "true")
+      conf.set(SHUFFLE_COMPRESS, true)
       var store = makeBlockManager(20000, "exec1")
       store.putSingle(
         ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
@@ -834,7 +834,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         "shuffle_0_0_0 was not compressed")
       stopBlockManager(store)
 
-      conf.set("spark.shuffle.compress", "false")
+      conf.set(SHUFFLE_COMPRESS, false)
       store = makeBlockManager(20000, "exec2")
       store.putSingle(
         ShuffleBlockId(0, 0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
@@ -875,7 +875,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       assert(store.memoryStore.getSize("other_block") >= 10000, "other_block was compressed")
       stopBlockManager(store)
     } finally {
-      System.clearProperty("spark.shuffle.compress")
+      System.clearProperty(SHUFFLE_COMPRESS.key)
       System.clearProperty(BROADCAST_COMPRESS.key)
       System.clearProperty(RDD_COMPRESS.key)
     }

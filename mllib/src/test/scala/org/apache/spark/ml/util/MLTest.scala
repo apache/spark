@@ -22,6 +22,7 @@ import java.io.File
 import org.scalatest.Suite
 
 import org.apache.spark.{DebugFilesystem, SparkConf, SparkContext}
+import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.ml.{PredictionModel, Transformer}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row}
@@ -40,7 +41,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
   protected override def sparkConf = {
     new SparkConf()
       .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
-      .set("spark.unsafe.exceptionOnMemoryLeak", "true")
+      .set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
       .set(SQLConf.CODEGEN_FALLBACK.key, "false")
   }
 
