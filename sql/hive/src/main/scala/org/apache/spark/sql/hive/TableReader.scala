@@ -123,7 +123,8 @@ class HadoopTableReader(
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
     // logDebug("Table input: %s".format(tablePath))
-    val hadoopRDD = createHadoopRDD(hiveTable.getInputFormatClass.getCanonicalName, localTableDesc, inputPathStr)
+    val hadoopRDD = createHadoopRDD(
+      hiveTable.getInputFormatClass.getCanonicalName, localTableDesc, inputPathStr)
 
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
