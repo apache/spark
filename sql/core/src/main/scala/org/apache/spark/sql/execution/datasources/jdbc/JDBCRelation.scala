@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Date, Timestamp}
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
@@ -27,10 +25,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Instructions on how to partition the table among workers.
@@ -174,10 +174,19 @@ private[sql] object JDBCRelation extends Logging {
     (dialect.quoteIdentifier(column.name), column.dataType)
   }
 
-  private def toInternalBoundValue(value: String, columnType: DataType): Long = columnType match {
-    case _: NumericType => value.toLong
-    case DateType => DateTimeUtils.fromJavaDate(Date.valueOf(value)).toLong
-    case TimestampType => DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(value))
+  private def toInternalBoundValue(value: String, columnType: DataType): Long = {
+    def parse[T](f: UTF8String => Option[T]): T = {
+      f(UTF8String.fromString(value)).getOrElse {
+        throw new IllegalArgumentException(
+          s"Cannot parse the bound value $value as ${columnType.catalogString}")
+      }
+    }
+    columnType match {
+      case _: NumericType => value.toLong
+      case DateType => parse(stringToDate).toLong
+      case TimestampType =>
+        parse(stringToTimestamp(_, getTimeZone(SQLConf.get.sessionLocalTimeZone)))
+    }
   }
 
   private def toBoundValueInWhereClause(
