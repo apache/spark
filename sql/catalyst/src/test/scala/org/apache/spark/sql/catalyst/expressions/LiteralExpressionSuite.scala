@@ -243,7 +243,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.fromString("Databricks", StringType), "Databricks")
     val dateString = "1970-01-01"
     checkEvaluation(Literal.fromString(dateString, DateType), java.sql.Date.valueOf(dateString))
-    val timestampString = "0000-01-01 00:00:00"
+    val timestampString = "2000-01-01 00:00:00.123"
     checkEvaluation(Literal.fromString(timestampString, TimestampType),
       java.sql.Timestamp.valueOf(timestampString))
     val calInterval = new CalendarInterval(1, 1)

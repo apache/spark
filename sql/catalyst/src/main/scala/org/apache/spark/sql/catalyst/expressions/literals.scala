@@ -41,6 +41,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
@@ -139,6 +141,11 @@ object Literal {
    * Constructs a Literal from a String
    */
   def fromString(str: String, dataType: DataType): Literal = {
+    def parse[T](f: UTF8String => Option[T]): T = {
+      f(UTF8String.fromString(str)).getOrElse {
+        throw new AnalysisException(s"Cannot parse the ${dataType.catalogString} value: $str")
+      }
+    }
     val value = dataType match {
       case BooleanType => str.toBoolean
       case ByteType => str.toByte
@@ -148,8 +155,10 @@ object Literal {
       case FloatType => str.toFloat
       case DoubleType => str.toDouble
       case StringType => UTF8String.fromString(str)
-      case DateType => java.sql.Date.valueOf(str)
-      case TimestampType => java.sql.Timestamp.valueOf(str)
+      case DateType => parse(stringToDate)
+      case TimestampType =>
+        val timeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
+        parse(stringToTimestamp(_, timeZone))
       case CalendarIntervalType => CalendarInterval.fromString(str)
       case t: DecimalType =>
         val d = Decimal(str)

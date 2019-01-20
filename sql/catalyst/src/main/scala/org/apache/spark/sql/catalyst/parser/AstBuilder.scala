@@ -22,6 +22,7 @@ import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
@@ -36,10 +37,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -1552,17 +1552,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
     val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
-    def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
-      f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
+    def toLiteral(t: DataType): Literal = {
+      Try {Literal.fromString(value, t)}.getOrElse {
         throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
       }
     }
     try {
       valueType match {
-        case "DATE" => toLiteral(stringToDate, DateType)
-        case "TIMESTAMP" =>
-          val timeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
-          toLiteral(stringToTimestamp(_, timeZone), TimestampType)
+        case "DATE" => toLiteral(DateType)
+        case "TIMESTAMP" => toLiteral(TimestampType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
