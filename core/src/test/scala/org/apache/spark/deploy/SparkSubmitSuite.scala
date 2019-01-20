@@ -1239,6 +1239,23 @@ class SparkSubmitSuite
 
     conf.get(nonDelimSpaceFromFile._1) should be ("blah")
   }
+
+  test("get a Spark configuration from arguments") {
+    val testConf = "spark.test.hello" -> "world"
+    val masterConf = "spark.master" -> "yarn"
+    val clArgs = Seq(
+      "--conf", s"${testConf._1}=${testConf._2}",
+      "--conf", s"${masterConf._1}=${masterConf._2}",
+      "--class", "Foo",
+      "app.jar")
+    val conf = new SparkSubmitArguments(clArgs).toSparkConf()
+     Seq(
+       testConf,
+       masterConf
+     ).foreach { case (k, v) =>
+       conf.get(k) should be (v)
+     }
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {

@@ -29,7 +29,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.spark.{SparkException, SparkUserAppException}
+import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
@@ -305,19 +305,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
-      error("Killing submissions is only supported in standalone or Mesos mode!")
-    }
     if (submissionToKill == null) {
       error("Please specify a submission to kill.")
     }
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
-      error(
-        "Requesting submission statuses is only supported in standalone or Mesos mode!")
-    }
     if (submissionToRequestStatusFor == null) {
       error("Please specify a submission to request status for.")
     }
@@ -574,6 +567,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
+        |
+        | Spark standalone, Mesos or K8s with cluster deploy mode only:
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
@@ -662,4 +657,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   private def error(msg: String): Unit = throw new SparkException(msg)
 
+  private[deploy] def toSparkConf(sparkConf: Option[SparkConf] = None): SparkConf = {
+    // either use an existing config or create a new empty one
+    sparkProperties.foldLeft(sparkConf.getOrElse(new SparkConf())) {
+      case (conf, (k, v)) => conf.set(k, v)
+    }
+  }
 }

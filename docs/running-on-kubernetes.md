@@ -62,7 +62,7 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8, and we are 
+The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8, and we are
 currently running <code>kubernetes-client</code> version <code>4.1.0</code>. Make sure that when you are making infrastructure additions that you are aware of said version. It is possible to schedule the
 driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
 using the configuration property for it. It will be possible to use more advanced
@@ -89,7 +89,7 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag push
 ```
 This will build using the projects provided default `Dockerfiles`. To see more options available for customising the behaviour of this tool, including providing custom `Dockerfiles`, please run with the `-h` flag.
 
-By default `bin/docker-image-tool.sh` builds docker image for running JVM jobs. You need to opt-in to build additional 
+By default `bin/docker-image-tool.sh` builds docker image for running JVM jobs. You need to opt-in to build additional
 language binding docker images.
 
 Example usage is
@@ -250,7 +250,7 @@ To mount a volume of any of the types above into the driver pod, use the followi
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.path=<mount path>
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.readOnly=<true|false>
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.subPath=<mount subPath>
-``` 
+```
 
 Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, and `persistentVolumeClaim`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
 
@@ -258,7 +258,7 @@ Each supported type of volumes may have some specific configuration options, whi
 
 ```
 spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].options.[OptionName]=<value>
-``` 
+```
 
 For example, the claim name of a `persistentVolumeClaim` with volume name `checkpointpvc` can be specified using the following property:
 
@@ -266,7 +266,7 @@ For example, the claim name of a `persistentVolumeClaim` with volume name `check
 spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=check-point-pvc-claim
 ```
 
-The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`. For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below. 
+The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`. For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below.
 
 ## Local Storage
 
@@ -403,6 +403,36 @@ RBAC authorization and how to configure Kubernetes service accounts for pods, pl
 [Using RBAC Authorization](https://kubernetes.io/docs/admin/authorization/rbac/) and
 [Configure Service Accounts for Pods](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/).
 
+## Spark Application Management
+
+Kubernetes provides simple application management via the spark-submit CLI tool in cluster mode.
+Users can kill a job by providing the submission ID that is printed when submitting their job.
+The submission ID follows the format ``namespace:driver-pod-name``.
+If user omits the namespace then the namespace set in current k8s context is used.
+For example if user has set a specific namespace as follows `kubectl config set-context minikube --namespace=spark`
+then the `spark` namespace will be used by default. On the other hand, if there is no namespace added to the specific context
+then all namespaces will be considered by default. That means operations will affect all Spark applications matching the given submission ID regardless of namespace.
+Moreover, spark-submit for application management uses the same backend code that is used for submitting the driver, so the same properties
+like `spark.kubernetes.context` etc., can be re-used.
+
+For example:
+```bash
+$ spark-submit --kill spark:spark-pi-1547948636094-driver --master k8s://https://192.168.2.8:8443
+```
+Users also can list the application status by using the `--status` flag:
+
+```bash
+$ spark-submit --status spark:spark-pi-1547948636094-driver --master  k8s://https://192.168.2.8:8443
+```
+Both operations support glob patterns. For example user can run:
+```bash
+$ spark-submit --kill spark:spark-pi* --master  k8s://https://192.168.2.8:8443
+```
+The above will kill all application with the specific prefix.
+
+User can specify the grace period for pod termination via the `spark.kubernetes.appKillPodDeletionGracePeriod` property,
+using `--conf` as means to provide it (default value for all K8s pods is <a href="https://kubernetes.io/docs/concepts/workloads/pods/pod">30 secs</a>).
+
 ## Future Work
 
 There are several Spark on Kubernetes features that are currently being worked on or planned to be worked on. Those features are expected to eventually make it into future versions of the spark-kubernetes integration.
@@ -411,7 +441,6 @@ Some of these include:
 
 * Dynamic Resource Allocation and External Shuffle Service
 * Local File Dependency Management
-* Spark Application Management
 * Job Queues and Resource Management
 
 # Configuration
@@ -426,10 +455,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.context</code></td>
   <td><code>(none)</code></td>
   <td>
-    The context from the user Kubernetes configuration file used for the initial 
+    The context from the user Kubernetes configuration file used for the initial
     auto-configuration of the Kubernetes client library.  When not specified then
-    the users current context is used.  <strong>NB:</strong> Many of the 
-    auto-configured settings can be overridden by the use of other Spark 
+    the users current context is used.  <strong>NB:</strong> Many of the
+    auto-configured settings can be overridden by the use of other Spark
     configuration properties e.g. <code>spark.kubernetes.namespace</code>.
   </td>
 </tr>
@@ -762,7 +791,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Specify the cpu request for each executor pod. Values conform to the Kubernetes <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu">convention</a>.
     Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in <a href="https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units">CPU units</a>.
-    This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task 
+    This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task
     parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
   </td>
 </tr>
@@ -900,14 +929,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.1</code></td>
   <td>
     This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, and various systems processes. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
-    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This prempts this error with a higher default. 
+    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This prempts this error with a higher default.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
   <td><code>"3"</code></td>
   <td>
-   This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
+   This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3.
   </td>
 </tr>
 <tr>
@@ -931,7 +960,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.hadoop.configMapName</code></td>
   <td><code>(none)</code></td>
   <td>
-    Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver 
+    Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver
     and executors for custom Hadoop configuration.
   </td>
 </tr>
@@ -940,14 +969,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(none)</code></td>
   <td>
     Specify the name of the secret where your existing delegation tokens are stored. This removes the need for the job user
-    to provide any kerberos credentials for launching a job. 
+    to provide any kerberos credentials for launching a job.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.kerberos.tokenSecret.itemKey</code></td>
   <td><code>(none)</code></td>
   <td>
-    Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user 
+    Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user
     to provide any kerberos credentials for launching a job.
   </td>
 </tr>
@@ -1016,6 +1045,13 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>10000</td>
   <td>
     Request timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
+  </td>
+</tr>
+<tr>  
+  <td><code>spark.kubernetes.appKillPodDeletionGracePeriod</code></td>
+  <td>(none)</td>
+  <td>
+  Specify the grace period in seconds when deleting a Spark application using spark-submit.
   </td>
 </tr>
 </table>
@@ -1155,7 +1191,6 @@ The following affect the driver and executor containers. All other containers in
     The cpu limits are set by <code>spark.kubernetes.{driver,executor}.limit.cores</code>. The cpu is set by
     <code>spark.{driver,executor}.cores</code>. The memory request and limit are set by summing the values of
     <code>spark.{driver,executor}.memory</code> and <code>spark.{driver,executor}.memoryOverhead</code>.
-
   </td>
 </tr>
 <tr>
