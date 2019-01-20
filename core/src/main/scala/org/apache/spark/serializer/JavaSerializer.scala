@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 private[spark] class JavaSerializationStream(
@@ -137,8 +138,8 @@ private[spark] class JavaSerializerInstance(
  */
 @DeveloperApi
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
-  private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
-  private var extraDebugInfo = conf.getBoolean("spark.serializer.extraDebugInfo", true)
+  private var counterReset = conf.get(SERIALIZER_OBJECT_STREAM_RESET)
+  private var extraDebugInfo = conf.get(SERIALIZER_EXTRA_DEBUG_INFO)
 
   protected def this() = this(new SparkConf())  // For deserialization only
 

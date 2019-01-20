@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{Instant, ZoneId}
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToDays
+
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
   def format(days: Int): String
@@ -38,11 +40,7 @@ class Iso8601DateFormatter(
     toInstantWithZoneId(temporalAccessor, UTC)
   }
 
-  override def parse(s: String): Int = {
-    val seconds = toInstant(s).getEpochSecond
-    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
-    days.toInt
-  }
+  override def parse(s: String): Int = instantToDays(toInstant(s))
 
   override def format(days: Int): String = {
     val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)

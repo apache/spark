@@ -22,8 +22,6 @@ from __future__ import absolute_import
 
 import sys
 import warnings
-import random
-import binascii
 if sys.version >= '3':
     basestring = str
     unicode = str
