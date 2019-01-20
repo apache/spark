@@ -72,6 +72,7 @@ private[ui] class EnvironmentPage(
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
         </div>
+        {if (appEnv.hadoopProperties.nonEmpty) {
         <span class="collapse-aggregated-hadoopProperties collapse-table"
               onClick="collapseTable('collapse-aggregated-hadoopProperties',
             'aggregated-hadoopProperties')">
@@ -80,9 +81,10 @@ private[ui] class EnvironmentPage(
             <a>Hadoop Properties</a>
           </h4>
         </span>
-        <div class="aggregated-hadoopProperties collapsible-table collapsed">
-          {hadoopPropertiesTable}
-        </div>
+          <div class="aggregated-hadoopProperties collapsible-table collapsed">
+            {hadoopPropertiesTable}
+          </div>
+        }}
         <span class="collapse-aggregated-systemProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-systemProperties',
             'aggregated-systemProperties')">
