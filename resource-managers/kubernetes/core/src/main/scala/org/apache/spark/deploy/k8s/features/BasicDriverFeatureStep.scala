@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -153,12 +154,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
 
-    Seq("spark.jars", "spark.files").foreach { key =>
-      conf.getOption(key).foreach { value =>
-        val resolved = KubernetesUtils.resolveFileUrisAndPath(Utils.stringToSeq(value))
-        if (resolved.nonEmpty) {
-          additionalProps.put(key, resolved.mkString(","))
-        }
+    Seq(JARS, FILES).foreach { key =>
+      val value = conf.get(key)
+      val resolved = KubernetesUtils.resolveFileUrisAndPath(value)
+      if (resolved.nonEmpty) {
+        additionalProps.put(key.key, resolved.mkString(","))
       }
     }
 

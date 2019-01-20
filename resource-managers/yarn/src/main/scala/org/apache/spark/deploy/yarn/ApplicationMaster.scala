@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.{StringUtils => ComStrUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
@@ -41,9 +42,9 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
@@ -58,6 +59,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
+  private val appAttemptId = YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
   private val isClusterMode = args.userClass != null
 
   private val sparkConf = new SparkConf()
@@ -99,25 +101,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     }
   }
 
-  private val tokenManager: Option[YARNHadoopDelegationTokenManager] = {
-    sparkConf.get(KEYTAB).map { _ =>
-      new YARNHadoopDelegationTokenManager(sparkConf, yarnConf)
-    }
-  }
-
-  private val ugi = tokenManager match {
-    case Some(tm) =>
-      // Set the context class loader so that the token renewer has access to jars distributed
-      // by the user.
-      Utils.withContextClassLoader(userClassLoader) {
-        tm.start()
-      }
-
-    case _ =>
-      SparkHadoopUtil.get.createSparkUser()
-  }
-
-  private val client = doAsUser { new YarnRMClient() }
+  private val client = new YarnRMClient()
 
   // Default to twice the number of executors (twice the maximum number of executors if dynamic
   // allocation is enabled), with a minimum of 3.
@@ -174,11 +158,19 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   // In cluster mode, used to tell the AM when the user's SparkContext has been initialized.
   private val sparkContextPromise = Promise[SparkContext]()
 
-  // Load the list of localized files set by the client. This is used when launching executors,
-  // and is loaded here so that these configs don't pollute the Web UI's environment page in
-  // cluster mode.
-  private val localResources = doAsUser {
+  /**
+   * Load the list of localized files set by the client, used when launching executors. This should
+   * be called in a context where the needed credentials to access HDFS are available.
+   */
+  private def prepareLocalResources(): Map[String, LocalResource] = {
     logInfo("Preparing Local resources")
+    val distCacheConf = new SparkConf(false)
+    if (args.distCacheConf != null) {
+      Utils.getPropertiesFromFile(args.distCacheConf).foreach { case (k, v) =>
+        distCacheConf.set(k, v)
+      }
+    }
+
     val resources = HashMap[String, LocalResource]()
 
     def setupDistributedCache(
@@ -199,11 +191,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       resources(fileName) = amJarRsrc
     }
 
-    val distFiles = sparkConf.get(CACHED_FILES)
-    val fileSizes = sparkConf.get(CACHED_FILES_SIZES)
-    val timeStamps = sparkConf.get(CACHED_FILES_TIMESTAMPS)
-    val visibilities = sparkConf.get(CACHED_FILES_VISIBILITIES)
-    val resTypes = sparkConf.get(CACHED_FILES_TYPES)
+    val distFiles = distCacheConf.get(CACHED_FILES)
+    val fileSizes = distCacheConf.get(CACHED_FILES_SIZES)
+    val timeStamps = distCacheConf.get(CACHED_FILES_TIMESTAMPS)
+    val visibilities = distCacheConf.get(CACHED_FILES_VISIBILITIES)
+    val resTypes = distCacheConf.get(CACHED_FILES_TYPES)
 
     for (i <- 0 to distFiles.size - 1) {
       val resType = LocalResourceType.valueOf(resTypes(i))
@@ -212,7 +204,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     }
 
     // Distribute the conf archive to executors.
-    sparkConf.get(CACHED_CONF_ARCHIVE).foreach { path =>
+    distCacheConf.get(CACHED_CONF_ARCHIVE).foreach { path =>
       val uri = new URI(path)
       val fs = FileSystem.get(uri, yarnConf)
       val status = fs.getFileStatus(new Path(uri))
@@ -225,36 +217,15 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         LocalResourceVisibility.PRIVATE.name())
     }
 
-    // Clean up the configuration so it doesn't show up in the Web UI (since it's really noisy).
-    CACHE_CONFIGS.foreach { e =>
-      sparkConf.remove(e)
-      sys.props.remove(e.key)
-    }
-
     resources.toMap
   }
 
-  def getAttemptId(): ApplicationAttemptId = {
-    client.getAttemptId()
-  }
-
   final def run(): Int = {
-    doAsUser {
-      runImpl()
-    }
-    exitCode
-  }
-
-  private def runImpl(): Unit = {
     try {
-      val appAttemptId = client.getAttemptId()
-
-      var attemptID: Option[String] = None
-
-      if (isClusterMode) {
+      val attemptID = if (isClusterMode) {
         // Set the web ui port to be ephemeral for yarn so we don't conflict with
         // other spark processes running on the same box
-        System.setProperty("spark.ui.port", "0")
+        System.setProperty(UI_PORT.key, "0")
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
@@ -264,7 +235,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
 
-        attemptID = Option(appAttemptId.getAttemptId.toString)
+        Option(appAttemptId.getAttemptId.toString)
+      } else {
+        None
       }
 
       new CallerContext(
@@ -277,7 +250,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
         val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
-        val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
+        val isLastAttempt = appAttemptId.getAttemptId() >= maxAppAttempts
 
         if (!finished) {
           // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
@@ -322,6 +295,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
           logWarning("Exception during stopping of the metric system: ", e)
       }
     }
+
+    exitCode
   }
 
   /**
@@ -377,9 +352,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
-        if (!inShutdown) {
-          tokenManager.foreach(_.stop())
-        }
       }
     }
   }
@@ -405,8 +377,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       port: Int,
       _sparkConf: SparkConf,
       uiAddress: Option[String]): Unit = {
-    val appId = client.getAttemptId().getApplicationId().toString()
-    val attemptId = client.getAttemptId().getAttemptId().toString()
+    val appId = appAttemptId.getApplicationId().toString()
+    val attemptId = appAttemptId.getAttemptId().toString()
     val historyAddress = ApplicationMaster
       .getHistoryServerAddress(_sparkConf, yarnConf, appId, attemptId)
 
@@ -415,9 +387,20 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   }
 
   private def createAllocator(driverRef: RpcEndpointRef, _sparkConf: SparkConf): Unit = {
-    val appId = client.getAttemptId().getApplicationId().toString()
+    // In client mode, the AM may be restarting after delegation tokens have reached their TTL. So
+    // always contact the driver to get the current set of valid tokens, so that local resources can
+    // be initialized below.
+    if (!isClusterMode) {
+      val tokens = driverRef.askSync[Array[Byte]](RetrieveDelegationTokens)
+      if (tokens != null) {
+        SparkHadoopUtil.get.addDelegationTokens(tokens, _sparkConf)
+      }
+    }
+
+    val appId = appAttemptId.getApplicationId().toString()
     val driverUrl = RpcEndpointAddress(driverRef.address.host, driverRef.address.port,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+    val localResources = prepareLocalResources()
 
     // Before we initialize the allocator, let's log the information about how executors will
     // be run up front, to avoid printing this out for every single executor being launched.
@@ -433,12 +416,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     allocator = client.createAllocator(
       yarnConf,
       _sparkConf,
+      appAttemptId,
       driverUrl,
       driverRef,
       securityMgr,
       localResources)
-
-    tokenManager.foreach(_.setDriverRef(driverRef))
 
     // Initialize the AM endpoint *after* the allocator has been initialized. This ensures
     // that when the driver sends an initial executor request (e.g. after an AM restart),
@@ -639,7 +621,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         d.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
 
       case None =>
-        System.setProperty("spark.ui.filters", amFilter)
+        System.setProperty(UI_FILTERS.key, amFilter)
         params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     }
   }
@@ -755,6 +737,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
           case None =>
             logWarning("Container allocator is not ready to find executor loss reasons yet.")
         }
+
+      case UpdateDelegationTokens(tokens) =>
+        SparkHadoopUtil.get.addDelegationTokens(tokens, sparkConf)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -765,12 +750,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
       }
     }
-  }
-
-  private def doAsUser[T](fn: => T): T = {
-    ugi.doAs(new PrivilegedExceptionAction[T]() {
-      override def run: T = fn
-    })
   }
 
 }
@@ -793,7 +772,24 @@ object ApplicationMaster extends Logging {
     SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
     master = new ApplicationMaster(amArgs)
-    System.exit(master.run())
+
+    val ugi = master.sparkConf.get(PRINCIPAL) match {
+      case Some(principal) =>
+        val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
+        SparkHadoopUtil.get.loginUserFromKeytab(principal, master.sparkConf.get(KEYTAB).orNull)
+        val newUGI = UserGroupInformation.getCurrentUser()
+        // Transfer the original user's tokens to the new user, since it may contain needed tokens
+        // (such as those user to connect to YARN).
+        newUGI.addCredentials(originalCreds)
+        newUGI
+
+      case _ =>
+        SparkHadoopUtil.get.createSparkUser()
+    }
+
+    ugi.doAs(new PrivilegedExceptionAction[Unit]() {
+      override def run(): Unit = System.exit(master.run())
+    })
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
@@ -801,7 +797,7 @@ object ApplicationMaster extends Logging {
   }
 
   private[spark] def getAttemptId(): ApplicationAttemptId = {
-    master.getAttemptId
+    master.appAttemptId
   }
 
   private[spark] def getHistoryServerAddress(

@@ -28,7 +28,6 @@ try:
     import resource
 except ImportError:
     has_resource_module = False
-import socket
 import traceback
 
 from pyspark.accumulators import _accumulatorRegistry

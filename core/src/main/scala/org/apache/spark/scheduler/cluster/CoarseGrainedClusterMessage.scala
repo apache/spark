@@ -104,6 +104,9 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
+  // Used by YARN's client mode AM to retrieve the current set of delegation tokens.
+  object RetrieveDelegationTokens extends CoarseGrainedClusterMessage
+
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running
   case class RequestExecutors(

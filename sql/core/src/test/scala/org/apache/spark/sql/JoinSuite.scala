@@ -909,4 +909,64 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       checkAnswer(df, Row(1, 100, 42, 200, 1, 42))
     }
   }
+
+  test("NaN and -0.0 in join keys") {
+    withTempView("v1", "v2", "v3", "v4") {
+      Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v1")
+      Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT v1.f, v1.d, v2.f, v2.d
+            |FROM v1 JOIN v2
+            |ON v1.f = v2.f AND v1.d = v2.d
+          """.stripMargin),
+        Seq(
+          Row(Float.NaN, Double.NaN, Float.NaN, Double.NaN),
+          Row(0.0f, 0.0, 0.0f, 0.0),
+          Row(0.0f, 0.0, -0.0f, -0.0),
+          Row(-0.0f, -0.0, 0.0f, 0.0),
+          Row(-0.0f, -0.0, -0.0f, -0.0)))
+
+      // test with complicated join keys.
+      checkAnswer(
+        sql(
+          """
+            |SELECT v1.f, v1.d, v2.f, v2.d
+            |FROM v1 JOIN v2
+            |ON
+            |  array(v1.f) = array(v2.f) AND
+            |  struct(v1.d) = struct(v2.d) AND
+            |  array(struct(v1.f, v1.d)) = array(struct(v2.f, v2.d)) AND
+            |  struct(array(v1.f), array(v1.d)) = struct(array(v2.f), array(v2.d))
+          """.stripMargin),
+        Seq(
+          Row(Float.NaN, Double.NaN, Float.NaN, Double.NaN),
+          Row(0.0f, 0.0, 0.0f, 0.0),
+          Row(0.0f, 0.0, -0.0f, -0.0),
+          Row(-0.0f, -0.0, 0.0f, 0.0),
+          Row(-0.0f, -0.0, -0.0f, -0.0)))
+
+      // test with tables with complicated-type columns.
+      Seq((Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))))
+        .toDF("arr", "stru", "arrOfStru").createTempView("v3")
+      Seq((Array(0.0f, -0.0f), Tuple2(0.0d, 0.0/0.0), Seq(Tuple2(0.0d, 0.0/0.0))))
+        .toDF("arr", "stru", "arrOfStru").createTempView("v4")
+      checkAnswer(
+        sql(
+          """
+            |SELECT v3.arr, v3.stru, v3.arrOfStru, v4.arr, v4.stru, v4.arrOfStru
+            |FROM v3 JOIN v4
+            |ON v3.arr = v4.arr AND v3.stru = v4.stru AND v3.arrOfStru = v4.arrOfStru
+          """.stripMargin),
+        Seq(Row(
+          Seq(-0.0f, 0.0f),
+          Row(-0.0d, Double.NaN),
+          Seq(Row(-0.0d, Double.NaN)),
+          Seq(0.0f, -0.0f),
+          Row(0.0d, 0.0/0.0),
+          Seq(Row(0.0d, 0.0/0.0)))))
+    }
+  }
 }

@@ -43,7 +43,7 @@ private[spark] case class ProcfsMetrics(
 // project.
 private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends Logging {
   private val procfsStatFile = "stat"
-  private val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+  private val testing = Utils.isTesting
   private val pageSize = computePageSize()
   private var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
