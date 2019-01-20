@@ -193,11 +193,8 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
     }.get
   }
 
-  test("Test the InputFormat optimizer") {
+  test("[SPARK-26630] Fix ClassCastException in TableReader while creating HadoopRDD") {
     withTable("table_old", "table_pt_old", "table_new", "table_pt_new") {
-      sql("set spark.sql.hive.fileInputFormat.enabled=true")
-      sql("set spark.sql.hive.fileInputFormat.split.maxsize=134217728")
-      sql("set spark.sql.hive.fileInputFormat.split.minsize=134217728")
       sql(
         s"""
            |CREATE TABLE table_old (id int)

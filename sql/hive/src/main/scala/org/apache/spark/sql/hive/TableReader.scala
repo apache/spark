@@ -123,7 +123,7 @@ class HadoopTableReader(
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
     // logDebug("Table input: %s".format(tablePath))
-    val hadoopRDD = getRDD(hiveTable.getInputFormatClass.getName, localTableDesc, inputPathStr)
+    val hadoopRDD = createHadoopRDD(hiveTable.getInputFormatClass.getCanonicalName, localTableDesc, inputPathStr)
 
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
@@ -239,7 +239,7 @@ class HadoopTableReader(
 
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
-      getRDD(partDesc.getInputFileFormatClassName, localTableDesc, inputPathStr)
+      createHadoopRDD(partDesc.getInputFileFormatClassName, localTableDesc, inputPathStr)
         .mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.getConstructor().newInstance()
@@ -288,20 +288,13 @@ class HadoopTableReader(
   /**
    * The entry of creating a RDD.
    */
-  private def getRDD(
-    inputClassName: String,
-    localTableDesc: TableDesc,
-    inputPathStr: String): RDD[Writable] = {
-    if (isCreateNewHadoopRDD(inputClassName)) {
-      createNewHadoopRdd(
-        localTableDesc,
-        inputPathStr,
-        inputClassName)
+  private def createHadoopRDD(
+      inputClassName: String, localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
+    if (classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]]
+      .isAssignableFrom(Utils.classForName(inputClassName))) {
+      createNewHadoopRdd(localTableDesc, inputPathStr, inputClassName)
     } else {
-      createHadoopRdd(
-        localTableDesc,
-        inputPathStr,
-        inputClassName)
+      createOldHadoopRdd(localTableDesc, inputPathStr, inputClassName)
     }
   }
 
@@ -309,10 +302,8 @@ class HadoopTableReader(
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each slave.
    */
-  private def createHadoopRdd(
-    tableDesc: TableDesc,
-    path: String,
-    inputClassName: String): RDD[Writable] = {
+  private def createOldHadoopRdd(
+      tableDesc: TableDesc, path: String, inputClassName: String): RDD[Writable] = {
 
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
 
@@ -320,7 +311,8 @@ class HadoopTableReader(
       sparkSession.sparkContext,
       _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
       Some(initializeJobConfFunc),
-      getInputFormat(inputClassName),
+      Utils.classForName(inputClassName)
+        .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]],
       classOf[Writable],
       classOf[Writable],
       _minSplitsPerRDD)
@@ -334,17 +326,15 @@ class HadoopTableReader(
    * applied locally on each slave.
    */
   private def createNewHadoopRdd(
-    tableDesc: TableDesc,
-    path: String,
-    inputClassName: String): RDD[Writable] = {
-
-    val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
+      tableDesc: TableDesc, path: String, inputClassName: String): RDD[Writable] = {
 
     val newJobConf = new JobConf(hadoopConf)
-    initializeJobConfFunc.apply(newJobConf)
+    (HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _).apply(newJobConf)
+
     val rdd = new NewHadoopRDD(
       sparkSession.sparkContext,
-      getNewInputFormat(inputClassName),
+      Utils.classForName(inputClassName)
+        .asInstanceOf[java.lang.Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]]],
       classOf[Writable],
       classOf[Writable],
       newJobConf
@@ -354,36 +344,6 @@ class HadoopTableReader(
     rdd.map(_._2)
   }
 
-  /**
-   * If `spark.sql.hive.fileInputFormat.enabled` is true, this function will optimize the input
-   * method while reading Hive tables.
-   * For old input format `org.apache.hadoop.mapred.InputFormat`.
-   */
-  private def getInputFormat(
-    inputClassName: String): Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]] = {
-    Utils.classForName(inputClassName)
-      .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]]
-  }
-
-  /**
-   * If `spark.sql.hive.fileInputFormat.enabled` is true, this function will optimize the input
-   * method while reading Hive tables.
-   * For new input format `org.apache.hadoop.mapreduce.InputFormat`.
-   */
-  private def getNewInputFormat(
-    inputClassName: String): Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]] = {
-    Utils.classForName(inputClassName)
-      .asInstanceOf[java.lang.Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]]]
-  }
-
-  /**
-   * Which kind of RDD will be created.
-   * If return true, it will use `NewHadoopRDD` to create RDD and use `HadoopRDD` when return false.
-   */
-  private def isCreateNewHadoopRDD(inputClassName: String): Boolean = {
-    classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]]
-      .isAssignableFrom(Utils.classForName(inputClassName))
-  }
 }
 
 private[hive] object HiveTableUtil {
