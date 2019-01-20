@@ -300,20 +300,21 @@ class HadoopTableReader(
   }
 
   /**
-   * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
+   * Creates a OldHadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each slave.
    */
   private def createOldHadoopRdd(
       tableDesc: TableDesc, path: String, inputClassName: String): RDD[Writable] = {
 
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
+    val inputFormatClass = Utils.classForName(inputClassName)
+      .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]]
 
     val rdd = new HadoopRDD(
       sparkSession.sparkContext,
       _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
       Some(initializeJobConfFunc),
-      Utils.classForName(inputClassName)
-        .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]],
+      inputFormatClass,
       classOf[Writable],
       classOf[Writable],
       _minSplitsPerRDD)
@@ -323,19 +324,20 @@ class HadoopTableReader(
   }
 
   /**
-   * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
+   * Creates a NewHadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each slave.
    */
   private def createNewHadoopRdd(
       tableDesc: TableDesc, path: String, inputClassName: String): RDD[Writable] = {
 
     val newJobConf = new JobConf(hadoopConf)
-    (HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _).apply(newJobConf)
+    HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc)(newJobConf)
+    val inputFormatClass = Utils.classForName(inputClassName)
+      .asInstanceOf[java.lang.Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]]]
 
     val rdd = new NewHadoopRDD(
       sparkSession.sparkContext,
-      Utils.classForName(inputClassName)
-        .asInstanceOf[java.lang.Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]]],
+      inputFormatClass,
       classOf[Writable],
       classOf[Writable],
       newJobConf
