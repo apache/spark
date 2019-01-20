@@ -24,7 +24,7 @@ import sys
 import unittest
 
 from pyspark.sql import Row
-from pyspark.sql.functions import UserDefinedFunction
+from pyspark.sql.functions import col, UserDefinedFunction
 from pyspark.sql.types import *
 from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings, \
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
@@ -201,6 +201,12 @@ class TypesTests(ReusedSQLTestCase):
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{'a': 1}], ["b"])
         self.assertEqual(df.columns, ['b'])
+
+    def test_negative_decimal(self):
+        df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
+        ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
+        actual = list(map(lambda r: int(r.value), ret))
+        self.assertEqual(actual, [0, 10])
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
