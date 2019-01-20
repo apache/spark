@@ -42,13 +42,13 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 
 ## Scanning Input Table
 
-Spark SQL can increase the speed while scanning tables via tuning Hadoop configurations.
+Spark SQL can increase the speed while scanning Hive tables via tuning Hadoop configurations.
 For example, setting the max/min size of input splits.
 
 When we use `TextInputFormat`, we can set the input format to `CombineTextInputFormat`. So it will
-combine small files automatically when we read a table.
+combine small files automatically when we read a Hive table.
 
-It can be quite useful especially when scanning a table with a lot of small files.
+It can be quite useful especially when scanning a Hive table with a lot of small files.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
