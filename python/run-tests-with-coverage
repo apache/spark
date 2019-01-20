@@ -52,6 +52,8 @@ export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
 
 ./run-tests "$@"
 
+echo "+++++++++++++++ Tests finished"
+
 # Don't run coverage for the coverage command itself
 unset COVERAGE_PROCESS_START
 
