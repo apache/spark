@@ -1337,9 +1337,9 @@ object SQLConf {
       .doc("When true, Arrow will perform safe type conversion when converting " +
         "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
         "when detecting unsafe type conversion like overflow. When false, disabling Arrow's type " +
-        "check and do type conversions anyway.")
+        "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()

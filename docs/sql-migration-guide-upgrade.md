@@ -43,6 +43,54 @@ displayTitle: Spark SQL Upgrading Guide
 
   - Since Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Set JSON option `inferTimestamp` to `false` to disable such type inferring.
 
+  - In PySpark, when Arrow optimization is enabled, if Arrow version is higher than 0.11.0, Arrow can perform safe type conversion when converting Pandas.Series to Arrow array during serialization. Arrow will raise errors when detecting unsafe type conversion like overflow. Setting `spark.sql.execution.pandas.arrowSafeTypeConversion` to true can enable it. The default setting is false. PySpark's behavior for Arrow versions is illustrated in the table below:
+  <table class="table">
+        <tr>
+          <th>
+            <b>PyArrow version</b>
+          </th>
+          <th>
+            <b>Integer Overflow</b>
+          </th>
+          <th>
+            <b>Floating Point Truncation</b>
+          </th>
+        </tr>
+        <tr>
+          <th>
+            <b>version < 0.11.0</b>
+          </th>
+          <th>
+            <b>Raise error</b>
+          </th>
+          <th>
+            <b>Silently allows</b>
+          </th>
+        </tr>
+        <tr>
+          <th>
+            <b>version > 0.11.0, arrowSafeTypeConversion=false</b>
+          </th>
+          <th>
+            <b>Silent overflow</b>
+          </th>
+          <th>
+            <b>Silently allows</b>
+          </th>
+        </tr>
+        <tr>
+          <th>
+            <b>version > 0.11.0, arrowSafeTypeConversion=true</b>
+          </th>
+          <th>
+            <b>Raise error</b>
+          </th>
+          <th>
+            <b>Raise error</b>
+          </th>
+        </tr>
+  </table>
+
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.

@@ -138,44 +138,36 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_byte(self):
-        with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
-            data = [(None,), (2,), (3,), (4,)]
-            schema = StructType().add("byte", ByteType())
-            df = self.spark.createDataFrame(data, schema)
-            byte_f = pandas_udf(lambda x: x, ByteType())
-            res = df.select(byte_f(col('byte')))
-            self.assertEquals(df.collect(), res.collect())
+        data = [(None,), (2,), (3,), (4,)]
+        schema = StructType().add("byte", ByteType())
+        df = self.spark.createDataFrame(data, schema)
+        byte_f = pandas_udf(lambda x: x, ByteType())
+        res = df.select(byte_f(col('byte')))
+        self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_short(self):
-        with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
-            data = [(None,), (2,), (3,), (4,)]
-            schema = StructType().add("short", ShortType())
-            df = self.spark.createDataFrame(data, schema)
-            short_f = pandas_udf(lambda x: x, ShortType())
-            res = df.select(short_f(col('short')))
-            self.assertEquals(df.collect(), res.collect())
+        data = [(None,), (2,), (3,), (4,)]
+        schema = StructType().add("short", ShortType())
+        df = self.spark.createDataFrame(data, schema)
+        short_f = pandas_udf(lambda x: x, ShortType())
+        res = df.select(short_f(col('short')))
+        self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_int(self):
-        with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
-            data = [(None,), (2,), (3,), (4,)]
-            schema = StructType().add("int", IntegerType())
-            df = self.spark.createDataFrame(data, schema)
-            int_f = pandas_udf(lambda x: x, IntegerType())
-            res = df.select(int_f(col('int')))
-            self.assertEquals(df.collect(), res.collect())
+        data = [(None,), (2,), (3,), (4,)]
+        schema = StructType().add("int", IntegerType())
+        df = self.spark.createDataFrame(data, schema)
+        int_f = pandas_udf(lambda x: x, IntegerType())
+        res = df.select(int_f(col('int')))
+        self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_long(self):
-        with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
-            data = [(None,), (2,), (3,), (4,)]
-            schema = StructType().add("long", LongType())
-            df = self.spark.createDataFrame(data, schema)
-            long_f = pandas_udf(lambda x: x, LongType())
-            res = df.select(long_f(col('long')))
-            self.assertEquals(df.collect(), res.collect())
+        data = [(None,), (2,), (3,), (4,)]
+        schema = StructType().add("long", LongType())
+        df = self.spark.createDataFrame(data, schema)
+        long_f = pandas_udf(lambda x: x, LongType())
+        res = df.select(long_f(col('long')))
+        self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_float(self):
         data = [(3.0,), (5.0,), (-1.0,), (None,)]
