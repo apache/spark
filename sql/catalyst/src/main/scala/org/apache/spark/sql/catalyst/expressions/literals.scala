@@ -125,7 +125,7 @@ object Literal {
    */
   def fromObject(obj: Any, objType: DataType): Literal = new Literal(obj, objType)
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
-  
+
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
