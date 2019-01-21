@@ -392,9 +392,9 @@ object PowerIterationClustering extends Logging {
           case (_, x, y) => x * y
         }.vertices.values.sum()
         val xTx = curG.vertices.mapValues(x => x * x).values.sum()
-        val Rayleigh = xTAx / xTx
+        val rayleigh = xTAx / xTx
 
-        if (math.abs(norm - math.abs(Rayleigh)) > tol) {
+        if (math.abs(norm - math.abs(rayleigh)) > tol) {
           throw new SparkException(s"Power Iteration fail to converge, delta = ${delta}," +
             s" difference delta = ${diffDelta} and norm = ${norm}")
         }
