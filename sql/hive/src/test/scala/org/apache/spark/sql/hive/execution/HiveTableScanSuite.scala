@@ -192,44 +192,4 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
       case p: HiveTableScanExec => p
     }.get
   }
-
-  test("[SPARK-26630] Fix ClassCastException in TableReader while creating HadoopRDD") {
-    withTable("table_old", "table_pt_old", "table_new", "table_pt_new") {
-      sql(
-        s"""
-           |CREATE TABLE table_old (id int)
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-         """.stripMargin)
-      sql(
-        s"""
-           |CREATE TABLE table_pt_old (id int)
-           |PARTITIONED BY (a int, b int)
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-         """.stripMargin)
-      sql(
-        s"""
-           |CREATE TABLE table_new (id int)
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-       """.stripMargin)
-      sql(
-        s"""
-           |CREATE TABLE table_pt_new (id int)
-           |PARTITIONED BY (a int, b int)
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-       """.stripMargin)
-
-      assert(sql("SELECT count(1) FROM table_old").collect() === Array(Row(0)))
-      assert(sql("SELECT count(1) FROM table_pt_old").collect() === Array(Row(0)))
-      assert(sql("SELECT count(1) FROM table_new").collect() === Array(Row(0)))
-      assert(sql("SELECT count(1) FROM table_pt_new").collect() === Array(Row(0)))
-    }
-  }
 }

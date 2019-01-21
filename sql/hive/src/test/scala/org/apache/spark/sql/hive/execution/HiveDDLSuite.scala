@@ -260,6 +260,65 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       assert(err.contains("Cannot recognize hive type string:"))
    }
   }
+
+  test("SPARK-26630: Fix ClassCastException in TableReader while creating HadoopRDD") {
+    withTable("table_old", "table_pt_old", "table_new", "table_pt_new",
+      "table_ctas_old", "table_ctas_pt_old", "table_ctas_new", "table_ctas_pt_new") {
+      spark.sql(
+        s"""
+           |CREATE TABLE table_old (id int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+         """.stripMargin)
+      spark.sql("INSERT INTO table_old VALUES (1), (2), (3), (4), (5)")
+      assert(spark.sql("SELECT COUNT(1) FROM table_old").collect() === Array(Row(5)))
+
+      spark.sql(
+        s"""
+           |CREATE TABLE table_pt_old (id int)
+           |PARTITIONED BY (pt int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+         """.stripMargin)
+      spark.sql("INSERT INTO table_pt_old PARTITION(pt=1) VALUES (1), (2), (3), (4), (5)")
+      assert(spark.sql("SELECT COUNT(1) FROM table_pt_old").collect() === Array(Row(5)))
+
+      spark.sql(
+        s"""
+           |CREATE TABLE table_new (id int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+       """.stripMargin)
+      spark.sql("INSERT INTO table_new VALUES (1), (2), (3), (4), (5)")
+      assert(spark.sql("SELECT COUNT(1) FROM table_new").collect() === Array(Row(5)))
+
+      spark.sql(
+        s"""
+           |CREATE TABLE table_pt_new (id int)
+           |PARTITIONED BY (pt int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+       """.stripMargin)
+      spark.sql("INSERT INTO table_pt_new PARTITION(pt=1) VALUES (1), (2), (3), (4), (5)")
+      assert(spark.sql("SELECT COUNT(1) FROM table_pt_new").collect() === Array(Row(5)))
+
+      spark.sql("CREATE TABLE table_ctas_old AS SELECT id FROM table_old")
+      assert(spark.sql("SELECT COUNT(1) from table_ctas_old").collect() === Array(Row(5)))
+
+      spark.sql("CREATE TABLE table_ctas_new AS SELECT id FROM table_new")
+      assert(spark.sql("SELECT COUNT(1) from table_ctas_new").collect() === Array(Row(5)))
+
+      spark.sql("CREATE TABLE table_ctas_pt_old AS SELECT id FROM table_pt_old")
+      assert(spark.sql("SELECT COUNT(1) from table_ctas_pt_old").collect() === Array(Row(5)))
+
+      spark.sql("CREATE TABLE table_ctas_pt_new AS SELECT id FROM table_pt_new")
+      assert(spark.sql("SELECT COUNT(1) from table_ctas_pt_new").collect() === Array(Row(5)))
+    }
+  }
 }
 
 class HiveDDLSuite
