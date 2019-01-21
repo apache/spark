@@ -91,6 +91,8 @@ private object NoHiveTest {
   def runTest(): Unit = {
     try {
       val manager = new HadoopDelegationTokenManager(new SparkConf(), new Configuration(), null)
+      assert(manager.isProviderLoaded("hadoopfs"))
+      assert(manager.isProviderLoaded("hbase"))
       require(!manager.isProviderLoaded("hive"))
     } catch {
       case e: Throwable =>

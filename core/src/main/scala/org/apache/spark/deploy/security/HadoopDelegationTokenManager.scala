@@ -249,7 +249,7 @@ private[spark] class HadoopDelegationTokenManager(
   private def loadProviders(): Map[String, HadoopDelegationTokenProvider] = {
     val loader = ServiceLoader.load(classOf[HadoopDelegationTokenProvider],
       Utils.getContextOrSparkClassLoader)
-    var providers = mutable.ArrayBuffer[HadoopDelegationTokenProvider]()
+    val providers = mutable.ArrayBuffer[HadoopDelegationTokenProvider]()
 
     val iterator = loader.iterator
     while (iterator.hasNext) {

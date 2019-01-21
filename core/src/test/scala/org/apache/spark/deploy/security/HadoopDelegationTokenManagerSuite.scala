@@ -18,8 +18,26 @@
 package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+
+private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationTokenProvider {
+  throw new IllegalArgumentException
+
+  override def serviceName: String = "throw"
+
+  override def delegationTokensRequired(
+    sparkConf: SparkConf,
+    hadoopConf: Configuration): Boolean = throw new IllegalArgumentException
+
+  override def obtainDelegationTokens(
+    hadoopConf: Configuration,
+    sparkConf: SparkConf,
+    fileSystems: Set[FileSystem],
+    creds: Credentials): Option[Long] = throw new IllegalArgumentException
+}
 
 class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
   private val hadoopConf = new Configuration()
@@ -28,6 +46,8 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     val manager = new HadoopDelegationTokenManager(new SparkConf(false), hadoopConf, null)
     assert(manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
+    // This checks that providers are loaded independently and they have no effect on each other
+    assert(!manager.isProviderLoaded("throw"))
   }
 
   test("using deprecated configurations") {
