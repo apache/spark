@@ -222,12 +222,6 @@ private[spark] class DAGScheduler(
   private val maxFailureNumTasksCheck = sc.getConf
     .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES)
 
-  /**
-   * Warning size Threshold for taskBinary to broadcast when submitting task.
-   */
-  private val taskWarningBinarySizeThreshold = sc.getConf
-    .get(config.SUBMIT_TASK_BINARY_WANRING_THRESHOLD)
-
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
@@ -1168,10 +1162,11 @@ private[spark] class DAGScheduler(
         partitions = stage.rdd.partitions
       }
 
-      val taskBinarySizeMb = Utils.byteStringAsMb(s"${taskBinaryBytes.length}b")
+      val taskBinarySizeKb = Utils.byteStringAsKb(s"${taskBinaryBytes.length}b")
 
-      if (taskBinarySizeMb > taskWarningBinarySizeThreshold) {
-        logWarning(s"Broadcasting large task binary with size ${taskBinarySizeMb}MB")
+      if (taskBinarySizeKb > TaskSetManager.TASK_SIZE_TO_WARN_KB) {
+        logWarning(s"Broadcasting large task binary with size " +
+          s"${Utils.bytesToString(taskBinarySizeKb * 1000)}")
       }
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
