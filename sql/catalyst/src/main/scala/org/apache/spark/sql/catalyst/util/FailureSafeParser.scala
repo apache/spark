@@ -55,11 +55,18 @@ class FailureSafeParser[IN](
 
   def parse(input: IN): Iterator[InternalRow] = {
     try {
-     if (skipParsing) {
-       Iterator.single(InternalRow.empty)
-     } else {
-       rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
-     }
+      Thread.dumpStack()
+      if (skipParsing) {
+        // scalastyle:off println
+        println("!!!! NOT PARSING !!!!")
+        // scalastyle:on println
+        Iterator.single(InternalRow.empty)
+      } else {
+        // scalastyle:off println
+        println("!!!! PARSING !!!!")
+        // scalastyle:on println
+        rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
+      }
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>
