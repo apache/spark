@@ -239,8 +239,7 @@ class HadoopTableReader(
 
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
-      createHadoopRDD(localTableDesc, inputPathStr)
-        .mapPartitions { iter =>
+      createHadoopRDD(localTableDesc, inputPathStr).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.getConstructor().newInstance()
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
@@ -289,12 +288,11 @@ class HadoopTableReader(
    * The entry of creating a RDD.
    */
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
-    localTableDesc.getInputFileFormatClass match {
-      case c: Class[_]
-        if classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]].isAssignableFrom(c) =>
-        createNewHadoopRdd(localTableDesc, inputPathStr)
-      case _ =>
-        createOldHadoopRdd(localTableDesc, inputPathStr)
+    val inputFormatClazz = localTableDesc.getInputFileFormatClass
+    if (classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]].isAssignableFrom(inputFormatClazz)) {
+      createNewHadoopRdd(localTableDesc, inputPathStr)
+    } else {
+      createOldHadoopRdd(localTableDesc, inputPathStr)
     }
   }
 
