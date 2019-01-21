@@ -497,7 +497,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Boolean = {
+      maxFields: Int): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
@@ -781,7 +781,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Boolean = {
+      maxFields: Int): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
