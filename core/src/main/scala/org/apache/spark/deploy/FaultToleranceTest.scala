@@ -60,7 +60,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private object FaultToleranceTest extends App with Logging {
 
   private val conf = new SparkConf()
-  private val ZK_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark")
+  private val zkDir = conf.get(config.Deploy.ZOOKEEPER_DIRECTORY).getOrElse("/spark")
 
   private val masters = ListBuffer[TestMasterInfo]()
   private val workers = ListBuffer[TestWorkerInfo]()
@@ -87,8 +87,8 @@ private object FaultToleranceTest extends App with Logging {
     terminateCluster()
 
     // Clear ZK directories in between tests (for speed purposes)
-    SparkCuratorUtil.deleteRecursive(zk, ZK_DIR + "/spark_leader")
-    SparkCuratorUtil.deleteRecursive(zk, ZK_DIR + "/master_status")
+    SparkCuratorUtil.deleteRecursive(zk, zkDir + "/spark_leader")
+    SparkCuratorUtil.deleteRecursive(zk, zkDir + "/master_status")
   }
 
   test("sanity-basic") {

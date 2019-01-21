@@ -524,13 +524,6 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-  val ORC_COPY_BATCH_TO_SPARK = buildConf("spark.sql.orc.copyBatchToSpark")
-    .doc("Whether or not to copy the ORC columnar batch to Spark columnar batch in the " +
-      "vectorized ORC reader.")
-    .internal()
-    .booleanConf
-    .createWithDefault(false)
-
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
@@ -1436,8 +1429,15 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
+  val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
     .internal()
+    .doc("A comma-separated list of data source short names or fully qualified data source" +
+      " register class names for which data source V2 read paths are disabled. Reads from these" +
+      " sources will fall back to the V1 sources.")
+    .stringConf
+    .createWithDefault("")
+
+  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
       " StreamWriteSupport is disabled. Writes to these sources will fall back to the V1 Sinks.")
     .stringConf
@@ -1642,13 +1642,6 @@ object SQLConf {
         "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
-
-  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
-    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
-      " dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
-      "java.time.* packages are used for the same purpose.")
-    .booleanConf
-    .createWithDefault(false)
 }
 
 /**
@@ -2028,6 +2021,8 @@ class SQLConf extends Serializable with Logging {
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
+  def userV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
+
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
   def disabledV2StreamingMicroBatchReaders: String =
@@ -2075,8 +2070,6 @@ class SQLConf extends Serializable with Logging {
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
-
-  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

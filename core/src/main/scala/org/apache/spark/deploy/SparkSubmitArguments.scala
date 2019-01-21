@@ -576,27 +576,26 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
-        | Spark standalone and Mesos only:
+        | Spark standalone, Mesos and Kubernetes only:
         |  --total-executor-cores NUM  Total cores for all executors.
         |
-        | Spark standalone and YARN only:
-        |  --executor-cores NUM        Number of cores per executor. (Default: 1 in YARN mode,
-        |                              or all available cores on the worker in standalone mode)
+        | Spark standalone, YARN and Kubernetes only:
+        |  --executor-cores NUM        Number of cores used by each executor. (Default: 1 in
+        |                              YARN and K8S modes, or all available cores on the worker
+        |                              in standalone mode).
         |
-        | YARN-only:
-        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
+        | Spark on YARN and Kubernetes only:
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |                              If dynamic allocation is enabled, the initial number of
         |                              executors will be at least NUM.
+        |  --principal PRINCIPAL       Principal to be used to login to KDC.
+        |  --keytab KEYTAB             The full path to the file that contains the keytab for the
+        |                              principal specified above.
+        |
+        | Spark on YARN only:
+        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
-        |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on
-        |                              secure HDFS.
-        |  --keytab KEYTAB             The full path to the file that contains the keytab for the
-        |                              principal specified above. This keytab will be copied to
-        |                              the node running the Application Master via the Secure
-        |                              Distributed Cache, for renewing the login tickets and the
-        |                              delegation tokens periodically.
       """.stripMargin
     )
 

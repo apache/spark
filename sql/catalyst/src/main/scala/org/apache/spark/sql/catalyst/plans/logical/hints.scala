@@ -35,6 +35,7 @@ case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan
 
 /**
  * A resolved hint node. The analyzer should convert all [[UnresolvedHint]] into [[ResolvedHint]].
+ * This node will be eliminated before optimization starts.
  */
 case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
   extends UnaryNode {
@@ -44,11 +45,31 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
+/**
+ * Hint that is associated with a [[Join]] node, with [[HintInfo]] on its left child and on its
+ * right child respectively.
+ */
+case class JoinHint(leftHint: Option[HintInfo], rightHint: Option[HintInfo]) {
 
+  override def toString: String = {
+    Seq(
+      leftHint.map("leftHint=" + _),
+      rightHint.map("rightHint=" + _))
+      .filter(_.isDefined).map(_.get).mkString(", ")
+  }
+}
+
+object JoinHint {
+  val NONE = JoinHint(None, None)
+}
+
+/**
+ * The hint attributes to be applied on a specific node.
+ *
+ * @param broadcast If set to true, it indicates that the broadcast hash join is the preferred join
+ *                  strategy and the node with this hint is preferred to be the build side.
+ */
 case class HintInfo(broadcast: Boolean = false) {
-
-  /** Must be called when computing stats for a join operator to reset hints. */
-  def resetForJoin(): HintInfo = copy(broadcast = false)
 
   override def toString: String = {
     val hints = scala.collection.mutable.ArrayBuffer.empty[String]

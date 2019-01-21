@@ -27,6 +27,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMaster
@@ -157,7 +158,7 @@ private[spark] class ExecutorAllocationManager(
 
   // Polling loop interval (ms)
   private val intervalMillis: Long = if (Utils.isTesting) {
-      conf.getLong(TESTING_SCHEDULE_INTERVAL_KEY, 100)
+      conf.get(TEST_SCHEDULE_INTERVAL)
     } else {
       100
     }
@@ -899,5 +900,4 @@ private[spark] class ExecutorAllocationManager(
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
-  val TESTING_SCHEDULE_INTERVAL_KEY = "spark.testing.dynamicAllocation.scheduleInterval"
 }

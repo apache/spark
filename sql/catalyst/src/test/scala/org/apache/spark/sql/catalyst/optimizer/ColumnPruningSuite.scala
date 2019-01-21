@@ -353,15 +353,15 @@ class ColumnPruningSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          ResolvedHint(SubqueryAlias("y", input)), Inner, None)).analyze
+          SubqueryAlias("y", input), Inner, None, JoinHint.NONE)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
-        ResolvedHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
-        Inner, None).analyze
+        Project(Seq($"y.key"), SubqueryAlias("y", input)),
+        Inner, None, JoinHint.NONE).analyze
 
     comparePlans(optimized, expected)
   }
@@ -400,5 +400,14 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
+    val testRelation = LocalRelation('_1.int, '_2.int)
+    val serializerObject = CatalystSerde.serialize[(Int, Int)](
+      CatalystSerde.deserialize[(Int, Int)](testRelation))
+    val query = serializerObject.select('_1)
+    val optimized = Optimize.execute(query.analyze)
+    val expected = serializerObject.copy(serializer = Seq(serializerObject.serializer.head)).analyze
+    comparePlans(optimized, expected)
+  }
   // todo: add more tests for column pruning
 }
