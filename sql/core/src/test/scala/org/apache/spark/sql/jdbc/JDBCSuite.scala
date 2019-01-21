@@ -27,7 +27,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1525,27 +1525,34 @@ class JDBCSuite extends QueryTest
   }
 
   test("parsing timestamp bounds") {
-    Seq(
-      ("1972-07-04 03:30:00", "1972-07-15 20:50:32.5", "1972-07-27 14:11:05"),
-      ("2019-01-20 12:00:00.502", "2019-01-20 12:00:00.751", "2019-01-20 12:00:01.000"),
-      ("2019-01-20T00:00:00.123456", "2019-01-20 00:05:00.123456", "2019-01-20T00:10:00.123456"),
-      ("1500-01-20T00:00:00.123456", "1500-01-20 00:05:00.123456", "1500-01-20T00:10:00.123456")
-    ).foreach { case (lower, middle, upper) =>
-      val df = spark.read.format("jdbc")
-        .option("url", urlWithUserAndPass)
-        .option("dbtable", "TEST.DATETIME")
-        .option("partitionColumn", "t")
-        .option("lowerBound", lower)
-        .option("upperBound", upper)
-        .option("numPartitions", 2)
-        .load()
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        Seq(
+          ("1972-07-04 03:30:00", "1972-07-15 20:50:32.5", "1972-07-27 14:11:05"),
+          ("2019-01-20 12:00:00.502", "2019-01-20 12:00:00.751", "2019-01-20 12:00:01.000"),
+          (
+            "2019-01-20T00:00:00.123456",
+            "2019-01-20 00:05:00.123456",
+            "2019-01-20T00:10:00.123456"),
+          ("1500-01-20T00:00:00.123456", "1500-01-20 00:05:00.123456", "1500-01-20T00:10:00.123456")
+        ).foreach { case (lower, middle, upper) =>
+          val df = spark.read.format("jdbc")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", "TEST.DATETIME")
+            .option("partitionColumn", "t")
+            .option("lowerBound", lower)
+            .option("upperBound", upper)
+            .option("numPartitions", 2)
+            .load()
 
-      df.logicalPlan match {
-        case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
-          val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
-          assert(whereClauses === Set(
-            s""""T" < '$middle' or "T" is null""",
-            s""""T" >= '$middle'"""))
+          df.logicalPlan match {
+            case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+              val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+              assert(whereClauses === Set(
+                s""""T" < '$middle' or "T" is null""",
+                s""""T" >= '$middle'"""))
+          }
+        }
       }
     }
   }
