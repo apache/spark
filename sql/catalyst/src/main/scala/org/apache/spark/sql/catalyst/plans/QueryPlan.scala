@@ -311,7 +311,7 @@ object QueryPlan extends PredicateHelper {
       append: String => Boolean,
       verbose: Boolean,
       addSuffix: Boolean,
-      maxFields: Int = SQLConf.get.maxToStringFields): Boolean = {
+      maxFields: Int = SQLConf.get.maxToStringFields): Unit = {
     try {
       plan.treeString(append, verbose, addSuffix, maxFields)
     } catch {

@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.StringUtils.{PlanStringConcat, StringConcat}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -480,7 +480,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       verbose: Boolean,
       addSuffix: Boolean = false,
       maxFields: Int = SQLConf.get.maxToStringFields): String = {
-    val concat = new StringConcat()
+    val concat = new PlanStringConcat()
 
     treeString(concat.append, verbose, addSuffix, maxFields)
     concat.toString
@@ -490,7 +490,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       append: String => Boolean,
       verbose: Boolean,
       addSuffix: Boolean,
-      maxFields: Int): Boolean = {
+      maxFields: Int): Unit = {
     generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields)
   }
 
@@ -558,7 +558,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Boolean = {
+      maxFields: Int): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -591,7 +591,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       children.last.generateTreeString(
         depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix, maxFields)
     }
-    append("")
   }
 
   /**

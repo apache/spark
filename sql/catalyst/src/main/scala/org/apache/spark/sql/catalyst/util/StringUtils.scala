@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils extends Logging {
@@ -98,7 +99,7 @@ object StringUtils extends Logging {
    * and one memory allocation for the final string.  Can also bound the final size of
    * the string.
    */
-  class StringConcat(val maxLength: Int = Integer.MAX_VALUE) {
+  class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
     private val strings = new ArrayBuffer[String]
     private var length: Int = 0
 
@@ -124,10 +125,17 @@ object StringUtils extends Logging {
     override def toString: String = {
       val finalLength = Math.min(length, maxLength)
       val result = new java.lang.StringBuilder(finalLength)
-      strings.dropRight(1).foreach(result.append)
-      strings.lastOption.foreach { s =>
-        val lastLength = Math.min(s.length, maxLength - result.length())
-        result.append(s, 0, lastLength)
+      var ix = 0
+      while(ix < strings.length) {
+        var s = strings(ix)
+        if(ix < strings.length - 1) {
+          result.append(s)
+        }
+        else {
+          val lastLength = Math.min(s.length, maxLength - result.length())
+          result.append(s, 0, lastLength)
+        }
+        ix += 1
       }
       result.toString
     }
