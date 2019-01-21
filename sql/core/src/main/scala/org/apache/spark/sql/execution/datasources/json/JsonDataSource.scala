@@ -129,20 +129,13 @@ object TextInputJsonDataSource extends JsonDataSource {
   }
 
   private def isAllWhitespace(rowText: Text): Boolean = {
-    val afdsafdsa =
     rowText.getLength == 0 || {
       val rowTextBuffer = ByteBuffer.wrap(rowText.getBytes)
-      continually {
-        val cp = Text.bytesToCodePoint(rowTextBuffer)
-        print(s"[${Character.getName(cp)}]")
-        cp
-      } .takeWhile(_ >= 0).take(rowText.getLength).forall(isWhitespace)
+      continually(Text.bytesToCodePoint(rowTextBuffer))
+        .takeWhile(_ >= 0)
+        .take(rowText.getLength)
+        .forall(isWhitespace)
     }
-    // scalastyle:off println
-    println()
-    println(new String(rowText.getBytes))
-    // scalastyle:on println
-    afdsafdsa
   }
 
   override def readFile(
