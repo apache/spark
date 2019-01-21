@@ -2254,6 +2254,26 @@ class Analyzer(
         } else {
           append
         }
+
+      case overwrite @ OverwriteByExpression(table, _, query, isByName)
+        if table.resolved && query.resolved && !overwrite.resolved =>
+        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+
+        if (projection != query) {
+          overwrite.copy(query = projection)
+        } else {
+          overwrite
+        }
+
+      case overwrite @ OverwritePartitionsDynamic(table, query, isByName)
+        if table.resolved && query.resolved && !overwrite.resolved =>
+        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+
+        if (projection != query) {
+          overwrite.copy(query = projection)
+        } else {
+          overwrite
+        }
     }
 
     def resolveOutputColumns(

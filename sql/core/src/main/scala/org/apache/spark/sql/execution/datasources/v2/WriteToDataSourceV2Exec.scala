@@ -17,17 +17,22 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchWrite}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsSaveMode, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
@@ -41,18 +46,107 @@ case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
   override def output: Seq[Attribute] = Nil
 }
 
+case class AppendDataExec(
+    table: SupportsBatchWrite,
+    writeOptions: DataSourceOptions,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val batchWrite = newWriteBuilder() match {
+      case builder: SupportsSaveMode => // TODO: Remove this
+        builder.mode(SaveMode.Append).buildForBatch()
+
+      case builder =>
+        builder.buildForBatch()
+    }
+    doWrite(batchWrite)
+  }
+}
+
+case class OverwriteByExpressionExec(
+    table: SupportsBatchWrite,
+    filters: Array[Filter],
+    writeOptions: DataSourceOptions,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val batchWrite = newWriteBuilder() match {
+      case builder: SupportsOverwrite =>
+        builder.overwrite(filters).buildForBatch()
+
+      case builder: SupportsSaveMode => // TODO: Remove this
+        builder.mode(SaveMode.Overwrite).buildForBatch()
+
+      case _ =>
+        throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
+    }
+
+    doWrite(batchWrite)
+  }
+}
+
+case class OverwritePartitionsDynamicExec(
+    table: SupportsBatchWrite,
+    writeOptions: DataSourceOptions,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val batchWrite = newWriteBuilder() match {
+      case builder: SupportsDynamicOverwrite =>
+        builder.overwriteDynamicPartitions().buildForBatch()
+
+      case builder: SupportsSaveMode => // TODO: Remove this
+        builder.mode(SaveMode.Overwrite).buildForBatch()
+
+      case _ =>
+        throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
+    }
+
+    doWrite(batchWrite)
+  }
+}
+
+case class WriteToDataSourceV2Exec(
+    batchWrite: BatchWrite,
+    query: SparkPlan
+  ) extends V2TableWriteExec {
+
+  import DataSourceV2Implicits._
+
+  def writeOptions: DataSourceOptions = Map.empty[String, String].toDataSourceOptions
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    doWrite(batchWrite)
+  }
+}
+
 /**
- * The physical plan for writing data into data source v2.
+ * Helper for physical plans that build batch writes.
  */
-case class WriteToDataSourceV2Exec(batchWrite: BatchWrite, query: SparkPlan)
-  extends UnaryExecNode {
+private[sql] trait BatchWriteHelper {
+  def table: SupportsBatchWrite
+  def query: SparkPlan
+  def writeOptions: DataSourceOptions
+
+  def newWriteBuilder(): WriteBuilder = {
+    table.newWriteBuilder(writeOptions)
+        .withInputDataSchema(query.schema)
+        .withQueryId(UUID.randomUUID().toString)
+  }
+}
+
+/**
+ * The base physical plan for writing data into data source v2.
+ */
+private[sql] trait V2TableWriteExec extends UnaryExecNode {
+  def query: SparkPlan
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  protected def doWrite(batchWrite: BatchWrite): RDD[InternalRow] = {
     val writerFactory = batchWrite.createBatchWriterFactory()
     val useCommitCoordinator = batchWrite.useCommitCoordinator
     val rdd = query.execute()

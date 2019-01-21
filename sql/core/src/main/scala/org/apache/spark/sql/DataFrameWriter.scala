@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwritePartitionsDynamic}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
@@ -264,29 +264,39 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new DataSourceOptions(options.asJava)
       provider.getTable(dsOptions) match {
         case table: SupportsBatchWrite =>
-          if (mode == SaveMode.Append) {
-            val relation = DataSourceV2Relation.create(table, options)
-            runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan)
-            }
-          } else {
-            val writeBuilder = table.newWriteBuilder(dsOptions)
-              .withQueryId(UUID.randomUUID().toString)
-              .withInputDataSchema(df.logicalPlan.schema)
-            writeBuilder match {
-              case s: SupportsSaveMode =>
-                val write = s.mode(mode).buildForBatch()
-                // It can only return null with `SupportsSaveMode`. We can clean it up after
-                // removing `SupportsSaveMode`.
-                if (write != null) {
-                  runCommand(df.sparkSession, "save") {
-                    WriteToDataSourceV2(write, df.logicalPlan)
-                  }
-                }
+          lazy val relation = DataSourceV2Relation.create(table, options)
+          mode match {
+            case SaveMode.Append =>
+              runCommand(df.sparkSession, "save") {
+                AppendData.byName(relation, df.logicalPlan)
+              }
 
-              case _ => throw new AnalysisException(
-                s"data source ${table.name} does not support SaveMode $mode")
-            }
+            case SaveMode.Overwrite =>
+              // DataFrameWriter does not support static partition values, so the behavior of
+              // overwrite mode is to replace partitions dynamically.
+              runCommand(df.sparkSession, "save") {
+                OverwritePartitionsDynamic.byName(relation, df.logicalPlan)
+              }
+
+            case _ =>
+              table.newWriteBuilder(dsOptions) match {
+                case writeBuilder: SupportsSaveMode =>
+                  val write = writeBuilder.mode(mode)
+                      .withQueryId(UUID.randomUUID().toString)
+                      .withInputDataSchema(df.logicalPlan.schema)
+                      .buildForBatch()
+                  // It can only return null with `SupportsSaveMode`. We can clean it up after
+                  // removing `SupportsSaveMode`.
+                  if (write != null) {
+                    runCommand(df.sparkSession, "save") {
+                      WriteToDataSourceV2(write, df.logicalPlan)
+                    }
+                  }
+
+                case _ =>
+                  throw new AnalysisException(
+                    s"data source ${table.name} does not support SaveMode $mode")
+              }
           }
 
         // Streaming also uses the data source V2 API. So it may be that the data source implements
