@@ -300,7 +300,7 @@ class HadoopTableReader(
   }
 
   /**
-   * Creates a OldHadoopRDD based on the broadcasted HiveConf and other job properties that will be
+   * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each slave.
    */
   private def createOldHadoopRdd(
