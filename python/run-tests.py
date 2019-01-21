@@ -302,7 +302,9 @@ def main():
         worker.daemon = True
         worker.start()
     try:
+        print_red("Join start")
         task_queue.join()
+        print_red("Join finished")
     except (KeyboardInterrupt, SystemExit):
         print_red("Exiting due to interrupt")
         sys.exit(-1)

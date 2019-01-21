@@ -50,8 +50,8 @@ export SPARK_CONF_DIR="$COVERAGE_DIR/conf"
 # This environment variable enables the coverage.
 export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
 
+echo "+++++++++++++++ Tests started"
 ./run-tests "$@"
-
 echo "+++++++++++++++ Tests finished"
 
 # Don't run coverage for the coverage command itself
