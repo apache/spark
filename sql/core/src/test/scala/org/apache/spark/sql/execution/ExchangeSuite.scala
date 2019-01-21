@@ -21,14 +21,13 @@ import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
 import scala.util.Random
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.ThreadUtils
 
 class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
@@ -138,12 +137,11 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-26601: Make broadcast-exchange thread pool configurable") {
-    val sparkConf = new SparkConf()
-      .set(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER.key, "1")
-    SparkSession.cleanupAnyExistingSession()
-    val tss = new TestSparkSession(sparkConf)
-    SparkSession.setActiveSession(tss)
+    val previousNumber = SparkSession.getActiveSession.get.sparkContext.conf
+      .get(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER)
 
+    SparkSession.getActiveSession.get.sparkContext.conf.
+      set(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER, 1)
     assert(SQLConf.get.getConf(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER) === 1)
 
     Future {
@@ -163,6 +161,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     assert(executed)
 
     // for other test
-    SparkSession.cleanupAnyExistingSession()
+    SparkSession.getActiveSession.get.sparkContext.conf.
+      set(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER, previousNumber)
   }
 }
