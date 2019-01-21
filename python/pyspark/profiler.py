@@ -104,11 +104,11 @@ class Profiler(object):
 
     def profile(self, func):
         """ Do profiling on the function `func`"""
-        raise NotImplemented
+        raise NotImplementedError
 
     def stats(self):
         """ Return the collected profiling stats (pstats.Stats)"""
-        raise NotImplemented
+        raise NotImplementedError
 
     def show(self, id):
         """ Print the profile stats to stdout, id is the RDD id """

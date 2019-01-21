@@ -179,8 +179,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :+
-    Batch("UpdateAttributeReferences", Once,
-      UpdateNullabilityInAttributeReferences)
+    Batch("UpdateNullability", Once, UpdateAttributeNullability) :+
+    // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
   }
 
   /**
@@ -210,7 +211,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PullupCorrelatedPredicates.ruleName ::
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
-      PullOutPythonUDFInJoinCondition.ruleName :: Nil
+      PullOutPythonUDFInJoinCondition.ruleName ::
+      NormalizeFloatingNumbers.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -558,6 +560,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from child of `DeserializeToObject`
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
+
+    case p @ Project(_, s: SerializeFromObject) if p.references != s.outputSet =>
+      val usedRefs = p.references
+      val prunedSerializer = s.serializer.filter(usedRefs.contains)
+      p.copy(child = SerializeFromObject(prunedSerializer, s.child))
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
     case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
@@ -1641,21 +1648,6 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
         a
       } else {
         a.copy(groupingExpressions = newGrouping)
-      }
-  }
-}
-
-/**
- * Updates nullability in [[AttributeReference]]s if nullability is different between
- * non-leaf plan's expressions and the children output.
- */
-object UpdateNullabilityInAttributeReferences extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p if !p.isInstanceOf[LeafNode] =>
-      val nullabilityMap = AttributeMap(p.children.flatMap(_.output).map { x => x -> x.nullable })
-      p transformExpressions {
-        case ar: AttributeReference if nullabilityMap.contains(ar) =>
-          ar.withNullability(nullabilityMap(ar))
       }
   }
 }

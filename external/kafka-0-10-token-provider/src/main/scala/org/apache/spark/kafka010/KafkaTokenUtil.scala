@@ -17,12 +17,13 @@
 
 package org.apache.spark.kafka010
 
-import java.{ util => ju }
+import java.{util => ju}
 import java.text.SimpleDateFormat
 
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.kafka.clients.CommonClientConfigs
@@ -33,6 +34,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, S
 import org.apache.kafka.common.security.token.delegation.DelegationToken
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
@@ -45,6 +47,8 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private[kafka010] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
+    checkProxyUser()
+
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
     val createDelegationTokenOptions = new CreateDelegationTokenOptions()
     val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
@@ -57,6 +61,14 @@ private[spark] object KafkaTokenUtil extends Logging {
       TOKEN_KIND,
       TOKEN_SERVICE
     ), token.tokenInfo.expiryTimestamp)
+  }
+
+  private[kafka010] def checkProxyUser(): Unit = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    // Obtaining delegation token for proxy user is planned but not yet implemented
+    // See https://issues.apache.org/jira/browse/KAFKA-6945
+    require(!SparkHadoopUtil.get.isProxyUser(currentUser), "Obtaining delegation token for proxy " +
+      "user is not yet supported.")
   }
 
   private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): ju.Properties = {

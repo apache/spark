@@ -169,7 +169,7 @@ of the most common options to set are:
     The amount of off-heap memory to be allocated per driver in cluster mode, in MiB unless
     otherwise specified. This is memory that accounts for things like VM overheads, interned strings, 
     other native overheads, etc. This tends to grow with the container size (typically 6-10%). 
-    This option is currently supported on YARN and Kubernetes.
+    This option is currently supported on YARN, Mesos and Kubernetes.
   </td>
 </tr>
 <tr>
@@ -1196,51 +1196,6 @@ Apart from these, the following properties are also available, and may be useful
     This setting has no impact on heap memory usage, so if your executors' total memory consumption 
     must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.memory.useLegacyMode</code></td>
-  <td>false</td>
-  <td>
-    Whether to enable the legacy memory management mode used in Spark 1.5 and before.
-    The legacy mode rigidly partitions the heap space into fixed-size regions,
-    potentially leading to excessive spilling if the application was not tuned.
-    The following deprecated memory fraction configurations are not read unless this is enabled:
-    <code>spark.shuffle.memoryFraction</code><br>
-    <code>spark.storage.memoryFraction</code><br>
-    <code>spark.storage.unrollFraction</code>
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.2</td>
-  <td>
-    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
-    Fraction of Java heap to use for aggregation and cogroups during shuffles.
-    At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.storage.memoryFraction</code></td>
-  <td>0.6</td>
-  <td>
-    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
-    increase it if you configure your own old generation size.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.storage.unrollFraction</code></td>
-  <td>0.2</td>
-  <td>
-    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
-    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
-    This is dynamically allocated by dropping existing blocks when there is not enough free
-    storage space to unroll the new block in its entirety.
   </td>
 </tr>
 <tr>

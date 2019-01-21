@@ -176,10 +176,14 @@ if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
-  # For source release, exclude copy of binary license/notice
-  rm spark-$SPARK_VERSION/LICENSE-binary
-  rm spark-$SPARK_VERSION/NOTICE-binary
-  rm -r spark-$SPARK_VERSION/licenses-binary
+
+  # For source release in v2.4+, exclude copy of binary license/notice
+  if [[ $SPARK_VERSION > "2.4" ]]; then
+    rm spark-$SPARK_VERSION/LICENSE-binary
+    rm spark-$SPARK_VERSION/NOTICE-binary
+    rm -r spark-$SPARK_VERSION/licenses-binary
+  fi
+
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
