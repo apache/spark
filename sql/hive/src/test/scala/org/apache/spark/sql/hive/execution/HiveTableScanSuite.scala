@@ -226,10 +226,10 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
        """.stripMargin)
 
-      sql("SELECT count(1) FROM table_old").show()
-      sql("SELECT count(1) FROM table_pt_old").show()
-      sql("SELECT count(1) FROM table_new").show()
-      sql("SELECT count(1) FROM table_pt_new").show()
+      assert(sql("SELECT count(1) FROM table_old").collect() === Array(Row(0)))
+      assert(sql("SELECT count(1) FROM table_pt_old").collect() === Array(Row(0)))
+      assert(sql("SELECT count(1) FROM table_new").collect() === Array(Row(0)))
+      assert(sql("SELECT count(1) FROM table_pt_new").collect() === Array(Row(0)))
     }
   }
 }
