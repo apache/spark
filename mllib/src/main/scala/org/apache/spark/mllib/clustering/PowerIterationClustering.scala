@@ -386,12 +386,17 @@ object PowerIterationClustering extends Logging {
          * We should give an exception, if we detect the failure of the convergence of the
          * power iteration
          */
-        val reileigh = curG.joinVertices(v) {
-          case (_, x, y) => x * y
-        }.vertices.values.sum() / curG.vertices.mapValues(x => x * x).values.sum()
 
-        if (math.abs(norm - math.abs(reileigh)) > tol) {
-          throw new SparkException("Power Iteration fail to converge")
+        // Rayleigh quotient = x^tAx / x^tx
+        val xTAx = curG.joinVertices(v) {
+          case (_, x, y) => x * y
+        }.vertices.values.sum()
+        val xTx = curG.vertices.mapValues(x => x * x).values.sum()
+        val Rayleigh = xTAx / xTx
+
+        if (math.abs(norm - math.abs(Rayleigh)) > tol) {
+          throw new SparkException(s"Power Iteration fail to converge, delta = ${delta}," +
+            s" difference delta = ${diffDelta} and norm = ${norm}")
         }
       }
       // update v
