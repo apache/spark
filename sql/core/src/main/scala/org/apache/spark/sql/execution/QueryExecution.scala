@@ -112,7 +112,7 @@ class QueryExecution(
     concat.toString
   }
 
-  private def writePlans(append: String => Boolean, maxFields: Int): Boolean = {
+  private def writePlans(append: String => Boolean, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
