@@ -126,40 +126,6 @@ object Literal {
   def fromObject(obj: Any, objType: DataType): Literal = new Literal(obj, objType)
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
 
-  def fromJSON(json: JValue): Literal = {
-    val dataType = DataType.parseDataType(json \ "dataType")
-    json \ "value" match {
-      case JNull => Literal.create(null, dataType)
-      case JString(str) => fromString(str, dataType)
-      case other => sys.error(s"$other is not a valid Literal json value")
-    }
-  }
-
-  /**
-   * Constructs a Literal from a String
-   */
-  def fromString(str: String, dataType: DataType): Literal = {
-    val value = dataType match {
-      case BooleanType => str.toBoolean
-      case ByteType => str.toByte
-      case ShortType => str.toShort
-      case IntegerType => str.toInt
-      case LongType => str.toLong
-      case FloatType => str.toFloat
-      case DoubleType => str.toDouble
-      case StringType => UTF8String.fromString(str)
-      case DateType => java.sql.Date.valueOf(str)
-      case TimestampType => java.sql.Timestamp.valueOf(str)
-      case CalendarIntervalType => CalendarInterval.fromString(str)
-      case t: DecimalType =>
-        val d = Decimal(str)
-        assert(d.changePrecision(t.precision, t.scale))
-        d
-      case _ => null
-    }
-    Literal.create(value, dataType)
-  }
-
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
