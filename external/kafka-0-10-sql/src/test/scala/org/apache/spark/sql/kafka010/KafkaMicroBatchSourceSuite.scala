@@ -28,6 +28,7 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
 
+import org.apache.kafka.clients.admin.{AdminClient, ConsumerGroupListing}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -626,6 +627,42 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       waitUntilBatchProcessed,
       // smallest now empty, 5 from bigger one
       CheckLastBatch(120 to 124: _*)
+    )
+  }
+
+  test("allow group.id override") {
+    // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
+    // as well as KafkaOffsetReader.createConsumer(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val customGroupId = "id-" + Random.nextInt()
+    val dsKafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.group.id", customGroupId)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(dsKafka)(
+      makeSureGetOffsetCalled,
+      CheckAnswer(1 to 30: _*),
+      Execute { _ =>
+        val consumerGroups = testUtils.listConsumerGroups()
+        val validGroups = consumerGroups.valid().get()
+        val validGroupsId = validGroups.asScala.map(_.groupId())
+        assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
+          s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
+          s"expected group id: $customGroupId")
+      }
     )
   }
 
@@ -1233,7 +1270,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
-    testUnsupportedConfig("kafka.group.id")
     testUnsupportedConfig("kafka.auto.offset.reset")
     testUnsupportedConfig("kafka.enable.auto.commit")
     testUnsupportedConfig("kafka.interceptor.classes")

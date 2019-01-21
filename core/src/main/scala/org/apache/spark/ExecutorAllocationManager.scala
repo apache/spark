@@ -27,6 +27,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMaster
@@ -127,7 +128,7 @@ private[spark] class ExecutorAllocationManager(
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
   private val tasksPerExecutorForFullParallelism =
-    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+    conf.get(EXECUTOR_CORES) / conf.getInt("spark.task.cpus", 1)
 
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
@@ -157,7 +158,7 @@ private[spark] class ExecutorAllocationManager(
 
   // Polling loop interval (ms)
   private val intervalMillis: Long = if (Utils.isTesting) {
-      conf.getLong(TESTING_SCHEDULE_INTERVAL_KEY, 100)
+      conf.get(TEST_SCHEDULE_INTERVAL)
     } else {
       100
     }
@@ -223,7 +224,7 @@ private[spark] class ExecutorAllocationManager(
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutorForFullParallelism == 0) {
-      throw new SparkException("spark.executor.cores must not be < spark.task.cpus.")
+      throw new SparkException(s"${EXECUTOR_CORES.key} must not be < spark.task.cpus.")
     }
 
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
@@ -899,5 +900,4 @@ private[spark] class ExecutorAllocationManager(
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
-  val TESTING_SCHEDULE_INTERVAL_KEY = "spark.testing.dynamicAllocation.scheduleInterval"
 }

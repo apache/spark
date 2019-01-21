@@ -34,15 +34,17 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.YarnClientApplication
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
-import org.mockito.Matchers.{eq => meq, _}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
+import org.mockito.Mockito.{spy, verify}
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers {
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   import Client._
 
@@ -367,7 +369,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       val resources = Map("fpga" -> 2, "gpu" -> 3)
       ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
-      val conf = new SparkConf().set("spark.submit.deployMode", deployMode)
+      val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, deployMode)
       resources.foreach { case (name, v) =>
         conf.set(prefix + name, v.toString)
       }

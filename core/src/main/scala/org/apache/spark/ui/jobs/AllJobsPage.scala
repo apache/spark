@@ -205,21 +205,17 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobTag: String,
       jobs: Seq[v1.JobData],
       killEnabled: Boolean): Seq[Node] = {
-    // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
-      UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
-    }
-    val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
+    val parameterOtherTable = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
     val jobIdTitle = if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
 
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterJobPage = UIUtils.stripXSS(request.getParameter(jobTag + ".page"))
-    val parameterJobSortColumn = UIUtils.stripXSS(request.getParameter(jobTag + ".sort"))
-    val parameterJobSortDesc = UIUtils.stripXSS(request.getParameter(jobTag + ".desc"))
-    val parameterJobPageSize = UIUtils.stripXSS(request.getParameter(jobTag + ".pageSize"))
+    val parameterJobPage = request.getParameter(jobTag + ".page")
+    val parameterJobSortColumn = request.getParameter(jobTag + ".sort")
+    val parameterJobSortDesc = request.getParameter(jobTag + ".desc")
+    val parameterJobPageSize = request.getParameter(jobTag + ".pageSize")
 
     val jobPage = Option(parameterJobPage).map(_.toInt).getOrElse(1)
     val jobSortColumn = Option(parameterJobSortColumn).map { sortColumn =>

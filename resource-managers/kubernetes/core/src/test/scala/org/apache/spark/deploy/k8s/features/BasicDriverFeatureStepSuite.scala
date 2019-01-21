@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -46,7 +47,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
-      .set("spark.driver.cores", "2")
+      .set(DRIVER_CORES, 2)
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(DRIVER_MEMORY.key, "256M")
       .set(DRIVER_MEMORY_OVERHEAD, 200L)
@@ -69,7 +70,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val expectedPortNames = Set(
       containerPort(DRIVER_PORT_NAME, DEFAULT_DRIVER_PORT),
       containerPort(BLOCK_MANAGER_PORT_NAME, DEFAULT_BLOCKMANAGER_PORT),
-      containerPort(UI_PORT_NAME, SparkUI.DEFAULT_PORT)
+      containerPort(UI_PORT_NAME, UI_PORT.defaultValue.get)
     )
     val foundPortNames = configuredPod.container.getPorts.asScala.toSet
     assert(expectedPortNames === foundPortNames)
@@ -142,7 +143,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .setJars(allJars)
-      .set("spark.files", allFiles.mkString(","))
+      .set(FILES, allFiles)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
 
@@ -153,8 +154,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       "spark.app.id" -> KubernetesTestConf.APP_ID,
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> kubernetesConf.resourceNamePrefix,
       "spark.kubernetes.submitInDriver" -> "true",
-      "spark.jars" -> "/opt/spark/jar1.jar,hdfs:///opt/spark/jar2.jar",
-      "spark.files" -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt",
+      JARS.key -> "/opt/spark/jar1.jar,hdfs:///opt/spark/jar2.jar",
+      FILES.key -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt",
       MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
     assert(additionalProperties === expectedSparkConf)
   }

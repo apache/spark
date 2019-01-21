@@ -19,7 +19,7 @@ package org.apache.spark.network.yarn
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.metrics2.MetricsRecordBuilder
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.{any, anyDouble, anyInt, anyLong}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.Matchers
 
@@ -56,8 +56,8 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
       YarnShuffleServiceMetrics.collectMetric(builder, testname,
         metrics.getMetrics.get(testname))
 
-      verify(builder).addCounter(anyObject(), anyLong())
-      verify(builder, times(4)).addGauge(anyObject(), anyDouble())
+      verify(builder).addCounter(any(), anyLong())
+      verify(builder, times(4)).addGauge(any(), anyDouble())
     }
   }
 
@@ -69,6 +69,6 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
       metrics.getMetrics.get("registeredExecutorsSize"))
 
     // only one
-    verify(builder).addGauge(anyObject(), anyInt())
+    verify(builder).addGauge(any(), anyInt())
   }
 }

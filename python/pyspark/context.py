@@ -66,6 +66,10 @@ class SparkContext(object):
 
     .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
         the active :class:`SparkContext` before creating a new one.
+
+    .. note:: :class:`SparkContext` instance is not supported to share across multiple
+        processes out of the box, and PySpark does not guarantee multi-processing execution.
+        Use threads instead for concurrent processing purpose.
     """
 
     _gateway = None
@@ -115,6 +119,11 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
+        if gateway is not None and gateway.gateway_parameters.auth_token is None:
+            raise ValueError(
+                "You are trying to pass an insecure Py4j gateway to Spark. This"
+                " is not allowed as it is a security risk.")
+
         SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
@@ -430,7 +439,6 @@ class SparkContext(object):
                     ' been killed or may also be in a zombie state.',
                     RuntimeWarning
                 )
-                pass
             finally:
                 self._jsc = None
         if getattr(self, "_accumulatorServer", None):
@@ -493,6 +501,14 @@ class SparkContext(object):
                 return start0 + int((split * size / numSlices)) * step
 
             def f(split, iterator):
+                # it's an empty iterator here but we need this line for triggering the
+                # logic of signal handling in FramedSerializer.load_stream, for instance,
+                # SpecialLengths.END_OF_DATA_SECTION in _read_with_length. Since
+                # FramedSerializer.load_stream produces a generator, the control should
+                # at least be in that function once. Here we do it by explicitly converting
+                # the empty iterator to a list, thus make sure worker reuse takes effect.
+                # See more details in SPARK-26549.
+                assert len(list(iterator)) == 0
                 return xrange(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)

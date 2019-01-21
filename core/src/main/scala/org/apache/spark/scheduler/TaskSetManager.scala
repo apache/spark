@@ -717,7 +717,7 @@ private[spark] class TaskSetManager(
     calculatedTasks += 1
     if (maxResultSize > 0 && totalResultSize > maxResultSize) {
       val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
-        s"(${Utils.bytesToString(totalResultSize)}) is bigger than spark.driver.maxResultSize " +
+        s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
         s"(${Utils.bytesToString(maxResultSize)})"
       logError(msg)
       abort(msg)
@@ -1043,16 +1043,15 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get(config.LOCALITY_WAIT)
-    val localityWaitKey = level match {
-      case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
-      case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
-      case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
+    val localityWait = level match {
+      case TaskLocality.PROCESS_LOCAL => config.LOCALITY_WAIT_PROCESS
+      case TaskLocality.NODE_LOCAL => config.LOCALITY_WAIT_NODE
+      case TaskLocality.RACK_LOCAL => config.LOCALITY_WAIT_RACK
       case _ => null
     }
 
-    if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait.toString)
+    if (localityWait != null) {
+      conf.get(localityWait)
     } else {
       0L
     }

@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 
-import org.mockito.Matchers.{anyInt, anyObject, anyString, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
@@ -430,7 +430,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     verify(blacklist, never).updateBlacklistForSuccessfulTaskSet(
       stageId = meq(2),
       stageAttemptId = anyInt(),
-      failuresByExec = anyObject())
+      failuresByExec = any())
   }
 
   test("scheduled tasks obey node and executor blacklists") {
@@ -504,7 +504,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       WorkerOffer("executor3", "host1", 2)
     )).flatten.size === 0)
     assert(tsm.isZombie)
-    verify(tsm).abort(anyString(), anyObject())
+    verify(tsm).abort(anyString(), any())
   }
 
   test("SPARK-22148 abort timer should kick in when task is completely blacklisted & no new " +
@@ -1011,7 +1011,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Locality should be used for bulk offers even with delay scheduling off") {
     val conf = new SparkConf()
-      .set("spark.locality.wait", "0")
+      .set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
     val clock = new ManualClock()
@@ -1058,7 +1058,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("With delay scheduling off, tasks can be run at any locality level immediately") {
     val conf = new SparkConf()
-      .set("spark.locality.wait", "0")
+      .set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
 
     // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
@@ -1184,7 +1184,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(finalTsm.isZombie)
 
     // no taskset has completed all of its tasks, so no updates to the blacklist tracker yet
-    verify(blacklist, never).updateBlacklistForSuccessfulTaskSet(anyInt(), anyInt(), anyObject())
+    verify(blacklist, never).updateBlacklistForSuccessfulTaskSet(anyInt(), anyInt(), any())
 
     // finally, lets complete all the tasks.  We simulate failures in attempt 1, but everything
     // else succeeds, to make sure we get the right updates to the blacklist in all cases.
@@ -1202,7 +1202,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       // we update the blacklist for the stage attempts with all successful tasks.  Even though
       // some tasksets had failures, we still consider them all successful from a blacklisting
       // perspective, as the failures weren't from a problem w/ the tasks themselves.
-      verify(blacklist).updateBlacklistForSuccessfulTaskSet(meq(0), meq(stageAttempt), anyObject())
+      verify(blacklist).updateBlacklistForSuccessfulTaskSet(meq(0), meq(stageAttempt), any())
     }
   }
 

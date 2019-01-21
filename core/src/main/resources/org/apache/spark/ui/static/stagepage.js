@@ -100,10 +100,10 @@ function getColumnNameForTaskMetricSummary(columnKey) {
             return "Scheduler Delay";
 
         case "diskBytesSpilled":
-            return "Shuffle spill (disk)";
+            return "Spill (disk)";
 
         case "memoryBytesSpilled":
-            return "Shuffle spill (memory)";
+            return "Spill (memory)";
 
         case "shuffleReadMetrics":
             return "Shuffle Read Size / Records";
@@ -263,7 +263,6 @@ function reselectCheckboxesBasedOnTaskTableState() {
 
 function getStageAttemptId() {
   var words = document.baseURI.split('?');
-  var attemptIdStr = words[1].split('&')[1];
   var digitsRegex = /[0-9]+/;
   // We are using regex here to extract the stage attempt id as there might be certain url's with format
   // like /proxy/application_1539986433979_27115/stages/stage/?id=0&attempt=0#tasksTitle
@@ -433,7 +432,7 @@ $(document).ready(function () {
                     "oLanguage": {
                         "sEmptyTable": "No data to show yet"
                     }
-                }
+                };
                 var executorSummaryTableSelector =
                     $("#summary-executor-table").DataTable(executorSummaryConf);
                 $('#parent-container [data-toggle="tooltip"]').tooltip();
@@ -612,7 +611,7 @@ $(document).ready(function () {
                     "searching": false,
                     "order": [[0, "asc"]],
                     "bAutoWidth": false
-                }
+                };
                 $("#accumulator-table").DataTable(accumulatorConf);
 
                 // building tasks table that uses server side functionality
@@ -842,7 +841,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Memory)"
+                            name: "Spill (Memory)"
                         },
                         {
                             data : function (row, type) {
@@ -852,7 +851,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Disk)"
+                            name: "Spill (Disk)"
                         },
                         {
                             data : function (row, type) {

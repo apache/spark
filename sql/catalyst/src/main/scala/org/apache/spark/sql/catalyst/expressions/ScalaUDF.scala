@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 
 /**
  * User-defined function.
@@ -48,23 +48,11 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputsNullSafe: Seq[Boolean],
-    inputTypes: Seq[DataType] = Nil,
+    inputTypes: Seq[AbstractDataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
-
-  // The constructor for SPARK 2.1 and 2.2
-  def this(
-      function: AnyRef,
-      dataType: DataType,
-      children: Seq[Expression],
-      inputTypes: Seq[DataType],
-      udfName: Option[String]) = {
-    this(
-      function, dataType, children, ScalaReflection.getParameterTypeNullability(function),
-      inputTypes, udfName, nullable = true, udfDeterministic = true)
-  }
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
