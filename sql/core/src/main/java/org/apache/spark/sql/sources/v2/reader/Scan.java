@@ -18,8 +18,10 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.sources.v2.SupportsBatchRead;
+import org.apache.spark.sql.sources.v2.SupportsMicroBatchRead;
 import org.apache.spark.sql.sources.v2.Table;
 
 /**
@@ -64,5 +66,21 @@ public interface Scan {
    */
   default Batch toBatch() {
     throw new UnsupportedOperationException("Batch scans are not supported");
+  }
+
+  /**
+   * Returns the physical representation of this scan for streaming query with micro-batch mode. By
+   * default this method throws exception, data sources must overwrite this method to provide an
+   * implementation, if the {@link Table} that creates this scan implements
+   * {@link SupportsMicroBatchRead}.
+   *
+   * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
+   *                           recovery. Data streams for the same logical source in the same query
+   *                           will be given the same checkpointLocation.
+   *
+   * @throws UnsupportedOperationException
+   */
+  default MicroBatchStream toMicroBatchStream(String checkpointLocation) {
+    throw new UnsupportedOperationException("Micro-batch scans are not supported");
   }
 }

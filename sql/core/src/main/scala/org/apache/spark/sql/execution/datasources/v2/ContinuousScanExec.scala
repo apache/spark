@@ -26,14 +26,13 @@ import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeSta
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousReadSupport}
 
 /**
- * Physical plan node for scanning data from a data source.
+ * Physical plan node for scanning data from a streaming data source with continuous mode.
  */
-// TODO: micro-batch should be handled by `DataSourceV2ScanExec`, after we finish the API refactor
-// completely.
-case class DataSourceV2StreamingScanExec(
+// TODO: merge it and `MicroBatchScanExec`.
+case class ContinuousScanExec(
     output: Seq[AttributeReference],
     @transient source: DataSourceV2,
     @transient options: Map[String, String],
@@ -46,7 +45,7 @@ case class DataSourceV2StreamingScanExec(
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: DataSourceV2StreamingScanExec =>
+    case other: ContinuousScanExec =>
       output == other.output && readSupport.getClass == other.readSupport.getClass &&
         options == other.options
     case _ => false
@@ -70,7 +69,6 @@ case class DataSourceV2StreamingScanExec(
   private lazy val partitions: Seq[InputPartition] = readSupport.planInputPartitions(scanConfig)
 
   private lazy val readerFactory = readSupport match {
-    case r: MicroBatchReadSupport => r.createReaderFactory(scanConfig)
     case r: ContinuousReadSupport => r.createContinuousReaderFactory(scanConfig)
     case _ => throw new IllegalStateException("unknown read support: " + readSupport)
   }

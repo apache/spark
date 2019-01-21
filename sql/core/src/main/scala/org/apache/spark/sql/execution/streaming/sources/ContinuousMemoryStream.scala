@@ -50,7 +50,8 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
   private implicit val formats = Serialization.formats(NoTypeHints)
 
   protected val logicalPlan =
-    StreamingRelationV2(this, "memory", Map(), attributes, None)(sqlContext.sparkSession)
+    // TODO: don't pass null as table after finish API refactor for continuous stream.
+    StreamingRelationV2(this, "memory", null, Map(), attributes, None)(sqlContext.sparkSession)
 
   // ContinuousReader implementation
 

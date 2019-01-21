@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * An abstract representation of progress through a {@link MicroBatchReadSupport} or
+ * An abstract representation of progress through a {@link MicroBatchStream} or
  * {@link ContinuousReadSupport}.
  * During execution, offsets provided by the data source implementation will be logged and used as
  * restart checkpoints. Each source should provide an offset implementation which the source can use

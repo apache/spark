@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import org.apache.kafka.clients.producer.ProducerRecord
 
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2StreamingScanExec
+import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.streaming.Trigger
 
@@ -208,7 +208,7 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
         eventually(timeout(streamingTimeout)) {
           assert(
             query.lastExecution.executedPlan.collectFirst {
-              case scan: DataSourceV2StreamingScanExec
+              case scan: ContinuousScanExec
                 if scan.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
                 scan.scanConfig.asInstanceOf[KafkaContinuousScanConfig]
             }.exists { config =>
