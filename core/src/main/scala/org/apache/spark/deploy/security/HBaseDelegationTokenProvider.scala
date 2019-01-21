@@ -70,6 +70,10 @@ private[security] class HBaseDelegationTokenProvider
         getMethod("create", classOf[Configuration])
       confCreate.invoke(null, conf).asInstanceOf[Configuration]
     } catch {
+      case e: ClassNotFoundException =>
+        logWarning(s"You are attempting to use the ${getClass.getCanonicalName}, but" +
+          s" the HBase libraries are not provided.")
+        conf
       case NonFatal(e) =>
         logWarning("Fail to invoke HBaseConfiguration", e)
         conf
