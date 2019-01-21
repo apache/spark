@@ -411,9 +411,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
-    print("Running %s" % command)
     run_cmd(command)
-    print("Finished %s" % command)
 
     if with_coverage:
         post_python_tests_results()
@@ -618,7 +616,7 @@ def main():
         build_spark_assembly_sbt(hadoop_version, should_run_java_style_checks)
 
     # run the test suites
-    # run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
+    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
