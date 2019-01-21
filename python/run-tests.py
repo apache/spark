@@ -142,8 +142,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
                 key = (pyspark_python, test_name)
                 SKIPPED_TESTS[key] = skipped_tests
             per_test_output.close()
-        except Exception as e:
-            LOGGER.info("Exception thrown %s" % e)
+        except:
             import traceback
             print_red("\nGot an exception while trying to store "
                       "skipped test output:\n%s" % traceback.format_exc())
