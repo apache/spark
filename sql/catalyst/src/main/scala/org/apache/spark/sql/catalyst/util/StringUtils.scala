@@ -103,10 +103,6 @@ object StringUtils extends Logging {
     private val strings = new ArrayBuffer[String]
     protected var length: Int = 0
 
-    // This tracks the full length of all appended strings, returns how long a
-    // non-truncated the string would be.
-    protected var appendedLength: Int = 0
-
     def atLimit: Boolean = length >= maxLength
 
     /**
@@ -116,13 +112,12 @@ object StringUtils extends Logging {
      */
     def append(s: String): Boolean = {
       val sLen = s.length
-      appendedLength += sLen
       if (!atLimit && s != null) {
         val available = maxLength - length
         val stringToAppend = if (available >= sLen) s else s.substring(0, available)
         strings.append(stringToAppend)
-        length += stringToAppend.length
       }
+      length += sLen
       return !atLimit
     }
 
@@ -147,7 +142,7 @@ object StringUtils extends Logging {
       if (atLimit && planSizeWarningPrinted.compareAndSet(false, true)) {
         logWarning(
           "Truncated the string representation of a plan since it was too long. The " +
-            s"plan had length ${appendedLength} and the maximum is ${length}. This behavior " +
+            s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
             "can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
       }
       super.toString
