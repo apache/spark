@@ -238,9 +238,9 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     child match {
       case CreateArray(ar) if intOrdinal < ar.length =>
         ar(intOrdinal).nullable
-      case GetArrayStructFields(CreateArray(ar), _, _, _, containsNull)
-          if intOrdinal < ar.length =>
-        containsNull
+      case GetArrayStructFields(CreateArray(elements), field, _, _, _)
+          if intOrdinal < elements.length =>
+        elements(intOrdinal).nullable || field.nullable
       case _ =>
         true
     }
