@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.collect.Lists;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -45,6 +46,35 @@ public class TransportFrameDecoderSuite {
     ChannelHandlerContext ctx = mockChannelHandlerContext();
     ByteBuf data = createAndFeedFrames(100, decoder, ctx);
     verifyAndCloseDecoder(decoder, ctx, data);
+  }
+
+  @Test
+  public void testConsolidationForDecodingNonFullyWrittenByteBuf() {
+    TransportFrameDecoder decoder = new TransportFrameDecoder();
+    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    ArrayList<ByteBuf> retained = Lists.newArrayList();
+    when(ctx.fireChannelRead(any())).thenAnswer(in -> {
+      ByteBuf buf = (ByteBuf) in.getArguments()[0];
+      retained.add(buf);
+      return null;
+    });
+    ByteBuf data1 = Unpooled.buffer(1024 * 1024);
+    data1.writeLong(1024 * 1024 + 8);
+    data1.writeByte(127);
+    ByteBuf data2 = Unpooled.buffer(1024 * 1024);
+    for (int i = 0; i < 1024 * 1024 - 1; i++) {
+      data2.writeByte(128);
+    }
+    int orignalCapacity = data1.capacity() + data2.capacity();
+    try {
+      decoder.channelRead(ctx, data1);
+      decoder.channelRead(ctx, data2);
+      assertEquals(1, retained.size());
+      assert(retained.get(0).capacity() < orignalCapacity);
+    } catch (Exception e) {
+      release(data1);
+      release(data2);
+    }
   }
 
   @Test

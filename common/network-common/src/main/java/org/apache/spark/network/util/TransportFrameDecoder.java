@@ -146,8 +146,16 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
       remaining -= next.readableBytes();
       frame.addComponent(next).writerIndex(frame.writerIndex() + next.readableBytes());
     }
+    // Because the bytebuf created is far less than it's capacity in most cases,
+    // we can reduce memory consumption by consolidation
+    ByteBuf retained = null;
+    if (frameSize >= 1024 * 1024) {
+      retained = frame.consolidate();
+    } else {
+      retained = frame;
+    }
     assert remaining == 0;
-    return frame;
+    return retained;
   }
 
   /**
