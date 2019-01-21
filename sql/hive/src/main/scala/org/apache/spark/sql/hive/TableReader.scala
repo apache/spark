@@ -301,7 +301,6 @@ class HadoopTableReader(
    * applied locally on each slave.
    */
   private def createOldHadoopRdd(tableDesc: TableDesc, path: String): RDD[Writable] = {
-
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
     val inputFormatClass = tableDesc.getInputFileFormatClass
       .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]]
@@ -324,7 +323,6 @@ class HadoopTableReader(
    * applied locally on each slave.
    */
   private def createNewHadoopRdd(tableDesc: TableDesc, path: String): RDD[Writable] = {
-
     val newJobConf = new JobConf(hadoopConf)
     HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc)(newJobConf)
     val inputFormatClass = tableDesc.getInputFileFormatClass
