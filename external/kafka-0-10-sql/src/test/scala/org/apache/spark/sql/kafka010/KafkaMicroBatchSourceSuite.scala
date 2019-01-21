@@ -35,7 +35,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{OldStreamingDataSourceV2Relation, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -118,11 +118,13 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
+          case r: StreamingDataSourceV2Relation
+              if r.stream.isInstanceOf[KafkaMicroBatchStream] =>
+            r.stream.asInstanceOf[KafkaMicroBatchStream]
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
-            case r: StreamingDataSourceV2Relation
+            case r: OldStreamingDataSourceV2Relation
                 if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
               r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
           }
@@ -1062,9 +1064,10 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     testStream(kafka)(
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
-        query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
-        }.nonEmpty
+        query.logicalPlan.find {
+          case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[KafkaMicroBatchStream]
+          case _ => false
+        }.isDefined
       }
     )
   }
@@ -1088,13 +1091,12 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val readSupport = provider.createMicroBatchReadSupport(
-          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
-        val config = readSupport.newScanConfigBuilder(
+        val dsOptions = new DataSourceOptions(options.asJava)
+        val table = provider.getTable(dsOptions)
+        val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
+        val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
-          KafkaSourceOffset(Map(tp -> 100L))).build()
-        val inputPartitions = readSupport.planInputPartitions(config)
-          .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
+          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaMicroBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
           inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
@@ -1410,7 +1412,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val reader = spark
       .readStream
       .format("kafka")
-      .option("startingOffsets", s"latest")
+      .option("startingOffsets", "latest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("failOnDataLoss", failOnDataLoss.toString)

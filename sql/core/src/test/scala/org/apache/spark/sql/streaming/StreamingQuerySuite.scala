@@ -220,10 +220,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+      override def planInputPartitions(start: OffsetV2, end: OffsetV2): Array[InputPartition] = {
         synchronized {
           clock.waitTillTime(1150)
-          super.planInputPartitions(config)
+          super.planInputPartitions(start, end)
         }
       }
     }
@@ -906,7 +906,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(df.logicalPlan.toJSON.contains("StreamingRelationV2"))
 
     testStream(df)(
-      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingExecutionRelation"))
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
 
     testStream(df, useV2Sink = true)(

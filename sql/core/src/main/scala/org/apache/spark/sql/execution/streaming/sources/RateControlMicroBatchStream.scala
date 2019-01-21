@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
 
-// A special `MicroBatchReadSupport` that can get latestOffset with a start offset.
-trait RateControlMicroBatchReadSupport extends MicroBatchReadSupport {
+// A special `MicroBatchStream` that can get latestOffset with a start offset.
+trait RateControlMicroBatchStream extends MicroBatchStream {
 
   override def latestOffset(): Offset = {
     throw new IllegalAccessException(

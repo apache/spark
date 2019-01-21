@@ -31,6 +31,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -47,7 +49,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with CreatableRelationProvider
     with StreamingWriteSupportProvider
     with ContinuousReadSupportProvider
-    with MicroBatchReadSupportProvider
+    with TableProvider
     with Logging {
   import KafkaSourceProvider._
 
@@ -101,40 +103,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       failOnDataLoss(caseInsensitiveParams))
   }
 
-  /**
-   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport]] to read
-   * batches of Kafka data in a micro-batch streaming query.
-   */
-  override def createMicroBatchReadSupport(
-      metadataPath: String,
-      options: DataSourceOptions): KafkaMicroBatchReadSupport = {
-
-    val parameters = options.asMap().asScala.toMap
-    validateStreamOptions(parameters)
-    // Each running query should use its own group id. Otherwise, the query may be only assigned
-    // partial data since Kafka will assign partitions to multiple consumers having the same group
-    // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
-
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
-
-    val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
-      STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
-
-    val kafkaOffsetReader = new KafkaOffsetReader(
-      strategy(caseInsensitiveParams),
-      kafkaParamsForDriver(specifiedKafkaParams),
-      parameters,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
-
-    new KafkaMicroBatchReadSupport(
-      kafkaOffsetReader,
-      kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-      options,
-      metadataPath,
-      startingStreamOffsets,
-      failOnDataLoss(caseInsensitiveParams))
+  override def getTable(options: DataSourceOptions): KafkaTable = {
+    new KafkaTable(strategy(options.asMap().asScala.toMap))
   }
 
   /**
@@ -432,6 +402,52 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // Don't want to throw an error, but at least log a warning.
     if (caseInsensitiveParams.get("maxoffsetspertrigger").isDefined) {
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
+    }
+  }
+
+  class KafkaTable(strategy: => ConsumerStrategy) extends Table
+    with SupportsMicroBatchRead {
+
+    override def name(): String = s"Kafka $strategy"
+
+    override def schema(): StructType = KafkaOffsetReader.kafkaSchema
+
+    override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new ScanBuilder {
+      override def build(): Scan = new KafkaScan(options)
+    }
+  }
+
+  class KafkaScan(options: DataSourceOptions) extends Scan {
+
+    override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
+
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      val parameters = options.asMap().asScala.toMap
+      validateStreamOptions(parameters)
+      // Each running query should use its own group id. Otherwise, the query may be only assigned
+      // partial data since Kafka will assign partitions to multiple consumers having the same group
+      // id. Hence, we should generate a unique id for each query.
+      val uniqueGroupId = streamingUniqueGroupId(parameters, checkpointLocation)
+
+      val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+      val specifiedKafkaParams = convertToSpecifiedParams(parameters)
+
+      val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+        caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+
+      val kafkaOffsetReader = new KafkaOffsetReader(
+        strategy(parameters),
+        kafkaParamsForDriver(specifiedKafkaParams),
+        parameters,
+        driverGroupIdPrefix = s"$uniqueGroupId-driver")
+
+      new KafkaMicroBatchStream(
+        kafkaOffsetReader,
+        kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
+        options,
+        checkpointLocation,
+        startingStreamOffsets,
+        failOnDataLoss(caseInsensitiveParams))
     }
   }
 }

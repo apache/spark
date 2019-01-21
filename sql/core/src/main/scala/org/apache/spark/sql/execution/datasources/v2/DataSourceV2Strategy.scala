@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchStream}
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 
 object DataSourceV2Strategy extends Strategy {
@@ -125,12 +125,19 @@ object DataSourceV2Strategy extends Strategy {
       // always add the projection, which will produce unsafe rows required by some operators
       ProjectExec(project, withFilter) :: Nil
 
-    case r: StreamingDataSourceV2Relation =>
+    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
+      val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
+      // ensure there is a projection, which will produce unsafe rows required by some operators
+      ProjectExec(r.output,
+        MicroBatchScanExec(
+          r.output, r.scanDesc, microBatchStream, r.startOffset.get, r.endOffset.get)) :: Nil
+
+    case r: OldStreamingDataSourceV2Relation =>
       // TODO: support operator pushdown for streaming data sources.
       val scanConfig = r.scanConfigBuilder.build()
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
-        DataSourceV2StreamingScanExec(
+        ContinuousScanExec(
           r.output, r.source, r.options, r.pushedFilters, r.readSupport, scanConfig)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
@@ -151,7 +158,8 @@ object DataSourceV2Strategy extends Strategy {
 
     case Repartition(1, false, child) =>
       val isContinuous = child.find {
-        case s: StreamingDataSourceV2Relation => s.readSupport.isInstanceOf[ContinuousReadSupport]
+        case s: OldStreamingDataSourceV2Relation =>
+          s.readSupport.isInstanceOf[ContinuousReadSupport]
         case _ => false
       }.isDefined
 
