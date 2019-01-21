@@ -419,7 +419,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
 
 def post_python_tests_results():
     if "SPARK_TEST_KEY" not in os.environ:
-        print("[error] 'SPARK_TEST_KEY' environment variable was not set. Unable to post"
+        print("[error] 'SPARK_TEST_KEY' environment variable was not set. Unable to post "
               "PySpark coverage results.")
         sys.exit(1)
     spark_test_key = os.environ.get("SPARK_TEST_KEY")
