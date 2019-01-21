@@ -204,27 +204,6 @@ package object util extends Logging {
     truncatedString(seq, "", sep, "", maxFields)
   }
 
-  /** Whether we have warned about plan string truncation yet. */
-  private val planSizeWarningPrinted = new AtomicBoolean(false)
-
-  def withSizeLimitedWriter[T](writer: Writer)(f: (Writer) => T): Option[T] = {
-    try {
-      // Subtract 3 from the string length to leave room for the "..."
-      val limited = new SizeLimitedWriter(writer, SQLConf.get.maxPlanStringLength - 3)
-      Some(f(limited))
-    }
-    catch {
-      case e: WriterSizeException =>
-        writer.write("...")
-        if (planSizeWarningPrinted.compareAndSet(false, true)) {
-          logWarning(
-            "Truncated the string representation of a plan since it was too long. This " +
-              s"behavior can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
-        }
-        None
-    }
-  }
-
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {

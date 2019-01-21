@@ -487,10 +487,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   def treeString(
-      append: String => Unit,
+      append: String => Boolean,
       verbose: Boolean,
       addSuffix: Boolean,
-      maxFields: Int): Unit = {
+      maxFields: Int): Boolean = {
     generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields)
   }
 
@@ -554,11 +554,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      append: String => Unit,
+      append: String => Boolean,
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
+      maxFields: Int): Boolean = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -591,6 +591,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       children.last.generateTreeString(
         depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix, maxFields)
     }
+    append("")
   }
 
   /**

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
@@ -28,9 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.StringUtils.{PlanStringConcat, StringConcat}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.catalyst.util.withSizeLimitedWriter
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -106,22 +104,14 @@ class QueryExecution(
     ReuseSubquery(sparkSession.sessionState.conf))
 
   def simpleString: String = withRedaction {
-    val concat = new StringConcat()
+    val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
     QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
     concat.append("\n")
     concat.toString
   }
 
-//  private def writeOrError(writer: Writer)(f: Writer => Unit): Unit = {
-//    try
-//      withSizeLimitedWriter(writer)(f)
-//    catch {
-//      case e: AnalysisException => writer.write(e.toString)
-//    }
-//  }
-//
-  private def writePlans(append: String => Unit, maxFields: Int): Unit = {
+  private def writePlans(append: String => Boolean, maxFields: Int): Boolean = {
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
@@ -142,13 +132,13 @@ class QueryExecution(
   }
 
   override def toString: String = withRedaction {
-    val concat = new StringConcat()
+    val concat = new PlanStringConcat()
     writePlans(concat.append, SQLConf.get.maxToStringFields)
     concat.toString
   }
 
   def stringWithStats: String = withRedaction {
-    val concat = new StringConcat()
+    val concat = new PlanStringConcat()
     val maxFields = SQLConf.get.maxToStringFields
 
     // trigger to compute stats for logical plans
@@ -203,9 +193,12 @@ class QueryExecution(
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
-
+      val append = (s: String) => {
+        writer.write(s)
+        true
+      }
       try {
-        writePlans(writer.write, maxFields)
+        writePlans(append, maxFields)
         writer.write("\n== Whole Stage Codegen ==\n")
         org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)
       } finally {
