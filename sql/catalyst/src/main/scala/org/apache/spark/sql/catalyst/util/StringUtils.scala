@@ -101,7 +101,11 @@ object StringUtils extends Logging {
    */
   class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
     private val strings = new ArrayBuffer[String]
-    private var length: Int = 0
+    protected var length: Int = 0
+
+    // This tracks the full length of all appended strings, returns how long a
+    // non-truncated the string would be.
+    protected var appendedLength: Int = 0
 
     def atLimit: Boolean = length >= maxLength
 
@@ -111,9 +115,13 @@ object StringUtils extends Logging {
      * has room for further appends before it hits its max limit.
      */
     def append(s: String): Boolean = {
+      val sLen = s.length
+      appendedLength += sLen
       if (!atLimit && s != null) {
-        strings.append(s)
-        length += s.length
+        val available = maxLength - length
+        val stringToAppend = if (available >= sLen) s else s.substring(0, available)
+        strings.append(stringToAppend)
+        length += stringToAppend.length
       }
       return !atLimit
     }
@@ -123,20 +131,8 @@ object StringUtils extends Logging {
      * returns concatenated string.
      */
     override def toString: String = {
-      val finalLength = Math.min(length, maxLength)
-      val result = new java.lang.StringBuilder(finalLength)
-      var ix = 0
-      while(ix < strings.length) {
-        var s = strings(ix)
-        if(ix < strings.length - 1) {
-          result.append(s)
-        }
-        else {
-          val lastLength = Math.min(s.length, maxLength - result.length())
-          result.append(s, 0, lastLength)
-        }
-        ix += 1
-      }
+      val result = new java.lang.StringBuilder(length)
+      strings.foreach(result.append)
       result.toString
     }
   }
@@ -150,8 +146,9 @@ object StringUtils extends Logging {
     override def toString: String = {
       if (atLimit && planSizeWarningPrinted.compareAndSet(false, true)) {
         logWarning(
-          "Truncated the string representation of a plan since it was too long. This " +
-            s"behavior can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
+          "Truncated the string representation of a plan since it was too long. The " +
+            s"plan had length ${appendedLength} and the maximum is ${length}. This behavior " +
+            "can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
       }
       super.toString
     }
