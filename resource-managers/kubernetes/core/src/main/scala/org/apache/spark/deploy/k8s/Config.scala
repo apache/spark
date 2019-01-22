@@ -24,6 +24,18 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
+  val KUBERNETES_CONTEXT =
+    ConfigBuilder("spark.kubernetes.context")
+      .doc("The desired context from your K8S config file used to configure the K8S " +
+        "client for interacting with the cluster.  Useful if your config file has " +
+        "multiple clusters or user identities defined.  The client library used " +
+        "locates the config file via the KUBECONFIG environment variable or by defaulting " +
+        "to .kube/config under your home directory.  If not specified then your current " +
+        "context is used.  You can always override specific aspects of the config file " +
+        "provided configuration using other Spark on K8S configuration options.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
