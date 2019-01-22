@@ -28,6 +28,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
 
@@ -226,8 +227,8 @@ private[spark] class ClientApp extends SparkApplication {
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val driverArgs = new ClientArguments(args)
 
-    if (!conf.contains("spark.rpc.askTimeout")) {
-      conf.set("spark.rpc.askTimeout", "10s")
+    if (!conf.contains(RPC_ASK_TIMEOUT)) {
+      conf.set(RPC_ASK_TIMEOUT, "10s")
     }
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 

@@ -30,7 +30,7 @@ class KryoSerializerDistributedSuite extends SparkFunSuite with LocalSparkContex
     val conf = new SparkConf(false)
       .set(config.SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
       .set(config.Kryo.KRYO_USER_REGISTRATORS, classOf[AppJarRegistrator].getName)
-      .set(config.MAX_TASK_FAILURES, 1)
+      .set(config.TASK_MAX_FAILURES, 1)
       .set(config.BLACKLIST_ENABLED, false)
 
     val jar = TestUtils.createJarWithClasses(List(AppJarRegistrator.customClassName))
