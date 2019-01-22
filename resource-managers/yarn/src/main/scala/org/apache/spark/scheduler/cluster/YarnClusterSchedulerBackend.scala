@@ -70,7 +70,6 @@ private[spark] class YarnClusterSchedulerBackend(
   }
 
   override def getDriverAttributes: Option[Map[String, String]] = {
-    var attributes: Option[Map[String, String]] = None
     try {
       val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
       val containerId = YarnSparkHadoopUtil.getContainerId
@@ -91,7 +90,7 @@ private[spark] class YarnClusterSchedulerBackend(
       val user = Utils.getCurrentUserName()
       val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
 
-      attributes = Some(Map(
+      Some(Map(
         "HTTP_SCHEME" -> httpScheme,
         "NODE_HTTP_ADDRESS" -> httpAddress,
         "CLUSTER_ID" -> clusterId.getOrElse(""),
@@ -103,7 +102,7 @@ private[spark] class YarnClusterSchedulerBackend(
       case e: Exception =>
         logInfo("Error while retrieving attributes on driver, so driver logs will not " +
           "be replaced with custom log pattern", e)
+        None
     }
-    attributes
   }
 }

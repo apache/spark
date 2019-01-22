@@ -252,20 +252,23 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.custom.executor.log.url</td>
     <td>(none)</td>
     <td>
-        Specifies custom spark executor log url for supporting external log service instead of using resource managers' app log urls.
-        Spark will support some path variables via patterns which can be vary on resource managers. 
-        Please check the document for resource manager to refer which patterns are supported.
+        Specifies custom spark executor log url for supporting external log service instead of using cluster
+        managers' application log urls in the history server. Spark will support some path variables via patterns
+        which can vary on cluster manager. Please check the documentation for your each cluster manager to
+        see which patterns are supported, if any. This configuration has no effect on a live application, it only
+        affects the history server.
         <p/>
-        For now, YARN mode only supports this configuration.
+        For now, only YARN mode supports this configuration
     </td>
   </tr>
   <tr>
     <td>spark.history.custom.executor.log.url.applyIncompleteApplication</td>
     <td>false</td>
     <td>
-        Specifies whether apply custom spark executor log url to incomplete applications as well.
+        Specifies whether to apply custom spark executor log url to incomplete applications as well.
         If executor logs for running applications should be provided as origin log urls, set this to `false`.
         Please note that incomplete applications may include applications which didn't shutdown gracefully.
+        Even this is set to `true`, this configuration has no effect on a live application, it only affects the history server.
     </td>
   </tr>
 

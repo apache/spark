@@ -109,6 +109,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
+  override protected def afterAll(): Unit = stop()
+
   val cases = Seq(
     "application list json" -> "applications",
     "completed app list json" -> "applications?status=completed",
@@ -207,8 +209,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         try {
           stop()
           init(
-            // compiler complains when using `->`, so made a tuple
-            (CUSTOM_EXECUTOR_LOG_URL.key, "http://newhost:9999/logs/clusters/" +
+            CUSTOM_EXECUTOR_LOG_URL.key -> ("http://newhost:9999/logs/clusters/" +
               "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}}"),
             APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP.key -> applyToIncompleteApp.toString)
 
