@@ -84,14 +84,14 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     tableDesc: CatalogTable,
     tableExists: Boolean): DataWritingCommand
 
-  // A subclass should override this with the Class of the concrete type expected to be
+  // A subclass should override this with the Class name of the concrete type expected to be
   // returned from `getWritingCommand`.
-  def writingCommandClass: Class[_]
+  def writingCommandClassName: String
 
   override def argString(maxFields: Int): String = {
     s"[Database: ${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
-    s"${Utils.getSimpleName(writingCommandClass)}]"
+    s"${writingCommandClassName}]"
   }
 }
 
@@ -124,7 +124,8 @@ case class CreateHiveTableAsSelectCommand(
       outputColumnNames = outputColumnNames)
   }
 
-  override def writingCommandClass: Class[_] = classOf[InsertIntoHiveTable]
+  override def writingCommandClassName: String =
+    Utils.getSimpleName(classOf[InsertIntoHiveTable])
 }
 
 /**
@@ -170,5 +171,6 @@ case class OptimizedCreateHiveTableAsSelectCommand(
       query.output.map(_.name))
   }
 
-  override def writingCommandClass: Class[_] = classOf[InsertIntoHadoopFsRelationCommand]
+  override def writingCommandClassName: String =
+    Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand])
 }
