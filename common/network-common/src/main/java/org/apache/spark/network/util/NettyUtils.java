@@ -31,6 +31,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.internal.PlatformDependent;
+import org.apache.spark.network.buffer.SparkPooledByteBufAllocator;
 
 /**
  * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
@@ -156,7 +157,7 @@ public class NettyUtils {
     if (numCores == 0) {
       numCores = Runtime.getRuntime().availableProcessors();
     }
-    return new PooledByteBufAllocator(
+    return new SparkPooledByteBufAllocator(
       allowDirectBufs && PlatformDependent.directBufferPreferred(),
       Math.min(PooledByteBufAllocator.defaultNumHeapArena(), numCores),
       Math.min(PooledByteBufAllocator.defaultNumDirectArena(), allowDirectBufs ? numCores : 0),
