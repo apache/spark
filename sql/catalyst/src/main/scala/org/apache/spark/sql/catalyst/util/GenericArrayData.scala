@@ -35,7 +35,6 @@ private object GenericArrayData {
 
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
-  def this(size: Int) = this(new Array[Any](size))
   def this(seq: Seq[Any]) = this(seq.toArray)
   def this(list: java.util.List[Any]) = this(list.asScala)
 
