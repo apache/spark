@@ -144,19 +144,19 @@ class CacheManager extends Logging {
       } else {
         _.sameResult(plan)
       }
-    val toRemove = mutable.Buffer[CachedData]()
-    readLock {
+    val plansToUncache = mutable.Buffer[CachedData]()
+    writeLock {
       val it = cachedData.iterator()
       while (it.hasNext) {
         val cd = it.next()
         if (shouldRemove(cd.plan)) {
-          cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
-          toRemove.append(cd)
+          plansToUncache.append(cd)
+          it.remove()
         }
       }
     }
-    writeLock {
-      toRemove.foreach(cachedData.remove(_))
+    plansToUncache.foreach { cd =>
+      cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
     }
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
@@ -176,24 +176,22 @@ class CacheManager extends Logging {
       condition: LogicalPlan => Boolean,
       clearCache: Boolean = true): Unit = {
     val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
-    readLock {
+    writeLock {
       val it = cachedData.iterator()
       while (it.hasNext) {
         val cd = it.next()
         if (condition(cd.plan)) {
-          if (clearCache) {
-            cd.cachedRepresentation.cacheBuilder.clearCache()
-          }
           // Remove the cache entry before we create a new one, so that we can have a different
           // physical plan.
           needToRecache += cd
+          it.remove()
         }
       }
     }
-    writeLock {
-      needToRecache.foreach(cachedData.remove(_))
-    }
     val recomputedPlans = needToRecache.map { cd =>
+      if (clearCache) {
+        cd.cachedRepresentation.cacheBuilder.clearCache()
+      }
       val plan = spark.sessionState.executePlan(cd.plan).executedPlan
       val newCache = InMemoryRelation(
         cacheBuilder = cd.cachedRepresentation.cacheBuilder.withCachedPlan(plan),
