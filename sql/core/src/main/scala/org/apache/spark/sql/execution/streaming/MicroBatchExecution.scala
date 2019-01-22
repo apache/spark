@@ -513,8 +513,7 @@ class MicroBatchExecution(
     // of attributes, so we don't need to concern about the value of literals.
 
     val newAttrPlanPreResolvedForSchema = newAttributePlan transformAllExpressions {
-      case ct: CurrentBatchTimestamp => ct.toLiteral
-      case cd: CurrentBatchTimestamp => cd.toLiteral
+      case cbt: CurrentBatchTimestamp => cbt.toLiteral
     }
 
     val triggerLogicalPlan = sink match {
