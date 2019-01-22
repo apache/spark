@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -576,26 +577,27 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains(EXECUTOR_CORES) && contains("spark.task.cpus")) {
+    if (contains(EXECUTOR_CORES) && contains(CPUS_PER_TASK)) {
       val executorCores = get(EXECUTOR_CORES)
-      val taskCpus = getInt("spark.task.cpus", 1)
+      val taskCpus = get(CPUS_PER_TASK)
 
       if (executorCores < taskCpus) {
-        throw new SparkException(s"${EXECUTOR_CORES.key} must not be less than spark.task.cpus.")
+        throw new SparkException(
+          s"${EXECUTOR_CORES.key} must not be less than ${CPUS_PER_TASK.key}.")
       }
     }
 
-    val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
+    val encryptionEnabled = get(NETWORK_CRYPTO_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
 
-    val executorTimeoutThresholdMs =
-      getTimeAsSeconds("spark.network.timeout", "120s") * 1000
+    val executorTimeoutThresholdMs = get(NETWORK_TIMEOUT) * 1000
     val executorHeartbeatIntervalMs = get(EXECUTOR_HEARTBEAT_INTERVAL)
+    val networkTimeout = NETWORK_TIMEOUT.key
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
-      s"spark.network.timeout=${executorTimeoutThresholdMs}ms must be greater than the value of " +
+      s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
       s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
   }
 
@@ -680,13 +682,13 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
     IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
-    "spark.rpc.numRetries" -> Seq(
+    RPC_NUM_RETRIES.key -> Seq(
       AlternateConfig("spark.akka.num.retries", "1.4")),
-    "spark.rpc.retry.wait" -> Seq(
+    RPC_RETRY_WAIT.key -> Seq(
       AlternateConfig("spark.akka.retry.wait", "1.4")),
-    "spark.rpc.askTimeout" -> Seq(
+    RPC_ASK_TIMEOUT.key -> Seq(
       AlternateConfig("spark.akka.askTimeout", "1.4")),
-    "spark.rpc.lookupTimeout" -> Seq(
+    RPC_LOOKUP_TIMEOUT.key -> Seq(
       AlternateConfig("spark.akka.lookupTimeout", "1.4")),
     "spark.streaming.fileStream.minRememberDuration" -> Seq(
       AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
@@ -694,7 +696,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
     MEMORY_OFFHEAP_ENABLED.key -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
-    "spark.rpc.message.maxSize" -> Seq(
+    RPC_MESSAGE_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),

@@ -92,7 +92,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     sc = new SparkContext(conf)
     taskScheduler =
-      new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4)) {
+      new TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES)) {
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
           // we need to create a spied tsm just so we can set the TaskSetBlacklist
@@ -155,7 +155,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler correctly accounts for multiple CPUs per task") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
     // Give zero core offers. Should not generate any tasks
     val zeroCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 0),
       new WorkerOffer("executor1", "host1", 0))
@@ -185,7 +185,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler does not crash when tasks are not serializable") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
     val numFreeCores = 1
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
@@ -1208,7 +1208,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("don't schedule for a barrier taskSet if available slots are less than pending tasks") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
 
     val numFreeCores = 3
     val workerOffers = IndexedSeq(
@@ -1225,7 +1225,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("schedule tasks for a barrier taskSet if all tasks can be launched together") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
 
     val numFreeCores = 3
     val workerOffers = IndexedSeq(
