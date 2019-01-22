@@ -139,11 +139,12 @@ in interactive mode by running `build/sbt`, and then run all build commands at t
 prompt.
 
 ### Setting up SBT's Memory Usage
-Configure the JVM options for SBT in `.jvmopts`, for example:
+Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
 
-    $ cat .jvmopts                                                                                                                   [21:18:11]
-    -Xms512M
-    -Xmx4096M
+    -Xmx2g
+    -XX:ReservedCodeCacheSize=512m
+
+For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](http://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 
 ## Speeding up Compilation
 
