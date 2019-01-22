@@ -199,7 +199,6 @@ class PandasUDFTests(ReusedSQLTestCase):
 
     def test_pandas_udf_detect_unsafe_type_conversion(self):
         from distutils.version import LooseVersion
-        from pyspark.sql.functions import pandas_udf
         import pandas as pd
         import numpy as np
         import pyarrow as pa
@@ -227,7 +226,6 @@ class PandasUDFTests(ReusedSQLTestCase):
 
     def test_pandas_udf_arrow_overflow(self):
         from distutils.version import LooseVersion
-        from pyspark.sql.functions import pandas_udf
         import pandas as pd
         import pyarrow as pa
 
