@@ -184,7 +184,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(localAssignments === localAssignments2)
   }
 
-  test("Power Iteration failed to converge") {
+  test("power iteration clustering gives incorrect results due to failed to converge") {
     /*
          Graph:
             1
@@ -197,13 +197,18 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       (2, 3)
     )).toDF("src", "dst")
 
-    val msg1 = intercept[SparkException] {
-      new PowerIterationClustering()
-        .setInitMode("random")
-        .setK(2)
-        .assignClusters(data1)
-    }.getMessage
-    assert(msg1.contains("Power Iteration fail to converge"))
+    val assignments1 = new PowerIterationClustering()
+      .setInitMode("random")
+      .setK(2)
+      .assignClusters(data1)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+    val predictions1 = Array.fill(2)(mutable.Set.empty[Long])
+    assignments1.foreach {
+      case (id, cluster) => predictions1(cluster) += id
+    }
+    assert(Set(predictions1(0).size, predictions1(1).size) !== Set(2, 2))
 
 
     /*
@@ -219,22 +224,32 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       (3, 4)
     )).toDF("src", "dst")
 
-    var msg2 = intercept[SparkException] {
-      new PowerIterationClustering()
-        .setInitMode("random")
-        .setK(2)
-        .assignClusters(data2)
-    }.getMessage
-    assert(msg1.contains("Power Iteration fail to converge"))
+    var assignments2 = new PowerIterationClustering()
+      .setInitMode("random")
+      .setK(2)
+      .assignClusters(data2)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+    val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
+    assignments2.foreach {
+      case (id, cluster) => predictions2(cluster) += id
+    }
+    assert(Set(predictions2(0).size, predictions2(1).size) !== Set(2, 3))
 
 
-    msg2 = intercept[SparkException] {
-      new PowerIterationClustering()
-        .setInitMode("degree")
-        .setK(2)
-        .assignClusters(data2)
-    }.getMessage
-    assert(msg1.contains("Power Iteration fail to converge"))
+    var assignments3 = new PowerIterationClustering()
+      .setInitMode("degree")
+      .setK(2)
+      .assignClusters(data2)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+    val predictions3 = Array.fill(2)(mutable.Set.empty[Long])
+    assignments3.foreach {
+      case (id, cluster) => predictions3(cluster) += id
+    }
+    assert(Set(predictions3(0).size, predictions3(1).size) !== Set(2, 3))
   }
 
   test("read/write") {

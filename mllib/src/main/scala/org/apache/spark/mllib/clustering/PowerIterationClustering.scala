@@ -395,7 +395,7 @@ object PowerIterationClustering extends Logging {
         val rayleigh = xTAx / xTx
 
         if (math.abs(norm - math.abs(rayleigh)) > tol) {
-          throw new SparkException(s"Power Iteration fail to converge, delta = ${delta}," +
+          logWarning(s"Power Iteration fail to converge. delta = ${delta}," +
             s" difference delta = ${diffDelta} and norm = ${norm}")
         }
       }
