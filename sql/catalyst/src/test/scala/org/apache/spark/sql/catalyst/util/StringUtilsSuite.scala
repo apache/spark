@@ -44,7 +44,7 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(filterPattern(names, " d* ") === Nil)
   }
 
-  test("split a SQL") {
+  test("split the SQL text") {
     val statement = "select * from tmp.dada;"
     assert(StringUtils.split(statement) === Array("select * from tmp.dada"))
 

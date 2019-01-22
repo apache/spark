@@ -20,16 +20,16 @@ import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.mockito.ArgumentMatcher
-import org.mockito.Matchers.argThat
+import org.mockito.ArgumentMatchers.argThat
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
 
 class SparkSQLCLIDriverSuite extends SparkFunSuite {
 
-  def matchSQL(sql: String, candidates: String*): Unit = {
+  def matchSQL(sqlText: String, candidates: String*): Unit = {
     class SQLMatcher extends ArgumentMatcher[String] {
-      override def matches(command: Any): Boolean =
+      override def matches(command: String): Boolean =
         candidates.contains(command.asInstanceOf[String])
     }
 
@@ -39,10 +39,10 @@ class SparkSQLCLIDriverSuite extends SparkFunSuite {
     val cli = mock(classOf[SparkSQLCLIDriver])
 
     when(cli.processCmd(argThat(new SQLMatcher))).thenReturn(0)
-    assert(cli.processLine(sql) == 0)
+    assert(cli.processLine(sqlText) == 0)
   }
 
-  test("SPARK-26312: Split a SQL in a correct way") {
+  test("SPARK-26312: sql text splitting for the processCmd method") {
     // semicolon in a string
     val sql =
       """
