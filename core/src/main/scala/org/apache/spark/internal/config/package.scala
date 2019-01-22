@@ -21,10 +21,11 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.scheduler.EventLoggingListener
+import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
 
@@ -264,10 +265,21 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
+  private[spark] val STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT =
+    ConfigBuilder("spark.storage.blockManagerSlaveTimeoutMs")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
+
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
   private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
+
+  private[spark] val DYN_ALLOCATION_ENABLED =
+    ConfigBuilder("spark.dynamicAllocation.enabled").booleanConf.createWithDefault(false)
+
+  private[spark] val DYN_ALLOCATION_TESTING =
+    ConfigBuilder("spark.dynamicAllocation.testing").booleanConf.createWithDefault(false)
 
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.minExecutors").intConf.createWithDefault(0)
@@ -282,6 +294,22 @@ package object config {
   private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
     ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
       .doubleConf.createWithDefault(1.0)
+
+  private[spark] val DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.cachedExecutorIdleTimeout")
+      .timeConf(TimeUnit.SECONDS).createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.executorIdleTimeout")
+      .timeConf(TimeUnit.SECONDS).createWithDefault(60)
+
+  private[spark] val DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.schedulerBacklogTimeout")
+      .timeConf(TimeUnit.SECONDS).createWithDefault(1)
+
+  private[spark] val DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
+      .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)
@@ -315,10 +343,35 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  private[spark] val MAX_TASK_FAILURES =
+  private[spark] val TASK_MAX_DIRECT_RESULT_SIZE =
+    ConfigBuilder("spark.task.maxDirectResultSize")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(1L << 20)
+
+  private[spark] val TASK_MAX_FAILURES =
     ConfigBuilder("spark.task.maxFailures")
       .intConf
       .createWithDefault(4)
+
+  private[spark] val TASK_REAPER_ENABLED =
+    ConfigBuilder("spark.task.reaper.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val TASK_REAPER_KILL_TIMEOUT =
+    ConfigBuilder("spark.task.reaper.killTimeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(-1)
+
+  private[spark] val TASK_REAPER_POLLING_INTERVAL =
+    ConfigBuilder("spark.task.reaper.pollingInterval")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10s")
+
+  private[spark] val TASK_REAPER_THREAD_DUMP =
+    ConfigBuilder("spark.task.reaper.threadDump")
+      .booleanConf
+      .createWithDefault(true)
 
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
@@ -512,7 +565,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password".r)
+      .createWithDefault("(?i)secret|password|token".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -572,11 +625,6 @@ package object config {
         "used for both the driver and the executors when running in cluster mode. File-based " +
         "secret keys are only allowed when using Kubernetes.")
       .fallbackConf(AUTH_SECRET_FILE)
-
-  private[spark] val NETWORK_ENCRYPTION_ENABLED =
-    ConfigBuilder("spark.network.crypto.enabled")
-      .booleanConf
-      .createWithDefault(false)
 
   private[spark] val BUFFER_WRITE_CHUNK_SIZE =
     ConfigBuilder("spark.buffer.write.chunkSize")
@@ -749,6 +797,96 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
+  private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.sort.initialBufferSize")
+      .internal()
+      .intConf
+      .checkValue(v => v > 0, "The value should be a positive integer.")
+      .createWithDefault(4096)
+
+  private[spark] val SHUFFLE_COMPRESS =
+    ConfigBuilder("spark.shuffle.compress")
+      .doc("Whether to compress shuffle output. Compression will use " +
+        "spark.io.compression.codec.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SPILL_COMPRESS =
+    ConfigBuilder("spark.shuffle.spill.compress")
+      .doc("Whether to compress data spilled during shuffles. Compression will use " +
+        "spark.io.compression.codec.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD =
+    ConfigBuilder("spark.shuffle.spill.initialMemoryThreshold")
+      .internal()
+      .doc("Initial threshold for the size of a collection before we start tracking its " +
+        "memory usage.")
+      .longConf
+      .createWithDefault(5 * 1024 * 1024)
+
+  private[spark] val SHUFFLE_SPILL_BATCH_SIZE =
+    ConfigBuilder("spark.shuffle.spill.batchSize")
+      .internal()
+      .doc("Size of object batches when reading/writing from serializers.")
+      .longConf
+      .createWithDefault(10000)
+
+  private[spark] val SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD =
+    ConfigBuilder("spark.shuffle.sort.bypassMergeThreshold")
+      .doc("In the sort-based shuffle manager, avoid merge-sorting data if there is no " +
+        "map-side aggregation and there are at most this many reduce partitions")
+      .intConf
+      .createWithDefault(200)
+
+  private[spark] val SHUFFLE_MANAGER =
+    ConfigBuilder("spark.shuffle.manager")
+      .stringConf
+      .createWithDefault("sort")
+
+  private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
+    ConfigBuilder("spark.shuffle.reduceLocality.enabled")
+      .doc("Whether to compute locality preferences for reduce tasks")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST =
+    ConfigBuilder("spark.shuffle.mapOutput.minSizeForBroadcast")
+      .doc("The size at which we use Broadcast to send the map output statuses to the executors.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("512k")
+
+  private[spark] val SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS =
+    ConfigBuilder("spark.shuffle.mapOutput.dispatcher.numThreads")
+      .intConf
+      .createWithDefault(8)
+
+  private[spark] val SHUFFLE_DETECT_CORRUPT =
+    ConfigBuilder("spark.shuffle.detectCorrupt")
+      .doc("Whether to detect any corruption in fetched blocks.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SYNC =
+    ConfigBuilder("spark.shuffle.sync")
+      .doc("Whether to force outstanding writes to disk.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_UNDAFE_FAST_MERGE_ENABLE =
+    ConfigBuilder("spark.shuffle.unsafe.fastMergeEnabled")
+      .doc("Whether to perform a fast spill merge.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SORT_USE_RADIXSORT =
+    ConfigBuilder("spark.shuffle.sort.useRadixSort")
+      .doc("Whether to use radix sort for sorting in-memory partition ids. Radix sort is much " +
+        "faster, but requires additional memory to be reserved memory as pointers are added.")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS =
     ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
       .internal()
@@ -809,6 +947,26 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
+  private[spark] val UNSAFE_EXCEPTION_ON_MEMORY_LEAK =
+    ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED =
+    ConfigBuilder("spark.unsafe.sorter.spill.read.ahead.enabled")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE =
+    ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => 1024 * 1024 <= v && v <= MAX_BUFFER_SIZE_BYTES,
+        s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
+      .createWithDefault(1024 * 1024)
+
   private[spark] val EXECUTOR_PLUGINS =
     ConfigBuilder("spark.executor.plugins")
       .doc("Comma-separated list of class names for \"plugins\" implementing " +
@@ -818,6 +976,31 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val CLEANER_PERIODIC_GC_INTERVAL =
+    ConfigBuilder("spark.cleaner.periodicGC.interval")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("30min")
+
+  private[spark] val CLEANER_REFERENCE_TRACKING =
+    ConfigBuilder("spark.cleaner.referenceTracking")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val CLEANER_REFERENCE_TRACKING_BLOCKING =
+    ConfigBuilder("spark.cleaner.referenceTracking.blocking")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE =
+    ConfigBuilder("spark.cleaner.referenceTracking.blocking.shuffle")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS =
+    ConfigBuilder("spark.cleaner.referenceTracking.cleanCheckpoints")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy").stringConf.createWithDefault("")
@@ -961,4 +1144,80 @@ package object config {
       .intConf
       .createWithDefault(4)
 
+  private[spark] val SERIALIZER = ConfigBuilder("spark.serializer")
+    .stringConf
+    .createWithDefault("org.apache.spark.serializer.JavaSerializer")
+
+  private[spark] val SERIALIZER_OBJECT_STREAM_RESET =
+    ConfigBuilder("spark.serializer.objectStreamReset")
+      .intConf
+      .createWithDefault(100)
+
+  private[spark] val SERIALIZER_EXTRA_DEBUG_INFO = ConfigBuilder("spark.serializer.extraDebugInfo")
+    .booleanConf
+    .createWithDefault(true)
+
+  private[spark] val JARS = ConfigBuilder("spark.jars")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val FILES = ConfigBuilder("spark.files")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val SUBMIT_DEPLOY_MODE = ConfigBuilder("spark.submit.deployMode")
+    .stringConf
+    .createWithDefault("client")
+
+  private[spark] val SUBMIT_PYTHON_FILES = ConfigBuilder("spark.submit.pyFiles")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val SCHEDULER_ALLOCATION_FILE =
+    ConfigBuilder("spark.scheduler.allocation.file")
+      .stringConf
+      .createOptional
+
+  private[spark] val SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO =
+    ConfigBuilder("spark.scheduler.minRegisteredResourcesRatio")
+      .doubleConf
+      .createOptional
+
+  private[spark] val SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME =
+    ConfigBuilder("spark.scheduler.maxRegisteredResourcesWaitingTime")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30s")
+
+  private[spark] val SCHEDULER_MODE =
+    ConfigBuilder("spark.scheduler.mode")
+      .stringConf
+      .createWithDefault(SchedulingMode.FIFO.toString)
+
+  private[spark] val SCHEDULER_REVIVE_INTERVAL =
+    ConfigBuilder("spark.scheduler.revive.interval")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
+  private[spark] val SPECULATION_ENABLED =
+    ConfigBuilder("spark.speculation")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SPECULATION_INTERVAL =
+    ConfigBuilder("spark.speculation.interval")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
+
+  private[spark] val SPECULATION_MULTIPLIER =
+    ConfigBuilder("spark.speculation.multiplier")
+      .doubleConf
+      .createWithDefault(1.5)
+
+  private[spark] val SPECULATION_QUANTILE =
+    ConfigBuilder("spark.speculation.quantile")
+      .doubleConf
+      .createWithDefault(0.75)
 }

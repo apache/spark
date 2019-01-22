@@ -624,6 +624,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
             "test", Some("attempt1")),
           SparkListenerEnvironmentUpdate(Map(
             "Spark Properties" -> properties.toSeq,
+            "Hadoop Properties" -> Seq.empty,
             "JVM Information" -> Seq.empty,
             "System Properties" -> Seq.empty,
             "Classpath Entries" -> Seq.empty
@@ -882,6 +883,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         SparkListenerApplicationStart("end-event-test", Some("end-event-test"), 1L, "test", None),
         SparkListenerEnvironmentUpdate(Map(
           "Spark Properties" -> Seq.empty,
+          "Hadoop Properties" -> Seq.empty,
           "JVM Information" -> Seq.empty,
           "System Properties" -> Seq.empty,
           "Classpath Entries" -> Seq.empty

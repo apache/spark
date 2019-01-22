@@ -17,7 +17,6 @@
 
 import gc
 import os
-import socket
 import sys
 from tempfile import NamedTemporaryFile
 import threading

@@ -14,18 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.datasources.v2
 
-package org.apache.spark.sql.execution.streaming.sources
+import org.apache.spark.sql.sources.v2.reader.{ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.types.StructType
 
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
+abstract class FileScanBuilder(schema: StructType)
+  extends ScanBuilder
+  with SupportsPushDownRequiredColumns
+  with SupportsPushDownFilters {
+  protected var readSchema = schema
 
-// A special `MicroBatchReadSupport` that can get latestOffset with a start offset.
-trait RateControlMicroBatchReadSupport extends MicroBatchReadSupport {
-
-  override def latestOffset(): Offset = {
-    throw new IllegalAccessException(
-      "latestOffset should not be called for RateControlMicroBatchReadSupport")
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.readSchema = requiredSchema
   }
-
-  def latestOffset(start: Offset): Offset
 }

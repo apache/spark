@@ -334,7 +334,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         """Test that the model improves on toy data with no. of batches"""
         input_batches = [
             self.sc.parallelize(self.generateLogisticInput(0, 1.5, 100, 42 + i))
-            for i in range(20)]
+            for i in range(40)]
         predict_batches = [
             b.map(lambda lp: (lp.label, lp.features)) for b in input_batches]
 

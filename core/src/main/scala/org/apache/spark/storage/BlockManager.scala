@@ -36,7 +36,9 @@ import com.codahale.metrics.{MetricRegistry, MetricSet}
 
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Network
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -133,7 +135,7 @@ private[spark] class BlockManager(
   private[spark] val externalShuffleServiceEnabled =
     conf.get(config.SHUFFLE_SERVICE_ENABLED)
   private val remoteReadNioBufferConversion =
-    conf.getBoolean("spark.network.remoteReadNioBufferConversion", false)
+    conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
@@ -942,7 +944,7 @@ private[spark] class BlockManager(
       serializerInstance: SerializerInstance,
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetricsReporter): DiskBlockObjectWriter = {
-    val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
+    val syncWrites = conf.get(config.SHUFFLE_SYNC)
     new DiskBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)
   }

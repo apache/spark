@@ -18,7 +18,6 @@
 import atexit
 import os
 import sys
-import select
 import signal
 import shlex
 import shutil
@@ -174,8 +173,7 @@ def local_connect_and_auth(port, auth_secret):
             errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
             sock.close()
             sock = None
-    else:
-        raise Exception("could not open socket: %s" % errors)
+    raise Exception("could not open socket: %s" % errors)
 
 
 def ensure_callback_server_started(gw):
