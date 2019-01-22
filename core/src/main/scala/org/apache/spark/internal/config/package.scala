@@ -284,6 +284,16 @@ package object config {
       .intConf
       .createWithDefault(64)
 
+  private[spark] val DISK_STORE_BLACKLIST_TIMEOUT =
+    ConfigBuilder("spark.diskStore.blacklist.timeout")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("1d")
+
+  private[spark] val DISK_STORE_MAX_RETIRES =
+    ConfigBuilder("spark.diskStore.maxRetries")
+      .intConf
+      .createWithDefault(3)
+
   private[spark] val BLOCK_FAILURES_BEFORE_LOCATION_REFRESH =
     ConfigBuilder("spark.block.failures.beforeLocationRefresh")
       .doc("Max number of failures before this block manager refreshes " +

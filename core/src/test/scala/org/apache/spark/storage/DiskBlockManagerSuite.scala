@@ -91,4 +91,24 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     for (i <- 0 until numBytes) writer.write(i)
     writer.close()
   }
+
+  test("test blacklisting bad disk directory") {
+    val blockId = new TestBlockId("1")
+    val hash = Utils.nonNegativeHash(blockId)
+    val (badDiskDir, goodDiskDir) = if (hash % rootDirs.length == 0) {
+      (rootDir0, rootDir1)
+    } else {
+      (rootDir1, rootDir0)
+    }
+
+    // Delete dirs to simulate disk error
+    Utils.deleteRecursively(badDiskDir)
+    try {
+      val file = diskBlockManager.getFile(blockId)
+      val fileRootDir = file.getParentFile.getParentFile.getParentFile
+      assert(file != null && file.getParentFile.exists() && fileRootDir === goodDiskDir)
+    } finally {
+      badDiskDir.mkdirs()
+    }
+  }
 }

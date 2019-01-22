@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.io.{File, IOException}
 import java.util.UUID
 
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
@@ -48,33 +50,57 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
+  private val badDirs = ArrayBuffer[File]()
+  private val maxRetries = conf.get(config.DISK_STORE_MAX_RETIRES)
+  private val blacklistTimeout = conf.get(config.DISK_STORE_BLACKLIST_TIMEOUT)
+  private val dirToBlacklistExpiryTime = new HashMap[File, Long]
+
   private val shutdownHook = addShutdownHook()
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
   def getFile(filename: String): File = {
-    // Figure out which local directory it hashes to, and which subdirectory in that
-    val hash = Utils.nonNegativeHash(filename)
-    val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+    var mostRecentFailure: Exception = null
+    // Update blacklist
+    val now = System.currentTimeMillis()
+    badDirs.dropWhile(now > dirToBlacklistExpiryTime(_))
 
-    // Create the subdirectory if it doesn't already exist
-    val subDir = subDirs(dirId).synchronized {
-      val old = subDirs(dirId)(subDirId)
-      if (old != null) {
-        old
-      } else {
-        val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && !newDir.mkdir()) {
-          throw new IOException(s"Failed to create local dir in $newDir.")
+    for (attempt <- 0 until maxRetries) {
+      val goodDirs = localDirs.filterNot(badDirs.contains(_))
+      if (goodDirs.isEmpty) {
+        throw new IOException("No good disk directories available")
+      }
+      // Figure out which local directory it hashes to, and which subdirectory in that
+      val hash = Utils.nonNegativeHash(filename)
+      val dirId = hash % goodDirs.length
+      val subDirId = (hash / goodDirs.length) % subDirsPerLocalDir
+      try {
+        // Create the subdirectory if it doesn't already exist
+        val subDir = subDirs(dirId).synchronized {
+          val old = subDirs(dirId)(subDirId)
+          if (old != null) {
+            old
+          } else {
+            val newDir = new File(goodDirs(dirId), "%02x".format(subDirId))
+            if (!newDir.exists() && !newDir.mkdir()) {
+              throw new IOException(s"Failed to create local dir in $newDir.")
+            }
+            subDirs(dirId)(subDirId) = newDir
+            newDir
+          }
         }
-        subDirs(dirId)(subDirId) = newDir
-        newDir
+        return new File(subDir, filename)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to looking up file $filename in attempt $attempt", e)
+          badDirs += goodDirs(dirId)
+          dirToBlacklistExpiryTime.put(goodDirs(dirId),
+            System.currentTimeMillis() + blacklistTimeout)
+          mostRecentFailure = e
       }
     }
-
-    new File(subDir, filename)
+    throw mostRecentFailure
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
