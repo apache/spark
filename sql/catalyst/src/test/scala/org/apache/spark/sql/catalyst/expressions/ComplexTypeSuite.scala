@@ -74,18 +74,20 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val f2 = StructField("b", IntegerType, nullable = true)
     val structType = StructType(f1 :: f2 :: Nil)
     val c = AttributeReference("c", structType, nullable = false)()
-    val stArray1 = GetArrayStructFields(CreateArray(c :: Nil), f1, 0, 2, containsNull = f1.nullable)
+    val inputArray1 = CreateArray(c :: Nil)
+    val inputArray1ContainsNull = c.nullable
+    val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
     assert(!GetArrayItem(stArray1, Literal(0)).nullable)
-    val stArray2 = GetArrayStructFields(CreateArray(c :: Nil), f2, 1, 2, containsNull = f2.nullable)
+    val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
     assert(GetArrayItem(stArray2, Literal(0)).nullable)
 
     val d = AttributeReference("d", structType, nullable = true)()
-    val stArray3 = GetArrayStructFields(CreateArray(c :: d :: Nil), f1, 0, 2,
-      containsNull = f1.nullable)
+    val inputArray2 = CreateArray(c :: d :: Nil)
+    val inputArray2ContainsNull = c.nullable || d.nullable
+    val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
     assert(!GetArrayItem(stArray3, Literal(0)).nullable)
     assert(GetArrayItem(stArray3, Literal(1)).nullable)
-    val stArray4 = GetArrayStructFields(CreateArray(c :: d :: Nil), f2, 1, 2,
-      containsNull = f2.nullable)
+    val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
     assert(GetArrayItem(stArray4, Literal(0)).nullable)
     assert(GetArrayItem(stArray4, Literal(1)).nullable)
   }
