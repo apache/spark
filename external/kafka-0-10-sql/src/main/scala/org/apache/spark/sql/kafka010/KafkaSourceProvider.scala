@@ -120,12 +120,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(parameters,
       STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
@@ -425,11 +420,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       // id. Hence, we should generate a unique id for each query.
       val uniqueGroupId = streamingUniqueGroupId(parameters, checkpointLocation)
 
-      val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
       val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
       val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-        caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+        parameters, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
       val kafkaOffsetReader = new KafkaOffsetReader(
         strategy(parameters),
@@ -443,7 +437,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         options,
         checkpointLocation,
         startingStreamOffsets,
-        failOnDataLoss(caseInsensitiveParams))
+        failOnDataLoss(parameters))
     }
   }
 }
