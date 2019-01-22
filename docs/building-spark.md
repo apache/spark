@@ -138,6 +138,13 @@ To avoid the overhead of launching sbt each time you need to re-compile, you can
 in interactive mode by running `build/sbt`, and then run all build commands at the command
 prompt.
 
+### Setting up SBT's Memory Usage
+Configure the JVM options for SBT in `.jvmopts`, for example:
+
+    $ cat .jvmopts                                                                                                                   [21:18:11]
+    -Xms512M
+    -Xmx4096M
+
 ## Speeding up Compilation
 
 Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
