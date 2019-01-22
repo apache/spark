@@ -28,6 +28,7 @@ import scala.xml._
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -295,7 +296,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
 
     val schedulingMode = store.environmentInfo().sparkProperties.toMap
-      .get("spark.scheduler.mode")
+      .get(SCHEDULER_MODE.key)
       .map { mode => SchedulingMode.withName(mode).toString }
       .getOrElse("Unknown")
 

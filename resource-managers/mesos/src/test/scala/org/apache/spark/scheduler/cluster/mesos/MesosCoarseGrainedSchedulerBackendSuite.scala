@@ -591,7 +591,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val expectedCores = 1
     setBackend(Map(
       "spark.cores.max" -> expectedCores.toString,
-      "spark.scheduler.minRegisteredResourcesRatio" -> "1.0"))
+      SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO.key -> "1.0"))
 
     val offers = List(Resources(backend.executorMemory(sc), expectedCores))
     offerResources(offers)
@@ -604,8 +604,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("supports data locality with dynamic allocation") {
     setBackend(Map(
-      "spark.dynamicAllocation.enabled" -> "true",
-      "spark.dynamicAllocation.testing" -> "true",
+      DYN_ALLOCATION_ENABLED.key -> "true",
+      DYN_ALLOCATION_TESTING.key -> "true",
       "spark.locality.wait" -> "1s"))
 
     assert(backend.getExecutorIds().isEmpty)

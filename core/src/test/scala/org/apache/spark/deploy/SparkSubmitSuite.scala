@@ -195,7 +195,7 @@ class SparkSubmitSuite
       "--name", "myApp",
       "--class", "Foo",
       "--num-executors", "0",
-      "--conf", "spark.dynamicAllocation.enabled=true",
+      "--conf", s"${DYN_ALLOCATION_ENABLED.key}=true",
       "thejar.jar")
     new SparkSubmitArguments(clArgs1)
 
@@ -203,7 +203,7 @@ class SparkSubmitSuite
       "--name", "myApp",
       "--class", "Foo",
       "--num-executors", "0",
-      "--conf", "spark.dynamicAllocation.enabled=false",
+      "--conf", s"${DYN_ALLOCATION_ENABLED.key}=false",
       "thejar.jar")
 
     val e = intercept[SparkException](new SparkSubmitArguments(clArgs2))
