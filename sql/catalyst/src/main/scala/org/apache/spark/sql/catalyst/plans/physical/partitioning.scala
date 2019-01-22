@@ -202,6 +202,9 @@ case object SinglePartition extends Partitioning {
 
   override def satisfies0(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
+    case HashClusteredDistribution(_, num) if num.nonEmpty && num.get != 1 => false
+    case OrderedDistribution(orders) if orders.nonEmpty => false
+    case _: OrderedDistribution => false
     case _ => true
   }
 }

@@ -140,7 +140,23 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       SinglePartition,
+      ClusteredDistribution(Seq('a, 'b, 'c), Some(1)),
+      true)
+
+    checkSatisfied(
+      SinglePartition,
+      ClusteredDistribution(Seq('a, 'b, 'c), Some(200)),
+      false)
+
+    checkSatisfied(
+      SinglePartition,
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      false)
+
+    
+    checkSatisfied(
+      SinglePartition,
+      OrderedDistribution(Nil),
       true)
 
     checkSatisfied(
