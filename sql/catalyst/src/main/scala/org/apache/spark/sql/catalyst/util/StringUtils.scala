@@ -111,15 +111,15 @@ object StringUtils extends Logging {
      * has room for further appends before it hits its max limit.
      */
     def append(s: String): Boolean = {
-	    if (s != null) {
-		    val sLen = s.length
-		    if (!atLimit) {
-			    val available = maxLength - length
-			    val stringToAppend = if (available >= sLen) s else s.substring(0, available)
-			    strings.append(stringToAppend)
-		    }
-		    length += sLen
-	    }
+      if (s != null) {
+        val sLen = s.length
+        if (!atLimit) {
+          val available = maxLength - length
+          val stringToAppend = if (available >= sLen) s else s.substring(0, available)
+          strings.append(stringToAppend)
+        }
+        length += sLen
+      }
       return !atLimit
     }
 
