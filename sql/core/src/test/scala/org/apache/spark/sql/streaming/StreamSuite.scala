@@ -1079,6 +1079,42 @@ class StreamSuite extends StreamTest {
       assert(query.exception.isEmpty)
     }
   }
+
+  Seq(true, false).foreach { useV2Sink =>
+    import org.apache.spark.sql.functions._
+
+    val newTestName = "SPARK-26379 Structured Streaming - Exception on adding column to Dataset" +
+      s" - use v2 sink - $useV2Sink"
+
+    test(newTestName) {
+      val input = MemoryStream[Int]
+      val df = input.toDS().withColumn("cur_timestamp", lit(current_timestamp()))
+
+      def assertBatchOutputAndUpdateLastTimestamp(
+          rows: Seq[Row],
+          curTimestamp: Long,
+          expectedValue: Int): Long = {
+        assert(rows.size === 1)
+        val row = rows.head
+        assert(row.getInt(0) === expectedValue)
+        assert(row.getTimestamp(1).getTime > curTimestamp)
+        row.getTimestamp(1).getTime
+      }
+
+      var lastTimestamp = -1L
+      testStream(df, useV2Sink = useV2Sink) (
+        AddData(input, 1),
+        CheckLastBatch { rows: Seq[Row] =>
+          lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, 1)
+        },
+        Execute { _ => Thread.sleep(3 * 1000) },
+        AddData(input, 2),
+        CheckLastBatch { rows: Seq[Row] =>
+          lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, 2)
+        }
+      )
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
