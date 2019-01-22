@@ -463,6 +463,13 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.blacklist.initial.blacklisted.nodes</code></td>
+  <td>false</td>
+  <td>
+  Comma-separated list of strings used as initially blacklisted YARN nodes.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.metrics.namespace</code></td>
   <td>(none)</td>
   <td>

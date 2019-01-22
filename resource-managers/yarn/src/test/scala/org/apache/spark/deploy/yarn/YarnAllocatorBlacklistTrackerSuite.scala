@@ -25,7 +25,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config.YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config.{BLACKLIST_TIMEOUT_CONF, MAX_FAILED_EXEC_PER_NODE}
 import org.apache.spark.util.ManualClock
 
@@ -35,27 +35,31 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
   val BLACKLIST_TIMEOUT = 100L
   val MAX_FAILED_EXEC_PER_NODE_VALUE = 2
 
+  var sparkConf: SparkConf = _
   var amClientMock: AMRMClient[ContainerRequest] = _
-  var yarnBlacklistTracker: YarnAllocatorBlacklistTracker = _
-  var failureTracker: FailureTracker = _
   var clock: ManualClock = _
 
   override def beforeEach(): Unit = {
-    val sparkConf = new SparkConf()
+    sparkConf = new SparkConf()
     sparkConf.set(BLACKLIST_TIMEOUT_CONF, BLACKLIST_TIMEOUT)
     sparkConf.set(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED, true)
     sparkConf.set(MAX_FAILED_EXEC_PER_NODE, MAX_FAILED_EXEC_PER_NODE_VALUE)
     clock = new ManualClock()
-
     amClientMock = mock(classOf[AMRMClient[ContainerRequest]])
-    failureTracker = new FailureTracker(sparkConf, clock)
-    yarnBlacklistTracker =
-      new YarnAllocatorBlacklistTracker(sparkConf, amClientMock, failureTracker)
-    yarnBlacklistTracker.setNumClusterNodes(4)
     super.beforeEach()
   }
 
+  private def createYarnAllocatorBlacklistTracker(
+      sparkConf: SparkConf = sparkConf): YarnAllocatorBlacklistTracker = {
+    val failureTracker = new FailureTracker(sparkConf, clock)
+    val yarnBlacklistTracker =
+      new YarnAllocatorBlacklistTracker(sparkConf, amClientMock, failureTracker)
+    yarnBlacklistTracker.setNumClusterNodes(4)
+    yarnBlacklistTracker
+  }
+
   test("expiring its own blacklisted nodes") {
+    val yarnBlacklistTracker = createYarnAllocatorBlacklistTracker()
     (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
       _ => {
         yarnBlacklistTracker.handleResourceAllocationFailure(Some("host"))
@@ -77,6 +81,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
   }
 
   test("not handling the expiry of scheduler blacklisted nodes") {
+    val yarnBlacklistTracker = createYarnAllocatorBlacklistTracker()
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host1", "host2"))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host1", "host2"), Collections.emptyList())
@@ -91,6 +96,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
   }
 
   test("combining scheduler and allocation blacklist") {
+    val yarnBlacklistTracker = createYarnAllocatorBlacklistTracker()
     (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
       _ => {
         yarnBlacklistTracker.handleResourceAllocationFailure(Some("host1"))
@@ -117,6 +123,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
   }
 
   test("blacklist all available nodes") {
+    val yarnBlacklistTracker = createYarnAllocatorBlacklistTracker()
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host1", "host2", "host3"))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host1", "host2", "host3"), Collections.emptyList())
@@ -136,5 +143,42 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
 
     verify(amClientMock).updateBlacklist(Arrays.asList("host4"), Collections.emptyList())
     assert(yarnBlacklistTracker.isAllNodeBlacklisted === true)
+  }
+
+  test("test with initial blacklisting") {
+    sparkConf.set(YARN_EXECUTOR_INITIAL_BLACKLISTED_NODES, Seq("initial1", "initial2"))
+    val yarnBlacklistTracker = createYarnAllocatorBlacklistTracker(sparkConf)
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set())
+
+    // initial1 and initial2 is added as blacklisted nodes at the very first updateBlacklist call
+    // and they are never removed
+    verify(amClientMock)
+      .updateBlacklist(Arrays.asList("initial1", "initial2"), Collections.emptyList())
+
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host1"))
+    verify(amClientMock)
+      .updateBlacklist(Arrays.asList("host1"), Collections.emptyList())
+
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set())
+    verify(amClientMock)
+      .updateBlacklist(Collections.emptyList(), Arrays.asList("host1"))
+
+    (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
+      _ => {
+        yarnBlacklistTracker.handleResourceAllocationFailure(Some("host2"))
+        // host2 should not be blacklisted at these failures as MAX_FAILED_EXEC_PER_NODE is 2
+        verify(amClientMock, never())
+          .updateBlacklist(Arrays.asList("host2"), Collections.emptyList())
+      }
+    }
+    // the third failure on the host triggers the blacklisting
+    yarnBlacklistTracker.handleResourceAllocationFailure(Some("host2"))
+    verify(amClientMock)
+      .updateBlacklist(Arrays.asList("host2"), Collections.emptyList())
+
+    clock.advance(BLACKLIST_TIMEOUT)
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set())
+    verify(amClientMock)
+      .updateBlacklist(Collections.emptyList(), Arrays.asList("host2"))
   }
 }
