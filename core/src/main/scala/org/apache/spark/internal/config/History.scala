@@ -130,14 +130,14 @@ private[spark] object History {
     .doc("Specifies custom spark executor log url for supporting external log service instead of " +
       "using cluster managers' application log urls in the history server. Spark will support " +
       "some path variables via patterns which can vary on cluster manager. Please check the " +
-      "documentation for your each cluster manager to see which patterns are supported, if any. " +
+      "documentation for your cluster manager to see which patterns are supported, if any. " +
       "This configuration has no effect on a live application, it only affects the history server.")
     .stringConf
     .createOptional
 
   val APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP =
     ConfigBuilder("spark.history.custom.executor.log.url.applyIncompleteApplication")
-      .doc("Whether apply custom executor log url, as specified by " +
+      .doc("Whether to apply custom executor log url, as specified by " +
         "`spark.history.custom.executor.log.url`, to incomplete application as well. " +
         "Even if this is true, this still only affects the behavior of the history server, " +
         "not running spark applications.")

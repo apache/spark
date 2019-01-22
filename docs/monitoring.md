@@ -254,7 +254,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>
         Specifies custom spark executor log url for supporting external log service instead of using cluster
         managers' application log urls in the history server. Spark will support some path variables via patterns
-        which can vary on cluster manager. Please check the documentation for your each cluster manager to
+        which can vary on cluster manager. Please check the documentation for your cluster manager to
         see which patterns are supported, if any. This configuration has no effect on a live application, it only
         affects the history server.
         <p/>
