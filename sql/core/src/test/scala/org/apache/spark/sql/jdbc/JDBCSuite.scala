@@ -1544,9 +1544,10 @@ class JDBCSuite extends QueryTest
             .load()
 
           df.logicalPlan match {
-            case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
-              val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
-              assert(whereClauses === Set(
+            case lr: LogicalRelation if lr.relation.isInstanceOf[JDBCRelation] =>
+              val jdbcRelation = lr.relation.asInstanceOf[JDBCRelation]
+              val whereClauses = jdbcRelation.parts.map(_.asInstanceOf[JDBCPartition].whereClause)
+              assert(whereClauses.toSet === Set(
                 s""""T" < '$middle' or "T" is null""",
                 s""""T" >= '$middle'"""))
           }
