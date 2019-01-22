@@ -1524,7 +1524,7 @@ class JDBCSuite extends QueryTest
       "Check the URL: jdbc:mysql://localhost/db"))
   }
 
-  test("parsing timestamp bounds") {
+  test("support casting patterns for lower/upper bounds of TimestampType") {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         Seq(
