@@ -85,8 +85,8 @@ private[sql] object JDBCRelation extends Logging {
         val (column, columnType) = verifyAndGetNormalizedPartitionColumn(
           schema, partitionColumn.get, resolver, jdbcOptions)
 
-        val lowerBoundValue = toInternalBoundValue(lowerBound.get, columnType)
-        val upperBoundValue = toInternalBoundValue(upperBound.get, columnType)
+        val lowerBoundValue = toInternalBoundValue(lowerBound.get, columnType, timeZoneId)
+        val upperBoundValue = toInternalBoundValue(upperBound.get, columnType, timeZoneId)
         JDBCPartitioningInfo(
           column, columnType, lowerBoundValue, upperBoundValue, numPartitions.get)
       }
@@ -174,7 +174,10 @@ private[sql] object JDBCRelation extends Logging {
     (dialect.quoteIdentifier(column.name), column.dataType)
   }
 
-  private def toInternalBoundValue(value: String, columnType: DataType): Long = {
+  private def toInternalBoundValue(
+      value: String,
+      columnType: DataType,
+      timeZoneId: String): Long = {
     def parse[T](f: UTF8String => Option[T]): T = {
       f(UTF8String.fromString(value)).getOrElse {
         throw new IllegalArgumentException(
@@ -184,8 +187,7 @@ private[sql] object JDBCRelation extends Logging {
     columnType match {
       case _: NumericType => value.toLong
       case DateType => parse(stringToDate).toLong
-      case TimestampType =>
-        parse(stringToTimestamp(_, getTimeZone(SQLConf.get.sessionLocalTimeZone)))
+      case TimestampType => parse(stringToTimestamp(_, getTimeZone(timeZoneId)))
     }
   }
 
