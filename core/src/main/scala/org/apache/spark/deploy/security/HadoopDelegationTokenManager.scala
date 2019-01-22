@@ -106,30 +106,21 @@ private[spark] class HadoopDelegationTokenManager(
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
 
     val ugi = UserGroupInformation.getCurrentUser()
-    val tgtRenewalTask = if (ugi.isFromKeytab()) {
+    if (ugi.isFromKeytab()) {
       // In Hadoop 2.x, renewal of the keytab-based login seems to be automatic, but in Hadoop 3.x,
       // it is configurable (see hadoop.kerberos.keytab.login.autorenewal.enabled, added in
       // HADOOP-9567). This task will make sure that the user stays logged in regardless of that
       // configuration's value. Note that checkTGTAndReloginFromKeytab() is a no-op if the TGT does
       // not need to be renewed yet.
-      new Runnable() {
+      val tgtRenewalTask = new Runnable() {
         override def run(): Unit = {
           ugi.checkTGTAndReloginFromKeytab()
         }
       }
-    } else {
-      // This seems to be automatically handled by the Hadoop library code, but is here as a
-      // "just in case" check. As with the above, it's a no-op if the TGT is still valid.
-      new Runnable() {
-        override def run(): Unit = {
-          ugi.reloginFromTicketCache()
-        }
-      }
+      val tgtRenewalPeriod = sparkConf.get(KERBEROS_RELOGIN_PERIOD)
+      renewalExecutor.scheduleAtFixedRate(tgtRenewalTask, tgtRenewalPeriod, tgtRenewalPeriod,
+        TimeUnit.SECONDS)
     }
-
-    val tgtRenewalPeriod = sparkConf.get(KERBEROS_RELOGIN_PERIOD)
-    renewalExecutor.scheduleAtFixedRate(tgtRenewalTask, tgtRenewalPeriod, tgtRenewalPeriod,
-      TimeUnit.SECONDS)
 
     updateTokensTask()
   }
