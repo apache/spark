@@ -204,6 +204,7 @@ public class RetryingBlockFetcher {
 
       // Now actually invoke the parent listener, outside of the synchronized block.
       if (!forwardBlockIds.isEmpty()) {
+        assert forwardBlockIds.size() == blockIds.length;
         listener.onBlockFetchSuccess(blockIds, data);
       }
     }

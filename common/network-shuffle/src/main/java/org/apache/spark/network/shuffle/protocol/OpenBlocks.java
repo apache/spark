@@ -99,7 +99,7 @@ public class OpenBlocks extends BlockTransferMessage {
     Encoders.Strings.encode(buf, execId);
     Encoders.StringArrays.encode(buf, blockIds);
     if (fetchContinuousShuffleBlocksInBatch) {
-      buf.writeBoolean(fetchContinuousShuffleBlocksInBatch);
+      buf.writeBoolean(true);
     }
   }
 
@@ -110,6 +110,7 @@ public class OpenBlocks extends BlockTransferMessage {
     boolean fetchContinuousShuffleBlocksInBatch = false;
     if (buf.readableBytes() >= 1) {
       // A sanity check. In `encode` we write true, so here we should read true.
+      assert buf.readBoolean();
       fetchContinuousShuffleBlocksInBatch = true;
     } else {
       fetchContinuousShuffleBlocksInBatch = false;

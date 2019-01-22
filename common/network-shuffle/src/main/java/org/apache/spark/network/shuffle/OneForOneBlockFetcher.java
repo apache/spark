@@ -51,6 +51,9 @@ public class OneForOneBlockFetcher {
   private final TransportClient client;
   private final OpenBlocks openMessage;
   private final String[] blockIds;
+  // In adaptive execution, one returned chunk might contain data for several consecutive blockIds,
+  // blockIdIndices is used to record the mapping relationship between chunk and its blockIds.
+  // chunk i contains block Ids: blockIdIndices[i] until blockIdIndices[i + 1] in blockIds
   private int[] blockIdIndices = null;
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
@@ -105,17 +108,6 @@ public class OneForOneBlockFetcher {
     }
   }
 
-  private void initShuffleBlockIdIndices(String[] blockIds) {
-    ArrayList<ArrayList<int[]>> arrayShuffleBlockIds =
-      ExternalShuffleBlockResolver.mergeContinuousShuffleBlockIds(blockIds);
-    assert(arrayShuffleBlockIds.size() == streamHandle.numChunks);
-    blockIdIndices = new int[arrayShuffleBlockIds.size() + 1];
-    blockIdIndices[0] = 0;
-    for (int i = 0; i < arrayShuffleBlockIds.size(); i++) {
-      blockIdIndices[i + 1] = blockIdIndices[i] + arrayShuffleBlockIds.get(i).size();
-    }
-  }
-
   /**
    * Begins the fetching process, calling the listener with every block fetched.
    * The given message will be serialized with the Java serializer, and the RPC must return a
@@ -141,7 +133,14 @@ public class OneForOneBlockFetcher {
             }
           } else {
             // server fetches continuous shuffle blocks in batch
-            initShuffleBlockIdIndices(blockIds);
+            ArrayList<ArrayList<int[]>> arrayShuffleBlockIds =
+              ExternalShuffleBlockResolver.mergeContinuousShuffleBlockIds(blockIds);
+            assert(streamHandle.numChunks == arrayShuffleBlockIds.size());
+            blockIdIndices = new int[arrayShuffleBlockIds.size() + 1];
+            blockIdIndices[0] = 0;
+            for (int i = 1; i < blockIdIndices.length; i++) {
+              blockIdIndices[i] = blockIdIndices[i - 1] + arrayShuffleBlockIds.get(i - 1).size();;
+            }
           }
           assert blockIdIndices[blockIdIndices.length - 1] == blockIds.length;
 

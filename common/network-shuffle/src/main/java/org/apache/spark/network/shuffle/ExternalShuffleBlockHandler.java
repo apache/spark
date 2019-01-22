@@ -211,8 +211,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final String appId;
     private final String execId;
     private final int shuffleId;
-    // An array containing mapId, reduceId and numBlocks tuple
-    private int[] shuffleBlockIds;
+    // An array containing mapId, reduceId and numReducers tuple
+    private final int[] shuffleBlockBatches;
 
     ManagedBufferIterator(
         String appId,
@@ -229,39 +229,39 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       if (fetchContinuousShuffleBlocksInBatch) {
         ArrayList<ArrayList<int[]>> arrayShuffleBlockIds =
           ExternalShuffleBlockResolver.mergeContinuousShuffleBlockIds(blockIds);
-        shuffleBlockIds = new int[arrayShuffleBlockIds.size() * 3];
+        shuffleBlockBatches = new int[arrayShuffleBlockIds.size() * 3];
         for (int i = 0; i < arrayShuffleBlockIds.size(); i++) {
           ArrayList<int[]> arrayShuffleBlockId = arrayShuffleBlockIds.get(i);
           int[] startBlockId = arrayShuffleBlockId.get(0);
           int[] endBlockId = arrayShuffleBlockId.get(arrayShuffleBlockId.size() - 1);
-          shuffleBlockIds[3 * i] = startBlockId[0];
-          shuffleBlockIds[3 * i + 1] = startBlockId[1];
-          shuffleBlockIds[3 * i + 2] = endBlockId[1] - startBlockId[1] + 1;
+          shuffleBlockBatches[3 * i] = startBlockId[0];
+          shuffleBlockBatches[3 * i + 1] = startBlockId[1];
+          shuffleBlockBatches[3 * i + 2] = endBlockId[1] - startBlockId[1] + 1;
         }
       } else {
-        shuffleBlockIds = new int[3 * blockIds.length];
+        shuffleBlockBatches = new int[3 * blockIds.length];
         for (int i = 0; i < blockIds.length; i++) {
           int[] blockIdParts = ExternalShuffleBlockResolver.getBlockIdParts(blockIds[i]);
-          shuffleBlockIds[3 * i] = blockIdParts[0];
-          shuffleBlockIds[3 * i + 1] = blockIdParts[1];
-          shuffleBlockIds[3 * i + 2] = 1;
+          shuffleBlockBatches[3 * i] = blockIdParts[0];
+          shuffleBlockBatches[3 * i + 1] = blockIdParts[1];
+          shuffleBlockBatches[3 * i + 2] = 1;
         }
       }
     }
 
     public int getNumChunks() {
-      return shuffleBlockIds.length / 3;
+      return shuffleBlockBatches.length / 3;
     }
 
     @Override
     public boolean hasNext() {
-      return index < shuffleBlockIds.length;
+      return index < shuffleBlockBatches.length;
     }
 
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
-        shuffleBlockIds[index], shuffleBlockIds[index + 1], shuffleBlockIds[index + 2]);
+        shuffleBlockBatches[index], shuffleBlockBatches[index + 1], shuffleBlockBatches[index + 2]);
       index += 3;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;

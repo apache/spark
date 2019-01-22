@@ -476,7 +476,7 @@ final class ShuffleBlockFetcherIterator(
           }
           var isStreamCopied: Boolean = false
           try {
-            input = streamWrapper(arrayBlockId, in)
+            input = streamWrapper(arrayBlockId.blockIds.head, in)
             // Only copy the stream if it's wrapped by compression or encryption, also the size of
             // block is small (the decompressed block is smaller than maxBytesInFlight)
             if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {

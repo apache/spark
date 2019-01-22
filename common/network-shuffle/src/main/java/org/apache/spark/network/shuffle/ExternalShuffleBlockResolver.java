@@ -172,7 +172,7 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId, numBlocks). We make
+   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId, numReducers). We make
    * assumptions about how the hash and sort based shuffles store their data.
    */
   public ManagedBuffer getBlockData(
@@ -181,23 +181,20 @@ public class ExternalShuffleBlockResolver {
       int shuffleId,
       int mapId,
       int reduceId,
-      int numBlocks) {
+      int numReducers) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
-    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId, numBlocks);
+    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId, numReducers);
   }
 
-  static public boolean isShuffleBlock(String[] blockIdParts) {
-    // length == 4: ShuffleBlockId
-    // length == 5: ShuffleBlockBatchId
-    return (blockIdParts.length == 4 || blockIdParts.length == 5) &&
-      blockIdParts[0].equals("shuffle");
+  public static boolean isShuffleBlock(String[] blockIdParts) {
+    return blockIdParts.length == 4 && blockIdParts[0].equals("shuffle");
   }
 
-  static public int[] getBlockIdParts(String blockId) {
+  public static int[] getBlockIdParts(String blockId) {
     String[] blockIdParts = blockId.split("_");
     if (!isShuffleBlock(blockIdParts)) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
@@ -205,7 +202,10 @@ public class ExternalShuffleBlockResolver {
     return new int[] { Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) };
   }
 
-  static public ArrayList<ArrayList<int[]>> mergeContinuousShuffleBlockIds(String[] blockIds) {
+  // Currently, for all input blockIds, we can make assumption that block ids of the same mapper id
+  // are consecutive in the map output file. Although, logically, they might not be consecutive
+  // because of zero-sized blocks, which have been filtered out in the client side actually.
+  public static ArrayList<ArrayList<int[]>> mergeContinuousShuffleBlockIds(String[] blockIds) {
     ArrayList<int[]> shuffleBlockIds = new ArrayList<>();
     ArrayList<ArrayList<int[]>> arrayShuffleBlockIds = new ArrayList<>();
 
@@ -327,13 +327,14 @@ public class ExternalShuffleBlockResolver {
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int numBlocks) {
+    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int numReducers) {
     File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
-      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId, numBlocks);
+      ShuffleIndexRecord shuffleIndexRecord =
+        shuffleIndexInformation.getIndex(reduceId, numReducers);
       return new FileSegmentManagedBuffer(
         conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
