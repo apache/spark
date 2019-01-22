@@ -37,10 +37,9 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -193,7 +192,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+    val useV1Sources =
+      sparkSession.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
+    val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+    val cls = lookupCls.newInstance() match {
+      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
+        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        f.fallBackFileFormat
+      case _ => lookupCls
+    }
+
     if (classOf[TableProvider].isAssignableFrom(cls)) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
@@ -202,16 +210,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         val objectMapper = new ObjectMapper()
         DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
       }
-      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption
+      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "true"
+      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption + checkFilesExistsOption
       val dsOptions = new DataSourceOptions(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
         case _ => provider.getTable(dsOptions)
       }
       table match {
-        case s: SupportsBatchRead =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-            provider, s, finalOptions, userSpecifiedSchema = userSpecifiedSchema))
+        case _: SupportsBatchRead =>
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
 
         case _ => loadV1Source(paths: _*)
       }

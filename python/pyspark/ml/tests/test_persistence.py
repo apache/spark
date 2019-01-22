@@ -23,6 +23,7 @@ import unittest
 from pyspark.ml import Transformer
 from pyspark.ml.classification import DecisionTreeClassifier, LogisticRegression, OneVsRest, \
     OneVsRestModel
+from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import Binarizer, HashingTF, PCA
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Params
@@ -88,6 +89,42 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def test_kmeans(self):
+        kmeans = KMeans(k=2, seed=1)
+        path = tempfile.mkdtemp()
+        km_path = path + "/km"
+        kmeans.save(km_path)
+        kmeans2 = KMeans.load(km_path)
+        self.assertEqual(kmeans.uid, kmeans2.uid)
+        self.assertEqual(type(kmeans.uid), type(kmeans2.uid))
+        self.assertEqual(kmeans2.uid, kmeans2.k.parent,
+                         "Loaded KMeans instance uid (%s) did not match Param's uid (%s)"
+                         % (kmeans2.uid, kmeans2.k.parent))
+        self.assertEqual(kmeans._defaultParamMap[kmeans.k], kmeans2._defaultParamMap[kmeans2.k],
+                         "Loaded KMeans instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def test_kmean_pmml_basic(self):
+        # Most of the validation is done in the Scala side, here we just check
+        # that we output text rather than parquet (e.g. that the format flag
+        # was respected).
+        data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
+                (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        kmeans = KMeans(k=2, seed=1)
+        model = kmeans.fit(df)
+        path = tempfile.mkdtemp()
+        km_path = path + "/km-pmml"
+        model.write().format("pmml").save(km_path)
+        pmml_text_list = self.sc.textFile(km_path).collect()
+        pmml_text = "\n".join(pmml_text_list)
+        self.assertIn("Apache Spark", pmml_text)
+        self.assertIn("PMML", pmml_text)
 
     def _compare_params(self, m1, m2, param):
         """

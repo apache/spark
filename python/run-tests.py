@@ -33,7 +33,6 @@ if sys.version < '3':
     import Queue
 else:
     import queue as Queue
-from distutils.version import LooseVersion
 from multiprocessing import Manager
 
 

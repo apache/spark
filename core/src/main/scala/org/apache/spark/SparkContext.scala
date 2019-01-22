@@ -229,7 +229,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
   def master: String = _conf.get("spark.master")
-  def deployMode: String = _conf.getOption("spark.submit.deployMode").getOrElse("client")
+  def deployMode: String = _conf.get(SUBMIT_DEPLOY_MODE)
   def appName: String = _conf.get("spark.app.name")
 
   private[spark] def isEventLogEnabled: Boolean = _conf.get(EVENT_LOG_ENABLED)
@@ -553,7 +553,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _executorAllocationManager.foreach(_.start())
 
     _cleaner =
-      if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
+      if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
         Some(new ContextCleaner(this))
       } else {
         None
@@ -2370,8 +2370,8 @@ class SparkContext(config: SparkConf) extends Logging {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
-      val environmentDetails = SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths,
-        addedFilePaths)
+      val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
+        schedulingMode, addedJarPaths, addedFilePaths)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }
@@ -2538,6 +2538,7 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
+  private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
 
@@ -2640,7 +2641,7 @@ object SparkContext extends Logging {
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
       case "yarn" =>
-        if (conf != null && conf.getOption("spark.submit.deployMode").contains("cluster")) {
+        if (conf != null && conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
           conf.getInt(DRIVER_CORES.key, 0)
         } else {
           0

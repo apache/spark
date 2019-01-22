@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.sources
+package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
 
-// A special `MicroBatchReadSupport` that can get latestOffset with a start offset.
-trait RateControlMicroBatchReadSupport extends MicroBatchReadSupport {
-
-  override def latestOffset(): Offset = {
-    throw new IllegalAccessException(
-      "latestOffset should not be called for RateControlMicroBatchReadSupport")
-  }
-
-  def latestOffset(start: Offset): Offset
-}
+/**
+ * An empty mix-in interface for {@link Table}, to indicate this table supports batch write.
+ * <p>
+ * If a {@link Table} implements this interface, the
+ * {@link SupportsWrite#newWriteBuilder(DataSourceOptions)}  must return a {@link WriteBuilder}
+ * with {@link WriteBuilder#buildForBatch()} implemented.
+ * </p>
+ */
+@Evolving
+public interface SupportsBatchWrite extends SupportsWrite {}

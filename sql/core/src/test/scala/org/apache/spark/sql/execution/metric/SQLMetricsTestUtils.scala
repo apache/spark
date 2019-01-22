@@ -84,8 +84,10 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       assert(metricValue == expected)
     }
 
-    val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
-    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
+    val totalNumBytesMetric = executedNode.metrics.find(
+      _.name == "written output total (min, med, max)").get
+    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "")
+      .split(" ").head.trim.toDouble
     assert(totalNumBytes > 0)
   }
 

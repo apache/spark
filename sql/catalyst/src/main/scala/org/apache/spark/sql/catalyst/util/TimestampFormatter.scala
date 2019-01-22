@@ -23,6 +23,8 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+
 sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to microseconds.
@@ -36,7 +38,7 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
-  def parse(s: String): Long // returns microseconds since epoch
+  def parse(s: String): Long
   def format(us: Long): String
 }
 
@@ -56,12 +58,6 @@ class Iso8601TimestampFormatter(
     }
   }
 
-  private def instantToMicros(instant: Instant): Long = {
-    val sec = Math.multiplyExact(instant.getEpochSecond, DateTimeUtils.MICROS_PER_SECOND)
-    val result = Math.addExact(sec, instant.getNano / DateTimeUtils.NANOS_PER_MICROS)
-    result
-  }
-
   override def parse(s: String): Long = instantToMicros(toInstant(s))
 
   override def format(us: Long): String = {
@@ -74,7 +70,18 @@ class Iso8601TimestampFormatter(
 }
 
 object TimestampFormatter {
+  val defaultPattern: String = "yyyy-MM-dd HH:mm:ss"
+  val defaultLocale: Locale = Locale.US
+
   def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
     new Iso8601TimestampFormatter(format, timeZone, locale)
+  }
+
+  def apply(format: String, timeZone: TimeZone): TimestampFormatter = {
+    apply(format, timeZone, defaultLocale)
+  }
+
+  def apply(timeZone: TimeZone): TimestampFormatter = {
+    apply(defaultPattern, timeZone, defaultLocale)
   }
 }

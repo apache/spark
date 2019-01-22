@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.util.{Calendar, Locale, TimeZone}
+import java.time.LocalDate
+import java.time.temporal.IsoFields
+import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
@@ -430,20 +432,14 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 case class DayOfWeek(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    cal.get(Calendar.DAY_OF_WEEK)
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.getDayOfWeek.plus(1).getValue
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = "calDayOfWeek"
-      ctx.addImmutableStateIfNotExists(cal, c,
-        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.value} = $c.get($cal.DAY_OF_WEEK);
+        ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().plus(1).getValue();
       """
     })
   }
@@ -462,20 +458,14 @@ case class DayOfWeek(child: Expression) extends DayWeek {
 case class WeekDay(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    (cal.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.getDayOfWeek.ordinal()
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = "calWeekDay"
-      ctx.addImmutableStateIfNotExists(cal, c,
-        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.value} = ($c.get($cal.DAY_OF_WEEK) + 5) % 7;
+         ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().ordinal();
       """
     })
   }
@@ -486,10 +476,6 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = IntegerType
-
-  @transient protected lazy val cal: Calendar = {
-    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-  }
 }
 
 // scalastyle:off line.size.limit
@@ -508,32 +494,16 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def dataType: DataType = IntegerType
 
-  @transient private lazy val c = {
-    val c = Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-    c.setFirstDayOfWeek(Calendar.MONDAY)
-    c.setMinimalDaysInFirstWeek(4)
-    c
-  }
-
   override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    c.get(Calendar.WEEK_OF_YEAR)
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val c = "calWeekOfYear"
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      ctx.addImmutableStateIfNotExists(cal, c, v =>
-        s"""
-           |$v = $cal.getInstance($dtu.getTimeZone("UTC"));
-           |$v.setFirstDayOfWeek($cal.MONDAY);
-           |$v.setMinimalDaysInFirstWeek(4);
-         """.stripMargin)
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-         |$c.setTimeInMillis($time * 1000L * 3600L * 24L);
-         |${ev.value} = $c.get($cal.WEEK_OF_YEAR);
+         |${ev.value} = java.time.LocalDate.ofEpochDay($days).get(
+         |  java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR);
        """.stripMargin
     })
   }
@@ -562,7 +532,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = TimestampFormatter(format.toString, timeZone, Locale.US)
+    val df = TimestampFormatter(format.toString, timeZone)
     UTF8String.fromString(df.format(timestamp.asInstanceOf[Long]))
   }
 
@@ -614,9 +584,7 @@ case class ToUnixTimestamp(
 
 /**
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
- * See [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html]
- * if SQL config spark.sql.legacy.timeParser.enabled is set to true otherwise
- * [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
+ * See [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
@@ -667,7 +635,7 @@ abstract class UnixTime
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
+      TimestampFormatter(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -700,7 +668,7 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter(formatString, timeZone, Locale.US).parse(
+              TimestampFormatter(formatString, timeZone).parse(
                 t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
             } catch {
               case NonFatal(_) => null
@@ -821,7 +789,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
+      TimestampFormatter(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -847,7 +815,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(TimestampFormatter(f.toString, timeZone, Locale.US)
+            UTF8String.fromString(TimestampFormatter(f.toString, timeZone)
               .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null

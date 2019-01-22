@@ -28,13 +28,14 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
 
+import org.apache.kafka.clients.admin.{AdminClient, ConsumerGroupListing}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{OldStreamingDataSourceV2Relation, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -117,11 +118,13 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
+          case r: StreamingDataSourceV2Relation
+              if r.stream.isInstanceOf[KafkaMicroBatchStream] =>
+            r.stream.asInstanceOf[KafkaMicroBatchStream]
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
-            case r: StreamingDataSourceV2Relation
+            case r: OldStreamingDataSourceV2Relation
                 if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
               r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
           }
@@ -629,6 +632,42 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  test("allow group.id override") {
+    // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
+    // as well as KafkaOffsetReader.createConsumer(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val customGroupId = "id-" + Random.nextInt()
+    val dsKafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.group.id", customGroupId)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(dsKafka)(
+      makeSureGetOffsetCalled,
+      CheckAnswer(1 to 30: _*),
+      Execute { _ =>
+        val consumerGroups = testUtils.listConsumerGroups()
+        val validGroups = consumerGroups.valid().get()
+        val validGroupsId = validGroups.asScala.map(_.groupId())
+        assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
+          s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
+          s"expected group id: $customGroupId")
+      }
+    )
+  }
+
   test("ensure stream-stream self-join generates only one offset in log and correct metrics") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
@@ -1025,9 +1064,10 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     testStream(kafka)(
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
-        query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
-        }.nonEmpty
+        query.logicalPlan.find {
+          case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[KafkaMicroBatchStream]
+          case _ => false
+        }.isDefined
       }
     )
   }
@@ -1051,13 +1091,12 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val readSupport = provider.createMicroBatchReadSupport(
-          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
-        val config = readSupport.newScanConfigBuilder(
+        val dsOptions = new DataSourceOptions(options.asJava)
+        val table = provider.getTable(dsOptions)
+        val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
+        val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
-          KafkaSourceOffset(Map(tp -> 100L))).build()
-        val inputPartitions = readSupport.planInputPartitions(config)
-          .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
+          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaMicroBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
           inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
@@ -1233,7 +1272,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
-    testUnsupportedConfig("kafka.group.id")
     testUnsupportedConfig("kafka.auto.offset.reset")
     testUnsupportedConfig("kafka.enable.auto.commit")
     testUnsupportedConfig("kafka.interceptor.classes")
@@ -1374,7 +1412,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val reader = spark
       .readStream
       .format("kafka")
-      .option("startingOffsets", s"latest")
+      .option("startingOffsets", "latest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("failOnDataLoss", failOnDataLoss.toString)

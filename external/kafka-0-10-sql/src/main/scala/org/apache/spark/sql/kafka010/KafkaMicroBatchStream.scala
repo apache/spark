@@ -22,6 +22,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
+import org.apache.kafka.clients.consumer.ConsumerConfig
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -29,17 +30,16 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
-import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchReadSupport
+import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchStream
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.util.UninterruptibleThread
 
 /**
- * A [[MicroBatchReadSupport]] that reads data from Kafka.
+ * A [[MicroBatchStream]] that reads data from Kafka.
  *
  * The [[KafkaSourceOffset]] is the custom [[Offset]] defined for this source that contains
  * a map of TopicPartition -> offset. Note that this offset is 1 + (available offset). For
@@ -54,13 +54,13 @@ import org.apache.spark.util.UninterruptibleThread
  * To avoid this issue, you should make sure stopping the query before stopping the Kafka brokers
  * and not use wrong broker addresses.
  */
-private[kafka010] class KafkaMicroBatchReadSupport(
+private[kafka010] class KafkaMicroBatchStream(
     kafkaOffsetReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     options: DataSourceOptions,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
-    failOnDataLoss: Boolean) extends RateControlMicroBatchReadSupport with Logging {
+    failOnDataLoss: Boolean) extends RateControlMicroBatchStream with Logging {
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",
@@ -93,16 +93,9 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     endPartitionOffsets
   }
 
-  override def fullSchema(): StructType = KafkaOffsetReader.kafkaSchema
-
-  override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
-  }
-
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
-    val startPartitionOffsets = sc.start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val endPartitionOffsets = sc.end.get.asInstanceOf[KafkaSourceOffset].partitionToOffsets
+  override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
+    val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
+    val endPartitionOffsets = end.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
@@ -122,7 +115,13 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     // Find deleted partitions, and report data loss if required
     val deletedPartitions = startPartitionOffsets.keySet.diff(endPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
-      reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed")
+      val message =
+        if (kafkaOffsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+          s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+        } else {
+          s"$deletedPartitions are gone. Some data may have been missed."
+        }
+      reportDataLoss(message)
     }
 
     // Use the end partitions to calculate offset ranges to ignore partitions that have
@@ -161,7 +160,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     }.toArray
   }
 
-  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
+  override def createReaderFactory(): PartitionReaderFactory = {
     KafkaMicroBatchReaderFactory
   }
 
