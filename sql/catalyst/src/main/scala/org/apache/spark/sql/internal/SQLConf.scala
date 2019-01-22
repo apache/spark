@@ -1324,6 +1324,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PANDAS_ARROW_SAFE_TYPE_CONVERSION =
+    buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion")
+      .internal()
+      .doc("When true, Arrow will perform safe type conversion when converting " +
+        "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
+        "when detecting unsafe type conversion like overflow. When false, disabling Arrow's type " +
+        "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
+      .booleanConf
+      .createWithDefault(false)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -1997,6 +2007,8 @@ class SQLConf extends Serializable with Logging {
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
+
+  def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
