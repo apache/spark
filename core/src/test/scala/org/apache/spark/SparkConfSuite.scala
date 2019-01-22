@@ -29,6 +29,7 @@ import com.esotericsoftware.kryo.Kryo
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
@@ -142,7 +143,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   test("creating SparkContext with cpus per tasks bigger than cores per executors") {
     val conf = new SparkConf(false)
       .set(EXECUTOR_CORES, 1)
-      .set("spark.task.cpus", "2")
+      .set(CPUS_PER_TASK, 2)
     intercept[SparkException] { sc = new SparkContext(conf) }
   }
 
@@ -268,10 +269,10 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   test("akka deprecated configs") {
     val conf = new SparkConf()
 
-    assert(!conf.contains("spark.rpc.numRetries"))
-    assert(!conf.contains("spark.rpc.retry.wait"))
-    assert(!conf.contains("spark.rpc.askTimeout"))
-    assert(!conf.contains("spark.rpc.lookupTimeout"))
+    assert(!conf.contains(RPC_NUM_RETRIES))
+    assert(!conf.contains(RPC_RETRY_WAIT))
+    assert(!conf.contains(RPC_ASK_TIMEOUT))
+    assert(!conf.contains(RPC_LOOKUP_TIMEOUT))
 
     conf.set("spark.akka.num.retries", "1")
     assert(RpcUtils.numRetries(conf) === 1)
@@ -322,12 +323,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.validateSettings()
 
-    conf.set(NETWORK_ENCRYPTION_ENABLED, true)
+    conf.set(NETWORK_CRYPTO_ENABLED, true)
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
 
-    conf.set(NETWORK_ENCRYPTION_ENABLED, false)
+    conf.set(NETWORK_CRYPTO_ENABLED, false)
     conf.set(SASL_ENCRYPTION_ENABLED, true)
     intercept[IllegalArgumentException] {
       conf.validateSettings()
@@ -341,7 +342,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.validateSettings()
 
-    conf.set("spark.network.timeout", "5s")
+    conf.set(NETWORK_TIMEOUT.key, "5s")
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
