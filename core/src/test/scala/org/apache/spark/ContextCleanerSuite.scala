@@ -29,10 +29,10 @@ import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
-import org.apache.spark.util.Utils
 
 /**
  * An abstract base class for context cleaner tests, which sets up a context with a config
@@ -46,9 +46,9 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName("ContextCleanerSuite")
-    .set("spark.cleaner.referenceTracking.blocking", "true")
-    .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
-    .set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
+    .set(CLEANER_REFERENCE_TRACKING_BLOCKING, true)
+    .set(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE, true)
+    .set(CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS, true)
     .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
 
   before {
@@ -234,7 +234,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       val conf = new SparkConf()
         .setMaster("local[2]")
         .setAppName("cleanupCheckpoint")
-        .set("spark.cleaner.referenceTracking.cleanCheckpoints", "false")
+        .set(CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS, false)
       sc = new SparkContext(conf)
       rdd = newPairRDD()
       sc.setCheckpointDir(checkpointDir.toString)
@@ -317,8 +317,8 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val conf2 = new SparkConf()
       .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("ContextCleanerSuite")
-      .set("spark.cleaner.referenceTracking.blocking", "true")
-      .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
+      .set(CLEANER_REFERENCE_TRACKING_BLOCKING, true)
+      .set(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE, true)
       .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
     sc = new SparkContext(conf2)
 

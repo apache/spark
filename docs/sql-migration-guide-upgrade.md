@@ -41,7 +41,57 @@ displayTitle: Spark SQL Upgrading Guide
 
   - Since Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Set JSON option `inferTimestamp` to `false` to disable such type inferring.
 
+  - In PySpark, when Arrow optimization is enabled, if Arrow version is higher than 0.11.0, Arrow can perform safe type conversion when converting Pandas.Series to Arrow array during serialization. Arrow will raise errors when detecting unsafe type conversion like overflow. Setting `spark.sql.execution.pandas.arrowSafeTypeConversion` to true can enable it. The default setting is false. PySpark's behavior for Arrow versions is illustrated in the table below:
+  <table class="table">
+        <tr>
+          <th>
+            <b>PyArrow version</b>
+          </th>
+          <th>
+            <b>Integer Overflow</b>
+          </th>
+          <th>
+            <b>Floating Point Truncation</b>
+          </th>
+        </tr>
+        <tr>
+          <th>
+            <b>version < 0.11.0</b>
+          </th>
+          <th>
+            <b>Raise error</b>
+          </th>
+          <th>
+            <b>Silently allows</b>
+          </th>
+        </tr>
+        <tr>
+          <th>
+            <b>version > 0.11.0, arrowSafeTypeConversion=false</b>
+          </th>
+          <th>
+            <b>Silent overflow</b>
+          </th>
+          <th>
+            <b>Silently allows</b>
+          </th>
+        </tr>
+        <tr>
+          <th>
+            <b>version > 0.11.0, arrowSafeTypeConversion=true</b>
+          </th>
+          <th>
+            <b>Raise error</b>
+          </th>
+          <th>
+            <b>Raise error</b>
+          </th>
+        </tr>
+  </table>
+
   - In Spark version 2.4 and earlier, if `org.apache.spark.sql.functions.udf(Any, DataType)` gets a Scala closure with primitive-type argument, the returned UDF will return null if the input values is null. Since Spark 3.0, the UDF will return the default value of the Java type if the input value is null. For example, `val f = udf((x: Int) => x, IntegerType)`, `f($"x")` will return null in Spark 2.4 and earlier if column `x` is null, and return 0 in Spark 3.0. This behavior change is introduced because Spark 3.0 is built with Scala 2.12 by default.
+
+  - Since Spark 3.0, the `weekofyear`, `weekday` and `dayofweek` functions use java.time API for calculation week number of year and day number of week based on Proleptic Gregorian calendar. In Spark version 2.4 and earlier, the hybrid calendar (Julian + Gregorian) is used for the same purpose. Results of the functions returned by Spark 3.0 and previous versions can be different for dates before October 15, 1582 (Gregorian).
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 

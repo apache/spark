@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import com.google.common.annotations.VisibleForTesting;
-
-import org.apache.spark.sql.sources.v2.reader.ReadSupport;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 
 /**
- * A base interface for streaming read support. Data sources should implement concrete streaming
- * read support interfaces: {@link ContinuousReadSupport}.
- * This is exposed for a testing purpose.
+ * The base interface representing a readable data stream in a Spark streaming query. It's
+ * responsible to manage the offsets of the streaming source in the streaming query.
+ *
+ * Data sources should implement concrete data stream interfaces: {@link MicroBatchStream}.
  */
-@VisibleForTesting
-public interface StreamingReadSupport extends ReadSupport {
+@Evolving
+public interface SparkDataStream extends BaseStreamingSource {
 
   /**
    * Returns the initial offset for a streaming query to start reading from. Note that the

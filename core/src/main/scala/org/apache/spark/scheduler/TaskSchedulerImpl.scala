@@ -31,6 +31,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
@@ -61,7 +62,7 @@ private[spark] class TaskSchedulerImpl(
   import TaskSchedulerImpl._
 
   def this(sc: SparkContext) = {
-    this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
+    this(sc, sc.conf.get(config.TASK_MAX_FAILURES))
   }
 
   // Lazily initializing blacklistTrackerOpt to avoid getting empty ExecutorAllocationClient,
@@ -71,7 +72,7 @@ private[spark] class TaskSchedulerImpl(
   val conf = sc.conf
 
   // How often to check for speculative tasks
-  val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
+  val SPECULATION_INTERVAL_MS = conf.get(SPECULATION_INTERVAL)
 
   // Duplicate copies of a task will only be launched if the original copy has been running for
   // at least this amount of time. This is to avoid the overhead of launching speculative copies
@@ -85,7 +86,7 @@ private[spark] class TaskSchedulerImpl(
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
 
   // CPUs to request per task
-  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
+  val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
@@ -131,7 +132,7 @@ private[spark] class TaskSchedulerImpl(
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
-  private val schedulingModeConf = conf.get(SCHEDULER_MODE_PROPERTY, SchedulingMode.FIFO.toString)
+  private val schedulingModeConf = conf.get(SCHEDULER_MODE)
   val schedulingMode: SchedulingMode =
     try {
       SchedulingMode.withName(schedulingModeConf.toUpperCase(Locale.ROOT))
@@ -183,7 +184,7 @@ private[spark] class TaskSchedulerImpl(
   override def start() {
     backend.start()
 
-    if (!isLocal && conf.getBoolean("spark.speculation", false)) {
+    if (!isLocal && conf.get(SPECULATION_ENABLED)) {
       logInfo("Starting speculative execution thread")
       speculationScheduler.scheduleWithFixedDelay(new Runnable {
         override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
@@ -857,7 +858,7 @@ private[spark] class TaskSchedulerImpl(
 
 private[spark] object TaskSchedulerImpl {
 
-  val SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode"
+  val SCHEDULER_MODE_PROPERTY = SCHEDULER_MODE.key
 
   /**
    * Used to balance containers across hosts.

@@ -231,8 +231,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WeekOfYear(Cast(Literal(date), DateType, gmtId)), 15)
     checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId)), 45)
     checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, gmtId)), 18)
-    checkEvaluation(WeekOfYear(Literal(new Date(toMillis("1582-10-15 13:10:15")))), 40)
-    checkEvaluation(WeekOfYear(Literal(new Date(toMillis("1582-10-04 13:10:15")))), 39)
+    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-15 13:10:15"), DateType, gmtId)), 41)
+    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-04 13:10:15"), DateType, gmtId)), 40)
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 

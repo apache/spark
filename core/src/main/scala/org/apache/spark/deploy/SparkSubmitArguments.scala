@@ -32,6 +32,7 @@ import scala.util.Try
 import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -208,7 +209,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(sparkProperties.get("spark.yarn.principal"))
       .orNull
     dynamicAllocationEnabled =
-      sparkProperties.get("spark.dynamicAllocation.enabled").exists("true".equalsIgnoreCase)
+      sparkProperties.get(DYN_ALLOCATION_ENABLED.key).exists("true".equalsIgnoreCase)
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
@@ -585,15 +586,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              in standalone mode).
         |
         | Spark on YARN and Kubernetes only:
+        |  --num-executors NUM         Number of executors to launch (Default: 2).
+        |                              If dynamic allocation is enabled, the initial number of
+        |                              executors will be at least NUM.
         |  --principal PRINCIPAL       Principal to be used to login to KDC.
         |  --keytab KEYTAB             The full path to the file that contains the keytab for the
         |                              principal specified above.
         |
         | Spark on YARN only:
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
-        |  --num-executors NUM         Number of executors to launch (Default: 2).
-        |                              If dynamic allocation is enabled, the initial number of
-        |                              executors will be at least NUM.
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
       """.stripMargin

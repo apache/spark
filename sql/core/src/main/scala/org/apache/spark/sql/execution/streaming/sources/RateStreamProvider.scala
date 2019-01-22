@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReadSupport
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchStream}
 import org.apache.spark.sql.types._
 
 /**
@@ -39,38 +41,31 @@ import org.apache.spark.sql.types._
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateStreamProvider extends DataSourceV2
-  with MicroBatchReadSupportProvider with ContinuousReadSupportProvider with DataSourceRegister {
+  with TableProvider with ContinuousReadSupportProvider with DataSourceRegister {
   import RateStreamProvider._
 
-  override def createMicroBatchReadSupport(
-      checkpointLocation: String,
-      options: DataSourceOptions): MicroBatchReadSupport = {
-      if (options.get(ROWS_PER_SECOND).isPresent) {
-      val rowsPerSecond = options.get(ROWS_PER_SECOND).get().toLong
-      if (rowsPerSecond <= 0) {
-        throw new IllegalArgumentException(
-          s"Invalid value '$rowsPerSecond'. The option 'rowsPerSecond' must be positive")
-      }
+  override def getTable(options: DataSourceOptions): Table = {
+    val rowsPerSecond = options.getLong(ROWS_PER_SECOND, 1)
+    if (rowsPerSecond <= 0) {
+      throw new IllegalArgumentException(
+        s"Invalid value '$rowsPerSecond'. The option 'rowsPerSecond' must be positive")
     }
 
-    if (options.get(RAMP_UP_TIME).isPresent) {
-      val rampUpTimeSeconds =
-        JavaUtils.timeStringAsSec(options.get(RAMP_UP_TIME).get())
-      if (rampUpTimeSeconds < 0) {
-        throw new IllegalArgumentException(
-          s"Invalid value '$rampUpTimeSeconds'. The option 'rampUpTime' must not be negative")
-      }
+    val rampUpTimeSeconds = Option(options.get(RAMP_UP_TIME).orElse(null))
+      .map(JavaUtils.timeStringAsSec)
+      .getOrElse(0L)
+    if (rampUpTimeSeconds < 0) {
+      throw new IllegalArgumentException(
+        s"Invalid value '$rampUpTimeSeconds'. The option 'rampUpTime' must not be negative")
     }
 
-    if (options.get(NUM_PARTITIONS).isPresent) {
-      val numPartitions = options.get(NUM_PARTITIONS).get().toInt
-      if (numPartitions <= 0) {
-        throw new IllegalArgumentException(
-          s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")
-      }
+    val numPartitions = options.getInt(
+      NUM_PARTITIONS, SparkSession.active.sparkContext.defaultParallelism)
+    if (numPartitions <= 0) {
+      throw new IllegalArgumentException(
+        s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")
     }
-
-    new RateStreamMicroBatchReadSupport(options, checkpointLocation)
+    new RateStreamTable(rowsPerSecond, rampUpTimeSeconds, numPartitions)
   }
 
   override def createContinuousReadSupport(
@@ -80,6 +75,31 @@ class RateStreamProvider extends DataSourceV2
   }
 
   override def shortName(): String = "rate"
+}
+
+class RateStreamTable(
+    rowsPerSecond: Long,
+    rampUpTimeSeconds: Long,
+    numPartitions: Int)
+  extends Table with SupportsMicroBatchRead {
+
+  override def name(): String = {
+    s"RateStream(rowsPerSecond=$rowsPerSecond, rampUpTimeSeconds=$rampUpTimeSeconds, " +
+      s"numPartitions=$numPartitions)"
+  }
+
+  override def schema(): StructType = RateStreamProvider.SCHEMA
+
+  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new ScanBuilder {
+    override def build(): Scan = new Scan {
+      override def readSchema(): StructType = RateStreamProvider.SCHEMA
+
+      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+        new RateStreamMicroBatchStream(
+          rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
+      }
+    }
+  }
 }
 
 object RateStreamProvider {
