@@ -133,6 +133,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   /** Stages for which the DAGScheduler has called TaskScheduler.cancelTasks(). */
   val cancelledStages = new HashSet[Int]()
 
+  val completedPartitions = new HashMap[Int, HashSet[Int]]()
+
   val taskScheduler = new TaskScheduler() {
     override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
     override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
@@ -160,7 +162,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
-    override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {}
+    // Since, the method completeTasks in TaskSchedulerImpl.scala marks the partition complete
+    // for all stage attempts in the particular stage id, it does not need any info about
+    // stageAttemptId. Hence, completed partition id's are stored only for stage id's to mock
+    // the method implementation here.
+    override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {
+      val partitionIds = completedPartitions.getOrElseUpdate(stageId, new HashSet[Int])
+      partitionIds.add(partitionId)
+      completedPartitions.put(stageId, partitionIds)
+    }
   }
 
   /** Length of time to wait while draining listener events. */
@@ -249,6 +259,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
+    completedPartitions.clear()
     securityMgr = new SecurityManager(conf)
     broadcastManager = new BroadcastManager(true, conf, securityMgr)
     mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true) {
@@ -2849,6 +2860,40 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       shuffleMapRdd.checkpoint()
       assertResultStageFailToRollback(shuffleMapRdd)
     }
+  }
+
+  test("SPARK-25250: Late zombie task completions handled correctly even before" +
+    " new taskset launched") {
+    val shuffleMapRdd = new MyRDD(sc, 4, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(4))
+    val reduceRdd = new MyRDD(sc, 4, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1, 2, 3))
+
+    completeShuffleMapStageSuccessfully(0, 0, numShufflePartitions = 4)
+
+    // Fail Stage 1 Attempt 0 with Fetch Failure
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0, 0, "ignored"),
+      null))
+
+    // this will trigger a resubmission of stage 0, since we've lost some of its
+    // map output, for the next iteration through the loop
+    scheduler.resubmitFailedStages()
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 4)
+
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(3), Success, Nil, Nil))
+    assert(completedPartitions.get(taskSets(3).stageId).get.contains(
+      taskSets(3).tasks(1).partitionId) == false, "Corresponding partition id for" +
+      " stage 1 attempt 1 is not complete yet")
+
+    // this will mark partition id 1 of stage 1 attempt 0 as complete. So we expect the status
+    // of that partition id to be reflected for stage 1 attempt 1 as well.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, Nil, Nil))
+    assert(completedPartitions.get(taskSets(3).stageId).get.contains(
+      taskSets(3).tasks(1).partitionId) == true)
   }
 
   /**

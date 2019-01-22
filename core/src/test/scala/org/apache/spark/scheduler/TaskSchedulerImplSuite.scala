@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
-import scala.collection.mutable.Set
 import scala.concurrent.duration._
 
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
@@ -40,14 +39,6 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def reviveOffers() {}
   def defaultParallelism(): Int = 1
   def maxNumConcurrentTasks(): Int = 0
-  val killedTaskIds: Set[Long] = Set[Long]()
-  override def killTask(
-      taskId: Long,
-      executorId: String,
-      interruptThread: Boolean,
-      reason: String): Unit = {
-    killedTaskIds.add(taskId)
-  }
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
