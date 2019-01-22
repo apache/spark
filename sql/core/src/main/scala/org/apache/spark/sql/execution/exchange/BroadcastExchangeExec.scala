@@ -66,7 +66,7 @@ case class BroadcastExchangeExec(
   }
 
   @transient
-  private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+  lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {

@@ -38,10 +38,10 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 
 /**
- * Performs a shuffle that will result in the desired `newPartitioning`.
+ * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
-    var newPartitioning: Partitioning,
+    desiredPartitioning: Partitioning,
     child: SparkPlan) extends Exchange {
 
   // NOTE: coordinator can be null after serialization/deserialization,
@@ -58,43 +58,31 @@ case class ShuffleExchangeExec(
     "Exchange"
   }
 
-  override def outputPartitioning: Partitioning = newPartitioning
+  override def outputPartitioning: Partitioning = {
+    desiredPartitioning
+  }
 
   private val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
+  @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
+
   /**
-   * Returns a [[ShuffleDependency]] that will partition rows of its child based on
-   * the partitioning scheme defined in `newPartitioning`. Those partitions of
-   * the returned ShuffleDependency will be the input of shuffle.
+   * A [[ShuffleDependency]] that will partition rows of its child based on the desired
+   * partitioning/ Those partitions of the returned ShuffleDependency will be the input of shuffle.
    */
-  private[exchange] def prepareShuffleDependency()
-    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+  @transient
+  lazy val shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchangeExec.prepareShuffleDependency(
-      child.execute(),
+      inputRDD,
       child.output,
-      newPartitioning,
+      outputPartitioning,
       serializer,
       writeMetrics)
   }
 
-  /**
-   * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
-   * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
-   * partition start indices array. If this optional array is defined, the returned
-   * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
-   */
-  private[exchange] def preparePostShuffleRDD(
-      shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
-      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
-    // If an array of partition start indices is provided, we need to use this array
-    // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
-    // update the number of post-shuffle partitions.
-    specifiedPartitionStartIndices.foreach { indices =>
-      assert(newPartitioning.isInstanceOf[HashPartitioning])
-      newPartitioning = UnknownPartitioning(indices.length)
-    }
-    new ShuffledRowRDD(shuffleDependency, readMetrics, specifiedPartitionStartIndices)
+  def createShuffledRDD(partitionStartIndices: Option[Array[Int]]): ShuffledRowRDD = {
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndices)
   }
 
   /**
@@ -105,26 +93,7 @@ case class ShuffleExchangeExec(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
-      val shuffleDependency = prepareShuffleDependency()
-      cachedShuffleRDD = preparePostShuffleRDD(shuffleDependency)
-    }
-    cachedShuffleRDD
-  }
-
-  private var _mapOutputStatistics: MapOutputStatistics = null
-
-  def mapOutputStatistics: MapOutputStatistics = _mapOutputStatistics
-
-  def eagerExecute(): RDD[InternalRow] = {
-    if (cachedShuffleRDD == null) {
-      val shuffleDependency = prepareShuffleDependency()
-      if (shuffleDependency.rdd.partitions.length != 0) {
-        // submitMapStage does not accept RDD with 0 partition.
-        // So, we will not submit this dependency.
-        val submittedStageFuture = sqlContext.sparkContext.submitMapStage(shuffleDependency)
-        _mapOutputStatistics = submittedStageFuture.get()
-      }
-      cachedShuffleRDD = preparePostShuffleRDD(shuffleDependency)
+      cachedShuffleRDD = createShuffledRDD(None)
     }
     cachedShuffleRDD
   }

@@ -94,11 +94,12 @@ class QueryExecution(
    * row format conversions as needed.
    */
   protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
-    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      adaptivePreparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp)}
+    val rules = if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+      adaptivePreparations
     } else {
-      preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp)}
+      preparations
     }
+    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp)}
   }
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
@@ -109,14 +110,16 @@ class QueryExecution(
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
+  // With adaptive execution, whole stage codegen will be done inside `QueryStageExecutor`.
   protected def adaptivePreparations: Seq[Rule[SparkPlan]] = Seq(
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
+    ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf),
     // PlanQueryStage needs to be the last rule because it divides the plan into multiple sub-trees
-    // by inserting leaf node QueryStageInput. Transforming the plan after applying this rule will
+    // by inserting leaf node QueryStage. Transforming the plan after applying this rule will
     // only transform node in a sub-tree.
-    PlanQueryStage(sparkSession.sessionState.conf))
+    PlanQueryStage(sparkSession))
 
   def simpleString: String = withRedaction {
     val concat = new StringConcat()

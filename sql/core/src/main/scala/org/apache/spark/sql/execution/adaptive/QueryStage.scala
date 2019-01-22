@@ -17,159 +17,56 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.Duration
+import scala.concurrent.Future
 
 import org.apache.spark.MapOutputStatistics
-import org.apache.spark.broadcast
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
-import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
-import org.apache.spark.util.ThreadUtils
 
 /**
- * In adaptive execution mode, an execution plan is divided into multiple QueryStages. Each
- * QueryStage is a sub-tree that runs in a single stage. Before executing current stage, we will
- * first submit all its child stages, wait for their completions and collect their statistics.
- * Based on the collected data, we can potentially optimize the execution plan in current stage,
- * change the number of reducer and do other optimizations.
+ * In adaptive execution mode, an execution plan is divided into multiple QueryStages w.r.t. the
+ * exchange as boundary. Each QueryStage is a sub-tree that runs in a single Spark stage.
  */
-abstract class QueryStage extends UnaryExecNode {
-
-  var child: SparkPlan
-
-  // Ignore this wrapper for canonicalizing.
-  override def doCanonicalize(): SparkPlan = child.canonicalized
-
-  override def output: Seq[Attribute] = child.output
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+abstract class QueryStage extends LeafExecNode {
 
   /**
-   * Execute childStages and wait until all stages are completed. Use a thread pool to avoid
-   * blocking on one child stage.
+   * An id of this query stage which is unique in the entire query plan.
    */
-  def executeChildStages(): Unit = {
-    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-
-    // Handle broadcast stages
-    val broadcastQueryStages: Seq[BroadcastQueryStage] = child.collect {
-      case bqs: BroadcastQueryStageInput => bqs.childStage
-    }
-    val broadcastFutures = broadcastQueryStages.map { queryStage =>
-      Future {
-        SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
-          queryStage.prepareBroadcast()
-        }
-      }(QueryStage.executionContext)
-    }
-
-    // Submit shuffle stages
-    val shuffleQueryStages: Seq[ShuffleQueryStage] = child.collect {
-      case sqs: ShuffleQueryStageInput => sqs.childStage
-    }
-    val shuffleStageFutures = shuffleQueryStages.map { queryStage =>
-      Future {
-        SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
-          queryStage.execute()
-        }
-      }(QueryStage.executionContext)
-    }
-
-    ThreadUtils.awaitResult(
-      Future.sequence(broadcastFutures)(implicitly, QueryStage.executionContext), Duration.Inf)
-    ThreadUtils.awaitResult(
-      Future.sequence(shuffleStageFutures)(implicitly, QueryStage.executionContext), Duration.Inf)
-  }
-
-  private var prepared = false
+  def id: Int
 
   /**
-   * Before executing the plan in this query stage, we execute all child stages, optimize the plan
-   * in this stage and determine the reducer number based on the child stages' statistics. Finally
-   * we do a codegen for this query stage and update the UI with the new plan.
+   * The sub-tree of the query plan that belongs to this query stage.
    */
-  def prepareExecuteStage(): Unit = synchronized {
-    // Ensure the prepareExecuteStage method only be executed once.
-    if (prepared) {
-      return
-    }
-    // 1. Execute childStages
-    executeChildStages()
-    // It is possible to optimize this stage's plan here based on the child stages' statistics.
-
-    // 2. Determine reducer number
-    val queryStageInputs: Seq[ShuffleQueryStageInput] = child.collect {
-      case input: ShuffleQueryStageInput => input
-    }
-    // mapOutputStatistics can be null if the childStage's RDD has 0 partition. In that case, we
-    // don't submit that stage and mapOutputStatistics is null.
-    val childMapOutputStatistics = queryStageInputs.map(_.childStage.mapOutputStatistics)
-      .filter(_ != null).toArray
-    if (childMapOutputStatistics.length > 0) {
-      val exchangeCoordinator = new ExchangeCoordinator(
-        conf.targetPostShuffleInputSize,
-        conf.minNumPostShufflePartitions)
-
-      val partitionStartIndices =
-        exchangeCoordinator.estimatePartitionStartIndices(childMapOutputStatistics)
-      child = child.transform {
-        case ShuffleQueryStageInput(childStage, output, _) =>
-          ShuffleQueryStageInput(childStage, output, Some(partitionStartIndices))
-      }
-    }
-
-    // 3. Codegen and update the UI
-    child = CollapseCodegenStages(sqlContext.conf).apply(child)
-    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    if (executionId != null && executionId.nonEmpty) {
-      val queryExecution = SQLExecution.getQueryExecution(executionId.toLong)
-      sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-        executionId.toLong,
-        queryExecution.toString,
-        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)))
-    }
-    prepared = true
-  }
-
-  // Caches the created ShuffleRowRDD so we can reuse that.
-  private var cachedRDD: RDD[InternalRow] = null
-
-  def executeStage(): RDD[InternalRow] = child.execute()
+  def plan: SparkPlan
 
   /**
-   * A QueryStage can be reused like Exchange. It is possible that multiple threads try to submit
-   * the same QueryStage. Use synchronized to make sure it is executed only once.
+   * Returns a new query stage with a new plan, which is optimized based on accurate runtime
+   * statistics.
    */
-  override def doExecute(): RDD[InternalRow] = synchronized {
-    if (cachedRDD == null) {
-      prepareExecuteStage()
-      cachedRDD = executeStage()
-    }
-    cachedRDD
-  }
+  def withNewPlan(newPlan: SparkPlan): QueryStage
 
-  override def executeCollect(): Array[InternalRow] = {
-    prepareExecuteStage()
-    child.executeCollect()
-  }
+  /**
+   * Materialize this QueryStage, to prepare for the execution, like submitting map stages,
+   * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
+   * stage is ready.
+   */
+  def materialize(): Future[Any]
 
-  override def executeToIterator(): Iterator[InternalRow] = {
-    prepareExecuteStage()
-    child.executeToIterator()
-  }
+  override def output: Seq[Attribute] = plan.output
+  override def outputPartitioning: Partitioning = plan.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
+  override def executeCollect(): Array[InternalRow] = plan.executeCollect()
+  override def executeTake(n: Int): Array[InternalRow] = plan.executeTake(n)
+  override def executeToIterator(): Iterator[InternalRow] = plan.executeToIterator()
+  override def doExecute(): RDD[InternalRow] = plan.execute()
+  override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
 
-  override def executeTake(n: Int): Array[InternalRow] = {
-    prepareExecuteStage()
-    child.executeTake(n)
-  }
-
+  // TODO: maybe we should not hide QueryStage entirely from explain result.
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
@@ -178,7 +75,7 @@ abstract class QueryStage extends UnaryExecNode {
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int): Unit = {
-    child.generateTreeString(
+    plan.generateTreeString(
       depth, lastChildren, append, verbose, "", false, maxFields)
   }
 }
@@ -186,56 +83,86 @@ abstract class QueryStage extends UnaryExecNode {
 /**
  * The last QueryStage of an execution plan.
  */
-case class ResultQueryStage(var child: SparkPlan) extends QueryStage
+case class ResultQueryStage(id: Int, plan: SparkPlan) extends QueryStage {
+
+  override def materialize(): Future[Any] = {
+    Future.unit
+  }
+
+  override def withNewPlan(newPlan: SparkPlan): QueryStage = {
+    copy(plan = newPlan)
+  }
+}
 
 /**
- * A shuffle QueryStage whose child is a ShuffleExchange.
+ * A shuffle QueryStage whose child is a ShuffleExchangeExec.
  */
-case class ShuffleQueryStage(var child: SparkPlan) extends QueryStage {
+case class ShuffleQueryStage(id: Int, plan: ShuffleExchangeExec) extends QueryStage {
 
-  protected var _mapOutputStatistics: MapOutputStatistics = null
+  override def withNewPlan(newPlan: SparkPlan): QueryStage = {
+    copy(plan = newPlan.asInstanceOf[ShuffleExchangeExec])
+  }
 
-  def mapOutputStatistics: MapOutputStatistics = _mapOutputStatistics
-
-  override def executeStage(): RDD[InternalRow] = {
-    child match {
-      case e: ShuffleExchangeExec =>
-        val result = e.eagerExecute()
-        _mapOutputStatistics = e.mapOutputStatistics
-        result
-      case _ => throw new IllegalArgumentException(
-        "The child of ShuffleQueryStage must be a ShuffleExchange.")
+  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+    if (plan.inputRDD.getNumPartitions == 0) {
+      // `submitMapStage` does not accept RDD with 0 partition. Here we return null and the caller
+      // side should take care of it.
+      Future.successful(null)
+    } else {
+      sparkContext.submitMapStage(plan.shuffleDependency)
     }
+  }
+
+  override def materialize(): Future[Any] = {
+    mapOutputStatisticsFuture
   }
 }
 
 /**
  * A broadcast QueryStage whose child is a BroadcastExchangeExec.
  */
-case class BroadcastQueryStage(var child: SparkPlan) extends QueryStage {
-  override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    child.executeBroadcast()
+case class BroadcastQueryStage(id: Int, plan: BroadcastExchangeExec) extends QueryStage {
+
+  override def withNewPlan(newPlan: SparkPlan): QueryStage = {
+    copy(plan = newPlan.asInstanceOf[BroadcastExchangeExec])
   }
 
-  private var prepared = false
-
-  def prepareBroadcast() : Unit = synchronized {
-    if (!prepared) {
-      executeChildStages()
-      child = CollapseCodegenStages(sqlContext.conf).apply(child)
-      // After child stages are completed, prepare() triggers the broadcast.
-      prepare()
-      prepared = true
-    }
-  }
-
-  override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "BroadcastExchange does not support the execute() code path.")
+  override def materialize(): Future[Any] = {
+    plan.relationFuture
   }
 }
 
-object QueryStage {
-  private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("adaptive-query-stage"))
+/**
+ * A wrapper of QueryStage to indicate that it's reused. Note that this is not a query stage.
+ */
+case class ReusedQueryStage(child: SparkPlan, output: Seq[Attribute]) extends UnaryExecNode {
+
+  // Ignore this wrapper for canonicalizing.
+  override def doCanonicalize(): SparkPlan = child.canonicalized
+
+  override def doExecute(): RDD[InternalRow] = {
+    child.execute()
+  }
+
+  override def doExecuteBroadcast[T](): Broadcast[T] = {
+    child.executeBroadcast()
+  }
+
+  // `ReusedQueryStage` can have distinct set of output attribute ids from its child, we need
+  // to update the attribute ids in `outputPartitioning` and `outputOrdering`.
+  private lazy val updateAttr: Expression => Expression = {
+    val originalAttrToNewAttr = AttributeMap(child.output.zip(output))
+    e => e.transform {
+      case attr: Attribute => originalAttrToNewAttr.getOrElse(attr, attr)
+    }
+  }
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning match {
+    case e: Expression => updateAttr(e).asInstanceOf[Partitioning]
+    case other => other
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    child.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
+  }
 }
