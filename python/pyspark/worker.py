@@ -252,7 +252,9 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
-        ser = ArrowStreamPandasSerializer(timezone)
+        safecheck = runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion",
+                                    "false").lower() == 'true'
+        ser = ArrowStreamPandasSerializer(timezone, safecheck)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 
