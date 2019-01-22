@@ -17,6 +17,7 @@
 package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
@@ -47,33 +48,25 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public ArrayData copy() {
-    GenericArrayData arrayData = new GenericArrayData(length);
-    for (int i = 0; i < numElements(); i++) {
-      if (isNullAt(i)) {
-        arrayData.setNullAt(i);
-      } else {
-        DataType dt = data.dataType();
-        if (dt instanceof BooleanType) {
-          arrayData.setBoolean(i, getBoolean(i));
-        } else if (dt instanceof ByteType) {
-          arrayData.setByte(i, getByte(i));
-        } else if (dt instanceof ShortType) {
-          arrayData.setShort(i, getShort(i));
-        } else if (dt instanceof IntegerType) {
-          arrayData.setInt(i, getInt(i));
-        } else if (dt instanceof LongType) {
-          arrayData.setLong(i, getLong(i));
-        } else if (dt instanceof FloatType) {
-          arrayData.setFloat(i, getFloat(i));
-        } else if (dt instanceof DoubleType) {
-          arrayData.setDouble(i, getDouble(i));
-        } else {
-          throw new RuntimeException("Not implemented. " + dt);
-        }
-      }
-    }
+    DataType dt = data.dataType();
 
-    return arrayData;
+    if (dt instanceof BooleanType) {
+      return UnsafeArrayData.fromPrimitiveArray(toBooleanArray());
+    } else if (dt instanceof ByteType) {
+      return UnsafeArrayData.fromPrimitiveArray(toByteArray());
+    } else if (dt instanceof ShortType) {
+      return UnsafeArrayData.fromPrimitiveArray(toShortArray());
+    } else if (dt instanceof IntegerType) {
+      return UnsafeArrayData.fromPrimitiveArray(toIntArray());
+    } else if (dt instanceof LongType) {
+      return UnsafeArrayData.fromPrimitiveArray(toLongArray());
+    } else if (dt instanceof FloatType) {
+      return UnsafeArrayData.fromPrimitiveArray(toFloatArray());
+    } else if (dt instanceof DoubleType) {
+      return UnsafeArrayData.fromPrimitiveArray(toDoubleArray());
+    } else {
+      throw new RuntimeException("Not implemented. " + dt);
+    }
   }
 
   @Override
