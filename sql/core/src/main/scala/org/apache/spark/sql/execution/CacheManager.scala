@@ -150,7 +150,7 @@ class CacheManager extends Logging {
       while (it.hasNext) {
         val cd = it.next()
         if (shouldRemove(cd.plan)) {
-          plansToUncache.append(cd)
+          plansToUncache += cd
           it.remove()
         }
       }
@@ -181,14 +181,14 @@ class CacheManager extends Logging {
       while (it.hasNext) {
         val cd = it.next()
         if (condition(cd.plan)) {
+          needToRecache += cd
           // Remove the cache entry before we create a new one, so that we can have a different
           // physical plan.
-          needToRecache += cd
           it.remove()
         }
       }
     }
-    val recomputedPlans = needToRecache.map { cd =>
+    needToRecache.map { cd =>
       if (clearCache) {
         cd.cachedRepresentation.cacheBuilder.clearCache()
       }
@@ -196,14 +196,12 @@ class CacheManager extends Logging {
       val newCache = InMemoryRelation(
         cacheBuilder = cd.cachedRepresentation.cacheBuilder.withCachedPlan(plan),
         logicalPlan = cd.plan)
-      cd.copy(cachedRepresentation = newCache)
-    }
-    writeLock {
-      needToRecache.foreach { c =>
-        if (lookupCachedData(c.plan).nonEmpty) {
+      val recomputedPlan = cd.copy(cachedRepresentation = newCache)
+      writeLock {
+        if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
           logWarning("While recaching, data was already added to cache.")
         } else {
-          cachedData.add(c)
+          cachedData.add(recomputedPlan)
         }
       }
     }
