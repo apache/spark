@@ -121,33 +121,20 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("string to date") {
-
-    var c = Calendar.getInstance()
-    c.set(2015, 0, 28, 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
     assert(stringToDate(UTF8String.fromString("2015-01-28")).get ===
-      millisToDays(c.getTimeInMillis))
-    c.set(2015, 0, 1, 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
+      LocalDate.of(2015, 1, 28).toEpochDay)
     assert(stringToDate(UTF8String.fromString("2015")).get ===
-      millisToDays(c.getTimeInMillis))
-    c.set(1, 0, 1, 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
+      LocalDate.of(2015, 1, 1).toEpochDay)
     val localDate = LocalDate.of(1, 1, 1)
       .atStartOfDay(TimeZoneUTC.toZoneId)
     assert(stringToDate(UTF8String.fromString("0001")).get ===
       TimeUnit.SECONDS.toDays(localDate.toEpochSecond))
-    c = Calendar.getInstance()
-    c.set(2015, 2, 1, 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
     assert(stringToDate(UTF8String.fromString("2015-03")).get ===
-      millisToDays(c.getTimeInMillis))
-    c = Calendar.getInstance()
-    c.set(2015, 2, 18, 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
+      LocalDate.of(2015, 3, 1).toEpochDay)
     Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
       "2015-03-18T123123", "2015-03-18T").foreach { s =>
-      assert(stringToDate(UTF8String.fromString(s)).get === millisToDays(c.getTimeInMillis))
+      assert(stringToDate(UTF8String.fromString(s)).get ===
+        LocalDate.of(2015, 3, 18).toEpochDay)
     }
 
     assert(stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
