@@ -64,34 +64,9 @@ public final class ColumnarArray extends ArrayData {
       return UnsafeArrayData.fromPrimitiveArray(toFloatArray());
     } else if (dt instanceof DoubleType) {
       return UnsafeArrayData.fromPrimitiveArray(toDoubleArray());
-    } else if (dt instanceof TimestampType) {
-      return UnsafeArrayData.fromPrimitiveArray(toLongArray());
-    } else if (dt instanceof StringType) {
-      return updateStringType();
-    } else if (dt instanceof DecimalType) {
-      return updateDecimalType(dt);
     } else {
-      throw new RuntimeException("Not implemented. " + dt);
+      return new GenericArrayData(toObjectArray(dt));
     }
-  }
-
-  private GenericArrayData updateStringType() {
-    GenericArrayData arrayData = new GenericArrayData(length);
-    for (int i = 0; i < numElements(); i++) {
-      arrayData.update(i, getUTF8String(i));
-    }
-
-    return arrayData;
-  }
-
-  private GenericArrayData updateDecimalType(DataType dt) {
-    GenericArrayData arrayData = new GenericArrayData(length);
-    DecimalType t = (DecimalType)dt;
-    for (int i = 0; i < numElements(); i++) {
-      arrayData.update(i, getDecimal(i, t.precision(), t.scale()));
-    }
-
-    return arrayData;
   }
 
   @Override
