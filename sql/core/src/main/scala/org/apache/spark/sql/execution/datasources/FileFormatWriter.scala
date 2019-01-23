@@ -170,7 +170,7 @@ object FileFormatWriter extends Logging {
             description = description,
             sparkStageId = taskContext.stageId(),
             sparkPartitionId = taskContext.partitionId(),
-            sparkAttemptNumber = taskContext.taskAttemptId().toInt,
+            sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
             committer,
             iterator = iter)
         },
