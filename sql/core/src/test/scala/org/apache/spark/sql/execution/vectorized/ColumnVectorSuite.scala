@@ -157,9 +157,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, StringType) === UTF8String.fromString(s"str$i"))
+      assert(arrayCopy.get(i, StringType) === UTF8String.fromString(s"str$i"))
     }
   }
 
@@ -170,10 +172,12 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       val utf8 = s"str$i".getBytes("utf8")
       assert(array.get(i, BinaryType) === utf8)
+      assert(arrayCopy.get(i, BinaryType) === utf8)
     }
   }
 
