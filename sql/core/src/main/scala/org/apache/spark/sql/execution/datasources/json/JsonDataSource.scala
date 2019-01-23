@@ -129,14 +129,16 @@ object TextInputJsonDataSource extends JsonDataSource {
       .select("value").as(Encoders.STRING)
   }
 
-  private def isAllWhitespace(rowText: Text): Boolean = {
-    rowText.getLength == 0 || {
-      val rowTextBuffer = ByteBuffer.wrap(rowText.getBytes)
-      continually(Text.bytesToCodePoint(rowTextBuffer))
-        .takeWhile(_ >= 0)
-        .take(rowText.getLength)
-        .forall(isWhitespace)
-    }
+  private def textLineHasNonWhitespace(rowText: Text): Boolean = {
+    val isAllWhitespace: Boolean =
+      rowText.getLength == 0 || {
+        val rowTextBuffer = ByteBuffer.wrap(rowText.getBytes)
+        continually(Text.bytesToCodePoint(rowTextBuffer))
+          .takeWhile(_ >= 0)
+          .take(rowText.getLength)
+          .forall(isWhitespace)
+      }
+    !isAllWhitespace
   }
 
   override def readFile(
@@ -155,8 +157,9 @@ object TextInputJsonDataSource extends JsonDataSource {
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord,
-      parser.options.multiLine)
-    linesReader.filterNot(isAllWhitespace).flatMap(safeParser.parse)
+      parser.options.multiLine,
+      textLineHasNonWhitespace)
+    linesReader.flatMap(safeParser.parse)
   }
 
   private def textToUTF8String(value: Text): UTF8String = {
