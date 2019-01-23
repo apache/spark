@@ -292,7 +292,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("Handling executor log url without renewing") {
+  test("log urls without customization") {
     val conf = createTestConf()
     val appId = "app1"
     val user = "user1"
@@ -306,7 +306,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     testHandlingExecutorLogUrl(conf, expected)
   }
 
-  test("Handling executor log url with custom executor url - happy case") {
+  test("custom log urls, including FILE_NAME") {
     val conf = createTestConf()
       .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
         "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}}")
@@ -332,8 +332,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     testHandlingExecutorLogUrl(conf, expected)
   }
 
-  test("Handling executor log url with custom executor url - happy case - " +
-    "pattern doesn't contain 'FILE_NAME'") {
+  test("custom log urls, excluding FILE_NAME") {
     val conf = createTestConf()
       .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
         "/users/{{USER}}/containers/{{CONTAINER_ID}}")
@@ -356,8 +355,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     testHandlingExecutorLogUrl(conf, expected)
   }
 
-  test("Handling executor log url with custom executor url - bad case - " +
-    "referring non-available attribute") {
+  test("custom log urls with invalid attribute") {
     // Here we are referring {{NON_EXISTING}} which is not available in attributes,
     // which Spark will fail back to provide origin log url with warning log.
 
@@ -378,8 +376,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     testHandlingExecutorLogUrl(conf, expected)
   }
 
-  test("Handling executor log url with custom executor url - bad case - " +
-    "'FILE_NAME' is given for pattern but 'LOG_FILES' attribute is not available") {
+  test("custom log urls, LOG_FILES not available while FILE_NAME is specified") {
     // For this case Spark will fail back to provide origin log url with warning log.
 
     val conf = createTestConf()
@@ -431,10 +428,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           var executorCount = 0
           while (executors.hasNext) {
             val executor = executors.next()
-            val expectation = iterForExpectation.next()
+            val (expectedExecInfo, expectedLogs) = iterForExpectation.next()
 
-            executor.hostPort should startWith(expectation._1.executorHost)
-            executor.executorLogs should be(expectation._2)
+            executor.hostPort should startWith(expectedExecInfo.executorHost)
+            executor.executorLogs should be(expectedLogs)
 
             executorCount += 1
           }
