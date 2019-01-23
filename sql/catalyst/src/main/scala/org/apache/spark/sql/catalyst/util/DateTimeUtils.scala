@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
-import java.util.{Calendar, Locale, TimeZone}
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.{Function => JFunction}
 
@@ -783,18 +783,17 @@ object DateTimeUtils {
         daysToMillis(prevMonday, timeZone)
       case TRUNC_TO_QUARTER =>
         val dDays = millisToDays(millis, timeZone)
-        millis = daysToMillis(truncDate(dDays, TRUNC_TO_MONTH), timeZone)
-        val cal = Calendar.getInstance()
-        cal.setTimeInMillis(millis)
-        val quarter = getQuarter(dDays)
-        val month = quarter match {
-          case 1 => Calendar.JANUARY
-          case 2 => Calendar.APRIL
-          case 3 => Calendar.JULY
-          case 4 => Calendar.OCTOBER
+        val month = getQuarter(dDays) match {
+          case 1 => Month.JANUARY
+          case 2 => Month.APRIL
+          case 3 => Month.JULY
+          case 4 => Month.OCTOBER
         }
-        cal.set(Calendar.MONTH, month)
-        cal.getTimeInMillis()
+        millis = daysToMillis(truncDate(dDays, TRUNC_TO_MONTH), timeZone)
+        val instant = Instant.ofEpochMilli(millis)
+        val localDateTime = LocalDateTime.ofInstant(instant, timeZone.toZoneId)
+        val truncated = localDateTime.withMonth(month.getValue)
+        truncated.atZone(timeZone.toZoneId).toInstant.toEpochMilli
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
