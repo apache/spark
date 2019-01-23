@@ -1519,6 +1519,17 @@ Apart from these, the following properties are also available, and may be useful
     you can set larger value.
   </td>
 </tr>
+<tr>
+  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td>200m</td>
+  <td>
+    Remote block will be fetched to disk when size of the block is above this threshold
+    in bytes. This is to avoid a giant request takes too much memory. Note this
+    configuration will affect both shuffle fetch and block manager remote block fetch.
+    For users who enabled external shuffle service, this feature can only work when
+    external shuffle service is newer than Spark 2.2.
+  </td>
+</tr>
 </table>
 
 ### Scheduling
