@@ -314,7 +314,7 @@ class ParquetFileFormat
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    // There are three things to note here.
+    // There are two things to note here.
     //
     // 1. Dictionary filtering has an issue about the predication on null. For this reason,
     //   This filtering is disabled. See SPARK-26677.
