@@ -30,10 +30,11 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupportProvider}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.streaming.Offset
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -59,7 +60,9 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         "Cannot add data when there is no query for finding the active socket source")
 
       val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source: TextSocketMicroBatchReadSupport, _) => source
+        case r: StreamingDataSourceV2Relation
+            if r.stream.isInstanceOf[TextSocketMicroBatchStream] =>
+          r.stream.asInstanceOf[TextSocketMicroBatchStream]
       }
       if (sources.isEmpty) {
         throw new Exception(
@@ -83,13 +86,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   }
 
   test("backward compatibility with old path") {
-    DataSource.lookupDataSource("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider",
-      spark.sqlContext.conf).getConstructor().newInstance() match {
-      case ds: MicroBatchReadSupportProvider =>
-        assert(ds.isInstanceOf[TextSocketSourceProvider])
-      case _ =>
-        throw new IllegalStateException("Could not find socket source")
-    }
+    val ds = DataSource.lookupDataSource(
+      "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider",
+      spark.sqlContext.conf).newInstance()
+    assert(ds.isInstanceOf[TextSocketSourceProvider], "Could not find socket source")
   }
 
   test("basic usage") {
@@ -175,16 +175,13 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(
-        "", new DataSourceOptions(Map.empty[String, String].asJava))
+      provider.getTable(new DataSourceOptions(Map.empty[String, String].asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(
-        "", new DataSourceOptions(Map("host" -> "localhost").asJava))
+      provider.getTable(new DataSourceOptions(Map("host" -> "localhost").asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(
-        "", new DataSourceOptions(Map("port" -> "1234").asJava))
+      provider.getTable(new DataSourceOptions(Map("port" -> "1234").asJava))
     }
   }
 
@@ -192,8 +189,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     val provider = new TextSocketSourceProvider
     val params = Map("host" -> "localhost", "port" -> "1234", "includeTimestamp" -> "fasle")
     intercept[AnalysisException] {
-      val a = new DataSourceOptions(params.asJava)
-      provider.createMicroBatchReadSupport("", a)
+      provider.getTable(new DataSourceOptions(params.asJava))
     }
   }
 
@@ -204,8 +200,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
     val exception = intercept[UnsupportedOperationException] {
-      provider.createMicroBatchReadSupport(
-        userSpecifiedSchema, "", new DataSourceOptions(params.asJava))
+      provider.getTable(new DataSourceOptions(params.asJava), userSpecifiedSchema)
     }
     assert(exception.getMessage.contains(
       "socket source does not support user-specified schema"))

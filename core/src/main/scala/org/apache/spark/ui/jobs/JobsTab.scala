@@ -22,6 +22,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.JavaConverters._
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
@@ -37,7 +38,7 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
     store
       .environmentInfo()
       .sparkProperties
-      .contains(("spark.scheduler.mode", SchedulingMode.FAIR.toString))
+      .contains((SCHEDULER_MODE.key, SchedulingMode.FAIR.toString))
   }
 
   def getSparkUser: String = parent.getSparkUser

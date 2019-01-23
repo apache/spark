@@ -154,10 +154,11 @@ function build {
   fi
 
   local BINDING_BUILD_ARGS=(
-    ${BUILD_PARAMS}
+    ${BUILD_ARGS[@]}
     --build-arg
     base_img=$(image_ref spark)
   )
+
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-false}
   local RDOCKERFILE=${RDOCKERFILE:-false}
