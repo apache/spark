@@ -415,9 +415,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
-  protected def createDriverEndpoint(): DriverEndpoint = {
-    new DriverEndpoint()
-  }
+  protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()
 
   def stopExecutors() {
     try {

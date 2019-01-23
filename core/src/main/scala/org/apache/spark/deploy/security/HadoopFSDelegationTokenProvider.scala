@@ -114,28 +114,22 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: () => Set[Fil
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
-    val user = sparkConf.get(KERBEROS_RENEWAL_CREDENTIALS) match {
-      case "keytab" => sparkConf.get(PRINCIPAL)
-      case "ccache" => Some(UserGroupInformation.getCurrentUser().getUserName())
-      case _ => None
-    }
+    val renewer = UserGroupInformation.getCurrentUser().getUserName()
 
-    user.flatMap { renewer =>
-      val creds = new Credentials()
-      fetchDelegationTokens(renewer, filesystems, creds)
+    val creds = new Credentials()
+    fetchDelegationTokens(renewer, filesystems, creds)
 
-      val renewIntervals = creds.getAllTokens.asScala.filter {
-        _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
-      }.flatMap { token =>
-        Try {
-          val newExpiration = token.renew(hadoopConf)
-          val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
-          val interval = newExpiration - identifier.getIssueDate
-          logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
-          interval
-        }.toOption
-      }
-      if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
+    val renewIntervals = creds.getAllTokens.asScala.filter {
+      _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
+    }.flatMap { token =>
+      Try {
+        val newExpiration = token.renew(hadoopConf)
+        val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
+        val interval = newExpiration - identifier.getIssueDate
+        logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
+        interval
+      }.toOption
     }
+    if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
   }
 }
