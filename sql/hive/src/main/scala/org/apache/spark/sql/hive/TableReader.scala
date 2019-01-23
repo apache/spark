@@ -31,7 +31,8 @@ import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => oldInputClass, JobConf}
+import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -289,7 +290,7 @@ class HadoopTableReader(
    */
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = localTableDesc.getInputFileFormatClass
-    if (classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]].isAssignableFrom(inputFormatClazz)) {
+    if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
       createNewHadoopRdd(localTableDesc, inputPathStr)
     } else {
       createOldHadoopRdd(localTableDesc, inputPathStr)
@@ -303,7 +304,7 @@ class HadoopTableReader(
   private def createOldHadoopRdd(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
     val inputFormatClass = tableDesc.getInputFileFormatClass
-      .asInstanceOf[java.lang.Class[org.apache.hadoop.mapred.InputFormat[Writable, Writable]]]
+      .asInstanceOf[Class[oldInputClass[Writable, Writable]]]
 
     val rdd = new HadoopRDD(
       sparkSession.sparkContext,
@@ -326,7 +327,7 @@ class HadoopTableReader(
     val newJobConf = new JobConf(hadoopConf)
     HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc)(newJobConf)
     val inputFormatClass = tableDesc.getInputFileFormatClass
-      .asInstanceOf[java.lang.Class[org.apache.hadoop.mapreduce.InputFormat[Writable, Writable]]]
+      .asInstanceOf[Class[newInputClass[Writable, Writable]]]
 
     val rdd = new NewHadoopRDD(
       sparkSession.sparkContext,
