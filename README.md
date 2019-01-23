@@ -1,7 +1,5 @@
 [![Jenkins Build](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-2.7/badge/icon)](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-2.7)
 [![AppVeyor Build](https://img.shields.io/appveyor/ci/ApacheSoftwareFoundation/spark/master.svg?style=plastic&logo=appveyor)](https://ci.appveyor.com/project/ApacheSoftwareFoundation/spark)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/pyspark.svg?label=pypi%20downloads&style=plastic)](https://pypi.org/project/pyspark)
-[![Commit Activity](https://img.shields.io/github/commit-activity/4w/apache/spark.svg?style=plastic)](https://github.com/apache/spark/commits/master)
 
 <p align="center">
   <a href="http://spark.apache.org">
