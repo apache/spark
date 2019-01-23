@@ -15,32 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.sql.sources.v2;
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.reader.Scan;
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
-
-trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient var sc: SparkContext = _
-
-  override def beforeAll() {
-    super.beforeAll()
-    val conf = new SparkConf()
-      .setMaster("local-cluster[2, 1, 1024]")
-      .setAppName("test-cluster")
-      .set(RPC_MESSAGE_MAX_SIZE, 1) // set to 1MB to detect direct serialization of data
-    sc = new SparkContext(conf)
-  }
-
-  override def afterAll() {
-    try {
-      if (sc != null) {
-        sc.stop()
-      }
-    } finally {
-      super.afterAll()
-    }
-  }
-}
+/**
+ * An empty mix-in interface for {@link Table}, to indicate this table supports streaming scan with
+ * micro-batch mode.
+ * <p>
+ * If a {@link Table} implements this interface, the
+ * {@link SupportsRead#newScanBuilder(DataSourceOptions)} must return a {@link ScanBuilder} that
+ * builds {@link Scan} with {@link Scan#toMicroBatchStream(String)} implemented.
+ * </p>
+ */
+@Evolving
+public interface SupportsMicroBatchRead extends SupportsRead { }

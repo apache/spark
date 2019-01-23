@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.util.{Calendar, Locale, TimeZone}
+import java.time.LocalDate
+import java.time.temporal.IsoFields
+import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
@@ -430,20 +432,14 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 case class DayOfWeek(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    cal.get(Calendar.DAY_OF_WEEK)
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.getDayOfWeek.plus(1).getValue
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = "calDayOfWeek"
-      ctx.addImmutableStateIfNotExists(cal, c,
-        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.value} = $c.get($cal.DAY_OF_WEEK);
+        ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().plus(1).getValue();
       """
     })
   }
@@ -462,20 +458,14 @@ case class DayOfWeek(child: Expression) extends DayWeek {
 case class WeekDay(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    (cal.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.getDayOfWeek.ordinal()
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = "calWeekDay"
-      ctx.addImmutableStateIfNotExists(cal, c,
-        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.value} = ($c.get($cal.DAY_OF_WEEK) + 5) % 7;
+         ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().ordinal();
       """
     })
   }
@@ -486,10 +476,6 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = IntegerType
-
-  @transient protected lazy val cal: Calendar = {
-    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-  }
 }
 
 // scalastyle:off line.size.limit
@@ -508,32 +494,16 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def dataType: DataType = IntegerType
 
-  @transient private lazy val c = {
-    val c = Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-    c.setFirstDayOfWeek(Calendar.MONDAY)
-    c.setMinimalDaysInFirstWeek(4)
-    c
-  }
-
   override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    c.get(Calendar.WEEK_OF_YEAR)
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val c = "calWeekOfYear"
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      ctx.addImmutableStateIfNotExists(cal, c, v =>
-        s"""
-           |$v = $cal.getInstance($dtu.getTimeZone("UTC"));
-           |$v.setFirstDayOfWeek($cal.MONDAY);
-           |$v.setMinimalDaysInFirstWeek(4);
-         """.stripMargin)
+    nullSafeCodeGen(ctx, ev, days => {
       s"""
-         |$c.setTimeInMillis($time * 1000L * 3600L * 24L);
-         |${ev.value} = $c.get($cal.WEEK_OF_YEAR);
+         |${ev.value} = java.time.LocalDate.ofEpochDay($days).get(
+         |  java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR);
        """.stripMargin
     })
   }
