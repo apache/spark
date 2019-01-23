@@ -113,12 +113,21 @@ object TypeCoercion {
     case _ => None
   }
 
+  private def findCommonTypeForBinaryComparison(
+      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = {
+    if (conf.isHiveTypeCoercionMode) {
+      findHiveCommonTypeForBinary(dt1, dt2)
+    } else {
+      findNativeCommonTypeForBinary(dt1, dt2, conf)
+    }
+  }
+
   /**
    * This function determines the target type of a comparison operator when one operand
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  private def findCommonTypeForBinaryComparison(
+  private def findNativeCommonTypeForBinary(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
     // We should cast all relative timestamp/date/string comparison into string comparisons
     // This behaves as a user would expect because timestamp strings sort lexicographically.
@@ -202,6 +211,28 @@ object TypeCoercion {
         case _ => None
       }
     }
+  }
+
+  /**
+   * This function follow hive's binary comparison action:
+   * https://github.com/apache/hive/blob/rel/release-3.0.0/ql/src/java/
+   * org/apache/hadoop/hive/ql/exec/FunctionRegistry.java#L802
+   */
+  private def findHiveCommonTypeForBinary(
+      dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
+    case (StringType, DateType) => Some(DateType)
+    case (DateType, StringType) => Some(DateType)
+    case (StringType, TimestampType) => Some(TimestampType)
+    case (TimestampType, StringType) => Some(TimestampType)
+    case (TimestampType, DateType) => Some(TimestampType)
+    case (DateType, TimestampType) => Some(TimestampType)
+    case (StringType, NullType) => Some(StringType)
+    case (NullType, StringType) => Some(StringType)
+    case (StringType | TimestampType, r: NumericType) => Some(DoubleType)
+    case (l: NumericType, StringType | TimestampType) => Some(DoubleType)
+    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
+    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
+    case _ => None
   }
 
   /**

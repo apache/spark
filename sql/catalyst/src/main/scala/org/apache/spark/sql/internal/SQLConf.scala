@@ -1334,6 +1334,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val typeCoercionMode =
+    buildConf("spark.sql.typeCoercion.mode")
+      .doc("Since Spark 2.4, the 'hive' mode is introduced for Hive compatiblity. " +
+        "Spark SQL has its native type cocersion mode, which is enabled by default.")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("default", "hive"))
+      .createWithDefault("default")
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -2009,6 +2018,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
+  def isHiveTypeCoercionMode: Boolean = getConf(SQLConf.typeCoercionMode).equals("hive")
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
