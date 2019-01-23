@@ -478,12 +478,19 @@ class SparkSubmitSuite
     val clArgs1 = Seq("--class", "org.apache.spark.repl.Main", "spark-shell")
     val appArgs1 = new SparkSubmitArguments(clArgs1)
     val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1)
+
     conf1.get(UI_SHOW_CONSOLE_PROGRESS) should be (true)
+    val sc1 = new SparkContext(conf1)
+    assert(sc1.progressBar.isDefined)
+    sc1.stop()
 
     val clArgs2 = Seq("--class", "org.SomeClass", "thejar.jar")
     val appArgs2 = new SparkSubmitArguments(clArgs2)
     val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
     assert(!conf2.contains(UI_SHOW_CONSOLE_PROGRESS))
+    val sc2 = new SparkContext(conf2)
+    assert(!sc2.progressBar.isDefined)
+    sc2.stop()
   }
 
   test("launch simple application with spark-submit") {
