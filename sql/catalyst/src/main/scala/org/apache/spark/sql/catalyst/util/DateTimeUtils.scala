@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime}
+import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Calendar, Locale, TimeZone}
@@ -841,26 +841,15 @@ object DateTimeUtils {
     if (offset != guess) {
       guess = tz.getOffset(millisLocal - offset)
       if (guess != offset) {
-        // fallback to do the reverse lookup using java.sql.Timestamp
+        // fallback to do the reverse lookup using java.time.LocalDateTime
         // this should only happen near the start or end of DST
-        val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
-        val year = getYear(days)
-        val month = getMonth(days)
-        val day = getDayOfMonth(days)
+        val localDate = LocalDate.ofEpochDay(TimeUnit.MILLISECONDS.toDays(millisLocal))
+        val localTime = LocalTime.ofNanoOfDay(TimeUnit.MILLISECONDS.toNanos(
+          Math.floorMod(millisLocal, MILLIS_PER_DAY)))
+        val localDateTime = LocalDateTime.of(localDate, localTime)
+        val millisEpoch = localDateTime.atZone(tz.toZoneId).toInstant.toEpochMilli
 
-        var millisOfDay = (millisLocal % MILLIS_PER_DAY).toInt
-        if (millisOfDay < 0) {
-          millisOfDay += MILLIS_PER_DAY.toInt
-        }
-        val seconds = (millisOfDay / 1000L).toInt
-        val hh = seconds / 3600
-        val mm = seconds / 60 % 60
-        val ss = seconds % 60
-        val ms = millisOfDay % 1000
-        val calendar = Calendar.getInstance(tz)
-        calendar.set(year, month - 1, day, hh, mm, ss)
-        calendar.set(Calendar.MILLISECOND, ms)
-        guess = (millisLocal - calendar.getTimeInMillis()).toInt
+        guess = (millisLocal - millisEpoch).toInt
       }
     }
     guess
