@@ -81,11 +81,11 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   private val executorHeartbeatIntervalMs = sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL)
 
-  require(checkTimeoutIntervalMs >= executorTimeoutMs,
+  require(checkTimeoutIntervalMs < executorTimeoutMs,
     s"checkTimeoutIntervalMs should be less than executorTimeoutMs, " +
       s"please set ${Network.NETWORK_TIMEOUT_INTERVAL.key} and " +
       s"${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key} properly.")
-  require(executorHeartbeatIntervalMs >= executorTimeoutMs,
+  require(executorHeartbeatIntervalMs < executorTimeoutMs,
     "executorHeartbeatIntervalMs should be less than executorTimeoutMs, " +
       s"please set ${config.EXECUTOR_HEARTBEAT_INTERVAL.key} and " +
       s"${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key} properly.")
