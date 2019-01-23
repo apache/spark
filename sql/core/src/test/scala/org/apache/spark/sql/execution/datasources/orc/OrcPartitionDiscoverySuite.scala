@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 // The data where the partitioning key exists only in the directory structure.
@@ -227,3 +229,8 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
 }
 
 class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSQLContext
+
+class OrcV1PartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSQLContext {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+}

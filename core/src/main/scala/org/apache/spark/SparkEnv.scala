@@ -31,7 +31,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
@@ -318,7 +318,7 @@ object SparkEnv extends Logging {
     val shortShuffleMgrNames = Map(
       "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
       "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
-    val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
+    val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
     val shuffleMgrClass =
       shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
@@ -417,8 +417,8 @@ object SparkEnv extends Logging {
     // Spark properties
     // This includes the scheduling mode whether or not it is configured (used by SparkUI)
     val schedulerMode =
-      if (!conf.contains("spark.scheduler.mode")) {
-        Seq(("spark.scheduler.mode", schedulingMode))
+      if (!conf.contains(SCHEDULER_MODE)) {
+        Seq((SCHEDULER_MODE.key, schedulingMode))
       } else {
         Seq.empty[(String, String)]
       }

@@ -16,7 +16,6 @@
 #
 
 ARG base_img
-ARG spark_uid=185
 
 FROM $base_img
 WORKDIR /
@@ -35,4 +34,5 @@ WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
 
 # Specify the User that the actual main process will run as
+ARG spark_uid=185
 USER ${spark_uid}

@@ -439,7 +439,6 @@ class SparkContext(object):
                     ' been killed or may also be in a zombie state.',
                     RuntimeWarning
                 )
-                pass
             finally:
                 self._jsc = None
         if getattr(self, "_accumulatorServer", None):

@@ -23,11 +23,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.StructType
 
@@ -92,6 +93,28 @@ case class DataSourceV2Relation(
  * after we figure out how to apply operator push-down for streaming data sources.
  */
 case class StreamingDataSourceV2Relation(
+    output: Seq[Attribute],
+    scanDesc: String,
+    stream: SparkDataStream,
+    startOffset: Option[Offset] = None,
+    endOffset: Option[Offset] = None)
+  extends LeafNode with MultiInstanceRelation {
+
+  override def isStreaming: Boolean = true
+
+  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def computeStats(): Statistics = stream match {
+    case r: SupportsReportStatistics =>
+      val statistics = r.estimateStatistics()
+      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+    case _ =>
+      Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  }
+}
+
+// TODO: remove it after finish API refactor for continuous streaming.
+case class OldStreamingDataSourceV2Relation(
     output: Seq[AttributeReference],
     source: DataSourceV2,
     options: Map[String, String],
@@ -111,7 +134,7 @@ case class StreamingDataSourceV2Relation(
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: StreamingDataSourceV2Relation =>
+    case other: OldStreamingDataSourceV2Relation =>
       output == other.output && readSupport.getClass == other.readSupport.getClass &&
         options == other.options
     case _ => false

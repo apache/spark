@@ -50,7 +50,7 @@ public class JavaRandomForestClassificationExample {
     // Empty categoricalFeaturesInfo indicates all features are continuous.
     int numClasses = 2;
     Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
-    Integer numTrees = 3; // Use more in practice.
+    int numTrees = 3; // Use more in practice.
     String featureSubsetStrategy = "auto"; // Let the algorithm choose.
     String impurity = "gini";
     int maxDepth = 5;
