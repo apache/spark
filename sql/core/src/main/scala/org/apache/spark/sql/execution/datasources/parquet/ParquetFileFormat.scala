@@ -314,6 +314,17 @@ class ParquetFileFormat
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
+    // There are three things to note here.
+    //
+    // 1. Dictionary filtering has an issue about the predication on null. For this reason,
+    //   This filtering is disabled. See SPARK-26677.
+    //
+    // 2. We should disable 'parquet.filter.dictionary.enabled' but
+    //   the 'parquet.filter.stats.enabled' and 'parquet.filter.dictionary.enabled' were
+    //   swapped mistakenly in Parquet side. It should use 'parquet.filter.dictionary.enabled'
+    //   when Spark upgrades Parquet. See PARQUET-1309.
+    hadoopConf.setIfUnset(ParquetInputFormat.STATS_FILTERING_ENABLED, "false")
+
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
     // Sets flags for `ParquetToSparkSchemaConverter`
