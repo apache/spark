@@ -46,7 +46,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
     val dataOfInstance: RDD[Instance] = data.map {
-      row => row match {
+      _ match {
         case instance: Instance => instance
         case labeledPoint: LabeledPoint => labeledPoint.toInstance
       }

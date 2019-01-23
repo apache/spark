@@ -41,7 +41,6 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
   private var categoricalDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var continuousDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var categoricalDataPointsForMulticlassForOrderedFeaturesRDD: RDD[LabeledPoint] = _
-  private var linearMulticlassDataset: DataFrame = _
 
   private val seed = 42
 
@@ -60,20 +59,6 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     categoricalDataPointsForMulticlassForOrderedFeaturesRDD = sc.parallelize(
       OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures())
       .map(_.asML)
-    linearMulticlassDataset = {
-      val nPoints = 100
-      val coefficients = Array(
-        -0.57997, 0.912083, -0.371077,
-        -0.16624, -0.84355, -0.048509)
-
-      val xMean = Array(5.843, 3.057)
-      val xVariance = Array(0.6856, 0.1899)
-
-      val testData = LogisticRegressionSuite.generateMultinomialLogisticInput(
-        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
-
-      sc.parallelize(testData, 4).toDF()
-    }
   }
 
   test("params") {
@@ -345,7 +330,20 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("training with sample weights") {
-    val df = linearMulticlassDataset
+    val df = {
+      val nPoints = 100
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077,
+        -0.16624, -0.84355, -0.048509)
+
+      val xMean = Array(5.843, 3.057)
+      val xVariance = Array(0.6856, 0.1899)
+
+      val testData = LogisticRegressionSuite.generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
+
+      sc.parallelize(testData, 4).toDF()
+    }
     val numClasses = 3
     val predEquals = (x: Double, y: Double) => x == y
     // (impurity, maxDepth)
