@@ -309,7 +309,6 @@ test_that("create DataFrame from RDD", {
 
 test_that("createDataFrame Arrow optimization", {
   skip_if_not_installed("arrow")
-  skip_if_not_installed("withr")
 
   conf <- callJMethod(sparkSession, "conf")
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
@@ -335,13 +334,13 @@ test_that("createDataFrame Arrow optimization", {
 
 test_that("createDataFrame Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
-  skip_if_not_installed("withr")
   rdf <- data.frame(list(list(a = 1,
                               b = "a",
                               c = TRUE,
                               d = 1.1,
                               e = 1L,
-                              g = as.Date("1990-02-24"))))
+                              f = as.Date("1990-02-24"),
+                              g = as.POSIXct("1990-02-24 12:34:56"))))
 
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
   conf <- callJMethod(sparkSession, "conf")

@@ -150,29 +150,17 @@ getDefaultSqlSource <- function() {
 writeToFileInArrow <- function(fileName, rdf, numPartitions) {
   requireNamespace1 <- requireNamespace
 
-  # For some reasons, Arrow R API requires to load 'defer_parent' which is from 'withr' package.
-  # This is a workaround to avoid this error. Otherwise, we should directly load 'withr'
-  # package, which CRAN complains about.
-  defer_parent <- function(x, ...) {
-    if (requireNamespace1("withr", quietly = TRUE)) {
-      defer_parent <- get("defer_parent", envir = asNamespace("withr"), inherits = FALSE)
-      defer_parent(x, ...)
-    } else {
-      stop("'withr' package should be installed.")
-    }
-  }
-
-  # R API in Arrow is not yet released. CRAN requires to add the package in requireNamespace
-  # at DESCRIPTION. Later, CRAN checks if the package is available or not. Therefore, it works
-  # around by avoiding direct requireNamespace.
+  # R API in Arrow is not yet released in CRAN (see ARROW-3204). CRAN requires to add the
+  # package in requireNamespace at DESCRIPTION. Later, CRAN checks if the package is available
+  # or not. Therefore, it works around by avoiding direct requireNamespace.
+  # Currently, as of Arrow 0.12.0, it can be installed, for instance, by
+  # `Rscript -e 'remotes::install_github("apache/arrow@apache-arrow-0.12.0", subdir = "r")'`
   if (requireNamespace1("arrow", quietly = TRUE)) {
     record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
-    record_batch_stream_writer <- get(
-      "record_batch_stream_writer", envir = asNamespace("arrow"), inherits = FALSE)
-    file_output_stream <- get(
-      "file_output_stream", envir = asNamespace("arrow"), inherits = FALSE)
-    write_record_batch <- get(
-      "write_record_batch", envir = asNamespace("arrow"), inherits = FALSE)
+    RecordBatchStreamWriter <- get(
+      "RecordBatchStreamWriter", envir = asNamespace("arrow"), inherits = FALSE)
+    FileOutputStream <- get(
+      "FileOutputStream", envir = asNamespace("arrow"), inherits = FALSE)
 
     numPartitions <- if (!is.null(numPartitions)) {
       numToInt(numPartitions)
@@ -194,17 +182,17 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
           # We should avoid private calls like 'close_on_exit' (CRAN disallows) but looks
           # there's no exposed API for it. Here's a workaround but ideally this should
           # be removed.
-          stream <- file_output_stream(fileName)
-          schema <- batch$schema()
-          stream_writer <- record_batch_stream_writer(stream, schema)
+          stream <- FileOutputStream(fileName)
+          schema <- batch$schema
+          stream_writer <- RecordBatchStreamWriter(stream, schema)
         }
 
-        write_record_batch(batch, stream_writer)
+        stream_writer$write_batch(batch)
       }
     },
     finally = {
       if (!is.null(stream_writer)) {
-        stream_writer$Close()
+        stream_writer$close()
       }
     })
 
@@ -214,12 +202,9 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
 }
 
 checkTypeRequirementForArrow <- function(dataHead, schema) {
-  # Currenty Arrow optimization does not support POSIXct and raw for now.
+  # Currenty Arrow optimization does not support raw for now.
   # Also, it does not support explicit float type set by users. It leads to
   # incorrect conversion. We will fall back to the path without Arrow optimization.
-  if (any(sapply(dataHead, function(x) is(x, "POSIXct")))) {
-    stop("Arrow optimization with R DataFrame does not support POSIXct type yet.")
-  }
   if (any(sapply(dataHead, is.raw))) {
     stop("Arrow optimization with R DataFrame does not support raw type yet.")
   }
@@ -290,7 +275,8 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                                      fileName)
         },
         finally = {
-          file.remove(fileName)
+          # File might not be created.
+          suppressWarnings(file.remove(fileName))
         })
 
         firstRow <- do.call(mapply, append(args, dataHead))[[1]]
