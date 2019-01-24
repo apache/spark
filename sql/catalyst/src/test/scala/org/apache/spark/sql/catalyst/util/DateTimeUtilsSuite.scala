@@ -363,28 +363,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with DateTimeTestUtils {
   }
 
   test("timestamp add months") {
-    val c1 = Calendar.getInstance()
-    c1.set(1997, 1, 28, 10, 30, 0)
-    c1.set(Calendar.MILLISECOND, 0)
-    val ts1 = c1.getTimeInMillis * 1000L
-    val c2 = Calendar.getInstance()
-    c2.set(2000, 1, 29, 10, 30, 0)
-    c2.set(Calendar.MILLISECOND, 123)
-    val ts2 = c2.getTimeInMillis * 1000L
+    val ts1 = date(1997, 2, 28, 10, 30, 0)
+    val ts2 = date(2000, 2, 29, 10, 30, 0, 123000)
     assert(timestampAddInterval(ts1, 36, 123000) === ts2)
 
-    val c3 = Calendar.getInstance(TimeZonePST)
-    c3.set(1997, 1, 27, 16, 0, 0)
-    c3.set(Calendar.MILLISECOND, 0)
-    val ts3 = c3.getTimeInMillis * 1000L
-    val c4 = Calendar.getInstance(TimeZonePST)
-    c4.set(2000, 1, 27, 16, 0, 0)
-    c4.set(Calendar.MILLISECOND, 123)
-    val ts4 = c4.getTimeInMillis * 1000L
-    val c5 = Calendar.getInstance(TimeZoneGMT)
-    c5.set(2000, 1, 29, 0, 0, 0)
-    c5.set(Calendar.MILLISECOND, 123)
-    val ts5 = c5.getTimeInMillis * 1000L
+    val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
+    val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
+    val ts5 = date(2000, 2, 29, 0, 0, 0, 123000, TimeZoneGMT)
     assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST) === ts4)
     assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT) === ts5)
   }
