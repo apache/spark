@@ -793,7 +793,7 @@ private[spark] class ApplicationMaster(
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-      // In cluster mode, do not rely on the disassociated event to exit
+      // In cluster mode or unmanaged am case, do not rely on the disassociated event to exit
       // This avoids potentially reporting incorrect exit codes if the driver fails
       if (!(isClusterMode || sparkConf.get(YARN_UNMANAGED_AM))) {
         logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")

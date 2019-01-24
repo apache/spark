@@ -87,6 +87,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testBasicYarnApp(false)
   }
 
+  test("run Spark in yarn-client mode with unmanaged am") {
+    testBasicYarnApp(true, Map("spark.yarn.unmanagedAM.enabled" -> "true"))
+  }
+
   test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
     testBasicYarnApp(true,
       Map(

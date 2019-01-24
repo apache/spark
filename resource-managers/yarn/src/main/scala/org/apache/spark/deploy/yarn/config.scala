@@ -238,7 +238,7 @@ package object config {
 
   /* Unmanaged AM configuration. */
 
-  private[spark] val YARN_UNMANAGED_AM = ConfigBuilder("spark.yarn.unmanagedAM")
+  private[spark] val YARN_UNMANAGED_AM = ConfigBuilder("spark.yarn.unmanagedAM.enabled")
     .doc("In client mode, whether to launch the Application Master service as part of the client " +
       "using unmanaged am.")
     .booleanConf

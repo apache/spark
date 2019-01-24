@@ -74,9 +74,8 @@ private[spark] class Client(
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
-  private var amServiceStarted = false
   private var appMaster: ApplicationMaster = _
-  private var unManagedAMStagingDirPath: Path = _
+  private var stagingDirPath: Path = _
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -141,18 +140,13 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
-  // The app staging dir based on the STAGING_DIR configuration if configured
-  // otherwise based on the users home directory.
-  private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
-    .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
-
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
 
   def stop(): Unit = {
     if (appMaster != null) {
-      appMaster.stopUnmanaged(unManagedAMStagingDirPath)
+      appMaster.stopUnmanaged(stagingDirPath)
     }
     launcherBackend.close()
     yarnClient.stop()
@@ -182,6 +176,12 @@ private[spark] class Client(
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
 
+      // The app staging dir based on the STAGING_DIR configuration if configured
+      // otherwise based on the users home directory.
+      val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
+        .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
+      stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
+
       new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
         Option(appId.toString)).setCurrentContext()
 
@@ -201,8 +201,8 @@ private[spark] class Client(
       appId
     } catch {
       case e: Throwable =>
-        if (appId != null) {
-          cleanupStagingDir(appId)
+        if (stagingDirPath != null) {
+          cleanupStagingDir()
         }
         throw e
     }
@@ -211,13 +211,12 @@ private[spark] class Client(
   /**
    * Cleanup application staging directory.
    */
-  private def cleanupStagingDir(appId: ApplicationId): Unit = {
+  private def cleanupStagingDir(): Unit = {
     if (sparkConf.get(PRESERVE_STAGING_FILES)) {
       return
     }
 
     def cleanupStagingDirInternal(): Unit = {
-      val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
       try {
         val fs = stagingDirPath.getFileSystem(hadoopConf)
         if (fs.delete(stagingDirPath, true)) {
@@ -861,7 +860,6 @@ private[spark] class Client(
     : ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
     val appId = newAppResponse.getApplicationId
-    val appStagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
         findPySparkArchives()
@@ -869,8 +867,8 @@ private[spark] class Client(
         Nil
       }
 
-    val launchEnv = setupLaunchEnv(appStagingDirPath, pySparkArchives)
-    val localResources = prepareLocalResources(appStagingDirPath, pySparkArchives)
+    val launchEnv = setupLaunchEnv(stagingDirPath, pySparkArchives)
+    val localResources = prepareLocalResources(stagingDirPath, pySparkArchives)
 
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources.asJava)
@@ -1052,7 +1050,7 @@ private[spark] class Client(
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
-            cleanupStagingDir(appId)
+            cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) =>
             val msg = s"Failed to contact YARN for application $appId."
@@ -1099,7 +1097,7 @@ private[spark] class Client(
       if (state == YarnApplicationState.FINISHED ||
           state == YarnApplicationState.FAILED ||
           state == YarnApplicationState.KILLED) {
-        cleanupStagingDir(appId)
+        cleanupStagingDir()
         return createAppReport(report)
       }
 
@@ -1107,8 +1105,7 @@ private[spark] class Client(
         return createAppReport(report)
       }
       if (state == YarnApplicationState.ACCEPTED && isClientUnmanagedAMEnabled &&
-          !amServiceStarted && report.getAMRMToken != null) {
-        amServiceStarted = true
+          appMaster == null && report.getAMRMToken != null) {
         appMaster = startApplicationMasterService(report)
       }
       lastState = state
@@ -1131,12 +1128,10 @@ private[spark] class Client(
     // Start Application Service in a separate thread and continue with application monitoring
     val appMaster = new ApplicationMaster(
       new ApplicationMasterArguments(Array.empty), sparkConf, hadoopConf)
-    unManagedAMStagingDirPath =
-      new Path(appStagingBaseDir, getAppStagingDir(report.getApplicationId))
     val amService = new Thread("Unmanaged Application Master Service") {
       override def run(): Unit = {
         appMaster.runUnmanaged(rpcEnv, report.getCurrentApplicationAttemptId,
-          unManagedAMStagingDirPath, cachedResourcesConf)
+          stagingDirPath, cachedResourcesConf)
       }
     }
     amService.setDaemon(true)
