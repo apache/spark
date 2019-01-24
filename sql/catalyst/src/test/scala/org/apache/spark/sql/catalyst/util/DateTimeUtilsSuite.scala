@@ -274,13 +274,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with DateTimeTestUtils {
   }
 
   test("hours") {
-    val c = Calendar.getInstance(TimeZonePST)
-    c.set(2015, 2, 18, 13, 2, 11)
-    assert(getHours(c.getTimeInMillis * 1000, TimeZonePST) === 13)
-    assert(getHours(c.getTimeInMillis * 1000, TimeZoneGMT) === 20)
-    c.set(2015, 12, 8, 2, 7, 9)
-    assert(getHours(c.getTimeInMillis * 1000, TimeZonePST) === 2)
-    assert(getHours(c.getTimeInMillis * 1000, TimeZoneGMT) === 10)
+    val tz = TimeZonePST
+    assert(getHours(date(2015, 3, 18, 13, 2, 11, 0, tz), TimeZonePST) === 13)
+    assert(getHours(date(2015, 3, 18, 13, 2, 11, 0, tz), TimeZoneGMT) === 20)
+    assert(getHours(date(2015, 12, 8, 2, 7, 9, 0, tz), TimeZonePST) === 2)
+    assert(getHours(date(2015, 12, 8, 2, 7, 9, 0, tz), TimeZoneGMT) === 10)
   }
 
   test("minutes") {
