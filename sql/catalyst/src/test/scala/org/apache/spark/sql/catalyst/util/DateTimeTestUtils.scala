@@ -51,11 +51,6 @@ trait DateTimeTestUtils {
     }
   }
 
-  def getInUTCDays(localDate: LocalDate): Int = {
-    val epochSeconds = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toEpochSecond
-    TimeUnit.SECONDS.toDays(epochSeconds).toInt
-  }
-
   def localDateTimeToMicros(localDateTime: LocalDateTime, tz: TimeZone): Long = {
     val instant = localDateTime.atZone(tz.toZoneId).toInstant
     DateTimeUtils.instantToMicros(instant)

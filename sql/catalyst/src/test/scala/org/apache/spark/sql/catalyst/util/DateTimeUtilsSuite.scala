@@ -313,47 +313,45 @@ class DateTimeUtilsSuite extends SparkFunSuite with DateTimeTestUtils {
   }
 
   test("get day in year") {
-    assert(getDayInYear(getInUTCDays(LocalDate.of(2015, 3, 18))) === 77)
-    assert(getDayInYear(getInUTCDays(LocalDate.of(2012, 3, 18))) === 78)
+    assert(getDayInYear(days(2015, 3, 18)) === 77)
+    assert(getDayInYear(days(2012, 3, 18)) === 78)
   }
 
   test("day of year calculations for old years") {
-    var date = LocalDate.of(1582, 3, 1)
-    assert(getDayInYear(getInUTCDays(date)) === 60)
+    assert(getDayInYear(days(1582, 3)) === 60)
 
     (1000 to 1600 by 10).foreach { year =>
       // January 1 is the 1st day of year.
-      date = LocalDate.of(year, 1, 1)
-      assert(getYear(getInUTCDays(date)) === year)
-      assert(getMonth(getInUTCDays(date)) === 1)
-      assert(getDayInYear(getInUTCDays(date)) === 1)
+      assert(getYear(days(year)) === year)
+      assert(getMonth(days(year, 1)) === 1)
+      assert(getDayInYear(days(year, 1, 1)) === 1)
 
       // December 31 is the 1st day of year.
-      date = LocalDate.of(year, 12, 31)
-      assert(getYear(getInUTCDays(date)) === year)
-      assert(getMonth(getInUTCDays(date)) === 12)
-      assert(getDayOfMonth(getInUTCDays(date)) === 31)
+      val date = days(year, 12, 31)
+      assert(getYear(date) === year)
+      assert(getMonth(date) === 12)
+      assert(getDayOfMonth(date) === 31)
     }
   }
 
   test("get year") {
-    assert(getYear(getInUTCDays(LocalDate.of(2015, 2, 18))) === 2015)
-    assert(getYear(getInUTCDays(LocalDate.of(2012, 2, 18))) === 2012)
+    assert(getYear(days(2015, 2, 18)) === 2015)
+    assert(getYear(days(2012, 2, 18)) === 2012)
   }
 
   test("get quarter") {
-    assert(getQuarter(getInUTCDays(LocalDate.of(2015, 2, 18))) === 1)
-    assert(getQuarter(getInUTCDays(LocalDate.of(2012, 11, 18))) === 4)
+    assert(getQuarter(days(2015, 2, 18)) === 1)
+    assert(getQuarter(days(2012, 11, 18)) === 4)
   }
 
   test("get month") {
-    assert(getMonth(getInUTCDays(LocalDate.of(2015, 3, 18))) === 3)
-    assert(getMonth(getInUTCDays(LocalDate.of(2012, 12, 18))) === 12)
+    assert(getMonth(days(2015, 3, 18)) === 3)
+    assert(getMonth(days(2012, 12, 18)) === 12)
   }
 
   test("get day of month") {
-    assert(getDayOfMonth(getInUTCDays(LocalDate.of(2015, 3, 18))) === 18)
-    assert(getDayOfMonth(getInUTCDays(LocalDate.of(2012, 12, 24))) === 24)
+    assert(getDayOfMonth(days(2015, 3, 18)) === 18)
+    assert(getDayOfMonth(days(2012, 12, 24)) === 24)
   }
 
   test("date add months") {
