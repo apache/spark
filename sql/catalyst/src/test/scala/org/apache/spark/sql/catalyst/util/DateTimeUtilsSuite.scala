@@ -357,14 +357,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with DateTimeTestUtils {
   }
 
   test("date add months") {
-    val c1 = Calendar.getInstance()
-    c1.set(1997, 1, 28, 10, 30, 0)
-    val days1 = millisToDays(c1.getTimeInMillis)
-    val c2 = Calendar.getInstance()
-    c2.set(2000, 1, 29)
-    assert(dateAddMonths(days1, 36) === millisToDays(c2.getTimeInMillis))
-    c2.set(1996, 0, 31)
-    assert(dateAddMonths(days1, -13) === millisToDays(c2.getTimeInMillis))
+    val input = days(1997, 2, 28, 10, 30)
+    assert(dateAddMonths(input, 36) === days(2000, 2, 29))
+    assert(dateAddMonths(input, -13) === days(1996, 1, 31))
   }
 
   test("timestamp add months") {

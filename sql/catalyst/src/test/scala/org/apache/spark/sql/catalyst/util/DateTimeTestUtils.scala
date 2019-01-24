@@ -61,6 +61,7 @@ trait DateTimeTestUtils {
     DateTimeUtils.instantToMicros(instant)
   }
 
+  // Returns microseconds since epoch for the given date
   def date(
       year: Int,
       month: Byte = 1,
@@ -75,6 +76,19 @@ trait DateTimeTestUtils {
     localDateTimeToMicros(localDateTime, tz)
   }
 
+  // Returns number of days since epoch for the given date
+  def days(
+     year: Int,
+     month: Byte = 1,
+     day: Byte = 1,
+     hour: Byte = 0,
+     minute: Byte = 0,
+     sec: Byte = 0): Int = {
+    val micros = date(year, month, day, hour, minute, sec)
+    TimeUnit.MICROSECONDS.toDays(micros).toInt
+  }
+
+  // Returns microseconds since epoch for current date and give time
   def time(
       hour: Byte = 0,
       minute: Byte = 0,
