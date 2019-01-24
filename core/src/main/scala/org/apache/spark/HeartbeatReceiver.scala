@@ -84,9 +84,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   require(checkTimeoutIntervalMs <= executorTimeoutMs,
     s"${Network.NETWORK_TIMEOUT_INTERVAL.key} should be less than or " +
       s"equal to ${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key}.")
-  require(executorHeartbeatIntervalMs < executorTimeoutMs,
-    s"${config.EXECUTOR_HEARTBEAT_INTERVAL.key} should be less than " +
-      s"${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key}")
+  require(executorHeartbeatIntervalMs <= executorTimeoutMs,
+    s"${config.EXECUTOR_HEARTBEAT_INTERVAL.key} should be less than or " +
+      s"equal to ${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key}")
 
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
