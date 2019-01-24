@@ -587,7 +587,7 @@ object SQLConf {
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
       "distinct semantics. By default the optimization is disabled, since it may return " +
-      "incorrect results when the files are empty..")
+      "incorrect results when the files are empty.")
     .booleanConf
     .createWithDefault(false)
 
