@@ -52,8 +52,8 @@ class NoopStreamSuite extends StreamTest {
     assert(query.isActive)
     try {
       input.addData(1, 2, 3)
-      failAfter(streamingTimeout) {
-        query.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        assert(query.recentProgress.map(_.numInputRows).sum == 3)
       }
     } finally {
       query.stop()
