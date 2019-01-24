@@ -381,4 +381,58 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1.secretsFile should be (null)
   }
 
+  test("shuffle serivce should be robust if multiple disk recovery enabled") {
+    yarnConfig.set("spark.yarn.shuffle.registeredExecutors.multipleDiskRecovery", "true")
+    yarnConfig.set("spark.yarn.shuffle.registeredExecutorsFile.checkInterval", "500")
+    s1 = new YarnShuffleService
+    val recoveryPath = new Path(recoveryLocalDir.toURI.getPath)
+    s1.setRecoveryPath(recoveryPath)
+    s1.init(yarnConfig)
+    val appId1 = ApplicationId.newInstance(0, 1);
+    val app1 = makeAppInfo("user1", appId1)
+    s1.initializeApplication(app1)
+
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/foo2", "/bar2"), 3, SORT_MANAGER)
+    val shuffleInfo3 = new ExecutorShuffleInfo(Array("/foo3", "/bar3"), 3, SORT_MANAGER)
+
+    val blockResolver = ShuffleTestAccessor.getBlockResolver(s1.blockHandler)
+    val execStateFile = ShuffleTestAccessor.registeredExecutorFile(blockResolver)
+
+    blockResolver.registerExecutor(appId1.toString, "exec1", shuffleInfo1)
+    val getExecInfo1 = ShuffleTestAccessor.getExecutorInfo(appId1, "exec1", blockResolver)
+    getExecInfo1 should be (Some(shuffleInfo1))
+
+    execStateFile.setWritable(false)
+    Thread.sleep(5000)
+    s1.stopApplication(new ApplicationTerminationContext(appId1))
+    s1.stop()
+    execStateFile.listFiles().foreach(_.delete())
+    execStateFile.delete()
+
+
+    s2 = new YarnShuffleService
+    s2.setRecoveryPath(recoveryPath)
+    s2.init(yarnConfig)
+    val blockResolver2 = ShuffleTestAccessor.getBlockResolver(s2.blockHandler)
+    val execStateFile2 = ShuffleTestAccessor.registeredExecutorFile(blockResolver2)
+
+    assert(execStateFile !== execStateFile2)
+    val getExecInfo2 = ShuffleTestAccessor.getExecutorInfo(appId1, "exec1", blockResolver2)
+    getExecInfo2 should be (Some(shuffleInfo1))
+    blockResolver.registerExecutor(appId1.toString, "exec2", shuffleInfo2)
+    val getExecInfo3 = ShuffleTestAccessor.getExecutorInfo(appId1, "exec2", blockResolver2)
+    getExecInfo3 should be (Some(shuffleInfo2))
+
+    val appId2 = ApplicationId.newInstance(0, 2)
+    val app2 = makeAppInfo("user1", appId2)
+    s2.initializeApplication(app2)
+
+    blockResolver2.registerExecutor(appId2.toString, "exec1", shuffleInfo3)
+    val getExecInfo4 = ShuffleTestAccessor.getExecutorInfo(appId2, "exec1", blockResolver2)
+    getExecInfo4 should be (Some(shuffleInfo3))
+
+    s2.stopApplication(new ApplicationTerminationContext(appId2))
+    s2.stop()
+  }
 }

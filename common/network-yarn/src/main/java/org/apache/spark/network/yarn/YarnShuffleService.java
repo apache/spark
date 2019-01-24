@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -92,6 +93,17 @@ public class YarnShuffleService extends AuxiliaryService {
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
+  // Whether enable multiple disk recovery on registered executors, we assume that
+  // yarn.nodemanager.local-dirs are mounted on multiple disks.
+  @VisibleForTesting
+  static final String REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY =
+      "spark.yarn.shuffle.registeredExecutors.multipleDiskRecovery";
+  private static final boolean DEFAULT_REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY = false;
+  // Disk check interval in milliseconds
+  private static final String REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL =
+      "spark.yarn.shuffle.registeredExecutorsFile.checkInterval";
+  private static final long DEFAULT_REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL = 60 * 1000;
+
   // just for testing when you want to find an open port
   @VisibleForTesting
   static int boundPort = -1;
@@ -156,6 +168,8 @@ public class YarnShuffleService extends AuxiliaryService {
     _conf = conf;
 
     boolean stopOnFailure = conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
+    boolean multiDiskRecovery = conf.getBoolean(REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY,
+        DEFAULT_REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY);
 
     try {
       // In case this NM was killed while there were running spark applications, we need to restore
@@ -163,12 +177,22 @@ public class YarnShuffleService extends AuxiliaryService {
       // If we don't find one, then we choose a file to use to save the state next time.  Even if
       // an application was stopped while the NM was down, we expect yarn to call stopApplication()
       // when it comes back
-      if (_recoveryPath != null) {
-        registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
-      }
-
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+      if (_recoveryPath != null) {
+        if (multiDiskRecovery) {
+          List<String> recoveryPaths = Lists.newArrayList();
+          recoveryPaths.add(_recoveryPath.toUri().getPath());
+          Collection<String> localDirs = conf.getTrimmedStringCollection("yarn.nodemanager.local-dirs");
+          recoveryPaths.addAll(localDirs);
+          blockHandler = new ExternalShuffleBlockHandler(transportConf, recoveryPaths, RECOVERY_FILE_NAME,
+              conf.getLong(REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL, DEFAULT_REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL));
+        } else {
+          registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
+          blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+        }
+      } else {
+        blockHandler = new ExternalShuffleBlockHandler(transportConf, null);
+      }
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests

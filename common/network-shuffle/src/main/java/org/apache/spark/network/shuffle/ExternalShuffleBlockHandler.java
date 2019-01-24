@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import com.codahale.metrics.Gauge;
@@ -64,6 +65,12 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
+  }
+
+  public ExternalShuffleBlockHandler(
+      TransportConf conf, List<String> localDirs, String recoveryFileName, long diskCheckInterval) throws IOException {
+    this(new OneForOneStreamManager(),
+        new ExternalShuffleBlockResolver(conf, localDirs, recoveryFileName, diskCheckInterval));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
