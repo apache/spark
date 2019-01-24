@@ -47,7 +47,7 @@ private[spark] class HistoryAppStatusStore(
     }
   }
 
-  private var warnedForMissingAttributes = new AtomicBoolean(false)
+  private val informedForMissingAttributes = new AtomicBoolean(false)
 
   override def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
     val execList = super.executorList(activeOnly)
@@ -116,8 +116,8 @@ private[spark] class HistoryAppStatusStore(
       allPatterns: Set[String],
       allAttributes: Set[String]): Unit = {
 
-    if (warnedForMissingAttributes.compareAndSet(false, true)) {
-      logWarning(s"Fail to renew executor log urls: $reason. Required: $allPatterns / " +
+    if (informedForMissingAttributes.compareAndSet(false, true)) {
+      logInfo(s"Fail to renew executor log urls: $reason. Required: $allPatterns / " +
         s"available: $allAttributes. Failing back to show app's original log urls.")
     }
   }
