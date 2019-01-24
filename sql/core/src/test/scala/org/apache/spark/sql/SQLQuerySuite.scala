@@ -2422,7 +2422,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(s"$expected") :: Nil)
   }
 
-  test("SPARK-15752 optimize metadata only query for datasource table") {
+  ignore("SPARK-15752 optimize metadata only query for datasource table") {
     withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
       withTable("srcpart_15752") {
         val data = (1 to 10).map(i => (i, s"data-$i", i % 2, if ((i % 2) == 0) "a" else "b"))
@@ -2963,6 +2963,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       withTable("t") {
         sql("create table t (s struct<i: Int>) using json")
         checkAnswer(sql("select s.I from t group by s.i"), Nil)
+      }
+    }
+  }
+
+  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
+    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
+      withTable("t") {
+        sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+        sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+        checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+        checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
       }
     }
   }
