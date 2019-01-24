@@ -275,22 +275,24 @@ class DateTimeUtilsSuite extends SparkFunSuite with DateTimeTestUtils {
 
   test("hours") {
     val tz = TimeZonePST
-    assert(getHours(date(2015, 3, 18, 13, 2, 11, 0, tz), TimeZonePST) === 13)
-    assert(getHours(date(2015, 3, 18, 13, 2, 11, 0, tz), TimeZoneGMT) === 20)
-    assert(getHours(date(2015, 12, 8, 2, 7, 9, 0, tz), TimeZonePST) === 2)
-    assert(getHours(date(2015, 12, 8, 2, 7, 9, 0, tz), TimeZoneGMT) === 10)
+    var input = date(2015, 3, 18, 13, 2, 11, 0, tz)
+    assert(getHours(input, TimeZonePST) === 13)
+    assert(getHours(input, TimeZoneGMT) === 20)
+    input = date(2015, 12, 8, 2, 7, 9, 0, tz)
+    assert(getHours(input, TimeZonePST) === 2)
+    assert(getHours(input, TimeZoneGMT) === 10)
   }
 
   test("minutes") {
-    val c = Calendar.getInstance(TimeZonePST)
-    c.set(2015, 2, 18, 13, 2, 11)
-    assert(getMinutes(c.getTimeInMillis * 1000, TimeZonePST) === 2)
-    assert(getMinutes(c.getTimeInMillis * 1000, TimeZoneGMT) === 2)
-    assert(getMinutes(c.getTimeInMillis * 1000, TimeZone.getTimeZone("Australia/North")) === 32)
-    c.set(2015, 2, 8, 2, 7, 9)
-    assert(getMinutes(c.getTimeInMillis * 1000, TimeZonePST) === 7)
-    assert(getMinutes(c.getTimeInMillis * 1000, TimeZoneGMT) === 7)
-    assert(getMinutes(c.getTimeInMillis * 1000, TimeZone.getTimeZone("Australia/North")) === 37)
+    val tz = TimeZonePST
+    var input = date(2015, 3, 18, 13, 2, 11, 0, tz)
+    assert(getMinutes(input, TimeZonePST) === 2)
+    assert(getMinutes(input, TimeZoneGMT) === 2)
+    assert(getMinutes(input, TimeZone.getTimeZone("Australia/North")) === 32)
+    input = date(2015, 3, 8, 2, 7, 9, 0, tz)
+    assert(getMinutes(input, TimeZonePST) === 7)
+    assert(getMinutes(input, TimeZoneGMT) === 7)
+    assert(getMinutes(input, TimeZone.getTimeZone("Australia/North")) === 37)
   }
 
   test("seconds") {
