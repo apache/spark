@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.state
+package org.apache.spark.sql.execution.streaming.state.join
 
 import java.util.UUID
 
@@ -23,83 +23,94 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 
-class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter {
+class StreamingJoinStateManagerSuite extends StreamTest with BeforeAndAfter {
 
   before {
     SparkSession.setActiveSession(spark) // set this before force initializing 'joinExec'
     spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
-
-  test("SymmetricHashJoinStateManager - all operations") {
-    withJoinStateManager(inputValueAttribs, joinKeyExprs) { manager =>
-      implicit val mgr = manager
-
-      assert(get(20) === Seq.empty)     // initially empty
-      append(20, 2)
-      assert(get(20) === Seq(2))        // should first value correctly
-      assert(numRows === 1)
-
-      append(20, 3)
-      assert(get(20) === Seq(2, 3))     // should append new values
-      append(20, 3)
-      assert(get(20) === Seq(2, 3, 3))  // should append another copy if same value added again
-      assert(numRows === 3)
-
-      assert(get(30) === Seq.empty)
-      append(30, 1)
-      assert(get(30) === Seq(1))
-      assert(get(20) === Seq(2, 3, 3))  // add another key-value should not affect existing ones
-      assert(numRows === 4)
-
-      removeByKey(25)
-      assert(get(20) === Seq.empty)
-      assert(get(30) === Seq(1))        // should remove 20, not 30
-      assert(numRows === 1)
-
-      removeByKey(30)
-      assert(get(30) === Seq.empty)     // should remove 30
-      assert(numRows === 0)
-
-      def appendAndTest(key: Int, values: Int*): Unit = {
-        values.foreach { value => append(key, value)}
-        require(get(key) === values)
-      }
-
-      appendAndTest(40, 100, 200, 300)
-      appendAndTest(50, 125)
-      appendAndTest(60, 275)              // prepare for testing removeByValue
-      assert(numRows === 5)
-
-      removeByValue(125)
-      assert(get(40) === Seq(200, 300))
-      assert(get(50) === Seq.empty)
-      assert(get(60) === Seq(275))        // should remove only some values, not all
-      assert(numRows === 3)
-
-      append(40, 50)
-      assert(get(40) === Seq(50, 200, 300))
-      assert(numRows === 4)
-
-      removeByValue(200)
-      assert(get(40) === Seq(300))
-      assert(get(60) === Seq(275))        // should remove only some values, not all
-      assert(numRows === 2)
-
-      removeByValue(300)
-      assert(get(40) === Seq.empty)
-      assert(get(60) === Seq.empty)       // should remove all values now
-      assert(numRows === 0)
+  test("StreamingJoinStateManager V1 - all operations") {
+    withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion = 1) { manager =>
+      testAllOperations(manager)
     }
   }
+
+  test("StreamingJoinStateManager V2 - all operations") {
+    withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion = 2) { manager =>
+      testAllOperations(manager)
+    }
+  }
+
+  private def testAllOperations(manager: StreamingJoinStateManager): Unit = {
+    implicit val mgr = manager
+
+    assert(get(20) === Seq.empty)     // initially empty
+    append(20, 2)
+    assert(get(20) === Seq(2))        // should first value correctly
+    assert(numRows === 1)
+
+    append(20, 3)
+    assert(get(20) === Seq(2, 3))     // should append new values
+    append(20, 3)
+    assert(get(20) === Seq(2, 3, 3))  // should append another copy if same value added again
+    assert(numRows === 3)
+
+    assert(get(30) === Seq.empty)
+    append(30, 1)
+    assert(get(30) === Seq(1))
+    assert(get(20) === Seq(2, 3, 3))  // add another key-value should not affect existing ones
+    assert(numRows === 4)
+
+    removeByKey(25)
+    assert(get(20) === Seq.empty)
+    assert(get(30) === Seq(1))        // should remove 20, not 30
+    assert(numRows === 1)
+
+    removeByKey(30)
+    assert(get(30) === Seq.empty)     // should remove 30
+    assert(numRows === 0)
+
+    def appendAndTest(key: Int, values: Int*): Unit = {
+      values.foreach { value => append(key, value)}
+      require(get(key) === values)
+    }
+
+    appendAndTest(40, 100, 200, 300)
+    appendAndTest(50, 125)
+    appendAndTest(60, 275)              // prepare for testing removeByValue
+    assert(numRows === 5)
+
+    removeByValue(125)
+    assert(get(40) === Seq(200, 300))
+    assert(get(50) === Seq.empty)
+    assert(get(60) === Seq(275))        // should remove only some values, not all
+    assert(numRows === 3)
+
+    append(40, 50)
+    assert(get(40) === Seq(50, 200, 300))
+    assert(numRows === 4)
+
+    removeByValue(200)
+    assert(get(40) === Seq(300))
+    assert(get(60) === Seq(275))        // should remove only some values, not all
+    assert(numRows === 2)
+
+    removeByValue(300)
+    assert(get(40) === Seq.empty)
+    assert(get(60) === Seq.empty)       // should remove all values now
+    assert(numRows === 0)
+  }
+
   val watermarkMetadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 10).build()
   val inputValueSchema = new StructType()
     .add(StructField("time", IntegerType, metadata = watermarkMetadata))
@@ -111,7 +122,6 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   val inputValueGen = UnsafeProjection.create(inputValueAttribs.map(_.dataType).toArray)
   val joinKeyGen = UnsafeProjection.create(joinKeyExprs.map(_.dataType).toArray)
 
-
   def toInputValue(i: Int): UnsafeRow = {
     inputValueGen.apply(new GenericInternalRow(Array[Any](i, false)))
   }
@@ -122,16 +132,16 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
 
   def toValueInt(inputValueRow: UnsafeRow): Int = inputValueRow.getInt(0)
 
-  def append(key: Int, value: Int)(implicit manager: SymmetricHashJoinStateManager): Unit = {
-    manager.append(toJoinKeyRow(key), toInputValue(value))
+  def append(key: Int, value: Int)(implicit manager: StreamingJoinStateManager): Unit = {
+    manager.append(toJoinKeyRow(key), toInputValue(value), matched = false)
   }
 
-  def get(key: Int)(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+  def get(key: Int)(implicit manager: StreamingJoinStateManager): Seq[Int] = {
     manager.get(toJoinKeyRow(key)).map(toValueInt).toSeq.sorted
   }
 
   /** Remove keys (and corresponding values) where `time <= threshold` */
-  def removeByKey(threshold: Long)(implicit manager: SymmetricHashJoinStateManager): Unit = {
+  def removeByKey(threshold: Long)(implicit manager: StreamingJoinStateManager): Unit = {
     val expr =
       LessThanOrEqual(
         BoundReference(
@@ -142,27 +152,28 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   }
 
   /** Remove values where `time <= threshold` */
-  def removeByValue(watermark: Long)(implicit manager: SymmetricHashJoinStateManager): Unit = {
+  def removeByValue(watermark: Long)(implicit manager: StreamingJoinStateManager): Unit = {
     val expr = LessThanOrEqual(inputValueAttribWithWatermark, Literal(watermark))
     val iter = manager.removeByValueCondition(
       GeneratePredicate.generate(expr, inputValueAttribs).eval _)
     while (iter.hasNext) iter.next()
   }
 
-  def numRows(implicit manager: SymmetricHashJoinStateManager): Long = {
+  def numRows(implicit manager: StreamingJoinStateManager): Long = {
     manager.metrics.numKeys
   }
 
-
   def withJoinStateManager(
     inputValueAttribs: Seq[Attribute],
-    joinKeyExprs: Seq[Expression])(f: SymmetricHashJoinStateManager => Unit): Unit = {
+    joinKeyExprs: Seq[Expression],
+    stateFormatVersion: Int)(f: StreamingJoinStateManager => Unit): Unit = {
 
     withTempDir { file =>
       val storeConf = new StateStoreConf()
       val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
-      val manager = new SymmetricHashJoinStateManager(
-        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration)
+      val manager = StreamingJoinStateManager.createStateManager(
+        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
+        stateFormatVersion)
       try {
         f(manager)
       } finally {
