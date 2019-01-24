@@ -178,9 +178,6 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
       for (rdf_slice in rdf_slices) {
         batch <- record_batch(rdf_slice)
         if (is.null(stream_writer)) {
-          # We should avoid private calls like 'close_on_exit' (CRAN disallows) but looks
-          # there's no exposed API for it. Here's a workaround but ideally this should
-          # be removed.
           stream <- FileOutputStream(fileName)
           schema <- batch$schema
           stream_writer <- RecordBatchStreamWriter(stream, schema)
