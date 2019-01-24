@@ -24,6 +24,7 @@ import org.apache.hadoop.security.Credentials
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationTokenProvider {
+  ExceptionThrowingDelegationTokenProvider.constructed = true
   throw new IllegalArgumentException
 
   override def serviceName: String = "throw"
@@ -39,15 +40,27 @@ private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationT
     creds: Credentials): Option[Long] = throw new IllegalArgumentException
 }
 
+private object ExceptionThrowingDelegationTokenProvider {
+  var constructed = false
+}
+
 class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
   private val hadoopConf = new Configuration()
 
   test("default configuration") {
+    ExceptionThrowingDelegationTokenProvider.constructed = false
     val manager = new HadoopDelegationTokenManager(new SparkConf(false), hadoopConf, null)
     assert(manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
     // This checks that providers are loaded independently and they have no effect on each other
+    assert(ExceptionThrowingDelegationTokenProvider.constructed)
     assert(!manager.isProviderLoaded("throw"))
+  }
+
+  test("disable hadoopfs credential provider") {
+    val sparkConf = new SparkConf(false).set("spark.security.credentials.hadoopfs.enabled", "false")
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+    assert(!manager.isProviderLoaded("hadoopfs"))
   }
 
   test("using deprecated configurations") {

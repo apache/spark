@@ -32,12 +32,6 @@ class HiveHadoopDelegationTokenManagerSuite extends SparkFunSuite {
     assert(manager.isProviderLoaded("hive"))
   }
 
-  test("disable hive credential provider") {
-    val sparkConf = new SparkConf(false).set("spark.security.credentials.hive.enabled", "false")
-    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
-    assert(!manager.isProviderLoaded("hive"))
-  }
-
   test("using deprecated configurations") {
     val sparkConf = new SparkConf(false)
       .set("spark.yarn.security.credentials.hive.enabled", "false")
