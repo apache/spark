@@ -85,3 +85,4 @@ private[noop] object NoopStreamingDataWriterFactory extends StreamingDataWriterF
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = NoopWriter
 }
+
