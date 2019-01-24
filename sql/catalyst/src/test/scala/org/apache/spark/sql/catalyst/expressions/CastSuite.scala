@@ -934,28 +934,4 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Cast.mayTruncate(DoubleType, ByteType))
     assert(Cast.mayTruncate(DecimalType.IntDecimal, ByteType))
   }
-
-  test("canSafeCast and mayTruncate must be consistent for numeric types") {
-    import DataTypeTestUtils._
-
-    def isCastSafe(from: NumericType, to: NumericType): Boolean = (from, to) match {
-      case (_, dt: DecimalType) => dt.isWiderThan(from)
-      case (dt: DecimalType, _) => dt.isTighterThan(to)
-      case _ => numericPrecedence.indexOf(from) <= numericPrecedence.indexOf(to)
-    }
-
-    numericTypes.foreach { from =>
-      val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
-
-      safeTargetTypes.foreach { to =>
-        assert(Cast.canSafeCast(from, to), s"It should be possible to safely cast $from to $to")
-        assert(!Cast.mayTruncate(from, to), s"No truncation is expected when casting $from to $to")
-      }
-
-      unsafeTargetTypes.foreach { to =>
-        assert(!Cast.canSafeCast(from, to), s"It shouldn't be possible to safely cast $from to $to")
-        assert(Cast.mayTruncate(from, to), s"Truncation is expected when casting $from to $to")
-      }
-    }
-  }
 }
