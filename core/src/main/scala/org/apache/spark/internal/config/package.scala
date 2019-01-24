@@ -634,13 +634,15 @@ package object config {
         "in bytes. This is to avoid a giant request takes too much memory. Note this " +
         "configuration will affect both shuffle fetch and block manager remote block fetch. " +
         "For users who enabled external shuffle service, this feature can only work when " +
-        "external shuffle service is newer than Spark 2.2.")
+        "external shuffle service is at least 2.3.0.")
       .bytesConf(ByteUnit.BYTE)
       // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
       // as well use fetch-to-disk in that case.  The message includes some metadata in addition
       // to the block data itself (in particular UploadBlock has a lot of metadata), so we leave
       // extra room.
-      .checkValue(_ <= Int.MaxValue - 512, "maxRemoteBlockSizeFetchToMem must be less than 2GB.")
+      .checkValue(
+        _ <= Int.MaxValue - 512,
+        "maxRemoteBlockSizeFetchToMem must be less than (Int.MaxValue - 512) bytes.")
       .createWithDefaultString("200m")
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
