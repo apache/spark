@@ -178,7 +178,7 @@ private[sql] class JacksonGenerator(
     var i = 0
     while (i < row.numFields) {
       val field = schema(i)
-      if (!row.isNullAt(i)) {
+      if (!row.isNullAt(i) || field.dataType == NullType) {
         gen.writeFieldName(field.name)
         fieldWriters(i).apply(row, i)
       }

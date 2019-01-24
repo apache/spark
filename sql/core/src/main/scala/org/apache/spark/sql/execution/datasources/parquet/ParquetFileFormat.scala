@@ -453,17 +453,17 @@ class ParquetFileFormat
     }
   }
 
-  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+  override def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true
 
-    case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
+    case st: StructType => st.forall { f => supportsDataType(f.dataType) }
 
-    case ArrayType(elementType, _) => supportDataType(elementType, isReadPath)
+    case ArrayType(elementType, _) => supportsDataType(elementType)
 
     case MapType(keyType, valueType, _) =>
-      supportDataType(keyType, isReadPath) && supportDataType(valueType, isReadPath)
+      supportsDataType(keyType) && supportsDataType(valueType)
 
-    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
+    case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
 
     case _ => false
   }
