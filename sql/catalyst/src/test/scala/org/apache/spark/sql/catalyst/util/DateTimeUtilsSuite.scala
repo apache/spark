@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.LocalDate
-import java.util.{Calendar, Locale, TimeZone}
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
@@ -517,20 +517,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with DateTimeTestUtils {
   }
 
   test("daysToMillis and millisToDays") {
-    val c = Calendar.getInstance(TimeZonePST)
+    val input = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, 16, tz = TimeZonePST))
+    assert(millisToDays(input, TimeZonePST) === 16800)
+    assert(millisToDays(input, TimeZoneGMT) === 16801)
 
-    c.set(2015, 11, 31, 16, 0, 0)
-    assert(millisToDays(c.getTimeInMillis, TimeZonePST) === 16800)
-    assert(millisToDays(c.getTimeInMillis, TimeZoneGMT) === 16801)
+    var expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZonePST))
+    assert(daysToMillis(16800, TimeZonePST) === expected)
 
-    c.set(2015, 11, 31, 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
-    assert(daysToMillis(16800, TimeZonePST) === c.getTimeInMillis)
-
-    c.setTimeZone(TimeZoneGMT)
-    c.set(2015, 11, 31, 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
-    assert(daysToMillis(16800, TimeZoneGMT) === c.getTimeInMillis)
+    expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZoneGMT))
+    assert(daysToMillis(16800, TimeZoneGMT) === expected)
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
