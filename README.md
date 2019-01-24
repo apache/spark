@@ -1,11 +1,7 @@
+# Apache Spark
+
 [![Jenkins Build](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-2.7/badge/icon)](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-2.7)
 [![AppVeyor Build](https://img.shields.io/appveyor/ci/ApacheSoftwareFoundation/spark/master.svg?style=plastic&logo=appveyor)](https://ci.appveyor.com/project/ApacheSoftwareFoundation/spark)
-
-<p align="center">
-  <a href="http://spark.apache.org">
-    <img src="https://spark.apache.org/images/spark-logo-trademark.png" alt="Apache Spark Logo">
-  </a>
-</p>
 
 Spark is a fast and general cluster computing system for Big Data. It provides
 high-level APIs in Scala, Java, Python, and R, and an optimized engine that
@@ -13,6 +9,9 @@ supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
 MLlib for machine learning, GraphX for graph processing,
 and Spark Streaming for stream processing.
+
+<http://spark.apache.org/>
+
 
 ## Online Documentation
 
