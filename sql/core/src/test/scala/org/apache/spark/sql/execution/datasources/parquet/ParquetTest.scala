@@ -31,7 +31,7 @@ import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetM
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.{DataFrame, SaveMode}
-import org.apache.spark.sql.execution.datasources.DataSourceTest
+import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  * convenient to use tuples rather than special case classes when writing test cases/suites.
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
-private[sql] trait ParquetTest extends DataSourceTest {
+private[sql] trait ParquetTest extends FileBasedDataSourceTest {
 
   override protected val dataSourceName: String = "parquet"
   override protected val vectorizedReaderEnabledKey: String =

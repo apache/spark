@@ -25,7 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.DataSourceTest
+import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 
@@ -43,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *   -> OrcFilterSuite
  *   -> HiveOrcFilterSuite
  */
-abstract class OrcTest extends QueryTest with DataSourceTest with BeforeAndAfterAll {
+abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
   import testImplicits._
 
   val orcImp: String = "native"

@@ -25,13 +25,13 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.test.SQLTestUtils
 
-private[sql] trait DataSourceTest extends SQLTestUtils {
+private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
 
   protected val dataSourceName: String
   protected val vectorizedReaderEnabledKey: String
 
   /**
-   * Reads data source file from given `path` as `DataFrame` and pass it to given function.
+   * Reads data source file from given `path` as `DataFrame` and passes it to given function.
    *
    * @param path           The path to file
    * @param testVectorized Whether to read the file with vectorized reader. If the data source
