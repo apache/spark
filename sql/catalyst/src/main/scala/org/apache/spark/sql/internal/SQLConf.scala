@@ -581,15 +581,6 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
-  val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
-    .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
-      "to produce the partition columns instead of table scans. It applies when all the columns " +
-      "scanned are partition columns and the query has an aggregate operator that satisfies " +
-      "distinct semantics. By default the optimization is disabled, since it may return " +
-      "incorrect results with empty tables.")
-    .booleanConf
-    .createWithDefault(false)
-
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
     .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
       "to parse.")
@@ -1783,8 +1774,6 @@ class SQLConf extends Serializable with Logging {
   def compareDateTimestampInTimestamp : Boolean = getConf(COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
-
-  def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
