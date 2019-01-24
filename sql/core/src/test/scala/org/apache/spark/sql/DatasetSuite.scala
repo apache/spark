@@ -1678,6 +1678,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(serializer.serializer.size == 1)
     checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
+
+  test("SPARK-26706: Fix Cast.mayTruncate for bytes") {
+    val thrownException = intercept[AnalysisException] {
+      spark.range(Long.MaxValue - 10, Long.MaxValue).as[Byte]
+        .map(b => b - 1)
+        .collect()
+    }
+    assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
