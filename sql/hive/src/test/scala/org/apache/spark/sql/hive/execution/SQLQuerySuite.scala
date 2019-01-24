@@ -86,17 +86,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(message.contains("Table or view not found"))
   }
 
-  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
-      withTable("t") {
-        sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
-        sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
-        checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
-        checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
-      }
-    }
-  }
-
   test("script") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     assume(TestUtils.testCommandAvailable("echo | sed"))
@@ -1781,7 +1770,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  ignore("SPARK-15752 optimize metadata only query for hive table") {
+  test("SPARK-15752 optimize metadata only query for hive table") {
     withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
       withTable("data_15752", "srcpart_15752", "srctext_15752") {
         val df = Seq((1, "2"), (3, "4")).toDF("key", "value")
@@ -2337,6 +2326,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         // check if the stats can be calculated without Cast exception.
         sql("select * from all_null where attr1 < 1").queryExecution.stringWithStats
         sql("select * from all_null where attr1 < attr2").queryExecution.stringWithStats
+      }
+    }
+  }
+
+  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
+    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+          sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+          if (enableOptimizeMetadataOnlyQuery) {
+            // The result is wrong if we enable the configuration.
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
+          } else {
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+          }
+          checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
+        }
       }
     }
   }

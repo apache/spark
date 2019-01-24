@@ -58,7 +58,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   private def testMetadataOnly(name: String, sqls: String*): Unit = {
-    ignore(name) {
+    test(name) {
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
         sqls.foreach { case q => assertMetadataOnlyQuery(sql(q)) }
       }
@@ -69,7 +69,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   private def testNotMetadataOnly(name: String, sqls: String*): Unit = {
-    ignore(name) {
+    test(name) {
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
         sqls.foreach { case q => assertNotMetadataOnlyQuery(sql(q)) }
       }
