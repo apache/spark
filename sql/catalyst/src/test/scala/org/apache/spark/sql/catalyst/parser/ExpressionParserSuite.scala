@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
  * CheckAnalysis classes.
  */
-class ExpressionParserSuite extends PlanTest {
+class ExpressionParserSuite extends PlanTest with DateTimeTestUtils {
   import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
@@ -692,7 +692,7 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("timestamp literals") {
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+    outstandingTimezones.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
         def toMicros(time: LocalDateTime): Long = {
           val seconds = time.atZone(timeZone.toZoneId).toInstant.getEpochSecond
@@ -714,7 +714,7 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("date literals") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+    outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         assertEval("DATE '2019-01-14'", 17910)
         assertEval("DATE '2019-01'", 17897)

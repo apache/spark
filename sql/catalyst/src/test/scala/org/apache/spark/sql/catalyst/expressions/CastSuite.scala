@@ -18,16 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.util.{Calendar, Locale, TimeZone}
-
-import scala.util.Random
+import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -35,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test suite for data type casting expression [[Cast]].
  */
-class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
+class CastSuite extends SparkFunSuite with ExpressionEvalHelper with DateTimeTestUtils {
 
   private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {

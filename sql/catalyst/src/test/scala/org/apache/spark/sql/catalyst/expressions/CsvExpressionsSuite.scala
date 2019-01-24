@@ -30,7 +30,11 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
+class CsvExpressionsSuite
+  extends SparkFunSuite
+  with ExpressionEvalHelper
+  with PlanTestBase
+  with DateTimeTestUtils {
   val badCsv = "\u0000\u0000\u0000A\u0001AAA"
 
   val gmtId = Option(DateTimeUtils.TimeZoneGMT.getID)
@@ -90,7 +94,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     )
 
     val csvData2 = "2016-01-01T00:00:00"
-    for (tz <- DateTimeTestUtils.outstandingTimezones) {
+    for (tz <- outstandingTimezones) {
       c = Calendar.getInstance(tz)
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)

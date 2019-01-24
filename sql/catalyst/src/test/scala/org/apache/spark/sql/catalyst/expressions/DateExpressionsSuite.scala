@@ -24,13 +24,12 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with DateTimeTestUtils {
 
   import IntegralLiteralTestUtils._
 

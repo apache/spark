@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 
-class DateFormatterSuite extends SparkFunSuite with SQLHelper {
+class DateFormatterSuite extends SparkFunSuite with SQLHelper with DateTimeTestUtils {
   test("parsing dates") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+    outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         val formatter = DateFormatter()
         val daysSinceEpoch = formatter.parse("2018-12-02")
@@ -37,7 +37,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("format dates") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+    outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         val formatter = DateFormatter()
         val date = formatter.format(17867)
@@ -57,7 +57,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       "2018-12-12",
       "2038-01-01",
       "5010-11-17").foreach { date =>
-      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      outstandingTimezonesIds.foreach { timeZone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
           val formatter = DateFormatter()
           val days = formatter.parse(date)
@@ -80,7 +80,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       17877,
       24837,
       1110657).foreach { days =>
-      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      outstandingTimezonesIds.foreach { timeZone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
           val formatter = DateFormatter()
           val date = formatter.format(days)

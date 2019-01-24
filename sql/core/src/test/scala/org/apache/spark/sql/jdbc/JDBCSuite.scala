@@ -40,7 +40,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends QueryTest
-  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
+  with BeforeAndAfter
+  with PrivateMethodTester
+  with SharedSQLContext
+  with DateTimeTestUtils {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -1525,7 +1528,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("support casting patterns for lower/upper bounds of TimestampType") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+    outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         Seq(
           ("1972-07-04 03:30:00", "1972-07-15 20:50:32.5", "1972-07-27 14:11:05"),

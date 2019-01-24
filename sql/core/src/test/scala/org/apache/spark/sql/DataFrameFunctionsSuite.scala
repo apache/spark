@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
-class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
+class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext with DateTimeTestUtils {
   import testImplicits._
 
   test("array with column name") {
@@ -912,7 +912,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00")))))
 
-    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+    withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
       checkAnswer(
         spark.sql("select sequence(" +
           "   cast('2018-01-01' as date)" +
