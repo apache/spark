@@ -125,7 +125,7 @@ case class WatermarkTracker(policy: MultipleWatermarkPolicy) extends Logging {
       case s: StatefulOperator => s
     }
 
-    statefulOperators.foreach(statefulOperator => {
+    statefulOperators.foreach { statefulOperator =>
       // find the first event time child node(s)
       val eventTimeExecs = statefulOperator match {
         case op: UnaryExecNode =>
@@ -143,7 +143,7 @@ case class WatermarkTracker(policy: MultipleWatermarkPolicy) extends Logging {
       }
 
       // compute watermark for the stateful operator node
-      statefulOperator.stateInfo.foreach(state => {
+      statefulOperator.stateInfo.foreach { state =>
         if (eventTimeExecs.nonEmpty) {
           updateWaterMarkMap(eventTimeExecs,
             statefulOperatorToEventTimeMap.getOrElseUpdate(state.operatorId,
@@ -154,8 +154,8 @@ case class WatermarkTracker(policy: MultipleWatermarkPolicy) extends Logging {
             statefulOperatorToWatermark.put(state.operatorId, newWatermarkMs)
           }
         }
-      })
-    })
+      }
+    }
 
 
     // Update the global watermark to the minimum of all watermark nodes.

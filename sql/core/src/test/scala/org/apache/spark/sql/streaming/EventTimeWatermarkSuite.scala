@@ -364,8 +364,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
                                 // window2 [15 - 20] -> (1,1), (2,2) is retained in state2
                                 // since watermark of group2 is at 10
         CheckNewAnswer(),
-        assertNumTotalStateRows(3), // {[25-30],25} -> 1 in state1 and
-                                    // {[30-35],1} -> 1, {[30-35],1} -> 1 {[30-35],2} -> 2 in state2
+        assertNumTotalStateRows(3), // [25 - 30] -> (25,1) in state1 and
+                                    // [15 - 20] -> (1,1), (2,2) in state2
         AddData(inputData, 26, 26, 27),
         CheckNewAnswer(),
         AddData(inputData, 40), // watermark -> group1 = 30 , group2 = 25
@@ -422,7 +422,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
                                 // window1 [40 - 45] -> (40,1) is emitted down
                                 // window1 [55 - 60] -> (55, 1) is retained in state1
                                 // window2 [30 - 35] -> (1,2), (2,1) is emitted out
-                                // window2 [40 - 45] -> (40, 1) is retained in state2
+                                // window2 [40 - 45] -> (1, 1) is retained in state2
         CheckAnswer((30, 1, 2), (30, 2, 1))
       )
     }

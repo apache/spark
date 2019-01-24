@@ -96,7 +96,7 @@ object UnsupportedOperationChecker {
     // Disallow some output mode
     outputMode match {
       case InternalOutputModes.Append if aggregates.nonEmpty =>
-        aggregates.foreach(aggregate => {
+        aggregates.foreach { aggregate =>
           // Find any attributes that are associated with an eventTime watermark.
           val watermarkAttributes = aggregate.groupingExpressions.collect {
             case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
@@ -109,7 +109,7 @@ object UnsupportedOperationChecker {
               s"$outputMode output mode not supported when there are streaming aggregations on " +
                 s"streaming DataFrames/DataSets without watermark")(plan)
           }
-        })
+        }
 
       case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
