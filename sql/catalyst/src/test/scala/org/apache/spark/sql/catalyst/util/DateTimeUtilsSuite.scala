@@ -441,7 +441,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c2.set(2000, 1, 29, 10, 30, 0)
     c2.set(Calendar.MILLISECOND, 123)
     val ts2 = c2.getTimeInMillis * 1000L
-    assert(timestampAddInterval(ts1, 36, 123000) === ts2)
+    assert(timestampAddInterval(ts1, 36, 123000, defaultTimeZone()) === ts2)
 
     val c3 = Calendar.getInstance(TimeZonePST)
     c3.set(1997, 1, 27, 16, 0, 0)
