@@ -52,7 +52,9 @@ class NoopStreamSuite extends StreamTest {
     assert(query.isActive)
     try {
       input.addData(1, 2, 3)
-      query.processAllAvailable()
+      failAfter(streamingTimeout) {
+        query.processAllAvailable()
+      }
     } finally {
       query.stop()
     }
