@@ -1690,8 +1690,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {
     def assertExecutionId: UserDefinedFunction = udf(AssertExecutionId.apply _)
-      spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
-    }
+    spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
   }
 }
 
