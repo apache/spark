@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, IOException}
+import java.io.File
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
@@ -60,35 +60,24 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private var server: TransportServer = _
 
-  private final val  MAX_DIR_CREATION_ATTEMPTS = 10
-
   private val shuffleServiceSource = new ExternalShuffleServiceSource
-
-  protected def createDirectory(root: String, name: String): File = {
-    var attempts = 0
-    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
-    var dir: File = null
-    while (dir == null) {
-      attempts += 1
-      if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-          maxAttempts + " attempts!")
-      }
-      try {
-        dir = new File(root, "registeredExecutors")
-        if (!dir.exists() && !dir.mkdirs()) {
-          dir = null
-        }
-      } catch { case e: SecurityException => dir = null; }
-    }
-    logInfo(s"registeredExecutorsDb path is ${dir.getAbsolutePath}")
-    new File(dir.getAbsolutePath, name)
-  }
 
   protected def initRegisteredExecutorsDB(dbName: String): File = {
     val localDirs = sparkConf.get("spark.local.dir", "").split(",")
-    if (localDirs.length >= 1 && !"".equals(localDirs(0))) {
-      createDirectory(localDirs(0), dbName)
+    var dbFile: File = null
+    if (localDirs.length >= 1) {
+      for (dir <- localDirs) {
+        val tmpFile = new File(dir, dbName)
+        if (tmpFile.exists()) {
+          dbFile = tmpFile
+        }
+      }
+      if (dbFile != null) {
+        dbFile
+      }
+      else {
+        new File(localDirs(0), dbName)
+      }
     }
     else {
       logWarning(s"'spark.local.dir' should be set first.")
