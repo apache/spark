@@ -141,7 +141,7 @@ final class ShuffleBlockFetcherIterator(
 
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
-   * longer place fetched blocks into [[results]].
+   * longer place fetched blocks into [[results]] and the iterator is marked as fully consumed.
    */
   @GuardedBy("this")
   private[this] var isZombie = false
@@ -372,7 +372,7 @@ final class ShuffleBlockFetcherIterator(
     logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime))
   }
 
-  override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
+  override def hasNext: Boolean = !isZombie && (numBlocksProcessed < numBlocksToFetch)
 
   /**
    * Fetches the next (BlockId, InputStream). If a task fails, the ManagedBuffers
@@ -395,7 +395,7 @@ final class ShuffleBlockFetcherIterator(
     // then fetch it one more time if it's corrupt, throw FailureFetchResult if the second fetch
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
-    while (result == null) {
+    while (!isZombie && result == null) {
       val startFetchWait = System.currentTimeMillis()
       result = results.take()
       val stopFetchWait = System.currentTimeMillis()
@@ -489,8 +489,12 @@ final class ShuffleBlockFetcherIterator(
       fetchUpToMaxBytes()
     }
 
-    currentResult = result.asInstanceOf[SuccessFetchResult]
-    (currentResult.blockId, new BufferReleasingInputStream(input, this))
+    if (result != null) {
+      currentResult = result.asInstanceOf[SuccessFetchResult]
+      (currentResult.blockId, new BufferReleasingInputStream(input, this))
+    } else { // the iterator has already be closed
+      throw new NoSuchElementException
+    }
   }
 
   private def fetchUpToMaxBytes(): Unit = {
