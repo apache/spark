@@ -20,15 +20,16 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
+import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -1686,6 +1687,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         .collect()
     }
     assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+  }
+
+  test("SPARK-26690: checkpoints should be executed with an execution id") {
+    def assertExecutionId: UserDefinedFunction = udf(AssertExecutionId.apply _)
+    spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
+  }
+}
+
+object AssertExecutionId {
+  def apply(id: Long): Long = {
+    assert(TaskContext.get().getLocalProperty(SQLExecution.EXECUTION_ID_KEY) != null)
+    id
   }
 }
 
