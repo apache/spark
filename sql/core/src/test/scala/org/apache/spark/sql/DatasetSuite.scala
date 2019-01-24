@@ -1687,6 +1687,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
   }
+
+  test("SPARK-26690: checkpoints should be executed with an execution id") {
+    def assertExecutionId: UserDefinedFunction = udf(AssertExecutionId.apply _)
+      spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
+    }
+  }
+}
+
+object AssertExecutionId {
+  def apply(id: Long): Long = {
+    assert(TaskContext.get().getLocalProperty(SQLExecution.EXECUTION_ID_KEY) != null)
+    id
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
