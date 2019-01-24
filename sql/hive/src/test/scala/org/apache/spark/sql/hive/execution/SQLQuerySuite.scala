@@ -86,6 +86,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(message.contains("Table or view not found"))
   }
 
+  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
+    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
+      withTable("t") {
+        sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+        sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+        checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+        checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
+      }
+    }
+  }
+
   test("script") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     assume(TestUtils.testCommandAvailable("echo | sed"))
@@ -1767,6 +1778,95 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("select (cast(99 as decimal(19,6)) + c1) * c2 from tbl"),
         Row(234.6)
       )
+    }
+  }
+
+  ignore("SPARK-15752 optimize metadata only query for hive table") {
+    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
+      withTable("data_15752", "srcpart_15752", "srctext_15752") {
+        val df = Seq((1, "2"), (3, "4")).toDF("key", "value")
+        df.createOrReplaceTempView("data_15752")
+        sql(
+          """
+            |CREATE TABLE srcpart_15752 (col1 INT, col2 STRING)
+            |PARTITIONED BY (partcol1 INT, partcol2 STRING) STORED AS parquet
+          """.stripMargin)
+        for (partcol1 <- Seq(0, 1); partcol2 <- Seq("a", "b")) {
+          sql(
+            s"""
+              |INSERT OVERWRITE TABLE srcpart_15752
+              |PARTITION (partcol1='$partcol1', partcol2='$partcol2')
+              |select key, value from data_15752
+            """.stripMargin)
+        }
+        checkAnswer(
+          sql("select partcol1 from srcpart_15752 group by partcol1"),
+          Row(0) :: Row(1) :: Nil)
+        checkAnswer(
+          sql("select partcol1 from srcpart_15752 where partcol1 = 1 group by partcol1"),
+          Row(1))
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srcpart_15752 group by partcol1"),
+          Row(0, 2) :: Row(1, 2) :: Nil)
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srcpart_15752 where partcol1 = 1 " +
+            "group by partcol1"),
+          Row(1, 2) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srcpart_15752"), Row(0) :: Row(1) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srcpart_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(
+          sql("select distinct col from (select partcol1 + 1 as col from srcpart_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+        checkAnswer(sql("select distinct partcol1 from srcpart_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(sql("select max(partcol1) from srcpart_15752"), Row(1))
+        checkAnswer(sql("select max(partcol1) from srcpart_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(sql("select max(partcol1) from (select partcol1 from srcpart_15752) t"), Row(1))
+        checkAnswer(
+          sql("select max(col) from (select partcol1 + 1 as col from srcpart_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+
+        sql(
+          """
+            |CREATE TABLE srctext_15752 (col1 INT, col2 STRING)
+            |PARTITIONED BY (partcol1 INT, partcol2 STRING) STORED AS textfile
+          """.stripMargin)
+        for (partcol1 <- Seq(0, 1); partcol2 <- Seq("a", "b")) {
+          sql(
+            s"""
+              |INSERT OVERWRITE TABLE srctext_15752
+              |PARTITION (partcol1='$partcol1', partcol2='$partcol2')
+              |select key, value from data_15752
+            """.stripMargin)
+        }
+        checkAnswer(
+          sql("select partcol1 from srctext_15752 group by partcol1"),
+          Row(0) :: Row(1) :: Nil)
+        checkAnswer(
+          sql("select partcol1 from srctext_15752 where partcol1 = 1 group by partcol1"),
+          Row(1))
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srctext_15752 group by partcol1"),
+          Row(0, 2) :: Row(1, 2) :: Nil)
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srctext_15752  where partcol1 = 1 " +
+            "group by partcol1"),
+          Row(1, 2) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srctext_15752"), Row(0) :: Row(1) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srctext_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(
+          sql("select distinct col from (select partcol1 + 1 as col from srctext_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+        checkAnswer(sql("select max(partcol1) from srctext_15752"), Row(1))
+        checkAnswer(sql("select max(partcol1) from srctext_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(sql("select max(partcol1) from (select partcol1 from srctext_15752) t"), Row(1))
+        checkAnswer(
+          sql("select max(col) from (select partcol1 + 1 as col from srctext_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+      }
     }
   }
 
