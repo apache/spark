@@ -150,11 +150,10 @@ getDefaultSqlSource <- function() {
 writeToFileInArrow <- function(fileName, rdf, numPartitions) {
   requireNamespace1 <- requireNamespace
 
-  # R API in Arrow is not yet released in CRAN (see ARROW-3204). CRAN requires to add the
+  # R API in Arrow is not yet released in CRAN. CRAN requires to add the
   # package in requireNamespace at DESCRIPTION. Later, CRAN checks if the package is available
   # or not. Therefore, it works around by avoiding direct requireNamespace.
-  # Currently, as of Arrow 0.12.0, it can be installed, for instance, by
-  # `Rscript -e 'remotes::install_github("apache/arrow@apache-arrow-0.12.0", subdir = "r")'`
+  # Currently, as of Arrow 0.12.0, it can be installed by install_github. See ARROW-3204.
   if (requireNamespace1("arrow", quietly = TRUE)) {
     record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
     RecordBatchStreamWriter <- get(
