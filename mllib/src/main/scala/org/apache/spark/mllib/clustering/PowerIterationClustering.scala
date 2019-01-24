@@ -378,6 +378,27 @@ object PowerIterationClustering extends Logging {
       logInfo(s"$msgPrefix: delta = $delta.")
       diffDelta = math.abs(delta - prevDelta)
       logInfo(s"$msgPrefix: diff(delta) = $diffDelta.")
+
+      if (math.abs(diffDelta) < tol) {
+        /**
+         * Power Iteration fails to converge if absolute value of top 2 eigen values are equal,
+         * but with opposite sign. The resultant vector flip-flops between two vectors.
+         * We should give an exception, if we detect the failure of the convergence of the
+         * power iteration
+         */
+
+        // Rayleigh quotient = x^tAx / x^tx
+        val xTAx = curG.joinVertices(v) {
+          case (_, x, y) => x * y
+        }.vertices.values.sum()
+        val xTx = curG.vertices.mapValues(x => x * x).values.sum()
+        val rayleigh = xTAx / xTx
+
+        if (math.abs(norm - math.abs(rayleigh)) > tol) {
+          logWarning(s"Power Iteration fail to converge. delta = ${delta}," +
+            s" difference delta = ${diffDelta} and norm = ${norm}")
+        }
+      }
       // update v
       curG = Graph(VertexRDD(v1), g.edges)
       prevDelta = delta

@@ -17,10 +17,11 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
-import org.mockito.Matchers
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
@@ -36,10 +37,10 @@ object KubernetesFeaturesTestUtils {
 
     when(mockStep.getAdditionalPodSystemProperties())
       .thenReturn(Map(stepType -> stepType))
-    when(mockStep.configurePod(Matchers.any(classOf[SparkPod])))
+    when(mockStep.configurePod(any(classOf[SparkPod])))
       .thenAnswer(new Answer[SparkPod]() {
         override def answer(invocation: InvocationOnMock): SparkPod = {
-          val originalPod = invocation.getArgumentAt(0, classOf[SparkPod])
+          val originalPod: SparkPod = invocation.getArgument(0)
           val configuredPod = new PodBuilder(originalPod.pod)
             .editOrNewMetadata()
             .addToLabels(stepType, stepType)
@@ -62,5 +63,10 @@ object KubernetesFeaturesTestUtils {
 
   def containerHasEnvVar(container: Container, envVarName: String): Boolean = {
     container.getEnv.asScala.exists(envVar => envVar.getName == envVarName)
+  }
+
+  def filter[T: ClassTag](list: Seq[HasMetadata]): Seq[T] = {
+    val desired = implicitly[ClassTag[T]].runtimeClass
+    list.filter(_.getClass() == desired).map(_.asInstanceOf[T]).toSeq
   }
 }

@@ -25,9 +25,17 @@ private[spark] object History {
 
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
 
-  val EVENT_LOG_DIR = ConfigBuilder("spark.history.fs.logDirectory")
+  val HISTORY_LOG_DIR = ConfigBuilder("spark.history.fs.logDirectory")
     .stringConf
     .createWithDefault(DEFAULT_LOG_DIR)
+
+  val SAFEMODE_CHECK_INTERVAL_S = ConfigBuilder("spark.history.fs.safemodeCheck.interval")
+    .timeConf(TimeUnit.SECONDS)
+    .createWithDefaultString("5s")
+
+  val UPDATE_INTERVAL_S = ConfigBuilder("spark.history.fs.update.interval")
+    .timeConf(TimeUnit.SECONDS)
+    .createWithDefaultString("10s")
 
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .booleanConf
@@ -79,4 +87,42 @@ private[spark] object History {
 
   val MAX_DRIVER_LOG_AGE_S = ConfigBuilder("spark.history.fs.driverlog.cleaner.maxAge")
     .fallbackConf(MAX_LOG_AGE_S)
+
+  val HISTORY_SERVER_UI_ACLS_ENABLE = ConfigBuilder("spark.history.ui.acls.enable")
+    .booleanConf
+    .createWithDefault(false)
+
+  val HISTORY_SERVER_UI_ADMIN_ACLS = ConfigBuilder("spark.history.ui.admin.acls")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  val HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS = ConfigBuilder("spark.history.ui.admin.acls.groups")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  val NUM_REPLAY_THREADS = ConfigBuilder("spark.history.fs.numReplayThreads")
+    .intConf
+    .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
+
+  val RETAINED_APPLICATIONS = ConfigBuilder("spark.history.retainedApplications")
+    .intConf
+    .createWithDefault(50)
+
+  val PROVIDER = ConfigBuilder("spark.history.provider")
+    .stringConf
+    .createOptional
+
+  val KERBEROS_ENABLED = ConfigBuilder("spark.history.kerberos.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  val KERBEROS_PRINCIPAL = ConfigBuilder("spark.history.kerberos.principal")
+    .stringConf
+    .createOptional
+
+  val KERBEROS_KEYTAB = ConfigBuilder("spark.history.kerberos.keytab")
+    .stringConf
+    .createOptional
 }

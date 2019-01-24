@@ -40,7 +40,7 @@ private[spark] object Kafka {
         "Kafka's JAAS config or in Kafka's config. For further details please see kafka " +
         "documentation. Only used to obtain delegation token.")
       .stringConf
-      .createOptional
+      .createWithDefault("kafka")
 
   val TRUSTSTORE_LOCATION =
     ConfigBuilder("spark.kafka.ssl.truststore.location")
@@ -79,4 +79,13 @@ private[spark] object Kafka {
         "For further details please see kafka documentation. Only used to obtain delegation token.")
       .stringConf
       .createOptional
+
+  val TOKEN_SASL_MECHANISM =
+    ConfigBuilder("spark.kafka.sasl.token.mechanism")
+      .doc("SASL mechanism used for client connections with delegation token. Because SCRAM " +
+        "login module used for authentication a compatible mechanism has to be set here. " +
+        "For further details please see kafka documentation (sasl.mechanism). Only used to " +
+        "authenticate against Kafka broker with delegation token.")
+      .stringConf
+      .createWithDefault("SCRAM-SHA-512")
 }

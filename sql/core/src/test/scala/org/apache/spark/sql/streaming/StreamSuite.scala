@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
@@ -96,18 +95,16 @@ class StreamSuite extends StreamTest {
     val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
       case s: StreamingRelationV2 => s
     }
-    assert(streamingRelation.nonEmpty, "cannot find StreamingExecutionRelation")
+    assert(streamingRelation.nonEmpty, "cannot find StreamingRelationV2")
     assert(
       streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("StreamingExecutionRelation.computeStats") {
-    val streamingExecutionRelation = MemoryStream[Int].toDF.logicalPlan collect {
-      case s: StreamingExecutionRelation => s
-    }
-    assert(streamingExecutionRelation.nonEmpty, "cannot find StreamingExecutionRelation")
-    assert(streamingExecutionRelation.head.computeStats.sizeInBytes
-      == spark.sessionState.conf.defaultSizeInBytes)
+    val memoryStream = MemoryStream[Int]
+    val executionRelation = StreamingExecutionRelation(
+      memoryStream, memoryStream.encoder.schema.toAttributes)(memoryStream.sqlContext.sparkSession)
+    assert(executionRelation.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("explain join with a normal source") {
@@ -312,7 +309,7 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock),
 
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
@@ -353,7 +350,7 @@ class StreamSuite extends StreamTest {
 
       /* Stop then restart the Stream  */
       StopStream,
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
       /* -- batch 1 no rerun ----------------- */
       // batch 1 would not re-run because the latest batch id logged in commit log is 1
@@ -495,9 +492,9 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("ScanV2".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
@@ -505,9 +502,9 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("ScanV2".r
         .findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))

@@ -45,6 +45,7 @@ import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZ4CompressionCodec;
 import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.io.SnappyCompressionCodec;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -184,7 +185,7 @@ public class UnsafeShuffleWriterSuite {
         fin.getChannel().position(startOffset);
         InputStream in = new LimitedInputStream(fin, partitionSize);
         in = blockManager.serializerManager().wrapForEncryption(in);
-        if (conf.getBoolean("spark.shuffle.compress", true)) {
+        if ((boolean) conf.get(package$.MODULE$.SHUFFLE_COMPRESS())) {
           in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
         }
         try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
@@ -235,6 +236,7 @@ public class UnsafeShuffleWriterSuite {
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
+    assertEquals(0, spillFilesCreated.size());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
     assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
     assertEquals(0, taskMetrics.shuffleWriteMetrics().bytesWritten());
@@ -278,12 +280,12 @@ public class UnsafeShuffleWriterSuite {
       String compressionCodecName,
       boolean encrypt) throws Exception {
     if (compressionCodecName != null) {
-      conf.set("spark.shuffle.compress", "true");
+      conf.set(package$.MODULE$.SHUFFLE_COMPRESS(), true);
       conf.set("spark.io.compression.codec", compressionCodecName);
     } else {
-      conf.set("spark.shuffle.compress", "false");
+      conf.set(package$.MODULE$.SHUFFLE_COMPRESS(), false);
     }
-    conf.set(org.apache.spark.internal.config.package$.MODULE$.IO_ENCRYPTION_ENABLED(), encrypt);
+    conf.set(package$.MODULE$.IO_ENCRYPTION_ENABLED(), encrypt);
 
     SerializerManager manager;
     if (encrypt) {
@@ -389,7 +391,7 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void mergeSpillsWithCompressionAndEncryptionSlowPath() throws Exception {
-    conf.set("spark.shuffle.unsafe.fastMergeEnabled", "false");
+    conf.set(package$.MODULE$.SHUFFLE_UNDAFE_FAST_MERGE_ENABLE(), false);
     testMergingSpills(false, LZ4CompressionCodec.class.getName(), true);
   }
 
@@ -429,14 +431,14 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOff() throws Exception {
-    conf.set("spark.shuffle.sort.useRadixSort", "false");
+    conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), false);
     writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
     assertEquals(2, spillFilesCreated.size());
   }
 
   @Test
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOn() throws Exception {
-    conf.set("spark.shuffle.sort.useRadixSort", "true");
+    conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), true);
     writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
     assertEquals(3, spillFilesCreated.size());
   }

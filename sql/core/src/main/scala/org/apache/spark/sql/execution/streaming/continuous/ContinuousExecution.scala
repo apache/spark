@@ -30,8 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2StreamingScanExec, StreamingDataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{ContinuousScanExec, OldStreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
@@ -67,12 +68,12 @@ class ContinuousExecution(
     val toExecutionRelationMap = MutableMap[StreamingRelationV2, ContinuousExecutionRelation]()
     analyzedPlan.transform {
       case r @ StreamingRelationV2(
-          source: ContinuousReadSupportProvider, _, extraReaderOptions, output, _) =>
+          source: ContinuousReadSupportProvider, _, _, extraReaderOptions, output, _) =>
         // TODO: shall we create `ContinuousReadSupport` here instead of each reconfiguration?
         toExecutionRelationMap.getOrElseUpdate(r, {
           ContinuousExecutionRelation(source, extraReaderOptions, output)(sparkSession)
         })
-      case StreamingRelationV2(_, sourceName, _, _, _) =>
+      case StreamingRelationV2(_, sourceName, _, _, _, _) =>
         throw new UnsupportedOperationException(
           s"Data source $sourceName does not support continuous processing.")
     }
@@ -122,6 +123,8 @@ class ContinuousExecution(
     // For at least once, we can just ignore those reports and risk duplicates.
     commitLog.getLatest() match {
       case Some((latestEpochId, _)) =>
+        updateStatusMessage("Starting new streaming query " +
+          s"and getting offsets from latest epoch $latestEpochId")
         val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
           throw new IllegalStateException(
             s"Batch $latestEpochId was committed without end epoch offsets!")
@@ -133,6 +136,7 @@ class ContinuousExecution(
         nextOffsets
       case None =>
         // We are starting this stream for the first time. Offsets are all None.
+        updateStatusMessage("Starting new streaming query")
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
         OffsetSeq.fill(continuousSources.map(_ => null): _*)
@@ -167,17 +171,17 @@ class ContinuousExecution(
         val readSupport = continuousSources(insertedSourceId)
         insertedSourceId += 1
         val newOutput = readSupport.fullSchema().toAttributes
-
+        val maxFields = SQLConf.get.maxToStringFields
         assert(output.size == newOutput.size,
-          s"Invalid reader: ${truncatedString(output, ",")} != " +
-            s"${truncatedString(newOutput, ",")}")
+          s"Invalid reader: ${truncatedString(output, ",", maxFields)} != " +
+            s"${truncatedString(newOutput, ",", maxFields)}")
         replacements ++= output.zip(newOutput)
 
         val loggedOffset = offsets.offsets(0)
         val realOffset = loggedOffset.map(off => readSupport.deserializeOffset(off.json))
         val startOffset = realOffset.getOrElse(readSupport.initialOffset)
         val scanConfigBuilder = readSupport.newScanConfigBuilder(startOffset)
-        StreamingDataSourceV2Relation(newOutput, source, options, readSupport, scanConfigBuilder)
+        OldStreamingDataSourceV2Relation(newOutput, source, options, readSupport, scanConfigBuilder)
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
@@ -211,7 +215,7 @@ class ContinuousExecution(
     }
 
     val (readSupport, scanConfig) = lastExecution.executedPlan.collect {
-      case scan: DataSourceV2StreamingScanExec
+      case scan: ContinuousScanExec
           if scan.readSupport.isInstanceOf[ContinuousReadSupport] =>
         scan.readSupport.asInstanceOf[ContinuousReadSupport] -> scan.scanConfig
     }.head
@@ -267,6 +271,7 @@ class ContinuousExecution(
       epochUpdateThread.setDaemon(true)
       epochUpdateThread.start()
 
+      updateStatusMessage("Running")
       reportTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(
           sparkSessionForQuery, lastExecution) {
@@ -330,6 +335,8 @@ class ContinuousExecution(
    * before this is called.
    */
   def commit(epoch: Long): Unit = {
+    updateStatusMessage(s"Committing epoch $epoch")
+
     assert(continuousSources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
 

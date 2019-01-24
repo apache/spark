@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A [[StructType]] object can be constructed by
@@ -57,7 +57,7 @@ import org.apache.spark.util.Utils
  *
  * // If this struct does not have a field called "d", it throws an exception.
  * struct("d")
- * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * // java.lang.IllegalArgumentException: d does not exist.
  * //   ...
  *
  * // Extract multiple StructFields. Field names are provided in a set.
@@ -69,7 +69,7 @@ import org.apache.spark.util.Utils
  * // Any names without matching fields will throw an exception.
  * // For the case shown below, an exception is thrown due to "d".
  * struct(Set("b", "c", "d"))
- * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * // java.lang.IllegalArgumentException: d does not exist.
  * //    ...
  * }}}
  *
@@ -272,22 +272,21 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
       throw new IllegalArgumentException(
-        s"""Field "$name" does not exist.
-           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
+        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
   }
 
   /**
    * Returns a [[StructType]] containing [[StructField]]s of the given names, preserving the
    * original order of fields.
    *
-   * @throws IllegalArgumentException if a field cannot be found for any of the given names
+   * @throws IllegalArgumentException if at least one given field name does not exist
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"""Nonexistent field(s): ${nonExistFields.mkString(", ")}.
-           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin)
+        s"${nonExistFields.mkString(", ")} do(es) not exist. " +
+          s"Available: ${fieldNames.mkString(", ")}")
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -301,8 +300,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
       throw new IllegalArgumentException(
-        s"""Field "$name" does not exist.
-           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
+        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
@@ -346,7 +344,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}")
-    truncatedString(fieldTypes, "struct<", ",", ">")
+    truncatedString(
+      fieldTypes,
+      "struct<", ",", ">",
+      SQLConf.get.maxToStringFields)
   }
 
   override def catalogString: String = {

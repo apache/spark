@@ -263,7 +263,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
-    .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
+    .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
+      "Note: For structured streaming, this configuration cannot be changed between query " +
+      "restarts from the same checkpoint location.")
     .intConf
     .createWithDefault(200)
 
@@ -521,13 +523,6 @@ object SQLConf {
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
     .intConf
     .createWithDefault(4096)
-
-  val ORC_COPY_BATCH_TO_SPARK = buildConf("spark.sql.orc.copyBatchToSpark")
-    .doc("Whether or not to copy the ORC columnar batch to Spark columnar batch in the " +
-      "vectorized ORC reader.")
-    .internal()
-    .booleanConf
-    .createWithDefault(false)
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
@@ -882,7 +877,9 @@ object SQLConf {
       .internal()
       .doc(
         "The class used to manage state data in stateful streaming queries. This class must " +
-          "be a subclass of StateStoreProvider, and must have a zero-arg constructor.")
+          "be a subclass of StateStoreProvider, and must have a zero-arg constructor. " +
+          "Note: For structured streaming, this configuration cannot be changed between query " +
+          "restarts from the same checkpoint location.")
       .stringConf
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
@@ -1327,6 +1324,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PANDAS_ARROW_SAFE_TYPE_CONVERSION =
+    buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion")
+      .internal()
+      .doc("When true, Arrow will perform safe type conversion when converting " +
+        "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
+        "when detecting unsafe type conversion like overflow. When false, disabling Arrow's type " +
+        "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
+      .booleanConf
+      .createWithDefault(false)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -1430,8 +1437,15 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
+  val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
     .internal()
+    .doc("A comma-separated list of data source short names or fully qualified data source" +
+      " register class names for which data source V2 read paths are disabled. Reads from these" +
+      " sources will fall back to the V1 sources.")
+    .stringConf
+    .createWithDefault("")
+
+  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
       " StreamWriteSupport is disabled. Writes to these sources will fall back to the V1 Sinks.")
     .stringConf
@@ -1629,20 +1643,13 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
-  val SET_COMMAND_REJECTS_SPARK_CONFS =
-    buildConf("spark.sql.legacy.execution.setCommandRejectsSparkConfs")
+  val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
+    buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
       .doc("If it is set to true, SET command will fail when the key is registered as " +
         "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
-
-  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
-    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
-      " dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
-      "java.time.* packages are used for the same purpose.")
-    .booleanConf
-    .createWithDefault(false)
 }
 
 /**
@@ -2009,6 +2016,8 @@ class SQLConf extends Serializable with Logging {
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
+  def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
@@ -2022,6 +2031,8 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
+
+  def userV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
@@ -2068,9 +2079,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
-  def setCommandRejectsSparkConfs: Boolean = getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CONFS)
-
-  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
+  def setCommandRejectsSparkCoreConfs: Boolean =
+    getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   /** ********************** SQLConf functionality methods ************ */
 

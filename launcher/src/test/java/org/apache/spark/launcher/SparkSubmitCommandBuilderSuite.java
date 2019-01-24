@@ -158,7 +158,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
-    assertEquals("python", cmd.get(cmd.size() - 1));
+    assertTrue(Arrays.asList("python", "python2", "python3").contains(cmd.get(cmd.size() - 1)));
     assertEquals(
       String.format("\"%s\" \"foo\" \"%s\" \"bar\" \"%s\"",
         parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.PYSPARK_SHELL_RESOURCE),

@@ -24,7 +24,8 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, PYSPARK_EXECUTOR_MEMORY}
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python._
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -45,8 +46,8 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
   private val driverUrl = RpcEndpointAddress(
-    kubernetesConf.get("spark.driver.host"),
-    kubernetesConf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
+    kubernetesConf.get(DRIVER_HOST_ADDRESS),
+    kubernetesConf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
   private val executorMemoryMiB = kubernetesConf.get(EXECUTOR_MEMORY)
   private val executorMemoryString = kubernetesConf.get(
@@ -66,7 +67,7 @@ private[spark] class BasicExecutorFeatureStep(
       executorMemoryWithOverhead
     }
 
-  private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
+  private val executorCores = kubernetesConf.sparkConf.get(EXECUTOR_CORES)
   private val executorCoresRequest =
     if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
       kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
@@ -112,12 +113,14 @@ private[spark] class BasicExecutorFeatureStep(
             .build())
           .build())
       } ++ {
-        Option(secMgr.getSecretKey()).map { authSecret =>
-          new EnvVarBuilder()
-            .withName(SecurityManager.ENV_AUTH_SECRET)
-            .withValue(authSecret)
-            .build()
-        }
+        if (kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty) {
+          Option(secMgr.getSecretKey()).map { authSecret =>
+            new EnvVarBuilder()
+              .withName(SecurityManager.ENV_AUTH_SECRET)
+              .withValue(authSecret)
+              .build()
+          }
+        } else None
       } ++ {
         kubernetesConf.get(EXECUTOR_CLASS_PATH).map { cp =>
           new EnvVarBuilder()
@@ -161,6 +164,10 @@ private[spark] class BasicExecutorFeatureStep(
         .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
         .endResources()
+        .addNewEnv()
+          .withName(ENV_SPARK_USER)
+          .withValue(Utils.getCurrentUserName())
+          .endEnv()
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")

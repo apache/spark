@@ -40,6 +40,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 
@@ -133,7 +134,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
-    // This demonstrates that we can have e.g 1024^3 PB without overflowing.
+    // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
     assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))
     assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
 
@@ -149,7 +150,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     // Test overflow exception
     intercept[IllegalArgumentException] {
-      // This value exceeds Long.MAX when converted to TB
+      // This value exceeds Long.MAX when converted to TiB
       ByteUnit.PiB.toTiB(9223372036854775807L)
     }
 
@@ -189,13 +190,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")
-    assert(Utils.bytesToString(2000000) === "1953.1 KB")
-    assert(Utils.bytesToString(2097152) === "2.0 MB")
-    assert(Utils.bytesToString(2306867) === "2.2 MB")
-    assert(Utils.bytesToString(5368709120L) === "5.0 GB")
-    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TB")
-    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PB")
-    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EB")
+    assert(Utils.bytesToString(2000000) === "1953.1 KiB")
+    assert(Utils.bytesToString(2097152) === "2.0 MiB")
+    assert(Utils.bytesToString(2306867) === "2.2 MiB")
+    assert(Utils.bytesToString(5368709120L) === "5.0 GiB")
+    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TiB")
+    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PiB")
+    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EiB")
     assert(Utils.bytesToString(BigInt(1L << 11) * (1L << 60)) === "2.36E+21 B")
   }
 
@@ -829,35 +830,35 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
     conf.set("spark.master", "yarn")
-    conf.set("spark.submit.deployMode", "client")
+    conf.set(SUBMIT_DEPLOY_MODE, "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "false")) === false)
+      conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "true")) === true)
+      conf.set(DYN_ALLOCATION_ENABLED, true)) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "1")) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "0")) === true)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
-    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
+    assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }
 
   test("getDynamicAllocationInitialExecutors") {
     val conf = new SparkConf()
     assert(Utils.getDynamicAllocationInitialExecutors(conf) === 0)
     assert(Utils.getDynamicAllocationInitialExecutors(
-      conf.set("spark.dynamicAllocation.minExecutors", "3")) === 3)
+      conf.set(DYN_ALLOCATION_MIN_EXECUTORS, 3)) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
       conf.set("spark.executor.instances", "2")) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
       conf.set("spark.executor.instances", "4")) === 4)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
-      conf.set("spark.dynamicAllocation.initialExecutors", "3")) === 4)
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)) === 4)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
-      conf.set("spark.dynamicAllocation.initialExecutors", "5")) === 5)
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 5)) === 5)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
-      conf.set("spark.dynamicAllocation.initialExecutors", "2")
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 2)
         .set("spark.executor.instances", "1")) === 3)
   }
 
@@ -1154,22 +1155,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     intercept[IllegalArgumentException] {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
-  }
-
-  object MalformedClassObject {
-    class MalformedClass
-  }
-
-  test("Safe getSimpleName") {
-    // getSimpleName on class of MalformedClass will result in error: Malformed class name
-    // Utils.getSimpleName works
-    val err = intercept[java.lang.InternalError] {
-      classOf[MalformedClassObject.MalformedClass].getSimpleName
-    }
-    assert(err.getMessage === "Malformed class name")
-
-    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
-      "UtilsSuite$MalformedClassObject$MalformedClass")
   }
 
   test("stringHalfWidth") {

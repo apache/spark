@@ -1626,6 +1626,12 @@ test_that("column functions", {
   expect_equal(c[[1]][[1]]$a, 1)
   c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, structType("a INT")), "csv")))
+  expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, schema_of_csv("1")), "csv")))
+  expect_equal(c[[1]][[1]]$`_c0`, 1)
+  c <- collect(select(df, alias(from_csv(df$col, schema_of_csv(lit("1"))), "csv")))
+  expect_equal(c[[1]][[1]]$`_c0`, 1)
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
@@ -1651,7 +1657,9 @@ test_that("column functions", {
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
   df <- as.DataFrame(j)
   schemas <- list(structType(structField("age", "integer"), structField("height", "double")),
-                  "age INT, height DOUBLE")
+                  "age INT, height DOUBLE",
+                  schema_of_json("{\"age\":16,\"height\":176.5}"),
+                  schema_of_json(lit("{\"age\":16,\"height\":176.5}")))
   for (schema in schemas) {
     s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
     expect_equal(ncol(s), 1)
@@ -1686,12 +1694,16 @@ test_that("column functions", {
 
   # check for unparseable
   df <- as.DataFrame(list(list("a" = "")))
-  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]]$a, NA)
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
 
   # check if array type in string is correctly supported.
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
-  for (schema in list(structType(structField("name", "string")), "name STRING")) {
+  schemas <- list(structType(structField("name", "string")),
+                  "name STRING",
+                  schema_of_json("{\"name\":\"Alice\"}"),
+                  schema_of_json(lit("{\"name\":\"Bob\"}")))
+  for (schema in schemas) {
     arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
     expect_equal(ncol(arr), 1)
     expect_equal(nrow(arr), 1)

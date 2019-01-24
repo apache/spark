@@ -192,6 +192,7 @@ class LSHModel(JavaModel):
                  "datasetA" and "datasetB", and a column "distCol" is added to show the distance
                  between each pair.
         """
+        threshold = TypeConverters.toFloat(threshold)
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
 
@@ -230,6 +231,16 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
     [Row(id=4, features=DenseVector([2.0, 2.0]), hashes=[DenseVector([1.0])], distCol=1.0)]
     >>> model.approxSimilarityJoin(df, df2, 3.0, distCol="EuclideanDistance").select(
+    ...     col("datasetA.id").alias("idA"),
+    ...     col("datasetB.id").alias("idB"),
+    ...     col("EuclideanDistance")).show()
+    +---+---+-----------------+
+    |idA|idB|EuclideanDistance|
+    +---+---+-----------------+
+    |  3|  6| 2.23606797749979|
+    +---+---+-----------------+
+    ...
+    >>> model.approxSimilarityJoin(df, df2, 3, distCol="EuclideanDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
     ...     col("EuclideanDistance")).show()
@@ -955,6 +966,10 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     >>> model = idf.fit(df)
     >>> model.idf
     DenseVector([0.0, 0.0])
+    >>> model.docFreq
+    [0, 3]
+    >>> model.numDocs == df.count()
+    True
     >>> model.transform(df).head().idf
     DenseVector([0.0, 0.0])
     >>> idf.setParams(outputCol="freqs").fit(df).transform(df).collect()[1].freqs
@@ -1033,6 +1048,22 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Returns the IDF vector.
         """
         return self._call_java("idf")
+
+    @property
+    @since("3.0.0")
+    def docFreq(self):
+        """
+        Returns the document frequency.
+        """
+        return self._call_java("docFreq")
+
+    @property
+    @since("3.0.0")
+    def numDocs(self):
+        """
+        Returns number of documents evaluated to compute idf
+        """
+        return self._call_java("numDocs")
 
 
 @inherit_doc

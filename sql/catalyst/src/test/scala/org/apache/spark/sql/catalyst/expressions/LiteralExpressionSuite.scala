@@ -179,6 +179,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkArrayLiteral(Array("a", "b", "c"))
     checkArrayLiteral(Array(1.0, 4.0))
     checkArrayLiteral(Array(CalendarInterval.MICROS_PER_DAY, CalendarInterval.MICROS_PER_HOUR))
+    val arr = collection.mutable.WrappedArray.make(Array(1.0, 4.0))
+    checkEvaluation(Literal(arr), toCatalyst(arr))
   }
 
   test("seq") {
@@ -225,26 +227,5 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
-  }
-
-  test("fromString converts String/DataType input correctly") {
-    checkEvaluation(Literal.fromString(false.toString, BooleanType), false)
-    checkEvaluation(Literal.fromString(null, NullType), null)
-    checkEvaluation(Literal.fromString(Int.MaxValue.toByte.toString, ByteType), Int.MaxValue.toByte)
-    checkEvaluation(Literal.fromString(Short.MaxValue.toShort.toString, ShortType), Short.MaxValue
-      .toShort)
-    checkEvaluation(Literal.fromString(Int.MaxValue.toString, IntegerType), Int.MaxValue)
-    checkEvaluation(Literal.fromString(Long.MaxValue.toString, LongType), Long.MaxValue)
-    checkEvaluation(Literal.fromString(Float.MaxValue.toString, FloatType), Float.MaxValue)
-    checkEvaluation(Literal.fromString(Double.MaxValue.toString, DoubleType), Double.MaxValue)
-    checkEvaluation(Literal.fromString("1.23456", DecimalType(10, 5)), Decimal(1.23456))
-    checkEvaluation(Literal.fromString("Databricks", StringType), "Databricks")
-    val dateString = "1970-01-01"
-    checkEvaluation(Literal.fromString(dateString, DateType), java.sql.Date.valueOf(dateString))
-    val timestampString = "0000-01-01 00:00:00"
-    checkEvaluation(Literal.fromString(timestampString, TimestampType),
-      java.sql.Timestamp.valueOf(timestampString))
-    val calInterval = new CalendarInterval(1, 1)
-    checkEvaluation(Literal.fromString(calInterval.toString, CalendarIntervalType), calInterval)
   }
 }

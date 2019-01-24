@@ -30,7 +30,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -49,9 +49,17 @@ private[sql] object SQLUtils extends Logging {
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
-      if (SparkSession.hiveClassesArePresent && enableHiveSupport &&
+      if (enableHiveSupport &&
           jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive") {
+            "hive" &&
+          // Note that the order of conditions here are on purpose.
+          // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
+          // however, `HiveConf` itself has some static logic to check if Hadoop version is
+          // supported or not, which throws an `IllegalArgumentException` if unsupported.
+          // If this is checked first, there's no way to disable Hive support in the case above.
+          // So, we intentionally check if Hive classes are loadable or not only when
+          // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
+          SparkSession.hiveClassesArePresent) {
         SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
       } else {
         if (enableHiveSupport) {
@@ -224,5 +232,9 @@ private[sql] object SQLUtils extends Logging {
         sparkSession.catalog.currentDatabase
     }
     sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
+  }
+
+  def createArrayType(column: Column): ArrayType = {
+    new ArrayType(ExprUtils.evalTypeExpr(column.expr), true)
   }
 }
