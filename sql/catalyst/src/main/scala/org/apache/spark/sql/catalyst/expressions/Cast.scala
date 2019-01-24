@@ -130,7 +130,7 @@ object Cast {
   private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
     val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
-    toPrecedence > 0 && fromPrecedence > toPrecedence
+    toPrecedence >= 0 && fromPrecedence > toPrecedence
   }
 
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {

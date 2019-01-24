@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -921,5 +922,40 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret5, "[[1, 2, 3], a, 0.1]")
     val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
     checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
+  }
+
+  test("SPARK-26706: Fix Cast.mayTruncate for bytes") {
+    assert(!Cast.mayTruncate(ByteType, ByteType))
+    assert(!Cast.mayTruncate(DecimalType.ByteDecimal, ByteType))
+    assert(Cast.mayTruncate(ShortType, ByteType))
+    assert(Cast.mayTruncate(IntegerType, ByteType))
+    assert(Cast.mayTruncate(LongType, ByteType))
+    assert(Cast.mayTruncate(FloatType, ByteType))
+    assert(Cast.mayTruncate(DoubleType, ByteType))
+    assert(Cast.mayTruncate(DecimalType.IntDecimal, ByteType))
+  }
+
+  test("canSafeCast and mayTruncate must be consistent for numeric types") {
+    import DataTypeTestUtils._
+
+    def isCastSafe(from: NumericType, to: NumericType): Boolean = (from, to) match {
+      case (_, dt: DecimalType) => dt.isWiderThan(from)
+      case (dt: DecimalType, _) => dt.isTighterThan(to)
+      case _ => numericPrecedence.indexOf(from) <= numericPrecedence.indexOf(to)
+    }
+
+    numericTypes.foreach { from =>
+      val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
+
+      safeTargetTypes.foreach { to =>
+        assert(Cast.canSafeCast(from, to), s"It should be possible to safely cast $from to $to")
+        assert(!Cast.mayTruncate(from, to), s"No truncation is expected when casting $from to $to")
+      }
+
+      unsafeTargetTypes.foreach { to =>
+        assert(!Cast.canSafeCast(from, to), s"It shouldn't be possible to safely cast $from to $to")
+        assert(Cast.mayTruncate(from, to), s"Truncation is expected when casting $from to $to")
+      }
+    }
   }
 }
