@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.image
 
+import java.io.File
 import java.nio.file.Paths
 import java.util.Arrays
 
@@ -24,11 +25,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.image.ImageSchema._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types._
 
 class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
   // Single column of images named "image"
-  private lazy val imagePath = "../data/mllib/images/origin"
+  private lazy val imagePath = new File(this.getClass.getResource("/").getPath
+          + "../../../../data/mllib/images/origin").getCanonicalPath
 
   test("Smoke test: create basic ImageSchema dataframe") {
     val origin = "path"
