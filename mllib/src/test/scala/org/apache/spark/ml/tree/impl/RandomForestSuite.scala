@@ -758,19 +758,19 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, 3, 2,
       minWeightFractionPerNode = 0.5)
     val Array(tree1) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
-    assert(tree1.depth == 0)
+    assert(tree1.depth === 0)
 
     strategy.minWeightFractionPerNode = 0.0
     val Array(tree2) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
-    assert(tree2.depth == 1)
+    assert(tree2.depth === 1)
 
     strategy.minInstancesPerNode = 2
     val Array(tree3) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
-    assert(tree3.depth == 0)
+    assert(tree3.depth === 0)
 
     strategy.minInstancesPerNode = 1
     val Array(tree4) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
-    assert(tree4.depth == 1)
+    assert(tree4.depth === 1)
   }
 }
 

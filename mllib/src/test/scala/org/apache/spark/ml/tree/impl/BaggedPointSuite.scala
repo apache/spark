@@ -35,7 +35,7 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
     val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, 1, false,
       (instance: Instance) => instance.weight * 4.0, seed = 42)
     baggedRDD.collect().foreach { baggedPoint =>
-      assert(baggedPoint.subsampleCounts.size == 1 && baggedPoint.subsampleCounts(0) == 1)
+      assert(baggedPoint.subsampleCounts.size === 1 && baggedPoint.subsampleCounts(0) === 1)
       assert(baggedPoint.sampleWeight === 2.0)
     }
   }

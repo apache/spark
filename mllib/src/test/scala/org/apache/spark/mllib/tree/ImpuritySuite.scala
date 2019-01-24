@@ -55,6 +55,7 @@ class ImpuritySuite extends SparkFunSuite {
         ~== impurity1 relTol 0.005)
     }
   }
+
   test("Regression impurities are insensitive to scaling") {
     def computeStats(samples: Seq[Double], weights: Seq[Double]): (Double, Double, Double) = {
       samples.zip(weights).foldLeft((0.0, 0.0, 0.0)) { case ((wn, wy, wyy), (y, w)) =>

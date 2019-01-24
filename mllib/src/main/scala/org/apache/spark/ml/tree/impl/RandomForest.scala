@@ -1041,9 +1041,9 @@ private[spark] object RandomForest extends Logging with Serializable {
       val partValueCountMap = mutable.Map[Double, Double]()
       var partNumSamples = 0.0
       var unweightedNumSamples = 0.0
-      featureSamples.foreach { x =>
-        partValueCountMap(x._2) = partValueCountMap.getOrElse(x._2, 0.0) + x._1;
-        partNumSamples += x._1;
+      featureSamples.foreach { case (sampleWeight, feature) =>
+        partValueCountMap(feature) = partValueCountMap.getOrElse(feature, 0.0) + sampleWeight;
+        partNumSamples += sampleWeight;
         unweightedNumSamples += 1.0
       }
 
