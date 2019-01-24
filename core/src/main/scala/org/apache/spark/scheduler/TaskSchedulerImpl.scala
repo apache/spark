@@ -289,12 +289,7 @@ private[spark] class TaskSchedulerImpl(
 
   override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
-      tsm.partitionToIndex.get(partitionId) match {
-        case Some(index) =>
-          tsm.markPartitionCompleted(index, taskInfo)
-
-        case None =>
-      }
+      tsm.markPartitionCompleted(partitionId, taskInfo)
     }
   }
 

@@ -169,7 +169,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {
       val partitionIds = completedPartitions.getOrElseUpdate(stageId, new HashSet[Int])
       partitionIds.add(partitionId)
-      completedPartitions.put(stageId, partitionIds)
+      completedPartitions(stageId) = partitionIds
     }
   }
 
@@ -2862,6 +2862,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     }
   }
 
+  // This test is kind of similar and goes alongwith "Completions in zombie tasksets update
+  // status of non-zombie taskset" in TaskSchedulerImplSuite.scala.
   test("SPARK-25250: Late zombie task completions handled correctly even before" +
     " new taskset launched") {
     val shuffleMapRdd = new MyRDD(sc, 4, Nil)
@@ -2882,8 +2884,19 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     scheduler.resubmitFailedStages()
     completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 4)
 
-    runEvent(makeCompletionEvent(
-      taskSets(1).tasks(3), Success, Nil, Nil))
+    // tasksets 1 & 3 should be two different attempts for our reduce stage -- lets
+    // double-check test setup
+    val reduceStage = taskSets(1).stageId
+    assert(taskSets(3).stageId === reduceStage)
+
+    // complete one task from the original taskset, make sure we update the taskSchedulerImpl
+    // so it can notify all taskSetManagers. Some of that is mocked here, just check there
+    // is the right event.
+    val taskToComplete = taskSets(1).tasks(3)
+
+    runEvent(makeCompletionEvent(taskToComplete, Success, Nil, Nil))
+    assert(completedPartitions.getOrElse(reduceStage, Set()) === Set(taskToComplete.partitionId))
+
     assert(completedPartitions.get(taskSets(3).stageId).get.contains(
       taskSets(3).tasks(1).partitionId) == false, "Corresponding partition id for" +
       " stage 1 attempt 1 is not complete yet")
