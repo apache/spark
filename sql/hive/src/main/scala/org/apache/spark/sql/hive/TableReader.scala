@@ -287,6 +287,9 @@ class HadoopTableReader(
 
   /**
    * The entry of creating a RDD.
+   * [SPARK-26630] Using which HadoopRDD will be decided by the input format of tables.
+   * The input format of NewHadoopRDD is from `org.apache.hadoop.mapreduce` package while
+   * the input format of HadoopRDD is from `org.apache.hadoop.mapred` package.
    */
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = localTableDesc.getInputFileFormatClass
