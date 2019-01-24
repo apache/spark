@@ -38,7 +38,8 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
                              val envName: String,
                              bootstrapPackages: Seq[String],
                              bootstrapChannels: Seq[String],
-                             extraArgs: Seq[String] = Nil) extends Logging {
+                             extraArgs: Seq[String] = Nil,
+                             envVars: Map[String, String] = Map.empty) extends Logging {
 
   import CondaEnvironment._
 
@@ -75,7 +76,8 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
         ::: extraArgs.toList
         ::: "--" :: packages.toList,
       description = s"install dependencies in conda env $condaEnvDir",
-      channels = channels.iterator.map(_.url).toList
+      channels = channels.iterator.map(_.url).toList,
+      envVars = envVars
     )
 
     this.packages ++= packages
@@ -96,7 +98,7 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
    * This is for sending the instructions to the executors so they can replicate the same steps.
    */
   def buildSetupInstructions: CondaSetupInstructions = {
-    CondaSetupInstructions(packages.toList, channels.toList, extraArgs)
+    CondaSetupInstructions(packages.toList, channels.toList, extraArgs, envVars)
   }
 }
 
@@ -155,7 +157,8 @@ object CondaEnvironment {
   case class CondaSetupInstructions(
          packages: Seq[String],
          unauthenticatedChannels: Seq[UnauthenticatedChannel],
-         extraArgs: Seq[String])
+         extraArgs: Seq[String],
+         envVars: Map[String, String])
         (userInfos: Map[UnauthenticatedChannel, String]) {
     require(unauthenticatedChannels.nonEmpty)
     require(packages.nonEmpty)
@@ -167,10 +170,11 @@ object CondaEnvironment {
   }
 
   object CondaSetupInstructions {
-    def apply(packages: Seq[String], channels: Seq[AuthenticatedChannel], extraArgs: Seq[String])
+    def apply(packages: Seq[String], channels: Seq[AuthenticatedChannel], extraArgs: Seq[String],
+              envVars: Map[String, String])
         : CondaSetupInstructions = {
       val ChannelsWithCreds(unauthed, userInfos) = unauthenticateChannels(channels)
-      CondaSetupInstructions(packages, unauthed, extraArgs)(userInfos)
+      CondaSetupInstructions(packages, unauthed, extraArgs, envVars)(userInfos)
     }
   }
 }

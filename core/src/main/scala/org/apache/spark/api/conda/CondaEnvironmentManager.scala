@@ -73,7 +73,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
               baseDir: String,
               condaPackages: Seq[String],
               condaChannelUrls: Seq[String],
-              condaExtraArgs: Seq[String] = Nil): CondaEnvironment = {
+              condaExtraArgs: Seq[String] = Nil,
+              condaEnvVars: Map[String, String] = Map.empty): CondaEnvironment = {
     require(condaPackages.nonEmpty, "Expected at least one conda package.")
     require(condaChannelUrls.nonEmpty, "Can't have an empty list of conda channel URLs")
     val name = "conda-env"
@@ -95,7 +96,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
         ::: verbosityFlags
         ::: "--" :: condaPackages.toList,
       description = "create conda env",
-      channels = condaChannelUrls.toList
+      channels = condaChannelUrls.toList,
+      envVars = condaEnvVars
     )
 
     new CondaEnvironment(this, linkedBaseDir, name, condaPackages, condaChannelUrls, condaExtraArgs)
@@ -139,7 +141,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
   private[conda] def runCondaProcess(baseRoot: Path,
                                      args: List[String],
                                      channels: List[String],
-                                     description: String): Unit = {
+                                     description: String,
+                                     envVars: Map[String, String]): Unit = {
     val condarc = generateCondarc(baseRoot, channels)
     val fakeHomeDir = baseRoot.resolve("home")
     // Attempt to create fake home dir
@@ -148,7 +151,7 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
     val extraEnv = List(
       "CONDARC" -> condarc.toString,
       "HOME" -> fakeHomeDir.toString
-    )
+    ) ++ envVars
 
     val command = Process(
       condaBinaryPath :: args,
