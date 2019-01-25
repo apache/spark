@@ -103,6 +103,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val PROCESS_TREE_METRICS_RECOMPUTE_WAIT =
+    ConfigBuilder("spark.metrics.recomputeWait")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1s")
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 

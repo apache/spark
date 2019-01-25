@@ -48,13 +48,14 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
   private val pageSize = computePageSize()
   private var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
-  var cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0)
-  var lastimeMetricsComputed = 0L
-  private val HEARTBEAT_INTERVAL_MS = if (testing) {
+  @volatile private var cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+  @volatile private var lastimeMetricsComputed = 0L
+  private val PROCESS_TREE_METRICS_RECOMPUTE_WAIT_MS = if (testing) {
     0
   } else {
-    SparkEnv.get.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL)
+    SparkEnv.get.conf.get(config.PROCESS_TREE_METRICS_RECOMPUTE_WAIT)
   }
+
 
 
   private lazy val isProcfsAvailable: Boolean = {
@@ -211,16 +212,16 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
   }
 
   private[spark] def isCacheValid(): Boolean = {
-    val lastMetricComputation = System.currentTimeMillis() - lastimeMetricsComputed
+    val metricsAge = System.currentTimeMillis() - lastimeMetricsComputed
     // ToDo: Should we make this configurable?
-    return  Math.min(1000, HEARTBEAT_INTERVAL_MS) > lastMetricComputation
+    return  PROCESS_TREE_METRICS_RECOMPUTE_WAIT_MS > metricsAge
   }
 
   private[spark] def computeAllMetrics(): ProcfsMetrics = {
     if (!isAvailable) {
       lastimeMetricsComputed = System.currentTimeMillis
       cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0)
-      return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+      return cachedAllMetric
     }
 
     if (!isCacheValid) {
@@ -244,8 +245,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         cachedAllMetric = allMetrics
         allMetrics
       }
-    }
-    else {
+    } else {
       cachedAllMetric
     }
   }
