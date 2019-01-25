@@ -693,6 +693,10 @@ private[spark] class DAGScheduler(
 
     val jobId = nextJobId.getAndIncrement()
     if (partitions.size == 0) {
+      listenerBus.post(
+        SparkListenerJobStart(jobId, clock.getTimeMillis(), Seq[StageInfo](), properties))
+      listenerBus.post(
+        SparkListenerJobEnd(jobId, clock.getTimeMillis(), JobSucceeded))
       // Return immediately if the job is running 0 tasks
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
