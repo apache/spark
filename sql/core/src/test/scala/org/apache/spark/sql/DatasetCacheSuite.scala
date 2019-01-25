@@ -207,7 +207,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     checkDataset(df5, Row(10))
   }
 
-  test("SC-14380 Cache data and cached plan should stay consistent") {
+  test("SPARK-26708 Cache data and cached plan should stay consistent") {
     val df = spark.range(0, 5).toDF("a")
     val df1 = df.withColumn("b", 'a + 1)
     val df2 = df.filter('a > 1)
