@@ -142,6 +142,13 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
    * longer place fetched blocks into [[results]] and the iterator is marked as fully consumed.
+   *
+   * When the iterator is inactive, [[hasNext]] and [[next]] calls will honor that as there are
+   * cases the iterator is still being consumed. For example, ShuffledRDD + PipedRDD if the
+   * subprocess command is failed. The task will be marked as failed, then the iterator will be
+   * cleaned up at task completion, the [[next]] call (called in the stdin writer thread of
+   * PipedRDD if not exited yet) may hang at [[results.take]]. The defensive check in [[hasNext]]
+   * and [[next]] reduces the possibility of such race conditions.
    */
   @GuardedBy("this")
   private[this] var isZombie = false
@@ -384,7 +391,7 @@ final class ShuffleBlockFetcherIterator(
    */
   override def next(): (BlockId, InputStream) = {
     if (!hasNext) {
-      throw new NoSuchElementException
+      throw new NoSuchElementException()
     }
 
     numBlocksProcessed += 1
@@ -489,12 +496,11 @@ final class ShuffleBlockFetcherIterator(
       fetchUpToMaxBytes()
     }
 
-    if (result != null) {
-      currentResult = result.asInstanceOf[SuccessFetchResult]
-      (currentResult.blockId, new BufferReleasingInputStream(input, this))
-    } else { // the iterator has already be closed
-      throw new NoSuchElementException
+    if (result == null) { // the iterator is already closed/cleaned up.
+      throw new NoSuchElementException()
     }
+    currentResult = result.asInstanceOf[SuccessFetchResult]
+    (currentResult.blockId, new BufferReleasingInputStream(input, this))
   }
 
   private def fetchUpToMaxBytes(): Unit = {

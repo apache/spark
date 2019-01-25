@@ -87,7 +87,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
   test("stdin writer thread should be exited when task is finished") {
     assume(TestUtils.testCommandAvailable("cat"))
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 1).map { x =>
-      val obj = new Object
+      val obj = new Object()
       obj.synchronized {
         obj.wait() // make the thread waits here.
       }
@@ -101,10 +101,10 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(result.collect().length === 0)
 
     // collect stderr writer threads
-    val stderrWriterThreads = Thread.getAllStackTraces.keySet().asScala
-      .filter { _.getName.startsWith(PipedRDD.STDIN_WRITER_THREAD_PREFIX) }
+    val stderrWriterThread = Thread.getAllStackTraces.keySet().asScala
+      .find { _.getName.startsWith(PipedRDD.STDIN_WRITER_THREAD_PREFIX) }
 
-    assert(stderrWriterThreads.size === 0)
+    assert(stderrWriterThread.isEmpty)
   }
 
   test("advanced pipe") {
