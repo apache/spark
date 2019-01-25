@@ -73,12 +73,12 @@ object DateTimeTestUtils {
 
   // Returns number of days since epoch for the given date
   def days(
-     year: Int,
-     month: Byte = 1,
-     day: Byte = 1,
-     hour: Byte = 0,
-     minute: Byte = 0,
-     sec: Byte = 0): Int = {
+      year: Int,
+      month: Byte = 1,
+      day: Byte = 1,
+      hour: Byte = 0,
+      minute: Byte = 0,
+      sec: Byte = 0): Int = {
     val micros = date(year, month, day, hour, minute, sec)
     TimeUnit.MICROSECONDS.toDays(micros).toInt
   }
