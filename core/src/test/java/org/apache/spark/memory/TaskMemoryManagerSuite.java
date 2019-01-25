@@ -33,7 +33,7 @@ public class TaskMemoryManagerSuite {
       new UnifiedMemoryManager(
         new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false),
         Long.MAX_VALUE,
-        Long.MAX_VALUE,
+        Long.MAX_VALUE / 2,
         1),
       0);
     final MemoryConsumer c = new TestMemoryConsumer(manager);
