@@ -18,17 +18,16 @@
 package org.apache.spark.rpc.netty
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
-
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Promise
 import scala.util.control.NonFatal
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.RPC_NETTY_DISPATCHER_NUM_THREADS
 import org.apache.spark.network.client.RpcResponseCallback
-import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
 
