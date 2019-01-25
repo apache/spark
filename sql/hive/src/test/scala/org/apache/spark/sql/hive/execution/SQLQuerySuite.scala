@@ -2189,7 +2189,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
         withTable("t") {
-          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+          sql("CREATE TABLE t (col1 INT) PARTITIONED BY (p1 INT)")
           sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
           if (enableOptimizeMetadataOnlyQuery) {
             // The result is wrong if we enable the configuration.
