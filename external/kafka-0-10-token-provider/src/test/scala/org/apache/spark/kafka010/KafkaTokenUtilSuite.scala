@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.security
+package org.apache.spark.kafka010
 
 import java.{util => ju}
 import java.security.PrivilegedExceptionAction

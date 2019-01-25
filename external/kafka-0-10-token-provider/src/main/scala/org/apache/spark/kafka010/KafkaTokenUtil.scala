@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.security
+package org.apache.spark.kafka010
 
 import java.{util => ju}
 import java.text.SimpleDateFormat
@@ -46,7 +46,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     override def getKind: Text = TOKEN_KIND
   }
 
-  private[security] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
+  private[kafka010] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
     checkProxyUser()
 
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
@@ -63,7 +63,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     ), token.tokenInfo.expiryTimestamp)
   }
 
-  private[security] def checkProxyUser(): Unit = {
+  private[kafka010] def checkProxyUser(): Unit = {
     val currentUser = UserGroupInformation.getCurrentUser()
     // Obtaining delegation token for proxy user is planned but not yet implemented
     // See https://issues.apache.org/jira/browse/KAFKA-6945
@@ -71,7 +71,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       "user is not yet supported.")
   }
 
-  private[security] def createAdminClientProperties(sparkConf: SparkConf): ju.Properties = {
+  private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): ju.Properties = {
     val adminClientProperties = new ju.Properties
 
     val bootstrapServers = sparkConf.get(Kafka.BOOTSTRAP_SERVERS)
@@ -154,7 +154,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private[security] def getKeytabJaasParams(sparkConf: SparkConf): String = {
+  private[kafka010] def getKeytabJaasParams(sparkConf: SparkConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
