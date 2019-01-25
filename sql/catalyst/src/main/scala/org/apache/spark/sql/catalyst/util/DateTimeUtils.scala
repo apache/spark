@@ -219,10 +219,6 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
-  def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
-    stringToTimestamp(s, defaultTimeZone())
-  }
-
   def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
     if (s == null) {
       return None
@@ -453,19 +449,8 @@ object DateTimeUtils {
     microsec + toYearZero * MICROS_PER_DAY
   }
 
-  private def localTimestamp(microsec: SQLTimestamp): SQLTimestamp = {
-    localTimestamp(microsec, defaultTimeZone())
-  }
-
   private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): SQLTimestamp = {
     absoluteMicroSecond(microsec) + timeZone.getOffset(microsec / 1000) * 1000L
-  }
-
-  /**
-   * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
-   */
-  def getHours(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND / 3600) % 24).toInt
   }
 
   /**
@@ -479,24 +464,8 @@ object DateTimeUtils {
    * Returns the minute value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getMinutes(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND / 60) % 60).toInt
-  }
-
-  /**
-   * Returns the minute value of a given timestamp value. The timestamp is expressed in
-   * microseconds.
-   */
   def getMinutes(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
     ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND / 60) % 60).toInt
-  }
-
-  /**
-   * Returns the second value of a given timestamp value. The timestamp is expressed in
-   * microseconds.
-   */
-  def getSeconds(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND) % 60).toInt
   }
 
   /**
@@ -610,14 +579,6 @@ object DateTimeUtils {
       dayOfMonth
     }
     firstDayOfMonth(nonNegativeMonth) + currentDayInMonth - 1
-  }
-
-  /**
-   * Add timestamp and full interval.
-   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
-   */
-  def timestampAddInterval(start: SQLTimestamp, months: Int, microseconds: Long): SQLTimestamp = {
-    timestampAddInterval(start, months, microseconds, defaultTimeZone())
   }
 
   /**
@@ -799,10 +760,6 @@ object DateTimeUtils {
         sys.error(s"Invalid trunc level: $level")
     }
     truncated * MICROS_PER_MILLIS
-  }
-
-  def truncTimestamp(d: SQLTimestamp, level: Int): SQLTimestamp = {
-    truncTimestamp(d, level, defaultTimeZone())
   }
 
   /**
