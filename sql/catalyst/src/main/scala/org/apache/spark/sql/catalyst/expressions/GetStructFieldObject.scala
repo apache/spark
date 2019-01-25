@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField}
 import org.apache.spark.sql.types.StructField
 
 /**
@@ -25,7 +24,7 @@ import org.apache.spark.sql.types.StructField
  * This is in contrast to the [[GetStructField]] case class extractor which returns the field
  * ordinal instead of the field itself.
  */
-private[execution] object GetStructFieldObject {
+private[sql] object GetStructFieldObject {
   def unapply(getStructField: GetStructField): Option[(Expression, StructField)] =
     Some((
       getStructField.child,
