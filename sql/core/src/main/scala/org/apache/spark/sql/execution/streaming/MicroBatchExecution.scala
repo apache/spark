@@ -508,12 +508,20 @@ class MicroBatchExecution(
           cd.dataType, cd.timeZoneId)
     }
 
+    // Pre-resolve new attributes to ensure all attributes are resolved before
+    // accessing schema of logical plan. Note that it only leverages the information
+    // of attributes, so we don't need to concern about the value of literals.
+
+    val newAttrPlanPreResolvedForSchema = newAttributePlan transformAllExpressions {
+      case cbt: CurrentBatchTimestamp => cbt.toLiteral
+    }
+
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
       case s: StreamingWriteSupportProvider =>
         val writer = s.createStreamingWriteSupport(
           s"$runId",
-          newAttributePlan.schema,
+          newAttrPlanPreResolvedForSchema.schema,
           outputMode,
           new DataSourceOptions(extraOptions.asJava))
         WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, writer), newAttributePlan)
