@@ -366,7 +366,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("timestamp add months") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
     val ts2 = date(2000, 2, 29, 10, 30, 0, 123000)
-    assert(timestampAddInterval(ts1, 36, 123000) === ts2)
+    assert(timestampAddInterval(ts1, 36, 123000, defaultTz) === ts2)
 
     val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
     val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
