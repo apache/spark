@@ -1144,6 +1144,11 @@ package object config {
       .intConf
       .createWithDefault(4)
 
+  private[spark] val RDD_UNPERSIST_BLOCKING =
+    ConfigBuilder("spark.rdd.unpersist.blocking")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SERIALIZER = ConfigBuilder("spark.serializer")
     .stringConf
     .createWithDefault("org.apache.spark.serializer.JavaSerializer")

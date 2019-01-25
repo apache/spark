@@ -38,6 +38,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
+import org.apache.spark.internal.config.RDD_UNPERSIST_BLOCKING
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
@@ -209,13 +210,14 @@ abstract class RDD[T: ClassTag](
    */
   def cache(): this.type = persist()
 
+  private val unpersistBlocking = conf.get(RDD_UNPERSIST_BLOCKING)
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
    *
    * @param blocking Whether to block until all blocks are deleted.
    * @return This RDD.
    */
-  def unpersist(blocking: Boolean = true): this.type = {
+  def unpersist(blocking: Boolean = unpersistBlocking): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
     sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
