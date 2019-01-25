@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class ColumnPruningSuite extends PlanTest {
 
@@ -408,6 +409,33 @@ class ColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val expected = serializerObject.copy(serializer = Seq(serializerObject.serializer.head)).analyze
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-26837: Prune nested serializers") {
+    withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      val testRelation = LocalRelation('_1.struct(StructType.fromDDL("_1 int, _2 string")), '_2.int)
+      val serializerObject = CatalystSerde.serialize[((Int, String), Int)](
+        CatalystSerde.deserialize[((Int, String), Int)](testRelation))
+      val query = serializerObject.select($"_1._1")
+      val optimized = Optimize.execute(query.analyze)
+
+      val prunedSerializer = serializerObject.serializer.head.transformDown {
+        case CreateNamedStruct(children) =>
+          CreateNamedStruct(children.take(2))
+      }.transformUp {
+        // Aligns null literal in `If` expression to make it resolvable.
+        case i @ If(_: IsNull, Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
+          i.copy(trueValue = Literal(null, ser.dataType))
+      }.asInstanceOf[NamedExpression]
+
+      // `name` in `GetStructField` affects `comparePlans`. Maybe we can ignore
+      // `name` in `GetStructField.equals`?
+      val expected = serializerObject.copy(serializer = Seq(prunedSerializer))
+        .select($"_1._1").analyze.transformAllExpressions {
+        case g: GetStructField => g.copy(name = None)
+      }
+      comparePlans(optimized, expected)
+    }
   }
   // todo: add more tests for column pruning
 }

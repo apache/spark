@@ -1497,6 +1497,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from object serialization operator which are unnecessary in " +
+        "satisfying a query. This optimization allows object serializers to avoid " +
+        "executing unnecessary nested expressions.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
@@ -2041,6 +2050,9 @@ class SQLConf extends Serializable with Logging {
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def serializerNestedSchemaPruningEnabled: Boolean =
+    getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
