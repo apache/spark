@@ -43,13 +43,11 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
    *
    * @param input a list of LogicalPlans to inner join and the type of inner join.
    * @param conditions a list of condition for join.
-   * @param hintMap a map of relation output attribute sets to their corresponding hints.
    */
   @tailrec
   final def createOrderedJoin(
       input: Seq[(LogicalPlan, InnerLike)],
-      conditions: Seq[Expression],
-      hintMap: Map[AttributeSet, HintInfo]): LogicalPlan = {
+      conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
@@ -58,8 +56,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         case (Inner, Inner) => Inner
         case (_, _) => Cross
       }
-      val join = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And),
-        JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet)))
+      val join = Join(left, right, innerJoinType,
+        joinConditions.reduceLeftOption(And), JoinHint.NONE)
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
       } else {
@@ -82,27 +80,27 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
         e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
-      val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And),
-        JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet)))
+      val joined = Join(left, right, innerJoinType,
+        joinConditions.reduceLeftOption(And), JoinHint.NONE)
 
       // should not have reference to same logical plan
-      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others, hintMap)
+      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ ExtractFiltersAndInnerJoins(input, conditions, hintMap)
+    case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       val reordered = if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
-          createOrderedJoin(starJoinPlan ++ rest, conditions, hintMap)
+          createOrderedJoin(starJoinPlan ++ rest, conditions)
         } else {
-          createOrderedJoin(input, conditions, hintMap)
+          createOrderedJoin(input, conditions)
         }
       } else {
-        createOrderedJoin(input, conditions, hintMap)
+        createOrderedJoin(input, conditions)
       }
 
       if (p.sameOutput(reordered)) {

@@ -24,9 +24,9 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.deploy.security.KafkaTokenUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Kafka
+import org.apache.spark.kafka010.KafkaTokenUtil
 
 /**
  * Class to conveniently update Kafka config params, while logging the changes

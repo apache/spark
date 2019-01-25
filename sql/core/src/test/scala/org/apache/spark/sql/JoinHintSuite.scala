@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class JoinHintSuite extends PlanTest with SharedSQLContext {
@@ -100,7 +101,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
     }
   }
 
-  test("hint preserved after join reorder") {
+  test("hints prevent join reorder") {
     withTempView("a", "b", "c") {
       df1.createOrReplaceTempView("a")
       df2.createOrReplaceTempView("b")
@@ -118,12 +119,10 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
       verifyJoinHint(
         sql("select /*+ broadcast(a, c)*/ * from a, c, b " +
           "where a.a1 = b.b1 and b.b1 = c.c1"),
-        JoinHint(
-          None,
-          Some(HintInfo(broadcast = true))) ::
+        JoinHint.NONE ::
           JoinHint(
             Some(HintInfo(broadcast = true)),
-            None):: Nil
+            Some(HintInfo(broadcast = true))):: Nil
       )
       verifyJoinHint(
         sql("select /*+ broadcast(b, c)*/ * from a, c, b " +
@@ -189,5 +188,31 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         None,
         Some(HintInfo(broadcast = true))) :: Nil
     )
+  }
+
+  test("nested hint") {
+    verifyJoinHint(
+      df.hint("broadcast").hint("broadcast").filter('id > 2).join(df, "id"),
+      JoinHint(
+        Some(HintInfo(broadcast = true)),
+        None) :: Nil
+    )
+  }
+
+  test("hints prevent cost-based join reorder") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      val join = df.join(df, "id")
+      val broadcasted = join.hint("broadcast")
+      verifyJoinHint(
+        join.join(broadcasted, "id").join(broadcasted, "id"),
+        JoinHint(
+          None,
+          Some(HintInfo(broadcast = true))) ::
+          JoinHint(
+            None,
+            Some(HintInfo(broadcast = true))) ::
+          JoinHint.NONE :: JoinHint.NONE :: JoinHint.NONE :: Nil
+      )
+    }
   }
 }

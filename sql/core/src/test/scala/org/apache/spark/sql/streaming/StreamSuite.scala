@@ -34,9 +34,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
@@ -96,18 +96,16 @@ class StreamSuite extends StreamTest {
     val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
       case s: StreamingRelationV2 => s
     }
-    assert(streamingRelation.nonEmpty, "cannot find StreamingExecutionRelation")
+    assert(streamingRelation.nonEmpty, "cannot find StreamingRelationV2")
     assert(
       streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("StreamingExecutionRelation.computeStats") {
-    val streamingExecutionRelation = MemoryStream[Int].toDF.logicalPlan collect {
-      case s: StreamingExecutionRelation => s
-    }
-    assert(streamingExecutionRelation.nonEmpty, "cannot find StreamingExecutionRelation")
-    assert(streamingExecutionRelation.head.computeStats.sizeInBytes
-      == spark.sessionState.conf.defaultSizeInBytes)
+    val memoryStream = MemoryStream[Int]
+    val executionRelation = StreamingExecutionRelation(
+      memoryStream, memoryStream.encoder.schema.toAttributes)(memoryStream.sqlContext.sparkSession)
+    assert(executionRelation.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("explain join with a normal source") {
@@ -495,9 +493,9 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("ScanV2".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
@@ -505,9 +503,9 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("ScanV2".r
         .findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
@@ -1081,6 +1079,51 @@ class StreamSuite extends StreamTest {
       query.stop()
       assert(query.exception.isEmpty)
     }
+  }
+
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp / current_date" +
+    " to Dataset - use v2 sink") {
+    testCurrentTimestampOnStreamingQuery(useV2Sink = true)
+  }
+
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp / current_date" +
+    " to Dataset - use v1 sink") {
+    testCurrentTimestampOnStreamingQuery(useV2Sink = false)
+  }
+
+  private def testCurrentTimestampOnStreamingQuery(useV2Sink: Boolean): Unit = {
+    val input = MemoryStream[Int]
+    val df = input.toDS()
+      .withColumn("cur_timestamp", lit(current_timestamp()))
+      .withColumn("cur_date", lit(current_date()))
+
+    def assertBatchOutputAndUpdateLastTimestamp(
+        rows: Seq[Row],
+        curTimestamp: Long,
+        curDate: Int,
+        expectedValue: Int): Long = {
+      assert(rows.size === 1)
+      val row = rows.head
+      assert(row.getInt(0) === expectedValue)
+      assert(row.getTimestamp(1).getTime >= curTimestamp)
+      val days = DateTimeUtils.millisToDays(row.getDate(2).getTime)
+      assert(days == curDate || days == curDate + 1)
+      row.getTimestamp(1).getTime
+    }
+
+    var lastTimestamp = System.currentTimeMillis()
+    val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
+    testStream(df, useV2Sink = useV2Sink) (
+      AddData(input, 1),
+      CheckLastBatch { rows: Seq[Row] =>
+        lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 1)
+      },
+      Execute { _ => Thread.sleep(1000) },
+      AddData(input, 2),
+      CheckLastBatch { rows: Seq[Row] =>
+        lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 2)
+      }
+    )
   }
 }
 

@@ -28,9 +28,9 @@ class KryoSerializerDistributedSuite extends SparkFunSuite with LocalSparkContex
 
   test("kryo objects are serialised consistently in different processes") {
     val conf = new SparkConf(false)
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", classOf[AppJarRegistrator].getName)
-      .set(config.MAX_TASK_FAILURES, 1)
+      .set(config.SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+      .set(config.Kryo.KRYO_USER_REGISTRATORS, classOf[AppJarRegistrator].getName)
+      .set(config.TASK_MAX_FAILURES, 1)
       .set(config.BLACKLIST_ENABLED, false)
 
     val jar = TestUtils.createJarWithClasses(List(AppJarRegistrator.customClassName))

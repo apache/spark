@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.executor.{Executor, TaskMetrics, TaskMetricsSuite}
+import org.apache.spark.internal.config.METRICS_CONF
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
@@ -37,7 +38,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("provide metrics sources") {
     val filePath = getClass.getClassLoader.getResource("test_metrics_config.properties").getFile
     val conf = new SparkConf(loadDefaults = false)
-      .set("spark.metrics.conf", filePath)
+      .set(METRICS_CONF, filePath)
     sc = new SparkContext("local", "test", conf)
     val rdd = sc.makeRDD(1 to 1)
     val result = sc.runJob(rdd, (tc: TaskContext, it: Iterator[Int]) => {

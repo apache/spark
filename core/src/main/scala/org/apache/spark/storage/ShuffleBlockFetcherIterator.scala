@@ -273,6 +273,8 @@ final class ShuffleBlockFetcherIterator(
     // Split local and remote blocks. Remote blocks are further split into FetchRequests of size
     // at most maxBytesInFlight in order to limit the amount of data in flight.
     val remoteRequests = new ArrayBuffer[FetchRequest]
+    var localBlockBytes = 0L
+    var remoteBlockBytes = 0L
 
     for ((address, blockInfos) <- blocksByAddress) {
       if (address.executorId == blockManager.blockManagerId.executorId) {
@@ -284,6 +286,7 @@ final class ShuffleBlockFetcherIterator(
           case None => // do nothing.
         }
         localBlocks ++= blockInfos.map(_._1)
+        localBlockBytes += blockInfos.map(_._2).sum
         numBlocksToFetch += localBlocks.size
       } else {
         val iterator = blockInfos.iterator
@@ -291,6 +294,7 @@ final class ShuffleBlockFetcherIterator(
         var curBlocks = new ArrayBuffer[(BlockId, Long)]
         while (iterator.hasNext) {
           val (blockId, size) = iterator.next()
+          remoteBlockBytes += size
           if (size < 0) {
             throw new BlockException(blockId, "Negative block size " + size)
           } else if (size == 0) {
@@ -317,8 +321,10 @@ final class ShuffleBlockFetcherIterator(
         }
       }
     }
-    logInfo(s"Getting $numBlocksToFetch non-empty blocks including ${localBlocks.size}" +
-        s" local blocks and ${remoteBlocks.size} remote blocks")
+    val totalBytes = localBlockBytes + remoteBlockBytes
+    logInfo(s"Getting $numBlocksToFetch (${Utils.bytesToString(totalBytes)}) non-empty blocks " +
+      s"including ${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local blocks and " +
+      s"${remoteBlocks.size} (${Utils.bytesToString(remoteBlockBytes)}) remote blocks")
     remoteRequests
   }
 

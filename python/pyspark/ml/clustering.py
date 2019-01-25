@@ -323,7 +323,7 @@ class KMeansSummary(ClusteringSummary):
         return self._call_java("trainingCost")
 
 
-class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable):
     """
     Model fitted by KMeans.
 

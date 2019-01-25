@@ -17,7 +17,9 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.EnumSet
 import java.util.concurrent.atomic.{AtomicBoolean}
+import javax.servlet.DispatcherType
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -25,11 +27,14 @@ import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
+import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -48,7 +53,7 @@ private[spark] abstract class YarnSchedulerBackend(
   private val stopped = new AtomicBoolean(false)
 
   override val minRegisteredRatio =
-    if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+    if (conf.get(config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
       0.8
     } else {
       super.minRegisteredRatio
@@ -159,7 +164,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Add filters to the SparkUI.
    */
-  private def addWebUIFilter(
+  private[cluster] def addWebUIFilter(
       filterName: String,
       filterParams: Map[String, String],
       proxyBase: String): Unit = {
@@ -172,11 +177,35 @@ private[spark] abstract class YarnSchedulerBackend(
       filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
       // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
-      val allFilters = filterName + "," + conf.get("spark.ui.filters", "")
+      val allFilters = Seq(filterName) ++ conf.get(UI_FILTERS)
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
-      conf.set("spark.ui.filters", allFilters)
-      filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
-      scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
+
+      // For already installed handlers, prepend the filter.
+      scheduler.sc.ui.foreach { ui =>
+        // Lock the UI so that new handlers are not added while this is running. Set the updated
+        // filter config inside the lock so that we're sure all handlers will properly get it.
+        ui.synchronized {
+          filterParams.foreach { case (k, v) =>
+            conf.set(s"spark.$filterName.param.$k", v)
+          }
+          conf.set(UI_FILTERS, allFilters)
+
+          ui.getHandlers.map(_.getServletHandler()).foreach { h =>
+            val holder = new FilterHolder()
+            holder.setName(filterName)
+            holder.setClassName(filterName)
+            filterParams.foreach { case (k, v) => holder.setInitParameter(k, v) }
+            h.addFilter(holder)
+
+            val mapping = new FilterMapping()
+            mapping.setFilterName(filterName)
+            mapping.setPathSpec("/*")
+            mapping.setDispatcherTypes(EnumSet.allOf(classOf[DispatcherType]))
+
+            h.prependFilterMapping(mapping)
+          }
+        }
+      }
     }
   }
 

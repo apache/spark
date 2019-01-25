@@ -23,7 +23,7 @@ import org.apache.spark.sql.sources.v2.reader.ReadSupport;
 
 /**
  * A base interface for streaming read support. Data sources should implement concrete streaming
- * read support interfaces: {@link MicroBatchReadSupport} or {@link ContinuousReadSupport}.
+ * read support interfaces: {@link ContinuousReadSupport}.
  * This is exposed for a testing purpose.
  */
 @VisibleForTesting

@@ -31,6 +31,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -47,7 +49,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with CreatableRelationProvider
     with StreamingWriteSupportProvider
     with ContinuousReadSupportProvider
-    with MicroBatchReadSupportProvider
+    with TableProvider
     with Logging {
   import KafkaSourceProvider._
 
@@ -101,40 +103,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       failOnDataLoss(caseInsensitiveParams))
   }
 
-  /**
-   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport]] to read
-   * batches of Kafka data in a micro-batch streaming query.
-   */
-  override def createMicroBatchReadSupport(
-      metadataPath: String,
-      options: DataSourceOptions): KafkaMicroBatchReadSupport = {
-
-    val parameters = options.asMap().asScala.toMap
-    validateStreamOptions(parameters)
-    // Each running query should use its own group id. Otherwise, the query may be only assigned
-    // partial data since Kafka will assign partitions to multiple consumers having the same group
-    // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
-
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
-
-    val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
-      STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
-
-    val kafkaOffsetReader = new KafkaOffsetReader(
-      strategy(caseInsensitiveParams),
-      kafkaParamsForDriver(specifiedKafkaParams),
-      parameters,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
-
-    new KafkaMicroBatchReadSupport(
-      kafkaOffsetReader,
-      kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-      options,
-      metadataPath,
-      startingStreamOffsets,
-      failOnDataLoss(caseInsensitiveParams))
+  override def getTable(options: DataSourceOptions): KafkaTable = {
+    new KafkaTable(strategy(options.asMap().asScala.toMap))
   }
 
   /**
@@ -335,9 +305,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // Validate user-specified Kafka options
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
-      throw new IllegalArgumentException(
-        s"Kafka option '${ConsumerConfig.GROUP_ID_CONFIG}' is not supported as " +
-          s"user-specified consumer groups are not used to track offsets.")
+      logWarning(CUSTOM_GROUP_ID_ERROR_MESSAGE)
+      if (caseInsensitiveParams.contains(GROUP_ID_PREFIX)) {
+        logWarning("Option 'groupIdPrefix' will be ignored as " +
+          s"option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set.")
+      }
     }
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}")) {
@@ -432,6 +404,52 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
   }
+
+  class KafkaTable(strategy: => ConsumerStrategy) extends Table
+    with SupportsMicroBatchRead {
+
+    override def name(): String = s"Kafka $strategy"
+
+    override def schema(): StructType = KafkaOffsetReader.kafkaSchema
+
+    override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new ScanBuilder {
+      override def build(): Scan = new KafkaScan(options)
+    }
+  }
+
+  class KafkaScan(options: DataSourceOptions) extends Scan {
+
+    override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
+
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      val parameters = options.asMap().asScala.toMap
+      validateStreamOptions(parameters)
+      // Each running query should use its own group id. Otherwise, the query may be only assigned
+      // partial data since Kafka will assign partitions to multiple consumers having the same group
+      // id. Hence, we should generate a unique id for each query.
+      val uniqueGroupId = streamingUniqueGroupId(parameters, checkpointLocation)
+
+      val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+      val specifiedKafkaParams = convertToSpecifiedParams(parameters)
+
+      val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+        caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+
+      val kafkaOffsetReader = new KafkaOffsetReader(
+        strategy(parameters),
+        kafkaParamsForDriver(specifiedKafkaParams),
+        parameters,
+        driverGroupIdPrefix = s"$uniqueGroupId-driver")
+
+      new KafkaMicroBatchStream(
+        kafkaOffsetReader,
+        kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
+        options,
+        checkpointLocation,
+        startingStreamOffsets,
+        failOnDataLoss(caseInsensitiveParams))
+    }
+  }
 }
 
 private[kafka010] object KafkaSourceProvider extends Logging {
@@ -440,6 +458,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
+  private val GROUP_ID_PREFIX = "groupidprefix"
 
   val TOPIC_OPTION_KEY = "topic"
 
@@ -459,7 +478,16 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       | source option "failOnDataLoss" to "false".
     """.stripMargin
 
-
+  val CUSTOM_GROUP_ID_ERROR_MESSAGE =
+    s"""Kafka option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set on this query, it is
+       | not recommended to set this option. This option is unsafe to use since multiple concurrent
+       | queries or sources using the same group id will interfere with each other as they are part
+       | of the same consumer group. Restarted queries may also suffer interference from the
+       | previous run having the same group id. The user should have only one query per group id,
+       | and/or set the option 'kafka.session.timeout.ms' to be very small so that the Kafka
+       | consumers from the previous query are marked dead by the Kafka group coordinator before the
+       | restarted query starts running.
+    """.stripMargin
 
   private val serClassName = classOf[ByteArraySerializer].getName
   private val deserClassName = classOf[ByteArrayDeserializer].getName
@@ -510,7 +538,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
       // So that consumers in executors do not mess with any existing group id
-      .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-executor")
+      .setIfUnset(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-executor")
 
       // So that consumers in executors does not commit offsets unnecessarily
       .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
@@ -529,7 +557,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       parameters: Map[String, String],
       metadataPath: String): String = {
     val groupIdPrefix = parameters
-      .getOrElse("groupIdPrefix", "spark-kafka-source")
+      .getOrElse(GROUP_ID_PREFIX, "spark-kafka-source")
     s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
   }
 

@@ -244,8 +244,11 @@ pod template that will always be overwritten by Spark. Therefore, users of this 
 the pod template file only lets Spark start with a template pod instead of an empty pod during the pod-building process.
 For details, see the [full list](#pod-template-properties) of pod template values that will be overwritten by spark.
 
-Pod template files can also define multiple containers. In such cases, Spark will always assume that the first container in
-the list will be the driver or executor container.
+Pod template files can also define multiple containers. In such cases, you can use the spark properties
+`spark.kubernetes.driver.podTemplateContainerName` and `spark.kubernetes.executor.podTemplateContainerName`
+to indicate which container should be used as a basis for the driver or executor.
+If not specified, or if the container name is not valid, Spark will assume that the first container in the list
+will be the driver or executor container.
 
 ## Using Kubernetes Volumes
 
@@ -346,6 +349,16 @@ the Spark application.
 
 ## Kubernetes Features
 
+### Configuration File
+
+Your Kubernetes config file typically lives under `.kube/config` in your home directory or in a location specified by the `KUBECONFIG` environment variable.  Spark on Kubernetes will attempt to use this file to do an initial auto-configuration of the Kubernetes client used to interact with the Kubernetes cluster.  A variety of Spark configuration properties are provided that allow further customising the client configuration e.g. using an alternative authentication method.
+
+### Contexts
+
+Kubernetes configuration files can contain multiple contexts that allow for switching between different clusters and/or user identities.  By default Spark on Kubernetes will use your current context (which can be checked by running `kubectl config current-context`) when doing the initial auto-configuration of the Kubernetes client.  
+
+In order to use an alternative context users can specify the desired context via the Spark configuration property `spark.kubernetes.context` e.g. `spark.kubernetes.context=minikube`.
+
 ### Namespaces
 
 Kubernetes has the concept of [namespaces](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/).
@@ -418,13 +431,23 @@ Some of these include:
 
 # Configuration
 
-See the [configuration page](configuration.html) for information on Spark configurations.  The following configurations are
-specific to Spark on Kubernetes.
+See the [configuration page](configuration.html) for information on Spark configurations.  The following configurations are specific to Spark on Kubernetes.
 
 #### Spark Properties
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.kubernetes.context</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    The context from the user Kubernetes configuration file used for the initial 
+    auto-configuration of the Kubernetes client library.  When not specified then
+    the users current context is used.  <strong>NB:</strong> Many of the 
+    auto-configured settings can be overridden by the use of other Spark 
+    configuration properties e.g. <code>spark.kubernetes.namespace</code>.
+  </td>
+</tr>
 <tr>
   <td><code>spark.kubernetes.namespace</code></td>
   <td><code>default</code></td>
@@ -947,16 +970,32 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.podTemplateFile</code></td>
   <td>(none)</td>
   <td>
-   Specify the local file that contains the driver [pod template](#pod-template). For example
-   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml`</code>
+   Specify the local file that contains the driver <a href="#pod-template">pod template</a>. For example
+   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.podTemplateContainerName</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the container name to be used as a basis for the driver in the given <a href="#pod-template">pod template</a>.
+   For example <code>spark.kubernetes.driver.podTemplateContainerName=spark-driver</code>
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.podTemplateFile</code></td>
   <td>(none)</td>
   <td>
-   Specify the local file that contains the executor [pod template](#pod-template). For example
-   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml`</code>
+   Specify the local file that contains the executor <a href="#pod-template">pod template</a>. For example
+   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.podTemplateContainerName</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the container name to be used as a basis for the executor in the given <a href="#pod-template">pod template</a>.
+   For example <code>spark.kubernetes.executor.podTemplateContainerName=spark-executor</code>
   </td>
 </tr>
 <tr>

@@ -34,7 +34,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
         val rightHint = mergeHints(collectHints(j.right))
         j.copy(hint = JoinHint(leftHint, rightHint))
     }
-    pulledUp.transform {
+    pulledUp.transformUp {
       case h: ResolvedHint => h.child
     }
   }
