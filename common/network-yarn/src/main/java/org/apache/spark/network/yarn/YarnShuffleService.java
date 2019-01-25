@@ -39,7 +39,9 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.api.*;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -85,7 +87,8 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
   private static final boolean DEFAULT_SPARK_AUTHENTICATE = false;
 
-  private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
+  @VisibleForTesting
+  static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
   private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
 
   // Whether failure during service initialization should stop the NM.
@@ -93,14 +96,16 @@ public class YarnShuffleService extends AuxiliaryService {
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
-  // Whether enable multiple disk recovery on registered executors, we assume that
-  // yarn.nodemanager.local-dirs are mounted on multiple disks.
+  // Whether enable multiple directories recovery on registered executors info,
+  // If enabled, both _recoveryPath and yarn.nodemanager.local-dirs are used for
+  // recovery, and they are supposed to be mounted on multiple disks.
   @VisibleForTesting
-  static final String REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY =
-      "spark.yarn.shuffle.registeredExecutors.multipleDiskRecovery";
-  private static final boolean DEFAULT_REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY = false;
+  static final String REGISTERED_EXECUTORS_MULTIPLE_DIRECTORIES_RECOVERY =
+      "spark.yarn.shuffle.registeredExecutors.multipleDirsRecovery";
+  private static final boolean DEFAULT_REGISTERED_EXECUTORS_MULTIPLE_DIRECTORIES_RECOVERY = false;
   // Disk check interval in milliseconds
-  private static final String REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL =
+  @VisibleForTesting
+  static final String REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL =
       "spark.yarn.shuffle.registeredExecutorsFile.checkInterval";
   private static final long DEFAULT_REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL = 60 * 1000;
 
@@ -168,8 +173,10 @@ public class YarnShuffleService extends AuxiliaryService {
     _conf = conf;
 
     boolean stopOnFailure = conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
-    boolean multiDiskRecovery = conf.getBoolean(REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY,
-        DEFAULT_REGISTERED_EXECUTORS_MULTIPLE_DISK_RECOVERY);
+
+    // Whether should check multiple directories for recovery
+    boolean multiDirsRecovery = conf.getBoolean(REGISTERED_EXECUTORS_MULTIPLE_DIRECTORIES_RECOVERY,
+        DEFAULT_REGISTERED_EXECUTORS_MULTIPLE_DIRECTORIES_RECOVERY);
 
     try {
       // In case this NM was killed while there were running spark applications, we need to restore
@@ -178,21 +185,27 @@ public class YarnShuffleService extends AuxiliaryService {
       // an application was stopped while the NM was down, we expect yarn to call stopApplication()
       // when it comes back
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
+      // Directories for recovery
+      String[] recoveryDirs = null;
+      // The interval for checking registered executor file and failing over if it's broken.
+      // Can only be used with multiple directories recovery
+      long checkInterval = -1;
+
       if (_recoveryPath != null) {
-        if (multiDiskRecovery) {
-          List<String> recoveryPaths = Lists.newArrayList();
-          recoveryPaths.add(_recoveryPath.toUri().getPath());
-          Collection<String> localDirs = conf.getTrimmedStringCollection("yarn.nodemanager.local-dirs");
-          recoveryPaths.addAll(localDirs);
-          blockHandler = new ExternalShuffleBlockHandler(transportConf, recoveryPaths, RECOVERY_FILE_NAME,
-              conf.getLong(REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL, DEFAULT_REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL));
+        if (multiDirsRecovery) {
+          List<String> recoveryDirList = Lists.newArrayList();
+          recoveryDirList.add(_recoveryPath.toUri().getPath());
+          Collection<String> localDirs = conf.getTrimmedStringCollection(YarnConfiguration.NM_LOCAL_DIRS);
+          recoveryDirList.addAll(localDirs);
+          recoveryDirs = recoveryDirList.toArray(new String[0]);
+          registeredExecutorFile = findRegisteredExecutorFile(recoveryDirs, RECOVERY_FILE_NAME);
+          checkInterval = conf.getLong(REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL,
+              DEFAULT_REGISTERED_EXECUTORS_FILE_CHECK_INTERVAL);
         } else {
           registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
-          blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
         }
-      } else {
-        blockHandler = new ExternalShuffleBlockHandler(transportConf, null);
       }
+      blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile, recoveryDirs, checkInterval);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
@@ -418,6 +431,40 @@ public class YarnShuffleService extends AuxiliaryService {
 
     return new File(_recoveryPath.toUri().getPath(), dbName);
   }
+
+  public static File findRegisteredExecutorFile(
+      String[] recoveryPaths, String recoveryFileName) {
+    File newFile = null;
+    if (recoveryPaths != null) {
+      File latestFile = null;
+      for (String path : recoveryPaths) {
+        File registeredExecutorFile = new File(path, recoveryFileName);
+        if (registeredExecutorFile.exists()) {
+          if (registeredExecutorFile.canRead()
+              && registeredExecutorFile.canWrite()) {
+            if (latestFile == null || registeredExecutorFile.lastModified() > latestFile.lastModified()) {
+              latestFile = registeredExecutorFile;
+            }
+          }
+        } else {
+          if (newFile == null) {
+            try {
+              JavaUtils.deleteRecursively(registeredExecutorFile);
+              newFile = registeredExecutorFile;
+            } catch (IOException e) {
+              logger.warn("Failed to delete old registered executor file " + registeredExecutorFile, e);
+            }
+          }
+        }
+      }
+      if (latestFile == null) {
+        return newFile;
+      }
+      return latestFile;
+    }
+    return null;
+  }
+
 
   /**
    * Simply encodes an application ID.

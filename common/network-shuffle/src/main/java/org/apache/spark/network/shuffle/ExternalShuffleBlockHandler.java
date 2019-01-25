@@ -61,16 +61,17 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   private final OneForOneStreamManager streamManager;
   private final ShuffleMetrics metrics;
 
-  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
+  public ExternalShuffleBlockHandler(
+      TransportConf conf, File registeredExecutorFile)
     throws IOException {
-    this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
+    this(conf, registeredExecutorFile, null, -1L);
   }
 
   public ExternalShuffleBlockHandler(
-      TransportConf conf, List<String> localDirs, String recoveryFileName, long diskCheckInterval) throws IOException {
+      TransportConf conf, File registeredExecutorFile, String[] recoveryDirs, long checkInterval)
+    throws IOException {
     this(new OneForOneStreamManager(),
-        new ExternalShuffleBlockResolver(conf, localDirs, recoveryFileName, diskCheckInterval));
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile, recoveryDirs, checkInterval));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */

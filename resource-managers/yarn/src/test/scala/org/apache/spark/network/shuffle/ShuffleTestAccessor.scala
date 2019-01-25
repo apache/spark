@@ -44,6 +44,11 @@ object ShuffleTestAccessor {
     Option(resolver.executors.get(id))
   }
 
+  def getAllExecutorInfos(resolver: ExternalShuffleBlockResolver):
+  ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
+    resolver.executors
+  }
+
   def registeredExecutorFile(resolver: ExternalShuffleBlockResolver): File = {
     resolver.registeredExecutorFile
   }

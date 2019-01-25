@@ -35,11 +35,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.Weigher;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -90,11 +90,9 @@ public class ExternalShuffleBlockResolver {
 
   private final TransportConf conf;
 
-  private final List<String> recoveryPaths;
-
-  private final String recoveryFileName;
-
   private AtomicBoolean registerExecutorFailed = new AtomicBoolean(false);
+
+  private String[] recoveryDirs;
 
   @VisibleForTesting
   File registeredExecutorFile;
@@ -105,58 +103,40 @@ public class ExternalShuffleBlockResolver {
     "org.apache.spark.shuffle.sort.SortShuffleManager",
     "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager");
 
-  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
-      throws IOException {
-    this(conf, registeredExecutorFile, null, null, -1,
-        Executors.newSingleThreadExecutor(
-        // Add `spark` prefix because it will run in NM in Yarn mode.
-        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
-  }
-
   public ExternalShuffleBlockResolver(
       TransportConf conf,
       File registeredExecutorFile,
-      Executor directoryCleaner) throws IOException {
-    this(conf, registeredExecutorFile, null, null, -1, directoryCleaner);
-  }
-
-  ExternalShuffleBlockResolver(
-      TransportConf conf,
-      List<String> recoveryPaths,
-      String registeredExecutorFileName,
+      String[] recoveryDirs,
       long checkInterval) throws IOException {
-    this(conf, null, recoveryPaths, registeredExecutorFileName, checkInterval,
+    this(conf, registeredExecutorFile,
         Executors.newSingleThreadExecutor(
             NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
+    this.recoveryDirs = recoveryDirs;
+    if (this.recoveryDirs != null) {
+      Preconditions.checkArgument(checkInterval > 0,
+          "Check interval of multiple directories recovery should be a positive number");
+      ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
+          NettyUtils.createThreadFactory("spark-shuffle-disk-checker"));
+      executor.scheduleAtFixedRate(this::checkRegisteredExecutorFileAndRecover,
+          checkInterval, checkInterval, TimeUnit.MILLISECONDS);
+    }
   }
 
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
+      throws IOException {
+    this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
+        // Add `spark` prefix because it will run in NM in Yarn mode.
+        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
+  }
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
   ExternalShuffleBlockResolver(
       TransportConf conf,
       File registeredExecutorFile,
-      List<String> recoveryPaths,
-      String recoveryFileName,
-      long checkInterval,
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
-    if (registeredExecutorFile != null) {
-      this.registeredExecutorFile = registeredExecutorFile;
-      this.recoveryPaths = null;
-      this.recoveryFileName = null;
-    } else {
-      this.recoveryPaths = recoveryPaths;
-      this.recoveryFileName = recoveryFileName;
-      this.registeredExecutorFile = findRegisteredExecutorFile();
-    }
-    if (checkInterval > 0) {
-      ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
-          NettyUtils.createThreadFactory("spark-shuffle-disk-checker"));
-      executor.scheduleAtFixedRate(() -> {
-        checkRegisteredExecutorFileAndRecover();
-      }, checkInterval, checkInterval, TimeUnit.MILLISECONDS);
-    }
+    this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
         new CacheLoader<File, ShuffleIndexInformation>() {
@@ -185,63 +165,33 @@ public class ExternalShuffleBlockResolver {
     return executors.size();
   }
 
-  public File findRegisteredExecutorFile() {
-    File newFile = null;
-    if (recoveryPaths != null) {
-      File latestFile = null;
-      for (String path : recoveryPaths) {
-        File registeredExecutorFile = new File(path, recoveryFileName);
-        if (registeredExecutorFile.exists()) {
-          if (registeredExecutorFile.canRead()
-              && registeredExecutorFile.canWrite()) {
-            if (latestFile == null || registeredExecutorFile.lastModified() > latestFile.lastModified()) {
-              latestFile = registeredExecutorFile;
-            }
-          }
-        } else {
-          try {
-            JavaUtils.deleteRecursively(registeredExecutorFile);
-            newFile = registeredExecutorFile;
-          } catch (IOException e) {
-            logger.warn("Failed to delete old registered executor file " + registeredExecutorFile, e);
-          }
-        }
-      }
-      if (latestFile == null) {
-        return newFile;
-      }
-      return latestFile;
-    }
-    return null;
-  }
-
   public File saveNewRegisteredExecutorFile() {
-    if (recoveryPaths != null) {
-      for (String path : recoveryPaths) {
-        File newRegisteredExecutorFile = new File(path, recoveryFileName);
-        if (!newRegisteredExecutorFile.exists()) {
-          try {
-            DB newDb = LevelDBProvider.initLevelDB(newRegisteredExecutorFile, CURRENT_VERSION, mapper);
-            for (Map.Entry<AppExecId, ExecutorShuffleInfo> entry : executors.entrySet()) {
-              byte[] key = dbAppExecKey(entry.getKey());
-              byte[] value = mapper.writeValueAsString(entry.getValue()).getBytes(StandardCharsets.UTF_8);
-              db.put(key, value);
-            }
-            if (this.db != null) {
-              try {
-                this.db.close();
-                JavaUtils.deleteRecursively(registeredExecutorFile);
-              } catch (IOException e) {
-                logger.warn("Failed to clean up old registered executors file at " + registeredExecutorFile, e);
-              }
-            }
-            this.db = newDb;
-            this.registeredExecutorFile = newRegisteredExecutorFile;
-            return newRegisteredExecutorFile;
-          } catch (Exception e) {
-            logger.error("Exception occurred while saving registered executors info to new file " + newRegisteredExecutorFile, e);
-            // continue
+    String recoveryFileName = registeredExecutorFile.getName();
+    for (String path : recoveryDirs) {
+      File newRegisteredExecutorFile = new File(path, recoveryFileName);
+      if (!newRegisteredExecutorFile.exists()) {
+        try {
+          DB newDb = LevelDBProvider.initLevelDB(newRegisteredExecutorFile, CURRENT_VERSION, mapper);
+          for (Map.Entry<AppExecId, ExecutorShuffleInfo> entry : executors.entrySet()) {
+            byte[] key = dbAppExecKey(entry.getKey());
+            byte[] value = mapper.writeValueAsString(entry.getValue()).getBytes(StandardCharsets.UTF_8);
+            newDb.put(key, value);
           }
+          // closing old db and clean up old registeredExecutorFile
+          if (this.db != null) {
+            try {
+              this.db.close();
+              JavaUtils.deleteRecursively(registeredExecutorFile);
+            } catch (IOException e) {
+              logger.warn("Failed to clean up old registered executors file at " + registeredExecutorFile, e);
+            }
+          }
+          this.db = newDb;
+          this.registeredExecutorFile = newRegisteredExecutorFile;
+          return newRegisteredExecutorFile;
+        } catch (Exception e) {
+          logger.error("Exception occurred while saving registered executors info to new file " + newRegisteredExecutorFile, e);
+          // continue
         }
       }
     }
@@ -392,9 +342,9 @@ public class ExternalShuffleBlockResolver {
   private void checkRegisteredExecutorFileAndRecover() {
     if (this.registeredExecutorFile == null) {
       return;
-    } else if (db != null && (!registeredExecutorFile.exists() ||
+    } else if (!registeredExecutorFile.exists() ||
         !registeredExecutorFile.canRead() ||
-        !registeredExecutorFile.canWrite())) {
+        !registeredExecutorFile.canWrite()) {
         saveNewRegisteredExecutorFile();
     } else if (registerExecutorFailed.getAndSet(false)) {
       saveNewRegisteredExecutorFile();
