@@ -1,20 +1,4 @@
 [ {
-  "id" : "application_1547723113049_0005",
-  "name" : "Spark SQL basic example",
-  "attempts" : [ {
-    "attemptId" : "1",
-    "startTime" : "2019-01-18T05:14:04.248GMT",
-    "endTime" : "2019-01-18T05:14:39.714GMT",
-    "lastUpdated" : "",
-    "duration" : 35466,
-    "sparkUser" : "spark",
-    "completed" : true,
-    "appSparkVersion" : "3.0.0-SNAPSHOT",
-    "startTimeEpoch" : 1547788444248,
-    "endTimeEpoch" : 1547788479714,
-    "lastUpdatedEpoch" : 0
-  } ]
-}, {
   "id" : "application_1538416563558_0014",
   "name" : "PythonBisectingKMeansExample",
   "attempts" : [ {
@@ -189,21 +173,5 @@
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1425081758277,
     "endTimeEpoch" : 1425081766912
-  } ]
-}, {
-  "id" : "application_1547723113049_0006",
-  "name" : "Spark SQL basic example",
-  "attempts" : [ {
-    "attemptId" : "1",
-    "startTime" : "2019-01-18T05:14:14.200GMT",
-    "endTime" : "1969-12-31T23:59:59.999GMT",
-    "lastUpdated" : "",
-    "duration" : 0,
-    "sparkUser" : "spark",
-    "completed" : false,
-    "appSparkVersion" : "3.0.0-SNAPSHOT",
-    "startTimeEpoch" : 1547788454200,
-    "endTimeEpoch" : -1,
-    "lastUpdatedEpoch" : 0
   } ]
 } ]

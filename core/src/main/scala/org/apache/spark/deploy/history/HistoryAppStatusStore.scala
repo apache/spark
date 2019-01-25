@@ -26,7 +26,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
-import org.apache.spark.status.api.v1.ExecutorSummary
 import org.apache.spark.util.kvstore.KVStore
 
 private[spark] class HistoryAppStatusStore(
@@ -36,11 +35,10 @@ private[spark] class HistoryAppStatusStore(
 
   import HistoryAppStatusStore._
 
-  private val applyReplaceLogUrlToIncompleteApp: Boolean =
-    conf.get(APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP)
-
   private val logUrlPattern: Option[String] = {
-    if (isApplicationCompleted || applyReplaceLogUrlToIncompleteApp) {
+    val appInfo = super.applicationInfo()
+    val applicationCompleted = appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
+    if (applicationCompleted || conf.get(APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP)) {
       conf.get(CUSTOM_EXECUTOR_LOG_URL)
     } else {
       None
@@ -65,12 +63,7 @@ private[spark] class HistoryAppStatusStore(
     }
   }
 
-  private def isApplicationCompleted: Boolean = {
-    val appInfo = super.applicationInfo()
-    appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
-  }
-
-  private def replaceLogUrls(exec: ExecutorSummary, urlPattern: String): ExecutorSummary = {
+  private def replaceLogUrls(exec: v1.ExecutorSummary, urlPattern: String): v1.ExecutorSummary = {
     val attributes = exec.attributes
 
     // Relation between pattern {{FILE_NAME}} and attribute {{LOG_FILES}}
@@ -115,16 +108,16 @@ private[spark] class HistoryAppStatusStore(
       reason: String,
       allPatterns: Set[String],
       allAttributes: Set[String]): Unit = {
-
     if (informedForMissingAttributes.compareAndSet(false, true)) {
       logInfo(s"Fail to renew executor log urls: $reason. Required: $allPatterns / " +
         s"available: $allAttributes. Failing back to show app's original log urls.")
     }
   }
 
-  private def replaceExecutorLogs(source: ExecutorSummary, newExecutorLogs: Map[String, String])
-    : ExecutorSummary = {
-    new ExecutorSummary(source.id, source.hostPort, source.isActive, source.rddBlocks,
+  private def replaceExecutorLogs(
+      source: v1.ExecutorSummary,
+      newExecutorLogs: Map[String, String]): v1.ExecutorSummary = {
+    new v1.ExecutorSummary(source.id, source.hostPort, source.isActive, source.rddBlocks,
       source.memoryUsed, source.diskUsed, source.totalCores, source.maxTasks, source.activeTasks,
       source.failedTasks, source.completedTasks, source.totalTasks, source.totalDuration,
       source.totalGCTime, source.totalInputBytes, source.totalShuffleRead,

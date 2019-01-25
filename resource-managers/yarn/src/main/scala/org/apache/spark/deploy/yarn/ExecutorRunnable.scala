@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.nio.ByteBuffer
-import java.util.Collections
+import java.util.{Collections, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
@@ -34,13 +34,13 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.NMClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
-import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, YarnExecutorHelper}
 
 private[yarn] class ExecutorRunnable(
     container: Option[Container],
@@ -227,13 +227,6 @@ private[yarn] class ExecutorRunnable(
     val env = new HashMap[String, String]()
     Client.populateClasspath(null, conf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
-    // lookup appropriate http scheme for container log urls
-    val yarnHttpPolicy = conf.get(
-      YarnConfiguration.YARN_HTTP_POLICY_KEY,
-      YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
-    )
-    val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
-
     System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
       .foreach { case (k, v) => env(k) = v }
 
@@ -250,22 +243,16 @@ private[yarn] class ExecutorRunnable(
 
     // Add log urls, as well as executor attributes
     container.foreach { c =>
-      val containerId = ConverterUtils.toString(c.getId)
-      val address = c.getNodeHttpAddress
+      YarnExecutorHelper.getLogUrls(conf, Some(c)).foreach { m =>
+        m.foreach { case (fileName, url) =>
+          env("SPARK_LOG_URL_" + fileName.toUpperCase(Locale.ROOT)) = url
+        }
+      }
 
-      env("SPARK_EXECUTOR_ATTRIBUTE_HTTP_SCHEME") = httpScheme
-      env("SPARK_EXECUTOR_ATTRIBUTE_NODE_HTTP_ADDRESS") = address
-      env("SPARK_EXECUTOR_ATTRIBUTE_CLUSTER_ID") = clusterId.getOrElse("")
-      env("SPARK_EXECUTOR_ATTRIBUTE_CONTAINER_ID") = containerId
-
-      sys.env.filterKeys(_.endsWith("USER")).foreach { u =>
-        val user = u._2
-        val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
-        env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
-        env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
-
-        env("SPARK_EXECUTOR_ATTRIBUTE_USER") = user
-        env("SPARK_EXECUTOR_ATTRIBUTE_LOG_FILES") = "stderr,stdout"
+      YarnExecutorHelper.getAttributes(conf, Some(c)).foreach { m =>
+        m.foreach { case (attr, value) =>
+          env("SPARK_EXECUTOR_ATTRIBUTE_" + attr.toUpperCase(Locale.ROOT)) = value
+        }
       }
     }
 

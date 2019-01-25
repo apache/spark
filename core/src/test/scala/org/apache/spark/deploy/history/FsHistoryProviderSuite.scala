@@ -294,10 +294,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   test("log urls without customization") {
     val conf = createTestConf()
-    val appId = "app1"
-    val user = "user1"
-
-    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
       execInfo -> execInfo.logUrlMap
@@ -313,10 +310,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // some of available attributes are not used in pattern which should be OK
 
-    val appId = "app1"
-    val user = "user1"
-
-    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
       val attr = execInfo.attributes
@@ -339,10 +333,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // some of available attributes are not used in pattern which should be OK
 
-    val appId = "app1"
-    val user = "user1"
-
-    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
       val attr = execInfo.attributes
@@ -363,13 +354,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
         "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{NON_EXISTING}}/{{FILE_NAME}}")
 
-    val appId = "app1"
-    val user = "user1"
-
-    val executorInfos = (1 to 5).map(createTestExecutorInfo(appId, user, _))
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
-
       execInfo -> execInfo.logUrlMap
     }.toMap
 
@@ -383,11 +370,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
         "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{NON_EXISTING}}/{{FILE_NAME}}")
 
-    val appId = "app1"
-    val user = "user1"
-
     val executorInfos = (1 to 5).map(
-      createTestExecutorInfo(appId, user, _, includingLogFiles = false))
+      createTestExecutorInfo("app1", "user1", _, includingLogFiles = false))
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
       execInfo -> execInfo.logUrlMap
@@ -396,19 +380,61 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     testHandlingExecutorLogUrl(conf, expected)
   }
 
+  test("custom log urls, app not finished, applyIncompleteApplication: true") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
+        "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}}")
+      .set(APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP, true)
+
+    // ensure custom log urls are applied to incomplete application
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      val attr = execInfo.attributes
+      val newLogUrlMap = attr("LOG_FILES").split(",").map { file =>
+        val newLogUrl = s"http://newhost:9999/logs/clusters/${attr("CLUSTER_ID")}" +
+          s"/users/${attr("USER")}/containers/${attr("CONTAINER_ID")}/$file"
+        file -> newLogUrl
+      }.toMap
+
+      execInfo -> newLogUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected, isCompletedApp = false)
+  }
+
+  test("custom log urls, app not finished, applyIncompleteApplication: false") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}" +
+        "/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}}")
+      .set(APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP, false)
+
+    // ensure custom log urls are NOT applied to incomplete application
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected, isCompletedApp = false)
+  }
+
   private def testHandlingExecutorLogUrl(
       conf: SparkConf,
-      expectedLogUrlMap: Map[ExecutorInfo, Map[String, String]]): Unit = {
+      expectedLogUrlMap: Map[ExecutorInfo, Map[String, String]],
+      isCompletedApp: Boolean = true): Unit = {
     val provider = new FsHistoryProvider(conf)
 
     val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = true)
 
     val executorAddedEvents = expectedLogUrlMap.keys.zipWithIndex.map { case (execInfo, idx) =>
-      val event = SparkListenerExecutorAdded(1 + idx, s"exec$idx", execInfo)
-      event
+      SparkListenerExecutorAdded(1 + idx, s"exec$idx", execInfo)
     }.toList.sortBy(_.time)
     val allEvents = List(SparkListenerApplicationStart("app1", Some("app1"), 1L,
-      "test", Some("attempt1"))) ++ executorAddedEvents
+      "test", Some("attempt1"))) ++ executorAddedEvents ++
+      (if (isCompletedApp) List(SparkListenerApplicationEnd(1000L)) else Seq())
 
     writeFile(attempt1, true, None, allEvents: _*)
 

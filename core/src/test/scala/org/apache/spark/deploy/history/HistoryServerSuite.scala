@@ -109,8 +109,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
-  override protected def afterAll(): Unit = stop()
-
   val cases = Seq(
     "application list json" -> "applications",
     "completed app list json" -> "applications?status=completed",
@@ -185,42 +183,19 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   // in the test resource folder
   cases.foreach { case (name, path) =>
     test(name) {
-      val expectationFile = new File(expRoot, HistoryServerSuite.sanitizePath(name) +
-        "_expectation.json")
-      assertApiCallResponse(path, expectationFile)
-    }
-  }
+      val (code, jsonOpt, errOpt) = getContentAndCode(path)
+      code should be (HttpServletResponse.SC_OK)
+      jsonOpt should be ('defined)
+      errOpt should be (None)
 
-  val casesCustomLogUrl = Seq(
-    "completed app executor list json apply custom log urls" ->
-      "applications/application_1547723113049_0005/1/executors",
-    "incomplete app executor list json apply custom log urls" ->
-      "applications/application_1547723113049_0006/1/executors"
-  )
-
-  casesCustomLogUrl.foreach { case (name, path) =>
-    Seq(true, false).foreach { applyToIncompleteApp =>
-      val newName = name + s" apply incomplete app $applyToIncompleteApp"
-      test(newName) {
-        // This only verifies whether applying custom log URLs is in effect for SHS.
-        // Validation of "custom log URLs" functionality will be covered from different UTs.
-
-        // restart server
-        try {
-          stop()
-          init(
-            CUSTOM_EXECUTOR_LOG_URL.key -> ("http://newhost:9999/logs/clusters/" +
-              "{{CLUSTER_ID}}/users/{{USER}}/containers/{{CONTAINER_ID}}/{{FILE_NAME}}"),
-            APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP.key -> applyToIncompleteApp.toString)
-
-          val expectationFile = new File(expRoot, HistoryServerSuite.sanitizePath(newName) +
-            "_expectation.json")
-          assertApiCallResponse(path, expectationFile)
-        } finally {
-          // make sure other UTs are not affected from relaunching HistoryServer
-          stop()
-        }
-      }
+      val exp = IOUtils.toString(new FileInputStream(
+        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
+      // compare the ASTs so formatting differences don't cause failures
+      import org.json4s._
+      import org.json4s.jackson.JsonMethods._
+      val jsonAst = parse(clearLastUpdated(jsonOpt.get))
+      val expAst = parse(exp)
+      assertValidDataInJson(jsonAst, expAst)
     }
   }
 
@@ -686,21 +661,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     out.write(clearLastUpdated(json))
     out.write('\n')
     out.close()
-  }
-
-  private def assertApiCallResponse(path: String, expectationFile: File): Unit = {
-    val (code, jsonOpt, errOpt) = getContentAndCode(path)
-    code should be (HttpServletResponse.SC_OK)
-    jsonOpt should be ('defined)
-    errOpt should be (None)
-
-    val exp = IOUtils.toString(new FileInputStream(expectationFile))
-    // compare the ASTs so formatting differences don't cause failures
-    import org.json4s._
-    import org.json4s.jackson.JsonMethods._
-    val jsonAst = parse(clearLastUpdated(jsonOpt.get))
-    val expAst = parse(exp)
-    assertValidDataInJson(jsonAst, expAst)
   }
 
 }

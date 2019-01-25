@@ -107,16 +107,7 @@ class ExecutorSummary private[spark](
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
-    val attributes: Map[String, String]) {
-
-  def replaceExecutorLogs(newExecutorLogs: Map[String, String]): ExecutorSummary = {
-    new ExecutorSummary(id, hostPort, isActive, rddBlocks, memoryUsed, diskUsed, totalCores,
-      maxTasks, activeTasks, failedTasks, completedTasks, totalTasks, totalDuration,
-      totalGCTime, totalInputBytes, totalShuffleRead, totalShuffleWrite, isBlacklisted,
-      maxMemory, addTime, removeTime, removeReason, newExecutorLogs, memoryMetrics,
-      blacklistedInStages, peakMemoryMetrics, attributes)
-  }
-}
+    val attributes: Map[String, String])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
