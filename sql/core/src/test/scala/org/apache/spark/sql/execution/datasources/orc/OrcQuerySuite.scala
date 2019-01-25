@@ -270,13 +270,16 @@ abstract class OrcQueryTest extends OrcTest {
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
-    // The test closure has side effect that changes table 't'. Running it without resetting
-    // the table data twice with vectorized=true and false will fail at the second time.
-    // Since it cares about inserting, we only do testing for vectorized=false.
-    withOrcTable(data, "t", testVectorized = false) {
-      sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+
+    withOrcFile(data) { file =>
+      withTempView("t") {
+        spark.read.orc(file).createOrReplaceTempView("t")
+        checkAnswer(spark.table("t"), data.map(Row.fromTuple))
+        sql("INSERT INTO TABLE t SELECT * FROM tmp")
+        checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+      }
     }
+
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tmp"),
       ignoreIfNotExists = true,
