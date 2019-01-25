@@ -139,7 +139,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
   }
 
-  override def supportsDataType(dataType: DataType): Boolean =
+  override def supportDataType(dataType: DataType): Boolean =
     dataType == StringType
 }
 

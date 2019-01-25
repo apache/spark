@@ -366,17 +366,6 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
-  test("SPARK-26716 supports writing and reading Null data type - json") {
-    withTempPath { dir =>
-      val df = spark.range(10).map(id => (id, null)).toDF("c1", "c2")
-      df.write.json(dir.getCanonicalPath)
-      checkAnswer(spark.read.json(dir.getCanonicalPath), df)
-      val schema =
-        StructType(Seq(StructField("c1", LongType, true), StructField("c2", NullType, true)))
-      checkAnswer(spark.read.schema(schema).json(dir.getCanonicalPath), df)
-    }
-  }
-
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
     withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc") {
       withTempDir { dir =>
