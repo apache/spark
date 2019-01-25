@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.hive.HiveSessionCatalog
+import org.apache.spark.util.Utils
 
 trait CreateHiveTableAsSelectBase extends DataWritingCommand {
   val tableDesc: CatalogTable
@@ -83,10 +84,14 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     tableDesc: CatalogTable,
     tableExists: Boolean): DataWritingCommand
 
-  override def argString: String = {
-    s"[Database:${tableDesc.database}, " +
+  // A subclass should override this with the Class name of the concrete type expected to be
+  // returned from `getWritingCommand`.
+  def writingCommandClassName: String
+
+  override def argString(maxFields: Int): String = {
+    s"[Database: ${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
-    s"InsertIntoHiveTable]"
+    s"${writingCommandClassName}]"
   }
 }
 
@@ -118,6 +123,9 @@ case class CreateHiveTableAsSelectCommand(
       ifPartitionNotExists = false,
       outputColumnNames = outputColumnNames)
   }
+
+  override def writingCommandClassName: String =
+    Utils.getSimpleName(classOf[InsertIntoHiveTable])
 }
 
 /**
@@ -162,4 +170,7 @@ case class OptimizedCreateHiveTableAsSelectCommand(
       Some(hadoopRelation.location),
       query.output.map(_.name))
   }
+
+  override def writingCommandClassName: String =
+    Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand])
 }

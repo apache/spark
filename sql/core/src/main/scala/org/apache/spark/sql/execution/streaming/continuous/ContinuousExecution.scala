@@ -30,8 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2StreamingScanExec, StreamingDataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{ContinuousScanExec, OldStreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
@@ -63,12 +64,12 @@ class ContinuousExecution(
     val toExecutionRelationMap = MutableMap[StreamingRelationV2, ContinuousExecutionRelation]()
     analyzedPlan.transform {
       case r @ StreamingRelationV2(
-          source: ContinuousReadSupportProvider, _, extraReaderOptions, output, _) =>
+          source: ContinuousReadSupportProvider, _, _, extraReaderOptions, output, _) =>
         // TODO: shall we create `ContinuousReadSupport` here instead of each reconfiguration?
         toExecutionRelationMap.getOrElseUpdate(r, {
           ContinuousExecutionRelation(source, extraReaderOptions, output)(sparkSession)
         })
-      case StreamingRelationV2(_, sourceName, _, _, _) =>
+      case StreamingRelationV2(_, sourceName, _, _, _, _) =>
         throw new UnsupportedOperationException(
           s"Data source $sourceName does not support continuous processing.")
     }
@@ -166,17 +167,17 @@ class ContinuousExecution(
         val readSupport = continuousSources(insertedSourceId)
         insertedSourceId += 1
         val newOutput = readSupport.fullSchema().toAttributes
-
+        val maxFields = SQLConf.get.maxToStringFields
         assert(output.size == newOutput.size,
-          s"Invalid reader: ${truncatedString(output, ",")} != " +
-            s"${truncatedString(newOutput, ",")}")
+          s"Invalid reader: ${truncatedString(output, ",", maxFields)} != " +
+            s"${truncatedString(newOutput, ",", maxFields)}")
         replacements ++= output.zip(newOutput)
 
         val loggedOffset = offsets.offsets(0)
         val realOffset = loggedOffset.map(off => readSupport.deserializeOffset(off.json))
         val startOffset = realOffset.getOrElse(readSupport.initialOffset)
         val scanConfigBuilder = readSupport.newScanConfigBuilder(startOffset)
-        StreamingDataSourceV2Relation(newOutput, source, options, readSupport, scanConfigBuilder)
+        OldStreamingDataSourceV2Relation(newOutput, source, options, readSupport, scanConfigBuilder)
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
@@ -210,7 +211,7 @@ class ContinuousExecution(
     }
 
     val (readSupport, scanConfig) = lastExecution.executedPlan.collect {
-      case scan: DataSourceV2StreamingScanExec
+      case scan: ContinuousScanExec
           if scan.readSupport.isInstanceOf[ContinuousReadSupport] =>
         scan.readSupport.asInstanceOf[ContinuousReadSupport] -> scan.scanConfig
     }.head

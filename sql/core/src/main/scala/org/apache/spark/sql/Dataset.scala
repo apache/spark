@@ -619,40 +619,41 @@ class Dataset[T] private[sql](
    *                           the caching subsystem
    */
   private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
-    val internalRdd = queryExecution.toRdd.map(_.copy())
-    if (reliableCheckpoint) {
-      internalRdd.checkpoint()
-    } else {
-      internalRdd.localCheckpoint()
-    }
-
-    if (eager) {
-      internalRdd.count()
-    }
-
-    val physicalPlan = queryExecution.executedPlan
-
-    // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-    // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-    // joins.
-    def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-      partitioning match {
-        case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-        case p => p
+    val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
+    withAction(actionName, queryExecution) { physicalPlan =>
+      val internalRdd = physicalPlan.execute().map(_.copy())
+      if (reliableCheckpoint) {
+        internalRdd.checkpoint()
+      } else {
+        internalRdd.localCheckpoint()
       }
+
+      if (eager) {
+        internalRdd.count()
+      }
+
+      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
+      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
+      // joins.
+      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
+        partitioning match {
+          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
+          case p => p
+        }
+      }
+
+      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
+
+      Dataset.ofRows(
+        sparkSession,
+        LogicalRDD(
+          logicalPlan.output,
+          internalRdd,
+          outputPartitioning,
+          physicalPlan.outputOrdering,
+          isStreaming
+        )(sparkSession)).as[T]
     }
-
-    val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(
-        logicalPlan.output,
-        internalRdd,
-        outputPartitioning,
-        physicalPlan.outputOrdering,
-        isStreaming
-      )(sparkSession)).as[T]
   }
 
   /**
@@ -862,7 +863,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
+    Join(logicalPlan, right.logicalPlan, joinType = Inner, None, JoinHint.NONE)
   }
 
   /**
@@ -940,7 +941,7 @@ class Dataset[T] private[sql](
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sparkSession.sessionState.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None, JoinHint.NONE))
       .analyzed.asInstanceOf[Join]
 
     withPlan {
@@ -948,7 +949,8 @@ class Dataset[T] private[sql](
         joined.left,
         joined.right,
         UsingJoin(JoinType(joinType), usingColumns),
-        None)
+        None,
+        JoinHint.NONE)
     }
   }
 
@@ -1001,7 +1003,7 @@ class Dataset[T] private[sql](
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
     val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr)))
+      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr), JoinHint.NONE))
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
@@ -1048,7 +1050,7 @@ class Dataset[T] private[sql](
    * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None, JoinHint.NONE)
   }
 
   /**
@@ -1083,7 +1085,8 @@ class Dataset[T] private[sql](
         this.logicalPlan,
         other.logicalPlan,
         JoinType(joinType),
-        Some(condition.expr))).analyzed.asInstanceOf[Join]
+        Some(condition.expr),
+        JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
       throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
@@ -1135,7 +1138,7 @@ class Dataset[T] private[sql](
     implicit val tuple2Encoder: Encoder[(T, U)] =
       ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
 
-    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr)))
+    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
   }
 
   /**

@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -40,6 +41,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -90,8 +93,19 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-  lazy val providingClass: Class[_] =
-    DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+  lazy val providingClass: Class[_] = {
+    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    // `providingClass` is used for resolving data source relation for catalog tables.
+    // As now catalog for data source V2 is under development, here we fall back all the
+    // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
+    // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
+    // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
+    // instead of `providingClass`.
+    cls.newInstance() match {
+      case f: FileDataSourceV2 => f.fallBackFileFormat
+      case _ => cls
+    }
+  }
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
@@ -543,23 +557,9 @@ case class DataSource(
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    allPaths.flatMap { path =>
-      val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
 
-      if (checkEmptyGlobPath && globPath.isEmpty) {
-        throw new AnalysisException(s"Path does not exist: $qualified")
-      }
-
-      // Sufficient to check head of the globPath seq for non-glob scenario
-      // Don't need to check once again if files exist in streaming mode
-      if (checkFilesExist && !fs.exists(globPath.head)) {
-        throw new AnalysisException(s"Path does not exist: ${globPath.head}")
-      }
-      globPath
-    }.toSeq
+    DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, hadoopConf,
+      checkEmptyGlobPath, checkFilesExist)
   }
 }
 
@@ -615,7 +615,7 @@ object DataSource extends Logging {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
-        classOf[OrcFileFormat].getCanonicalName
+        classOf[OrcDataSourceV2].getCanonicalName
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"
@@ -702,6 +702,48 @@ object DataSource extends Logging {
           throw e
         }
     }
+  }
+
+  /**
+   * Checks and returns files in all the paths.
+   */
+  private[sql] def checkAndGlobPathIfNecessary(
+      paths: Seq[String],
+      hadoopConf: Configuration,
+      checkEmptyGlobPath: Boolean,
+      checkFilesExist: Boolean): Seq[Path] = {
+    val allGlobPath = paths.flatMap { path =>
+      val hdfsPath = new Path(path)
+      val fs = hdfsPath.getFileSystem(hadoopConf)
+      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+
+      if (checkEmptyGlobPath && globPath.isEmpty) {
+        throw new AnalysisException(s"Path does not exist: $qualified")
+      }
+
+      // Sufficient to check head of the globPath seq for non-glob scenario
+      // Don't need to check once again if files exist in streaming mode
+      if (checkFilesExist && !fs.exists(globPath.head)) {
+        throw new AnalysisException(s"Path does not exist: ${globPath.head}")
+      }
+      globPath
+    }
+
+    if (checkFilesExist) {
+      val (filteredOut, filteredIn) = allGlobPath.partition { path =>
+        InMemoryFileIndex.shouldFilterOut(path.getName)
+      }
+      if (filteredIn.isEmpty) {
+        logWarning(
+          s"All paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
+      } else {
+        logDebug(
+          s"Some paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
+      }
+    }
+
+    allGlobPath
   }
 
   /**

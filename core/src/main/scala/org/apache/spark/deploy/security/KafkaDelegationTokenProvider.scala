@@ -44,7 +44,7 @@ private[security] class KafkaDelegationTokenProvider
       return Some(nextRenewalDate)
     } catch {
       case NonFatal(e) =>
-        logInfo(s"Failed to get token from service $serviceName", e)
+        logWarning(s"Failed to get token from service $serviceName", e)
     }
     None
   }

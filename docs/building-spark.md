@@ -138,6 +138,14 @@ To avoid the overhead of launching sbt each time you need to re-compile, you can
 in interactive mode by running `build/sbt`, and then run all build commands at the command
 prompt.
 
+### Setting up SBT's Memory Usage
+Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
+
+    -Xmx2g
+    -XX:ReservedCodeCacheSize=512m
+
+For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](http://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
+
 ## Speeding up Compilation
 
 Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc

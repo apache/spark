@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -42,7 +43,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
   // CPU settings
-  private val driverCpuCores = conf.get("spark.driver.cores", "1")
+  private val driverCpuCores = conf.get(DRIVER_CORES.key, "1")
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
@@ -85,7 +86,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
-    val driverPort = conf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT)
+    val driverPort = conf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
     val driverBlockManagerPort = conf.sparkConf.getInt(
       DRIVER_BLOCK_MANAGER_PORT.key,
       DEFAULT_BLOCKMANAGER_PORT
@@ -153,12 +154,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
 
-    Seq("spark.jars", "spark.files").foreach { key =>
-      conf.getOption(key).foreach { value =>
-        val resolved = KubernetesUtils.resolveFileUrisAndPath(Utils.stringToSeq(value))
-        if (resolved.nonEmpty) {
-          additionalProps.put(key, resolved.mkString(","))
-        }
+    Seq(JARS, FILES).foreach { key =>
+      val value = conf.get(key)
+      val resolved = KubernetesUtils.resolveFileUrisAndPath(value)
+      if (resolved.nonEmpty) {
+        additionalProps.put(key.key, resolved.mkString(","))
       }
     }
 

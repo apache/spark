@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -107,8 +108,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val secretPassword = "secret_password"
     val conf = getLoggingConf(testDirPath, None)
       .set(key, secretPassword)
+    val hadoopconf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
-    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val envDetails = SparkEnv.environmentDetails(conf, hadoopconf, "FIFO", Seq.empty, Seq.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
     assert(redactedProps(key) == "*********(redacted)")
@@ -122,7 +124,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // Expected IOException, since we haven't enabled log overwrite.
     intercept[IOException] { testEventLogging() }
     // Try again, but enable overwriting.
-    testEventLogging(extraConf = Map("spark.eventLog.overwrite" -> "true"))
+    testEventLogging(extraConf = Map(EVENT_LOG_OVERWRITE.key -> "true"))
   }
 
   test("Event log name") {
@@ -526,15 +528,15 @@ object EventLoggingListenerSuite {
   /** Get a SparkConf with event logging enabled. */
   def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
-    conf.set("spark.eventLog.enabled", "true")
-    conf.set("spark.eventLog.logBlockUpdates.enabled", "true")
-    conf.set("spark.eventLog.testing", "true")
-    conf.set("spark.eventLog.dir", logDir.toString)
+    conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_BLOCK_UPDATES, true)
+    conf.set(EVENT_LOG_TESTING, true)
+    conf.set(EVENT_LOG_DIR, logDir.toString)
     compressionCodec.foreach { codec =>
-      conf.set("spark.eventLog.compress", "true")
-      conf.set("spark.io.compression.codec", codec)
+      conf.set(EVENT_LOG_COMPRESS, true)
+      conf.set(IO_COMPRESSION_CODEC, codec)
     }
-    conf.set("spark.eventLog.logStageExecutorMetrics.enabled", "true")
+    conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf
   }
 

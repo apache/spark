@@ -323,7 +323,7 @@ class KMeansSummary(ClusteringSummary):
         return self._call_java("trainingCost")
 
 
-class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable):
     """
     Model fitted by KMeans.
 
@@ -587,6 +587,8 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.trainingCost
+    2.000...
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
@@ -700,7 +702,15 @@ class BisectingKMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+
+    @property
+    @since("3.0.0")
+    def trainingCost(self):
+        """
+        Sum of squared distances to the nearest centroid for all points in the training dataset.
+        This is equivalent to sklearn's inertia.
+        """
+        return self._call_java("trainingCost")
 
 
 @inherit_doc

@@ -45,6 +45,8 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -227,10 +229,10 @@ class SparkContext(config: SparkConf) extends Logging {
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
   def master: String = _conf.get("spark.master")
-  def deployMode: String = _conf.getOption("spark.submit.deployMode").getOrElse("client")
+  def deployMode: String = _conf.get(SUBMIT_DEPLOY_MODE)
   def appName: String = _conf.get("spark.app.name")
 
-  private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] def isEventLogEnabled: Boolean = _conf.get(EVENT_LOG_ENABLED)
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
@@ -386,9 +388,9 @@ class SparkContext(config: SparkConf) extends Logging {
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
     _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
-    _conf.setIfMissing("spark.driver.port", "0")
+    _conf.setIfMissing(DRIVER_PORT, 0)
 
-    _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
+    _conf.set(EXECUTOR_ID, SparkContext.DRIVER_IDENTIFIER)
 
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.nonEmpty))
@@ -396,15 +398,14 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _eventLogDir =
       if (isEventLogEnabled) {
-        val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
-          .stripSuffix("/")
+        val unresolvedDir = conf.get(EVENT_LOG_DIR).stripSuffix("/")
         Some(Utils.resolveURI(unresolvedDir))
       } else {
         None
       }
 
     _eventLogCodec = {
-      val compress = _conf.getBoolean("spark.eventLog.compress", false)
+      val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
         Some(CompressionCodec.getCodecName(_conf)).map(CompressionCodec.getShortName)
       } else {
@@ -440,7 +441,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
 
     _ui =
-      if (conf.getBoolean("spark.ui.enabled", true)) {
+      if (conf.get(UI_ENABLED)) {
         Some(SparkUI.create(Some(this), _statusStore, _conf, _env.securityManager, appName, "",
           startTime))
       } else {
@@ -462,7 +463,7 @@ class SparkContext(config: SparkConf) extends Logging {
       files.foreach(addFile)
     }
 
-    _executorMemory = _conf.getOption("spark.executor.memory")
+    _executorMemory = _conf.getOption(EXECUTOR_MEMORY.key)
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
       .orElse(Option(System.getenv("SPARK_MEM"))
       .map(warnSparkMem))
@@ -471,7 +472,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Convert java options to env vars as a work around
     // since we can't set env vars directly in sbt.
-    for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
+    for { (envKey, propKey) <- Seq(("SPARK_TESTING", IS_TESTING.key))
       value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
       executorEnvs(envKey) = value
     }
@@ -510,7 +511,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
-    if (_conf.getBoolean("spark.ui.reverseProxy", false)) {
+    if (_conf.get(UI_REVERSE_PROXY)) {
       System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
     }
     _ui.foreach(_.setAppId(_applicationId))
@@ -552,7 +553,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _executorAllocationManager.foreach(_.start())
 
     _cleaner =
-      if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
+      if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
         Some(new ContextCleaner(this))
       } else {
         None
@@ -2369,8 +2370,8 @@ class SparkContext(config: SparkConf) extends Logging {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
-      val environmentDetails = SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths,
-        addedFilePaths)
+      val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
+        schedulingMode, addedJarPaths, addedFilePaths)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }
@@ -2537,6 +2538,7 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
+  private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
 
@@ -2639,8 +2641,8 @@ object SparkContext extends Logging {
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
       case "yarn" =>
-        if (conf != null && conf.getOption("spark.submit.deployMode").contains("cluster")) {
-          conf.getInt("spark.driver.cores", 0)
+        if (conf != null && conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
+          conf.getInt(DRIVER_CORES.key, 0)
         } else {
           0
         }

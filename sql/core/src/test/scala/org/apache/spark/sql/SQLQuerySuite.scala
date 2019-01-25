@@ -240,6 +240,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row("1"), Row("2")))
   }
 
+  test("SPARK-11226 Skip empty line in json file") {
+    spark.read
+      .json(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}", "").toDS())
+      .createOrReplaceTempView("d")
+
+    checkAnswer(
+      sql("select count(1) from d"),
+      Seq(Row(3)))
+  }
+
   test("SPARK-8828 sum should return null if all input values are null") {
     checkAnswer(
       sql("select sum(a), avg(a) from allNulls"),
@@ -2934,6 +2944,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         val dfIn_a = df.filter(whereWithIn)
         val dfIn_b = df.filter(whereWithInNullSafe)
         checkAnswer(df.except(dfIn_a), df.except(dfIn_b))
+      }
+    }
+  }
+
+  test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val msg = intercept[AnalysisException] {
+        withTable("t") {
+          sql("create table t (s struct<i: Int>) using json")
+          checkAnswer(sql("select s.I from t group by s.i"), Nil)
+        }
+      }.message
+      assert(msg.contains("No such struct field I in i"))
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTable("t") {
+        sql("create table t (s struct<i: Int>) using json")
+        checkAnswer(sql("select s.I from t group by s.i"), Nil)
       }
     }
   }

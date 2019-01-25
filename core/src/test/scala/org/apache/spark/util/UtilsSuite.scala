@@ -40,6 +40,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 
@@ -829,35 +830,35 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
     conf.set("spark.master", "yarn")
-    conf.set("spark.submit.deployMode", "client")
+    conf.set(SUBMIT_DEPLOY_MODE, "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "false")) === false)
+      conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "true")) === true)
+      conf.set(DYN_ALLOCATION_ENABLED, true)) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "1")) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "0")) === true)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
-    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
+    assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }
 
   test("getDynamicAllocationInitialExecutors") {
     val conf = new SparkConf()
     assert(Utils.getDynamicAllocationInitialExecutors(conf) === 0)
     assert(Utils.getDynamicAllocationInitialExecutors(
-      conf.set("spark.dynamicAllocation.minExecutors", "3")) === 3)
+      conf.set(DYN_ALLOCATION_MIN_EXECUTORS, 3)) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
       conf.set("spark.executor.instances", "2")) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
       conf.set("spark.executor.instances", "4")) === 4)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
-      conf.set("spark.dynamicAllocation.initialExecutors", "3")) === 4)
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)) === 4)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
-      conf.set("spark.dynamicAllocation.initialExecutors", "5")) === 5)
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 5)) === 5)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
-      conf.set("spark.dynamicAllocation.initialExecutors", "2")
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 2)
         .set("spark.executor.instances", "1")) === 3)
   }
 
@@ -1154,22 +1155,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     intercept[IllegalArgumentException] {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
-  }
-
-  object MalformedClassObject {
-    class MalformedClass
-  }
-
-  test("Safe getSimpleName") {
-    // getSimpleName on class of MalformedClass will result in error: Malformed class name
-    // Utils.getSimpleName works
-    val err = intercept[java.lang.InternalError] {
-      classOf[MalformedClassObject.MalformedClass].getSimpleName
-    }
-    assert(err.getMessage === "Malformed class name")
-
-    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
-      "UtilsSuite$MalformedClassObject$MalformedClass")
   }
 
   test("stringHalfWidth") {

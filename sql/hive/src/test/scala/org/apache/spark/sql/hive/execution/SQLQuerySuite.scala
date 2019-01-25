@@ -692,8 +692,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
-          "create a partitioned table using Hive's file formats"))
+        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
+          "the partition columns of the target table"))
       }
     }
   }

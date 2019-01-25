@@ -67,6 +67,16 @@ function docker_push {
   fi
 }
 
+function resolve_file {
+  local FILE=$1
+  if [ -n "$FILE" ]; then
+    local DIR=$(dirname $FILE)
+    DIR=$(cd $DIR && pwd)
+    FILE="${DIR}/$(basename $FILE)"
+  fi
+  echo $FILE
+}
+
 # Create a smaller build context for docker in dev builds to make the build faster. Docker
 # uploads all of the current directory to the daemon, and it can get pretty big with dev
 # builds that contain test log files and other artifacts.
@@ -154,10 +164,11 @@ function build {
   fi
 
   local BINDING_BUILD_ARGS=(
-    ${BUILD_PARAMS}
+    ${BUILD_ARGS[@]}
     --build-arg
     base_img=$(image_ref spark)
   )
+
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-false}
   local RDOCKERFILE=${RDOCKERFILE:-false}
@@ -257,9 +268,9 @@ while getopts f:p:R:mr:t:nb:u: option
 do
  case "${option}"
  in
- f) BASEDOCKERFILE=${OPTARG};;
- p) PYDOCKERFILE=${OPTARG};;
- R) RDOCKERFILE=${OPTARG};;
+ f) BASEDOCKERFILE=$(resolve_file ${OPTARG});;
+ p) PYDOCKERFILE=$(resolve_file ${OPTARG});;
+ R) RDOCKERFILE=$(resolve_file ${OPTARG});;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;

@@ -20,6 +20,7 @@ package org.apache.spark.mllib.util
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 
 trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
   @transient var sc: SparkContext = _
@@ -29,7 +30,7 @@ trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
     val conf = new SparkConf()
       .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("test-cluster")
-      .set("spark.rpc.message.maxSize", "1") // set to 1MB to detect direct serialization of data
+      .set(RPC_MESSAGE_MAX_SIZE, 1) // set to 1MB to detect direct serialization of data
     sc = new SparkContext(conf)
   }
 
