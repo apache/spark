@@ -17,99 +17,57 @@
 
 package org.apache.spark.deploy.security
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.util.Utils
+
+private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationTokenProvider {
+  ExceptionThrowingDelegationTokenProvider.constructed = true
+  throw new IllegalArgumentException
+
+  override def serviceName: String = "throw"
+
+  override def delegationTokensRequired(
+    sparkConf: SparkConf,
+    hadoopConf: Configuration): Boolean = throw new IllegalArgumentException
+
+  override def obtainDelegationTokens(
+    hadoopConf: Configuration,
+    sparkConf: SparkConf,
+    fileSystems: Set[FileSystem],
+    creds: Credentials): Option[Long] = throw new IllegalArgumentException
+}
+
+private object ExceptionThrowingDelegationTokenProvider {
+  var constructed = false
+}
 
 class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
   private val hadoopConf = new Configuration()
 
   test("default configuration") {
+    ExceptionThrowingDelegationTokenProvider.constructed = false
     val manager = new HadoopDelegationTokenManager(new SparkConf(false), hadoopConf, null)
     assert(manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
-    assert(manager.isProviderLoaded("hive"))
-    assert(manager.isProviderLoaded("kafka"))
+    // This checks that providers are loaded independently and they have no effect on each other
+    assert(ExceptionThrowingDelegationTokenProvider.constructed)
+    assert(!manager.isProviderLoaded("throw"))
   }
 
-  test("disable hive credential provider") {
-    val sparkConf = new SparkConf(false).set("spark.security.credentials.hive.enabled", "false")
+  test("disable hadoopfs credential provider") {
+    val sparkConf = new SparkConf(false).set("spark.security.credentials.hadoopfs.enabled", "false")
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
-    assert(manager.isProviderLoaded("hadoopfs"))
-    assert(manager.isProviderLoaded("hbase"))
-    assert(!manager.isProviderLoaded("hive"))
-    assert(manager.isProviderLoaded("kafka"))
+    assert(!manager.isProviderLoaded("hadoopfs"))
   }
 
   test("using deprecated configurations") {
     val sparkConf = new SparkConf(false)
       .set("spark.yarn.security.tokens.hadoopfs.enabled", "false")
-      .set("spark.yarn.security.credentials.hive.enabled", "false")
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(!manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
-    assert(!manager.isProviderLoaded("hive"))
-    assert(manager.isProviderLoaded("kafka"))
   }
-
-  test("SPARK-23209: obtain tokens when Hive classes are not available") {
-    // This test needs a custom class loader to hide Hive classes which are in the classpath.
-    // Because the manager code loads the Hive provider directly instead of using reflection, we
-    // need to drive the test through the custom class loader so a new copy that cannot find
-    // Hive classes is loaded.
-    val currentLoader = Thread.currentThread().getContextClassLoader()
-    val noHive = new ClassLoader() {
-      override def loadClass(name: String, resolve: Boolean): Class[_] = {
-        if (name.startsWith("org.apache.hive") || name.startsWith("org.apache.hadoop.hive")) {
-          throw new ClassNotFoundException(name)
-        }
-
-        val prefixBlacklist = Seq("java", "scala", "com.sun.", "sun.")
-        if (prefixBlacklist.exists(name.startsWith(_))) {
-          return currentLoader.loadClass(name)
-        }
-
-        val found = findLoadedClass(name)
-        if (found != null) {
-          return found
-        }
-
-        val classFileName = name.replaceAll("\\.", "/") + ".class"
-        val in = currentLoader.getResourceAsStream(classFileName)
-        if (in != null) {
-          val bytes = IOUtils.toByteArray(in)
-          return defineClass(name, bytes, 0, bytes.length)
-        }
-
-        throw new ClassNotFoundException(name)
-      }
-    }
-
-    Utils.withContextClassLoader(noHive) {
-      val test = noHive.loadClass(NoHiveTest.getClass.getName().stripSuffix("$"))
-      test.getMethod("runTest").invoke(null)
-    }
-  }
-}
-
-/** Test code for SPARK-23209 to avoid using too much reflection above. */
-private object NoHiveTest {
-
-  def runTest(): Unit = {
-    try {
-      val manager = new HadoopDelegationTokenManager(new SparkConf(), new Configuration(), null)
-      require(!manager.isProviderLoaded("hive"))
-    } catch {
-      case e: Throwable =>
-        // Throw a better exception in case the test fails, since there may be a lot of nesting.
-        var cause = e
-        while (cause.getCause() != null) {
-          cause = cause.getCause()
-        }
-        throw cause
-    }
-  }
-
 }

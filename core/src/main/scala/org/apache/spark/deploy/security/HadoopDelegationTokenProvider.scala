@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
@@ -43,11 +44,13 @@ private[spark] trait HadoopDelegationTokenProvider {
    * Obtain delegation tokens for this service and get the time of the next renewal.
    * @param hadoopConf Configuration of current Hadoop Compatible system.
    * @param creds Credentials to add tokens and security keys to.
+   * @param fileSystems List of file systems for which to obtain delegation tokens.
    * @return If the returned tokens are renewable and can be renewed, return the time of the next
    *         renewal, otherwise None should be returned.
    */
   def obtainDelegationTokens(
     hadoopConf: Configuration,
     sparkConf: SparkConf,
+    fileSystems: Set[FileSystem],
     creds: Credentials): Option[Long]
 }

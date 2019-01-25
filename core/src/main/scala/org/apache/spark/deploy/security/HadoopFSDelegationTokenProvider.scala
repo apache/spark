@@ -31,7 +31,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
-private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: () => Set[FileSystem])
+private[deploy] class HadoopFSDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
 
   // This tokenRenewalInterval will be set in the first call to obtainDelegationTokens.
@@ -44,14 +44,14 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: () => Set[Fil
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
       sparkConf: SparkConf,
+      fileSystems: Set[FileSystem],
       creds: Credentials): Option[Long] = {
     try {
-      val fsToGetTokens = fileSystems()
-      val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fsToGetTokens, creds)
+      val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fileSystems, creds)
 
       // Get the token renewal interval if it is not set. It will only be called once.
       if (tokenRenewalInterval == null) {
-        tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf, fsToGetTokens)
+        tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf, fileSystems)
       }
 
       // Get the time of next renewal.
