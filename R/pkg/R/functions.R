@@ -222,8 +222,6 @@ NULL
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
-#'          \item \code{sequence}, this contains an optional parameter to specify the step of
-#'              the range in sequence.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
 #' @name column_collection_functions
@@ -260,9 +258,7 @@ NULL
 #' tmp7 <- mutate(df, v8 = create_array(df$model, df$cyl), v9 = create_array(df$model, df$hp))
 #' head(select(tmp7, map_from_arrays(tmp7$v8, tmp7$v9)))
 #' tmp8 <- mutate(df, v10 = create_array(struct(df$model, df$cyl)))
-#' head(select(tmp8, map_from_entries(tmp8$v10)))
-#' df2 <- createDataFrame(list(list(-2L, 2L)))
-#' head(select(df2, sequence(df2[[1]], df2[[2]])))}
+#' head(select(tmp8, map_from_entries(tmp8$v10)))}
 NULL
 
 #' Window functions for Column operations
@@ -3475,7 +3471,7 @@ setMethod("flatten",
 #'
 #' @rdname column_collection_functions
 #' @aliases map_concat map_concat,Column-method
-#' @note map_concat since 2.4.0
+#' @note map_concat since 3.0.0
 setMethod("map_concat",
           signature(x = "Column"),
           function(x, ...) {
@@ -3520,7 +3516,7 @@ setMethod("map_from_arrays",
 #'
 #' @rdname column_collection_functions
 #' @aliases map_from_entries map_from_entries,Column-method
-#' @note map_from_entries since 2.4.0
+#' @note map_from_entries since 3.0.0
 setMethod("map_from_entries",
           signature(x = "Column"),
           function(x) {
@@ -3582,26 +3578,6 @@ setMethod("explode",
             jc <- callJStatic("org.apache.spark.sql.functions", "explode", x@jc)
             column(jc)
           })
-
-#' @details
-#' \code{sequence}: Generate a sequence of integers from start to stop, incrementing by step.
-#' If step is not set, incrementing by 1 if start is less than or equal to stop, otherwise -1.
-#'
-#' @param step an optional parameter to specify the step of the range.
-#' @rdname column_collection_functions
-#' @aliases sequence sequence,Column-method
-#' @note sequence since 2.4.0
-setMethod("sequence",
-         signature(),
-         function(x, y, step = NULL) {
-           jc <- if (is.null(step)) {
-             callJStatic("org.apache.spark.sql.functions", "sequence", x@jc, y@jc)
-           } else {
-             stopifnot(class(step) == "Column")
-             callJStatic("org.apache.spark.sql.functions", "sequence", x@jc, y@jc, step@jc)
-           }
-           column(jc)
-         })
 
 #' @details
 #' \code{size}: Returns length of array or map.

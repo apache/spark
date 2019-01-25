@@ -1541,11 +1541,6 @@ test_that("column functions", {
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(NA, 1L, 2L, 3L), list(NA, NA, 4L, 5L, 6L)))
 
-  # Test sequence()
-  df <- createDataFrame(list(list(-2L, 2L)))
-  result <- collect(select(df, sequence(df[[1]], df[[2]])))[[1]]
-  expect_equal(result, list(list(-2L, -1L, 0L, 1L, 2L)))
-
   # Test slice()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(4L, 5L))))
   result <- collect(select(df, slice(df[[1]], 2L, 2L)))[[1]]

@@ -1230,10 +1230,6 @@ setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
 #' @name NULL
 setGeneric("second", function(x) { standardGeneric("second") })
 
-#' @rdname column_collection_functions
-#' @name NULL
-setGeneric("sequence", function(...) { standardGeneric("sequence") })
-
 #' @rdname column_misc_functions
 #' @name NULL
 setGeneric("sha1", function(x) { standardGeneric("sha1") })
