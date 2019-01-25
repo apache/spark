@@ -280,21 +280,19 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] def getSortFunc(
       ascending: Boolean): ((String, Long), (String, Long)) => Boolean = {
     if (ascending) {
-      { case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
+      case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
         if (freqA == freqB) {
-         strA < strB
+          strA < strB
         } else {
-         freqA < freqB
+          freqA < freqB
         }
-      }
     } else {
-      { case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
+      case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
         if (freqA == freqB) {
-          strA  < strB
+          strA < strB
         } else {
           freqA > freqB
         }
-      }
     }
   }
 }
@@ -331,8 +329,8 @@ class StringIndexerModel (
     "instead.", "3.0.0")
   @Since("1.5.0")
   def labels: Array[String] = {
-    require(labelsArray.length == 1, "This StringIndexerModel is fitted by multi-columns, " +
-      "call for `labelsArray` instead.")
+    require(labelsArray.length == 1, "This StringIndexerModel is fit on multiple columns. " +
+      "Call `labelsArray` instead.")
     labelsArray(0)
   }
 
