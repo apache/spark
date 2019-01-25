@@ -192,6 +192,9 @@ case class ExpressionEncoder[T](
 
     if (isSerializedAsStructForTopLevel) {
       val nullSafeSerializer = objSerializer.transformUp {
+        case _ @ AssertNotNull(a: AssertNotNull, _) =>
+          // strip redundant AssertNotNull
+          a
         case r: BoundReference =>
           // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
           // doesn't allow top-level row to be null, only its columns can be null.
