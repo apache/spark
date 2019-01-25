@@ -243,7 +243,7 @@ private[yarn] class ExecutorRunnable(
 
     // Add log urls
     container.foreach { c =>
-      sys.env.get("SPARK_USER").foreach { user =>
+      sys.env.filterKeys(_.endsWith("USER")).foreach { user =>
         val containerId = ConverterUtils.toString(c.getId)
         val address = c.getNodeHttpAddress
         val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
