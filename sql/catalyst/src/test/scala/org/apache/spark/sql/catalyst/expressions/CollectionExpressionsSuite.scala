@@ -32,10 +32,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class CollectionExpressionsSuite
-  extends SparkFunSuite
-  with ExpressionEvalHelper
-  with DateTimeTestUtils {
+class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def testSize(sizeOfNull: Any): Unit = {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
@@ -837,7 +834,7 @@ class CollectionExpressionsSuite
 
     def noDST(t: Timestamp): Timestamp = new Timestamp(t.getTime - dstOffset)
 
-    withDefaultTimeZone(timeZone) {
+    DateTimeTestUtils.withDefaultTimeZone(timeZone) {
       // Spring time change
       checkEvaluation(new Sequence(
         Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
@@ -865,7 +862,7 @@ class CollectionExpressionsSuite
   }
 
   test("Sequence of dates") {
-    withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2018-01-05")),

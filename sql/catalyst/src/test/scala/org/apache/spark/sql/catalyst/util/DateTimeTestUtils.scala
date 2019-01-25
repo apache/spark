@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 /**
  * Helper functions for testing date and time functionality.
  */
-trait DateTimeTestUtils {
+object DateTimeTestUtils {
 
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
 

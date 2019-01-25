@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, TimestampFormatter}
 
-class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with DateTimeTestUtils {
+class TimestampFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("parsing timestamps using time zones") {
     val localDate = "2018-12-02T10:11:12.001234"
@@ -38,7 +38,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with DateTime
       "Antarctica/Vostok" -> 1543723872001234L,
       "Asia/Hong_Kong" -> 1543716672001234L,
       "Europe/Amsterdam" -> 1543741872001234L)
-    outstandingTimezonesIds.foreach { timeZone =>
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         TimeZone.getTimeZone(timeZone))
@@ -58,7 +58,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with DateTime
       "Antarctica/Vostok" -> "2018-12-02T16:11:12.001234",
       "Asia/Hong_Kong" -> "2018-12-02T18:11:12.001234",
       "Europe/Amsterdam" -> "2018-12-02T11:11:12.001234")
-    outstandingTimezonesIds.foreach { timeZone =>
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         TimeZone.getTimeZone(timeZone))
@@ -79,7 +79,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with DateTime
         1543749753123456L,
         2177456523456789L,
         11858049903010203L).foreach { micros =>
-        outstandingTimezones.foreach { timeZone =>
+        DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
           val formatter = TimestampFormatter(pattern, timeZone)
           val timestamp = formatter.format(micros)
           val parsed = formatter.parse(timestamp)
@@ -100,7 +100,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with DateTime
       "2018-12-02T11:22:33.123456",
       "2039-01-01T01:02:03.456789",
       "2345-10-07T22:45:03.010203").foreach { timestamp =>
-      outstandingTimezones.foreach { timeZone =>
+      DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
         val formatter = TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timeZone)
         val micros = formatter.parse(timestamp)
         val formatted = formatter.format(micros)

@@ -32,11 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class JsonExpressionsSuite
-  extends SparkFunSuite
-  with ExpressionEvalHelper
-  with PlanTestBase
-  with DateTimeTestUtils {
+class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
   val json =
     """
       |{"store":{"fruit":[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
@@ -524,7 +520,7 @@ class JsonExpressionsSuite
     )
 
     val jsonData2 = """{"t": "2016-01-01T00:00:00"}"""
-    for (tz <- outstandingTimezones) {
+    for (tz <- DateTimeTestUtils.outstandingTimezones) {
       c = Calendar.getInstance(tz)
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
