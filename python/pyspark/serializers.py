@@ -237,7 +237,7 @@ class ArrowStreamSerializer(Serializer):
 
     def load_stream(self, stream):
         import pyarrow as pa
-        reader = pa.open_stream(stream)
+        reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
 
@@ -342,7 +342,7 @@ class ArrowStreamPandasSerializer(Serializer):
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
         import pyarrow as pa
-        reader = pa.open_stream(stream)
+        reader = pa.ipc.open_stream(stream)
 
         for batch in reader:
             yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
