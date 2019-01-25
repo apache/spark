@@ -827,6 +827,7 @@ private[spark] class AppStatusListener(
     event.blockUpdatedInfo.blockId match {
       case block: RDDBlockId => updateRDDBlock(event, block)
       case stream: StreamBlockId => updateStreamBlock(event, stream)
+      case broadcast: BroadcastBlockId => updateBroadcastBlock(event, broadcast)
       case _ =>
     }
   }
@@ -992,6 +993,30 @@ private[spark] class AppStatusListener(
     } else {
       kvstore.delete(classOf[StreamBlockData],
         Array(stream.name, event.blockUpdatedInfo.blockManagerId.executorId))
+    }
+  }
+
+  def updateBroadcastBlock(event: SparkListenerBlockUpdated, broadcast: BroadcastBlockId): Unit = {
+    val executorId = event.blockUpdatedInfo.blockManagerId.executorId
+    val storageLevel = event.blockUpdatedInfo.storageLevel
+
+    // Whether values are being added to or removed from the existing accounting.
+    val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
+    val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
+
+    // Function to apply a delta to a value, but ensure that it doesn't go negative.
+    def newValue(old: Long, delta: Long): Long = math.max(0, old + delta)
+
+    liveExecutors.get(executorId).foreach { exec =>
+      if (exec.hasMemoryInfo) {
+        if (storageLevel.useOffHeap) {
+          exec.usedOffHeap = newValue(exec.usedOffHeap, memoryDelta)
+        } else {
+          exec.usedOnHeap = newValue(exec.usedOnHeap, memoryDelta)
+        }
+      }
+      exec.memoryUsed = newValue(exec.memoryUsed, memoryDelta)
+      exec.diskUsed = newValue(exec.diskUsed, diskDelta)
     }
   }
 
