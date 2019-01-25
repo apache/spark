@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
+
+import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row

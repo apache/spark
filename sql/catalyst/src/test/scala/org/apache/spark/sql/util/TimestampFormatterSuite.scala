@@ -18,7 +18,7 @@
 package org.apache.spark.sql.util
 
 import java.time.{LocalDateTime, ZoneOffset}
-import java.util.{TimeZone}
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite

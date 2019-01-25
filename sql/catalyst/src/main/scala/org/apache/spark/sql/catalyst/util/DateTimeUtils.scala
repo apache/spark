@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.time._
+import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, Month, ZonedDateTime}
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
