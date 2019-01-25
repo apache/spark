@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.LocalDate
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
@@ -119,20 +118,13 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("string to date") {
-    assert(stringToDate(UTF8String.fromString("2015-01-28")).get ===
-      LocalDate.of(2015, 1, 28).toEpochDay)
-    assert(stringToDate(UTF8String.fromString("2015")).get ===
-      LocalDate.of(2015, 1, 1).toEpochDay)
-    val localDate = LocalDate.of(1, 1, 1)
-      .atStartOfDay(TimeZoneUTC.toZoneId)
-    assert(stringToDate(UTF8String.fromString("0001")).get ===
-      TimeUnit.SECONDS.toDays(localDate.toEpochSecond))
-    assert(stringToDate(UTF8String.fromString("2015-03")).get ===
-      LocalDate.of(2015, 3, 1).toEpochDay)
+    assert(stringToDate(UTF8String.fromString("2015-01-28")).get === days(2015, 1, 28))
+    assert(stringToDate(UTF8String.fromString("2015")).get === days(2015, 1, 1))
+    assert(stringToDate(UTF8String.fromString("0001")).get === days(1, 1, 1))
+    assert(stringToDate(UTF8String.fromString("2015-03")).get === days(2015, 3, 1))
     Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
       "2015-03-18T123123", "2015-03-18T").foreach { s =>
-      assert(stringToDate(UTF8String.fromString(s)).get ===
-        LocalDate.of(2015, 3, 18).toEpochDay)
+      assert(stringToDate(UTF8String.fromString(s)).get === days(2015, 3, 18))
     }
 
     assert(stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
