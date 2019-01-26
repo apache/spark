@@ -21,9 +21,9 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.common.security.scram.ScramLoginModule
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.security.KafkaTokenUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.kafka010.KafkaTokenUtil
 
 private[kafka010] object KafkaSecurityHelper extends Logging {
   def isTokenAvailable(): Boolean = {
