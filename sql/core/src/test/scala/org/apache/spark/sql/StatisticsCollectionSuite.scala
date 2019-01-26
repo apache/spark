@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
@@ -436,7 +437,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val column = "T"
       withTable(table) {
         TimeZone.setDefault(srcTimeZone)
-        spark.range(10)
+        val (start, end) = (0, 10)
+        spark.range(start, end)
           .select('id.cast(TimestampType).as(column))
           .write.saveAsTable(table)
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
@@ -444,7 +446,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         val stats = getCatalogTable(table)
           .stats.get.colStats(column)
           .toPlanStat(column, TimestampType)
-        assert(stats.min.get.asInstanceOf[Long] == 0)
+        assert(stats.min.get.asInstanceOf[Long] == start)
+        assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
       }
     }
     DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
