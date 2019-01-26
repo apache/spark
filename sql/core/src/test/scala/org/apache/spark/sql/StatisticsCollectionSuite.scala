@@ -432,26 +432,34 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("store and retrieve column stats in different time zones") {
-    def checkTimestampStats(srcTimeZone: TimeZone, dstTimeZone: TimeZone): Unit = {
+    def checkTimestampStats(t: DataType, srcTimeZone: TimeZone, dstTimeZone: TimeZone): Unit = {
       val table = "time_table"
       val column = "T"
       withTable(table) {
         TimeZone.setDefault(srcTimeZone)
-        val (start, end) = (0, 10)
+        val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
         spark.range(start, end)
-          .select('id.cast(TimestampType).as(column))
+          .select('id.cast(TimestampType).cast(t).as(column))
           .write.saveAsTable(table)
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
         TimeZone.setDefault(dstTimeZone)
         val stats = getCatalogTable(table)
           .stats.get.colStats(column)
-          .toPlanStat(column, TimestampType)
-        assert(stats.min.get.asInstanceOf[Long] == start)
-        assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
+          .toPlanStat(column, t)
+        t match {
+          case TimestampType =>
+            assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
+            assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
+          case DateType =>
+            assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
+            assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
+        }
       }
     }
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
-      checkTimestampStats(DateTimeUtils.TimeZoneUTC, timeZone)
+    Seq(TimestampType, DateType).foreach { t =>
+      DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+        checkTimestampStats(t, DateTimeUtils.TimeZoneUTC, timeZone)
+      }
     }
   }
 }
