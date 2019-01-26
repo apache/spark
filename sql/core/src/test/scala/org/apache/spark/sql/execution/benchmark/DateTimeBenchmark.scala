@@ -84,5 +84,13 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       val dateExpr = "cast(cast(id as timestamp) as date)"
       run(N, "format date", s"date_format($dateExpr, 'MMM yyyy')")
     }
+    runBenchmark("Formatting timestamps") {
+      run(N, "from_unixtime", "from_unixtime(id, 'yyyy-MM-dd HH:mm:ss.SSSSSS')")
+    }
+    runBenchmark("Convert timestamps") {
+      val timestampExpr = "cast(id as timestamp)"
+      run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
+      run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
+    }
   }
 }
