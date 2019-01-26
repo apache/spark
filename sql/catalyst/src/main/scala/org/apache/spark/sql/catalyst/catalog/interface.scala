@@ -478,8 +478,8 @@ object CatalogColumnStat extends Logging {
   def fromExternalString(s: String, name: String, dataType: DataType): Any = {
     dataType match {
       case BooleanType => s.toBoolean
-      case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
-      case TimestampType => DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
+      case DateType => s.toInt
+      case TimestampType => s.toLong
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
@@ -501,9 +501,8 @@ object CatalogColumnStat extends Logging {
    */
   def toExternalString(v: Any, colName: String, dataType: DataType): String = {
     val externalValue = dataType match {
-      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
-      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
-      case BooleanType | _: IntegralType | FloatType | DoubleType => v
+      case BooleanType | _: IntegralType | FloatType | DoubleType |
+           TimestampType | DateType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case _ =>
