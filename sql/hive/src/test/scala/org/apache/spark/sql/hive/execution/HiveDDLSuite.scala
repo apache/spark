@@ -261,62 +261,91 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
    }
   }
 
-  test("SPARK-26630: Fix ClassCastException in TableReader while creating HadoopRDD") {
-    withTable("table_old", "table_pt_old", "table_new", "table_pt_new",
-      "table_ctas_old", "table_ctas_pt_old", "table_ctas_new", "table_ctas_pt_new") {
+  test("SPARK-26630: table with old input format and without partitioned will use HadoopRDD") {
+    withTable("table_old", "table_ctas_old") {
       spark.sql(
         s"""
-           |CREATE TABLE table_old (id int)
+           |CREATE TABLE table_old (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
            |STORED AS
            |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-         """.stripMargin)
-      spark.sql("INSERT INTO table_old VALUES (1), (2), (3), (4), (5)")
-      assert(spark.sql("SELECT COUNT(1) FROM table_old").collect() === Array(Row(5)))
+           |""".stripMargin)
+      spark.sql("INSERT INTO table_old " +
+        "VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)")
+      assert(spark.sql("SELECT col1, col2, col3, col4 FROM table_old").collect() ===
+        Array(Row(2147483648L, "AAA", 3.14, false), Row(2147483649L, "BBB", 3.142, true)))
 
+      spark.sql("CREATE TABLE table_ctas_old AS SELECT col1, col2, col3, col4 FROM table_old")
+      assert(spark.sql("SELECT col1, col2, col3, col4 from table_ctas_old").collect() ===
+        Array(Row(2147483648L, "AAA", 3.14, false), Row(2147483649L, "BBB", 3.142, true)))
+    }
+  }
+
+  test("SPARK-26630: table with old input format and partitioned will use HadoopRDD") {
+    withTable("table_pt_old", "table_ctas_pt_old") {
       spark.sql(
         s"""
-           |CREATE TABLE table_pt_old (id int)
-           |PARTITIONED BY (pt int)
+           |CREATE TABLE table_pt_old (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+           |PARTITIONED BY (pt INT)
            |STORED AS
            |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-         """.stripMargin)
-      spark.sql("INSERT INTO table_pt_old PARTITION(pt=1) VALUES (1), (2), (3), (4), (5)")
-      assert(spark.sql("SELECT COUNT(1) FROM table_pt_old").collect() === Array(Row(5)))
+           |""".stripMargin)
+      spark.sql("INSERT INTO table_pt_old PARTITION (pt = 1) " +
+        "VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)")
+      assert(spark.sql("SELECT col1, col2, col3, col4 FROM table_pt_old WHERE pt = 1")
+        .collect() === Array(Row(2147483648L, "AAA", 3.14, false),
+        Row(2147483649L, "BBB", 3.142, true)))
 
+      spark.sql("CREATE TABLE table_ctas_pt_old AS " +
+        "SELECT col1, col2, col3, col4 FROM table_pt_old")
+      assert(spark.sql("SELECT col1, col2, col3, col4 from table_ctas_pt_old")
+        .collect() === Array(Row(2147483648L, "AAA", 3.14, false),
+        Row(2147483649L, "BBB", 3.142, true)))
+    }
+  }
+
+  test("SPARK-26630: table with new input format and without partitioned will use NewHadoopRDD") {
+    withTable("table_new", "table_ctas_new") {
       spark.sql(
         s"""
-           |CREATE TABLE table_new (id int)
+           |CREATE TABLE table_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
            |STORED AS
            |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-       """.stripMargin)
-      spark.sql("INSERT INTO table_new VALUES (1), (2), (3), (4), (5)")
-      assert(spark.sql("SELECT COUNT(1) FROM table_new").collect() === Array(Row(5)))
+           |""".stripMargin)
+      spark.sql("INSERT INTO table_new " +
+        "VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)")
+      assert(spark.sql("SELECT col1, col2, col3, col4 FROM table_new").collect() ===
+        Array(Row(2147483648L, "AAA", 3.14, false), Row(2147483649L, "BBB", 3.142, true)))
 
+      spark.sql("CREATE TABLE table_ctas_new AS SELECT col1, col2, col3, col4 FROM table_new")
+      assert(spark.sql("SELECT col1, col2, col3, col4 from table_ctas_new").collect() ===
+        Array(Row(2147483648L, "AAA", 3.14, false), Row(2147483649L, "BBB", 3.142, true)))
+    }
+  }
+
+  test("SPARK-26630: table with new input format and partitioned will use NewHadoopRDD") {
+    withTable("table_pt_new", "table_ctas_pt_new") {
       spark.sql(
         s"""
-           |CREATE TABLE table_pt_new (id int)
-           |PARTITIONED BY (pt int)
+           |CREATE TABLE table_pt_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+           |PARTITIONED BY (pt INT)
            |STORED AS
            |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-       """.stripMargin)
-      spark.sql("INSERT INTO table_pt_new PARTITION(pt=1) VALUES (1), (2), (3), (4), (5)")
-      assert(spark.sql("SELECT COUNT(1) FROM table_pt_new").collect() === Array(Row(5)))
+           |""".stripMargin)
+      spark.sql("INSERT INTO table_pt_new PARTITION (pt = 1) " +
+        "VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)")
+      assert(spark.sql("SELECT col1, col2, col3, col4 FROM table_pt_new WHERE pt = 1")
+        .collect() === Array(Row(2147483648L, "AAA", 3.14, false),
+        Row(2147483649L, "BBB", 3.142, true)))
 
-      spark.sql("CREATE TABLE table_ctas_old AS SELECT id FROM table_old")
-      assert(spark.sql("SELECT COUNT(1) from table_ctas_old").collect() === Array(Row(5)))
-
-      spark.sql("CREATE TABLE table_ctas_new AS SELECT id FROM table_new")
-      assert(spark.sql("SELECT COUNT(1) from table_ctas_new").collect() === Array(Row(5)))
-
-      spark.sql("CREATE TABLE table_ctas_pt_old AS SELECT id FROM table_pt_old")
-      assert(spark.sql("SELECT COUNT(1) from table_ctas_pt_old").collect() === Array(Row(5)))
-
-      spark.sql("CREATE TABLE table_ctas_pt_new AS SELECT id FROM table_pt_new")
-      assert(spark.sql("SELECT COUNT(1) from table_ctas_pt_new").collect() === Array(Row(5)))
+      spark.sql("CREATE TABLE table_ctas_pt_new AS " +
+        "SELECT col1, col2, col3, col4 FROM table_pt_new")
+      assert(spark.sql("SELECT col1, col2, col3, col4 from table_ctas_pt_new")
+        .collect() === Array(Row(2147483648L, "AAA", 3.14, false),
+        Row(2147483649L, "BBB", 3.142, true)))
     }
   }
 }
