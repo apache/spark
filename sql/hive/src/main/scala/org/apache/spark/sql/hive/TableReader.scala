@@ -294,9 +294,9 @@ class HadoopTableReader(
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = localTableDesc.getInputFileFormatClass
     if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
-      createNewHadoopRdd(localTableDesc, inputPathStr)
+      createNewHadoopRDD(localTableDesc, inputPathStr)
     } else {
-      createOldHadoopRdd(localTableDesc, inputPathStr)
+      createOldHadoopRDD(localTableDesc, inputPathStr)
     }
   }
 
@@ -304,7 +304,7 @@ class HadoopTableReader(
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each slave.
    */
-  private def createOldHadoopRdd(tableDesc: TableDesc, path: String): RDD[Writable] = {
+  private def createOldHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
     val inputFormatClass = tableDesc.getInputFileFormatClass
       .asInstanceOf[Class[oldInputClass[Writable, Writable]]]
@@ -326,7 +326,7 @@ class HadoopTableReader(
    * Creates a NewHadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each slave.
    */
-  private def createNewHadoopRdd(tableDesc: TableDesc, path: String): RDD[Writable] = {
+  private def createNewHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
     HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc)(newJobConf)
     val inputFormatClass = tableDesc.getInputFileFormatClass
