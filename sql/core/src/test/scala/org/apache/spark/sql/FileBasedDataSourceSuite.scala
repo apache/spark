@@ -367,6 +367,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
+    // TODO(SPARK-26716): support data type validating in V2 data source, and test V2 as well.
     withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc") {
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
