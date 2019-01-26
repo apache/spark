@@ -214,7 +214,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
 
   test("Test Block - isFullyConsumed") {
     val sparkConf = new SparkConf().set("spark.app.id", "streaming-test")
-    sparkConf.set("spark.storage.unrollMemoryThreshold", "512")
+    sparkConf.set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
     sparkConf.set(IO_ENCRYPTION_ENABLED, enableEncryption)
     // Block Manager with 12000 * 0.4 = 4800 bytes of free space for unroll
