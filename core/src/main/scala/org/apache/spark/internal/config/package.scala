@@ -195,6 +195,7 @@ package object config {
       "less working memory may be available to execution and tasks may spill to disk more " +
       "often. Leaving this at the default value is recommended. ")
     .doubleConf
+    .checkValue(v => v >= 0.0 && v < 1.0, "Storage fraction must be in [0,1)")
     .createWithDefault(0.5)
 
   private[spark] val MEMORY_FRACTION = ConfigBuilder("spark.memory.fraction")
