@@ -270,6 +270,26 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
 
+  private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
+    ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
+      .doc("Whether or not cleanup the non-shuffle files on executor exits.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val DISKSTORE_SUB_DIRECTORIES =
+    ConfigBuilder("spark.diskStore.subDirectories")
+      .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
+        "hashing Block files into.")
+      .intConf
+      .createWithDefault(64)
+
+  private[spark] val BLOCK_FAILURES_BEFORE_LOCATION_REFRESH =
+    ConfigBuilder("spark.block.failures.beforeLocationRefresh")
+      .doc("Max number of failures before this block manager refreshes " +
+        "the block locations from the driver.")
+      .intConf
+      .createWithDefault(5)
+
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
