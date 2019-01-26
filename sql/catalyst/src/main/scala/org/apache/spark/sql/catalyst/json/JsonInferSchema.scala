@@ -122,7 +122,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
       case VALUE_STRING =>
         val field = parser.getText
-        val decimalTry = allCatch opt {
+        lazy val decimalTry = allCatch opt {
           val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
