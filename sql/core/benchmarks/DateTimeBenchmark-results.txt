@@ -6,92 +6,92 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 cast to timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-cast to timestamp wholestage off               283 /  303         35.4          28.3       1.0X
-cast to timestamp wholestage on                267 /  290         37.4          26.7       1.1X
+cast to timestamp wholestage off               297 /  309         33.7          29.7       1.0X
+cast to timestamp wholestage on                271 /  288         36.9          27.1       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-year to timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+year of timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-year to timestamp wholestage off               725 /  774         13.8          72.5       1.0X
-year to timestamp wholestage on                685 /  699         14.6          68.5       1.1X
+year of timestamp wholestage off               713 /  753         14.0          71.3       1.0X
+year of timestamp wholestage on                797 /  808         12.6          79.7       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-quarter to timestamp:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+quarter of timestamp:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-quarter to timestamp wholestage off            836 /  836         12.0          83.6       1.0X
-quarter to timestamp wholestage on             837 /  847         11.9          83.7       1.0X
+quarter of timestamp wholestage off            942 /  942         10.6          94.2       1.0X
+quarter of timestamp wholestage on             812 /  839         12.3          81.2       1.2X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-month to timestamp:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+month of timestamp:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-month to timestamp wholestage off              687 /  688         14.6          68.7       1.0X
-month to timestamp wholestage on               712 /  722         14.1          71.2       1.0X
+month of timestamp wholestage off              698 /  699         14.3          69.8       1.0X
+month of timestamp wholestage on               683 /  702         14.6          68.3       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-weekofyear to timestamp:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+weekofyear of timestamp:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-weekofyear to timestamp wholestage off        1217 / 1220          8.2         121.7       1.0X
-weekofyear to timestamp wholestage on         1208 / 1224          8.3         120.8       1.0X
+weekofyear of timestamp wholestage off        1279 / 1285          7.8         127.9       1.0X
+weekofyear of timestamp wholestage on         1212 / 1260          8.3         121.2       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-day to timestamp:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+day of timestamp:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-day to timestamp wholestage off                708 /  712         14.1          70.8       1.0X
-day to timestamp wholestage on                 707 /  715         14.1          70.7       1.0X
+day of timestamp wholestage off                699 /  706         14.3          69.9       1.0X
+day of timestamp wholestage on                 679 /  683         14.7          67.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-dayofyear to timestamp:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+dayofyear of timestamp:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-dayofyear to timestamp wholestage off          714 /  715         14.0          71.4       1.0X
-dayofyear to timestamp wholestage on           737 /  753         13.6          73.7       1.0X
+dayofyear of timestamp wholestage off          732 /  733         13.7          73.2       1.0X
+dayofyear of timestamp wholestage on           709 /  715         14.1          70.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-dayofmonth to timestamp:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+dayofmonth of timestamp:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-dayofmonth to timestamp wholestage off         700 /  703         14.3          70.0       1.0X
-dayofmonth to timestamp wholestage on          710 /  722         14.1          71.0       1.0X
+dayofmonth of timestamp wholestage off         713 /  729         14.0          71.3       1.0X
+dayofmonth of timestamp wholestage on          684 /  685         14.6          68.4       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-dayofweek to timestamp:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+dayofweek of timestamp:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-dayofweek to timestamp wholestage off          862 /  866         11.6          86.2       1.0X
-dayofweek to timestamp wholestage on           849 /  868         11.8          84.9       1.0X
+dayofweek of timestamp wholestage off          858 /  861         11.6          85.8       1.0X
+dayofweek of timestamp wholestage on           819 /  824         12.2          81.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-weekday to timestamp:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+weekday of timestamp:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-weekday to timestamp wholestage off            770 /  771         13.0          77.0       1.0X
-weekday to timestamp wholestage on             795 /  808         12.6          79.5       1.0X
+weekday of timestamp wholestage off            797 /  802         12.5          79.7       1.0X
+weekday of timestamp wholestage on             776 /  801         12.9          77.6       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-hour to timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+hour of timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-hour to timestamp wholestage off               470 /  471         21.3          47.0       1.0X
-hour to timestamp wholestage on                475 /  479         21.1          47.5       1.0X
+hour of timestamp wholestage off               468 /  474         21.4          46.8       1.0X
+hour of timestamp wholestage on                442 /  445         22.6          44.2       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-minute to timestamp:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+minute of timestamp:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-minute to timestamp wholestage off             470 /  480         21.3          47.0       1.0X
-minute to timestamp wholestage on              478 /  488         20.9          47.8       1.0X
+minute of timestamp wholestage off             484 /  493         20.7          48.4       1.0X
+minute of timestamp wholestage on              449 /  452         22.3          44.9       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-second to timestamp:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+second of timestamp:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-second to timestamp wholestage off             451 /  453         22.2          45.1       1.0X
-second to timestamp wholestage on              458 /  461         21.8          45.8       1.0X
+second of timestamp wholestage off             454 /  461         22.0          45.4       1.0X
+second of timestamp wholestage on              475 /  488         21.1          47.5       1.0X
 
 
 ================================================================================================
@@ -102,15 +102,15 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 current_date:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-current_date wholestage off                    218 /  219         45.8          21.8       1.0X
-current_date wholestage on                     246 /  251         40.7          24.6       0.9X
+current_date wholestage off                    220 /  222         45.5          22.0       1.0X
+current_date wholestage on                     224 /  258         44.6          22.4       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 current_timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-current_timestamp wholestage off               226 /  246         44.2          22.6       1.0X
-current_timestamp wholestage on                225 /  239         44.4          22.5       1.0X
+current_timestamp wholestage off               225 /  239         44.4          22.5       1.0X
+current_timestamp wholestage on                200 /  208         50.0          20.0       1.1X
 
 
 ================================================================================================
@@ -121,43 +121,43 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 cast to date:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-cast to date wholestage off                    483 /  484         20.7          48.3       1.0X
-cast to date wholestage on                     534 /  538         18.7          53.4       0.9X
+cast to date wholestage off                    491 /  491         20.4          49.1       1.0X
+cast to date wholestage on                     497 /  504         20.1          49.7       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 last_day:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-last_day wholestage off                        723 /  730         13.8          72.3       1.0X
-last_day wholestage on                         741 /  759         13.5          74.1       1.0X
+last_day wholestage off                        722 /  728         13.8          72.2       1.0X
+last_day wholestage on                         709 /  723         14.1          70.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 next_day:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-next_day wholestage off                        576 /  577         17.4          57.6       1.0X
-next_day wholestage on                         624 /  639         16.0          62.4       0.9X
+next_day wholestage off                        584 /  594         17.1          58.4       1.0X
+next_day wholestage on                         603 /  611         16.6          60.3       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 date_add:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-date_add wholestage off                        485 /  486         20.6          48.5       1.0X
-date_add wholestage on                         496 /  510         20.2          49.6       1.0X
+date_add wholestage off                        496 /  496         20.1          49.6       1.0X
+date_add wholestage on                         470 /  472         21.3          47.0       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 date_sub:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-date_sub wholestage off                        480 /  500         20.8          48.0       1.0X
-date_sub wholestage on                         499 /  501         20.0          49.9       1.0X
+date_sub wholestage off                        475 /  476         21.1          47.5       1.0X
+date_sub wholestage on                         469 /  473         21.3          46.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 add_months:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-add_months wholestage off                      979 /  989         10.2          97.9       1.0X
-add_months wholestage on                       979 /  989         10.2          97.9       1.0X
+add_months wholestage off                      925 /  926         10.8          92.5       1.0X
+add_months wholestage on                       911 /  923         11.0          91.1       1.0X
 
 
 ================================================================================================
@@ -168,8 +168,8 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 format date:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-format date wholestage off                    7796 / 7808          1.3         779.6       1.0X
-format date wholestage on                     7737 / 7798          1.3         773.7       1.0X
+format date wholestage off                    7727 / 7921          1.3         772.7       1.0X
+format date wholestage on                     7449 / 7537          1.3         744.9       1.0X
 
 
 ================================================================================================
@@ -180,8 +180,8 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 from_unixtime:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-from_unixtime wholestage off                  7826 / 7833          1.3         782.6       1.0X
-from_unixtime wholestage on                   7844 / 7868          1.3         784.4       1.0X
+from_unixtime wholestage off                  7633 / 7797          1.3         763.3       1.0X
+from_unixtime wholestage on                   7543 / 7575          1.3         754.3       1.0X
 
 
 ================================================================================================
@@ -192,14 +192,14 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 from_utc_timestamp:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-from_utc_timestamp wholestage off              979 /  988         10.2          97.9       1.0X
-from_utc_timestamp wholestage on               915 /  929         10.9          91.5       1.1X
+from_utc_timestamp wholestage off              928 /  931         10.8          92.8       1.0X
+from_utc_timestamp wholestage on               865 /  873         11.6          86.5       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 to_utc_timestamp:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-to_utc_timestamp wholestage off                957 /  959         10.5          95.7       1.0X
-to_utc_timestamp wholestage on                 943 /  968         10.6          94.3       1.0X
+to_utc_timestamp wholestage off                915 /  921         10.9          91.5       1.0X
+to_utc_timestamp wholestage on                 877 /  881         11.4          87.7       1.0X
 
 
