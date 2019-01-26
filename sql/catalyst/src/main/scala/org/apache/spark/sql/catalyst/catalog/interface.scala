@@ -429,7 +429,7 @@ case class CatalogColumnStat(
    */
   def toMap(colName: String): Map[String, String] = {
     val map = new scala.collection.mutable.HashMap[String, String]
-    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", "1")
+    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", "2")
     distinctCount.foreach { v =>
       map.put(s"${colName}.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
     }
