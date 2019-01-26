@@ -33,9 +33,7 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  */
 object DateTimeBenchmark extends SqlBasedBenchmark {
   private def doBenchmark(cardinality: Int, expr: String): Unit = {
-    spark.range(cardinality)
-      .selectExpr(expr)
-      .write.format("noop").save()
+    spark.range(cardinality).selectExpr(expr).write.format("noop").save()
   }
 
   private def run(cardinality: Int, name: String, expr: String): Unit = {
