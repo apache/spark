@@ -1186,7 +1186,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
+  ignore("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
     withTempView("t1", "t2", "t3") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
