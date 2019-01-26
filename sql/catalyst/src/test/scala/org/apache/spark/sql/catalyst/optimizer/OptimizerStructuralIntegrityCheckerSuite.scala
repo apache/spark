@@ -66,11 +66,29 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
       Aggregate(Nil, Seq[NamedExpression](max('id) as 'm),
         LocalRelation('id.long)).analyze
     assert(analyzed.resolved)
+
+    // Should fail verification with the OptimizeRuleBreakSI rule
     val message = intercept[TreeNodeException[LogicalPlan]] {
       Optimize.execute(analyzed)
     }.getMessage
     val ruleName = OptimizeRuleBreakSI.ruleName
     assert(message.contains(s"After applying rule $ruleName in batch OptimizeRuleBreakSI"))
     assert(message.contains("the structural integrity of the plan is broken"))
+
+    // Should not fail verification with the regular optimizer
+    SimpleTestOptimizer.execute(analyzed)
+  }
+
+  test("check for invalid plan before execution of any rule") {
+    val analyzed =
+      Aggregate(Nil, Seq[NamedExpression](max('id) as 'm),
+        LocalRelation('id.long)).analyze
+    val invalidPlan = OptimizeRuleBreakSI.apply(analyzed)
+
+    // Should fail verification right at the beginning
+    val message = intercept[TreeNodeException[LogicalPlan]] {
+      Optimize.execute(invalidPlan)
+    }.getMessage
+    assert(message.contains("The structural integrity of the input plan is broken"))
   }
 }

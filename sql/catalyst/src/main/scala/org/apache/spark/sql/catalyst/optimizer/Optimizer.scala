@@ -38,8 +38,10 @@ import org.apache.spark.util.Utils
 abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
 
-  // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
-  // still resolved after the execution of each rule.
+  // Check for structural integrity of the plan in test mode.
+  // Currently we check after the execution of each rule if a plan:
+  // - is still resolved
+  // - only host special expressions in supported operators
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
     !Utils.isTesting || (plan.resolved && checkSpecialExpressionIntegrity(plan))
   }
@@ -50,9 +52,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
    * Returns true when all operators are integral.
    */
   private def checkSpecialExpressionIntegrity(plan: LogicalPlan): Boolean = {
-    plan.collectFirst {
-      case p if specialExpressionInUnsupportedOperator(p) => p
-    }.isEmpty
+    plan.find(specialExpressionInUnsupportedOperator).isEmpty
   }
 
   /**
@@ -65,13 +65,14 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   private def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Boolean = {
     val exprs = plan.expressions
     exprs.flatMap { root =>
-      root.collectFirst {
+      root.find {
         case e: WindowExpression
-          if !plan.isInstanceOf[Window] => e
+          if !plan.isInstanceOf[Window] => true
         case e: AggregateExpression
-          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => e
+          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => true
         case e: Generator
-          if !plan.isInstanceOf[Generate] => e
+          if !plan.isInstanceOf[Generate] => true
+        case _ => false
       }
     }.nonEmpty
   }
