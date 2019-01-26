@@ -80,5 +80,9 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(N, "date_sub", s"date_sub($dateExpr, 10)")
       run(N, "add_months", s"add_months($dateExpr, 10)")
     }
+    runBenchmark("Formatting dates") {
+      val dateExpr = "cast(cast(id as timestamp) as date)"
+      run(N, "format date", s"date_format($dateExpr, 'MMM yyyy')")
+    }
   }
 }
