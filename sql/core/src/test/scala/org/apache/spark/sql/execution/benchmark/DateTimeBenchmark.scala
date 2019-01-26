@@ -35,31 +35,40 @@ import org.apache.spark.sql.types.TimestampType
  * }}}
  */
 object DateTimeBenchmark extends SqlBasedBenchmark {
-  import spark.implicits._
-
   def doBenchmark(cardinality: Int, expr: String): Unit = {
     spark.range(cardinality)
       .selectExpr(expr)
       .write.format("noop").save()
   }
 
-  def castToTimestamp(cardinality: Int): Unit = {
-    codegenBenchmark("cast to timestamp", cardinality) {
-      doBenchmark(cardinality, "cast(id as timestamp)")
+  def run(cardinality: Int, name: String, expr: String): Unit = {
+    codegenBenchmark(name, cardinality) {
+      doBenchmark(cardinality, expr)
     }
   }
 
-  def getYear(cardinality: Int): Unit = {
-    codegenBenchmark("year from timestamp", cardinality) {
-      doBenchmark(cardinality, "year(cast(id as timestamp))")
+  def run(cardinality: Int, func: String): Unit = {
+    codegenBenchmark(s"$func to timestamp", cardinality) {
+      doBenchmark(cardinality, s"$func(cast(id as timestamp))")
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val cardinality = 100000000
+    val N = 10000000
     runBenchmark("Extract components") {
-      castToTimestamp(cardinality)
-      getYear(cardinality)
+      run(N, "cast to timestamp", "cast(id as timestamp)")
+      run(N, "year")
+      run(N, "quarter")
+      run(N, "month")
+      run(N, "weekofyear")
+      run(N, "day")
+      run(N, "dayofyear")
+      run(N, "dayofmonth")
+      run(N, "dayofweek")
+      run(N, "weekday")
+      run(N, "hour")
+      run(N, "minute")
+      run(N, "second")
     }
   }
 }
