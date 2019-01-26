@@ -71,5 +71,14 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(N, "current_date", "current_date")
       run(N, "current_timestamp", "current_timestamp")
     }
+    runBenchmark("Date arithmetic") {
+      val dateExpr = "cast(cast(id as timestamp) as date)"
+      run(N, "cast to date", dateExpr)
+      run(N, "last_day", s"last_day($dateExpr)")
+      run(N, "next_day", s"next_day($dateExpr, 'TU')")
+      run(N, "date_add", s"date_add($dateExpr, 10)")
+      run(N, "date_sub", s"date_sub($dateExpr, 10)")
+      run(N, "add_months", s"add_months($dateExpr, 10)")
+    }
   }
 }
