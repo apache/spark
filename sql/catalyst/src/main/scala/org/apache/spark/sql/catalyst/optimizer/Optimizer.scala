@@ -41,7 +41,39 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
   // still resolved after the execution of each rule.
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || plan.resolved
+    !Utils.isTesting || (plan.resolved && checkSpecialExpressionIntegrity(plan))
+  }
+
+  /**
+   * Check if all operators in this plan hold structural integrity with regards to hosting special
+   * expressions.
+   * Returns true when all operators are integral.
+   */
+  private def checkSpecialExpressionIntegrity(plan: LogicalPlan): Boolean = {
+    plan.collectFirst {
+      case p if specialExpressionInUnsupportedOperator(p) => p
+    }.isEmpty
+  }
+
+  /**
+   * Check if there's any expression in this query plan operator that is
+   * - A WindowExpression but the plan is not Window
+   * - An AggregateExpresion but the plan is not Aggregate or Window
+   * - A Generator but the plan is not Generate
+   * Returns true when this operator breaks structural integrity with one of the cases above.
+   */
+  private def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Boolean = {
+    val exprs = plan.expressions
+    exprs.flatMap { root =>
+      root.collectFirst {
+        case e: WindowExpression
+          if !plan.isInstanceOf[Window] => e
+        case e: AggregateExpression
+          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => e
+        case e: Generator
+          if !plan.isInstanceOf[Generate] => e
+      }
+    }.nonEmpty
   }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)

@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,6 +36,8 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
       case Project(projectList, child) =>
         val newAttr = UnresolvedAttribute("unresolvedAttr")
         Project(projectList ++ Seq(newAttr), child)
+      case agg @ Aggregate(Nil, aggregateExpressions, child) =>
+        Project(aggregateExpressions, child)
     }
   }
 
@@ -47,8 +50,21 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
     override def defaultBatches: Seq[Batch] = Seq(newBatch) ++ super.defaultBatches
   }
 
-  test("check for invalid plan after execution of rule") {
+  test("check for invalid plan after execution of rule - unresolved attribute") {
     val analyzed = Project(Alias(Literal(10), "attr")() :: Nil, OneRowRelation()).analyze
+    assert(analyzed.resolved)
+    val message = intercept[TreeNodeException[LogicalPlan]] {
+      Optimize.execute(analyzed)
+    }.getMessage
+    val ruleName = OptimizeRuleBreakSI.ruleName
+    assert(message.contains(s"After applying rule $ruleName in batch OptimizeRuleBreakSI"))
+    assert(message.contains("the structural integrity of the plan is broken"))
+  }
+
+  test("check for invalid plan after execution of rule - special expression in wrong operator") {
+    val analyzed =
+      Aggregate(Nil, Seq[NamedExpression](max('id) as 'm),
+        LocalRelation('id.long)).analyze
     assert(analyzed.resolved)
     val message = intercept[TreeNodeException[LogicalPlan]] {
       Optimize.execute(analyzed)
