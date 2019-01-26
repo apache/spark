@@ -32,19 +32,19 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  * }}}
  */
 object DateTimeBenchmark extends SqlBasedBenchmark {
-  def doBenchmark(cardinality: Int, expr: String): Unit = {
+  private def doBenchmark(cardinality: Int, expr: String): Unit = {
     spark.range(cardinality)
       .selectExpr(expr)
       .write.format("noop").save()
   }
 
-  def run(cardinality: Int, name: String, expr: String): Unit = {
+  private def run(cardinality: Int, name: String, expr: String): Unit = {
     codegenBenchmark(name, cardinality) {
       doBenchmark(cardinality, expr)
     }
   }
 
-  def run(cardinality: Int, func: String): Unit = {
+  private def run(cardinality: Int, func: String): Unit = {
     codegenBenchmark(s"$func to timestamp", cardinality) {
       doBenchmark(cardinality, s"$func(cast(id as timestamp))")
     }
