@@ -18,7 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
+import org.apache.spark.sql.execution.datasources.json.JSONBenchmark.spark
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.TimestampType
 
 /**
  * Synthetic benchmark for date and timestamp functions.
@@ -35,24 +37,28 @@ import org.apache.spark.sql.functions._
 object DateTimeBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
+  def doBenchmark(cardinality: Int, expr: String): Unit = {
+    spark.range(cardinality)
+      .selectExpr(expr)
+      .write.format("noop").save()
+  }
+
+  def castToTimestamp(cardinality: Int): Unit = {
+    codegenBenchmark("cast to timestamp", cardinality) {
+      doBenchmark(cardinality, "cast(id as timestamp)")
+    }
+  }
+
   def getYear(cardinality: Int): Unit = {
-    def yearBenchmark(expr: String): Unit = {
-      spark.range(cardinality)
-        .selectExpr(expr)
-        .select(year('input))
-        .write.format("noop").save()
-    }
-    codegenBenchmark("year from date", cardinality) {
-      yearBenchmark("DATE '2019-01-26' AS input")
-    }
     codegenBenchmark("year from timestamp", cardinality) {
-      yearBenchmark("DATE '2019-01-26 10:46:00' AS input")
+      doBenchmark(cardinality, "year(cast(id as timestamp))")
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val cardinality = 100000000
     runBenchmark("Extract components") {
+      castToTimestamp(cardinality)
       getYear(cardinality)
     }
   }
