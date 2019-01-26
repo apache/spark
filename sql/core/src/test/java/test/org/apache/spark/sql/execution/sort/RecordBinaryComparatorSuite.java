@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql.execution.sort;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TestMemoryManager;
@@ -41,7 +42,8 @@ import org.junit.Test;
 public class RecordBinaryComparatorSuite {
 
   private final TaskMemoryManager memoryManager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+      new TestMemoryManager(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
   private final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
 
   private final int uaoSize = UnsafeAlignedOffset.getUaoSize();
