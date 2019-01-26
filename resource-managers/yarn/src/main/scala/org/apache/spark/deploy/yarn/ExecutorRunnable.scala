@@ -40,7 +40,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.util.{Utils, YarnExecutorHelper}
+import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 
 private[yarn] class ExecutorRunnable(
     container: Option[Container],
@@ -243,13 +243,13 @@ private[yarn] class ExecutorRunnable(
 
     // Add log urls, as well as executor attributes
     container.foreach { c =>
-      YarnExecutorHelper.getLogUrls(conf, Some(c)).foreach { m =>
+      YarnContainerInfoHelper.getLogUrls(conf, Some(c)).foreach { m =>
         m.foreach { case (fileName, url) =>
           env("SPARK_LOG_URL_" + fileName.toUpperCase(Locale.ROOT)) = url
         }
       }
 
-      YarnExecutorHelper.getAttributes(conf, Some(c)).foreach { m =>
+      YarnContainerInfoHelper.getAttributes(conf, Some(c)).foreach { m =>
         m.foreach { case (attr, value) =>
           env("SPARK_EXECUTOR_ATTRIBUTE_" + attr.toUpperCase(Locale.ROOT)) = value
         }

@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.yarn.ApplicationMaster
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.YarnExecutorHelper
+import org.apache.spark.util.YarnContainerInfoHelper
 
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -36,10 +36,10 @@ private[spark] class YarnClusterSchedulerBackend(
   }
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
-    YarnExecutorHelper.getLogUrls(sc.hadoopConfiguration, container = None)
+    YarnContainerInfoHelper.getLogUrls(sc.hadoopConfiguration, container = None)
   }
 
   override def getDriverAttributes: Option[Map[String, String]] = {
-    YarnExecutorHelper.getAttributes(sc.hadoopConfiguration, container = None)
+    YarnContainerInfoHelper.getAttributes(sc.hadoopConfiguration, container = None)
   }
 }

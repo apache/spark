@@ -42,11 +42,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
-  SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.tags.ExtendedYarnTest
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 
 /**
  * Integration tests for YARN; these tests use a mini Yarn cluster to run Spark-on-YARN
@@ -469,31 +468,23 @@ private object YarnClusterDriver extends Logging with Matchers {
         }
 
         val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
-        val httpAddress = System.getenv(ApplicationConstants.Environment.NM_HOST.name()) +
-          ":" + System.getenv(ApplicationConstants.Environment.NM_HTTP_PORT.name())
-
-        // lookup appropriate http scheme for container log urls
-        val yarnHttpPolicy = yarnConf.get(
-          YarnConfiguration.YARN_HTTP_POLICY_KEY,
-          YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
-        )
-        val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
-
-        val containerId = YarnSparkHadoopUtil.getContainerId
+        val host = YarnContainerInfoHelper.getNodeManagerHost
+        val port = YarnContainerInfoHelper.getNodeManagerPort
+        val httpPort = YarnContainerInfoHelper.getNodeManagerHttpPort
+        val httpScheme = YarnContainerInfoHelper.getYarnHttpScheme(yarnConf)
+        val containerId = YarnContainerInfoHelper.getContainerId(container = None)
         val user = Utils.getCurrentUserName()
+        val clusterId: Option[String] = YarnContainerInfoHelper.getClusterId(yarnConf)
+
         assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
 
         assert(listener.driverAttributes.nonEmpty)
         val driverAttributes = listener.driverAttributes.get
-        val clusterId: Option[String] = try {
-          Some(YarnConfiguration.getClusterId(yarnConf))
-        } catch {
-          case _: HadoopIllegalArgumentException => None
-        }
-
         val expectationAttributes = Map(
           "HTTP_SCHEME" -> httpScheme,
-          "NODE_HTTP_ADDRESS" -> httpAddress,
+          "NODE_HOST" -> host,
+          "NODE_PORT" -> port,
+          "NODE_HTTP_PORT" -> httpPort,
           "CLUSTER_ID" -> clusterId.getOrElse(""),
           "CONTAINER_ID" -> ConverterUtils.toString(containerId),
           "USER" -> user,

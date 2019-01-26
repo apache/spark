@@ -27,7 +27,7 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.internal.Logging
 
-private[spark] object YarnExecutorHelper extends Logging {
+private[spark] object YarnContainerInfoHelper extends Logging {
   def getLogUrls(
       conf: Configuration,
       container: Option[Container]): Option[Map[String, String]] = {
@@ -35,11 +35,12 @@ private[spark] object YarnExecutorHelper extends Logging {
       val yarnConf = new YarnConfiguration(conf)
 
       val containerId = getContainerId(container)
-      val httpAddress = getNodeManagerHttpAddress
       val user = Utils.getCurrentUserName()
       val httpScheme = getYarnHttpScheme(yarnConf)
+      val host = getNodeManagerHost
+      val httpPort = getNodeManagerHttpPort
 
-      val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
+      val baseUrl = s"$httpScheme$host:$httpPort/node/containerlogs/$containerId/$user"
       logDebug(s"Base URL for logs: $baseUrl")
 
       Some(Map(
@@ -60,13 +61,17 @@ private[spark] object YarnExecutorHelper extends Logging {
 
       val clusterId = getClusterId(yarnConf)
       val containerId = getContainerId(container)
-      val httpAddress = getNodeManagerHttpAddress
+      val host = getNodeManagerHost
+      val port = getNodeManagerPort
+      val httpPort = getNodeManagerHttpPort
       val user = Utils.getCurrentUserName()
       val httpScheme = getYarnHttpScheme(yarnConf)
 
       Some(Map(
         "HTTP_SCHEME" -> httpScheme,
-        "NODE_HTTP_ADDRESS" -> httpAddress,
+        "NODE_HOST" -> host,
+        "NODE_PORT" -> port.toString,
+        "NODE_HTTP_PORT" -> httpPort.toString,
         "CLUSTER_ID" -> clusterId.getOrElse(""),
         "CONTAINER_ID" -> ConverterUtils.toString(containerId),
         "USER" -> user,
@@ -80,12 +85,12 @@ private[spark] object YarnExecutorHelper extends Logging {
     }
   }
 
-  private def getContainerId(container: Option[Container]): ContainerId = container match {
+  def getContainerId(container: Option[Container]): ContainerId = container match {
     case Some(c) => c.getId
     case None => YarnSparkHadoopUtil.getContainerId
   }
 
-  private def getClusterId(yarnConf: YarnConfiguration): Option[String] = {
+  def getClusterId(yarnConf: YarnConfiguration): Option[String] = {
     try {
       Some(YarnConfiguration.getClusterId(yarnConf))
     } catch {
@@ -93,12 +98,7 @@ private[spark] object YarnExecutorHelper extends Logging {
     }
   }
 
-  private def getNodeManagerHttpAddress: String = {
-    System.getenv(Environment.NM_HOST.name()) + ":" +
-      System.getenv(Environment.NM_HTTP_PORT.name())
-  }
-
-  private def getYarnHttpScheme(yarnConf: YarnConfiguration): String = {
+  def getYarnHttpScheme(yarnConf: YarnConfiguration): String = {
     // lookup appropriate http scheme for container log urls
     val yarnHttpPolicy = yarnConf.get(
       YarnConfiguration.YARN_HTTP_POLICY_KEY,
@@ -106,4 +106,10 @@ private[spark] object YarnExecutorHelper extends Logging {
     )
     if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
   }
+
+  def getNodeManagerHost: String = System.getenv(Environment.NM_HOST.name())
+
+  def getNodeManagerPort: Int = System.getenv(Environment.NM_PORT.name()).toInt
+
+  def getNodeManagerHttpPort: Int = System.getenv(Environment.NM_HTTP_PORT.name()).toInt
 }
