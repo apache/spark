@@ -43,7 +43,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
   }
 
   private def run(cardinality: Int, func: String): Unit = {
-    codegenBenchmark(s"$func to timestamp", cardinality) {
+    codegenBenchmark(s"$func of timestamp", cardinality) {
       doBenchmark(cardinality, s"$func(cast(id as timestamp))")
     }
   }
