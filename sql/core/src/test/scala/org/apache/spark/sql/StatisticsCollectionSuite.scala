@@ -18,12 +18,14 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.util.TimeZone
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -425,6 +427,28 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         df2.createTempView("TBL2")
         sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
       }
+    }
+  }
+
+  test("store and retrieve column stats in different time zones") {
+    def checkTimestampStats(srcTimeZone: TimeZone, dstTimeZone: TimeZone): Unit = {
+      val table = "time_table"
+      val column = "T"
+      withTable(table) {
+        TimeZone.setDefault(srcTimeZone)
+        spark.range(10)
+          .select('id.cast(TimestampType).as(column))
+          .write.saveAsTable(table)
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
+        TimeZone.setDefault(dstTimeZone)
+        val stats = getCatalogTable(table)
+          .stats.get.colStats(column)
+          .toPlanStat(column, TimestampType)
+        assert(stats.min.get.asInstanceOf[Long] == 0)
+      }
+    }
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      checkTimestampStats(DateTimeUtils.TimeZoneUTC, timeZone)
     }
   }
 }
