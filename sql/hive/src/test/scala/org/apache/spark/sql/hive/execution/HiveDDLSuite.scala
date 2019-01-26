@@ -265,10 +265,10 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     withTable("table_old", "table_ctas_old") {
       sql(
         """
-           |CREATE TABLE table_old (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+          |CREATE TABLE table_old (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
         """.stripMargin)
       sql(
         """
@@ -316,10 +316,10 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     withTable("table_new", "table_ctas_new") {
       sql(
         """
-           |CREATE TABLE table_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+          |CREATE TABLE table_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
         """.stripMargin)
       sql(
         """
@@ -341,11 +341,11 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     withTable("table_pt_new", "table_ctas_pt_new") {
       sql(
         """
-           |CREATE TABLE table_pt_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
-           |PARTITIONED BY (pt INT)
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+          |CREATE TABLE table_pt_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+          |PARTITIONED BY (pt INT)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
         """.stripMargin)
       sql(
         """
