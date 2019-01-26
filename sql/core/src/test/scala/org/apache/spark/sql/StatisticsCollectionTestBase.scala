@@ -78,10 +78,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       Some(16), Some(16)),
     "cstring" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
     "cbinary" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
-    "cdate" -> CatalogColumnStat(Some(2), Some(d1.toString), Some(d2.toString), Some(1), Some(4),
-      Some(4)),
-    "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1.toString), Some(t2.toString), Some(1),
-      Some(8), Some(8))
+    "cdate" -> CatalogColumnStat(Some(2), Some(d1Internal.toString), Some(d2Internal.toString),
+      Some(1), Some(4), Some(4)),
+    "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1Internal.toString),
+      Some(t2Internal.toString), Some(1), Some(8), Some(8))
   )
 
   /**
