@@ -18,9 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
-import org.apache.spark.sql.execution.datasources.json.JSONBenchmark.spark
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.TimestampType
 
 /**
  * Synthetic benchmark for date and timestamp functions.
@@ -69,6 +66,10 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(N, "hour")
       run(N, "minute")
       run(N, "second")
+    }
+    runBenchmark("Current date and time") {
+      run(N, "current_date", "current_date")
+      run(N, "current_timestamp", "current_timestamp")
     }
   }
 }
