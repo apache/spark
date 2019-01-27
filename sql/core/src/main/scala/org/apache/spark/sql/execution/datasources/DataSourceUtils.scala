@@ -45,7 +45,7 @@ object DataSourceUtils {
    */
   private def verifySchema(format: FileFormat, schema: StructType, isReadPath: Boolean): Unit = {
     schema.foreach { field =>
-      if (!format.supportDataType(field.dataType, isReadPath)) {
+      if (!format.supportDataType(field.dataType)) {
         throw new AnalysisException(
           s"$format data source does not support ${field.dataType.catalogString} data type.")
       }
