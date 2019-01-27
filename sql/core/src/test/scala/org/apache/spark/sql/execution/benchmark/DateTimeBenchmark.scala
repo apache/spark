@@ -32,13 +32,13 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  * }}}
  */
 object DateTimeBenchmark extends SqlBasedBenchmark {
-  private def doBenchmark(cardinality: Int, expr: String): Unit = {
-    spark.range(cardinality).selectExpr(expr).write.format("noop").save()
+  private def doBenchmark(cardinality: Int, exprs: String*): Unit = {
+    spark.range(cardinality).selectExpr(exprs: _*).write.format("noop").save()
   }
 
-  private def run(cardinality: Int, name: String, expr: String): Unit = {
+  private def run(cardinality: Int, name: String, exprs: String*): Unit = {
     codegenBenchmark(name, cardinality) {
-      doBenchmark(cardinality, expr)
+      doBenchmark(cardinality, exprs: _*)
     }
   }
 
@@ -89,6 +89,25 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       val timestampExpr = "cast(id as timestamp)"
       run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
       run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
+    }
+    runBenchmark("Intervals") {
+      val (start, end) = ("cast(id as timestamp)", "cast((id+8640000) as timestamp)")
+      run(N, "cast interval", start, end)
+      run(N, "datediff", s"datediff($start, $end)")
+      run(N, "months_between", s"months_between($start, $end)")
+      run(1000000, "window", s"window($start, 100, 10, 1)")
+    }
+    runBenchmark("Truncation") {
+      val timestampExpr = "cast(id as timestamp)"
+      Seq("YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE",
+          "SECOND", "WEEK", "QUARTER").foreach { level =>
+        run(N, s"date_trunc $level", s"date_trunc('$level', $timestampExpr)")
+      }
+
+      val dateExpr = "cast(cast(id as timestamp) as date)"
+      Seq("year", "yyyy", "yy", "mon", "month", "mm").foreach { level =>
+        run(N, s"trunc $level", s"trunc('$level', $dateExpr)")
+      }
     }
   }
 }
