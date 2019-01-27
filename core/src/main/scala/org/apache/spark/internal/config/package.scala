@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 package object config {
@@ -452,8 +453,9 @@ package object config {
       .internal()
       .doc("The chunk size in bytes during writing out the bytes of ChunkedByteBuffer.")
       .bytesConf(ByteUnit.BYTE)
-      .checkValue(_ <= Int.MaxValue, "The chunk size during writing out the bytes of" +
-        " ChunkedByteBuffer should not larger than Int.MaxValue.")
+      .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        "The chunk size during writing out the bytes of" +
+        " ChunkedByteBuffer should not larger than Int.MaxValue - 15.")
       .createWithDefault(64 * 1024 * 1024)
 
   private[spark] val CHECKPOINT_COMPRESS =
@@ -524,8 +526,9 @@ package object config {
         "otherwise specified. These buffers reduce the number of disk seeks and system calls " +
         "made in creating intermediate shuffle files.")
       .bytesConf(ByteUnit.KiB)
-      .checkValue(v => v > 0 && v <= Int.MaxValue / 1024,
-        s"The file buffer size must be greater than 0 and less than ${Int.MaxValue / 1024}.")
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
+        s"The file buffer size must be greater than 0 and less than" +
+          s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
@@ -533,16 +536,18 @@ package object config {
       .doc("The file system for this buffer size after each partition " +
         "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
       .bytesConf(ByteUnit.KiB)
-      .checkValue(v => v > 0 && v <= Int.MaxValue / 1024,
-        s"The buffer size must be greater than 0 and less than ${Int.MaxValue / 1024}.")
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
+        s"The buffer size must be greater than 0 and less than" +
+          s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
   private[spark] val SHUFFLE_DISK_WRITE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.spill.diskWriteBufferSize")
       .doc("The buffer size, in bytes, to use when writing the sorted records to an on-disk file.")
       .bytesConf(ByteUnit.BYTE)
-      .checkValue(v => v > 0 && v <= Int.MaxValue,
-        s"The buffer size must be greater than 0 and less than ${Int.MaxValue}.")
+      .checkValue(v => v > 12 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        s"The buffer size must be greater than 12 and less than or equal to " +
+          s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefault(1024 * 1024)
 
   private[spark] val UNROLL_MEMORY_CHECK_PERIOD =
@@ -645,7 +650,7 @@ package object config {
       .internal()
       .doc("For testing only, controls the size of chunks when memory mapping a file")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   private[spark] val BARRIER_SYNC_TIMEOUT =
     ConfigBuilder("spark.barrier.sync.timeout")
@@ -656,6 +661,14 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v > 0, "The value should be a positive time value.")
       .createWithDefaultString("365d")
+
+  private[spark] val UNSCHEDULABLE_TASKSET_TIMEOUT =
+    ConfigBuilder("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
+      .doc("The timeout in seconds to wait to acquire a new executor and schedule a task " +
+        "before aborting a TaskSet which is unschedulable because of being completely blacklisted.")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(v => v >= 0, "The value should be a non negative time value.")
+      .createWithDefault(120)
 
   private[spark] val BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL =
     ConfigBuilder("spark.scheduler.barrier.maxConcurrentTasksCheck.interval")

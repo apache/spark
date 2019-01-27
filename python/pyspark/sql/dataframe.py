@@ -119,25 +119,6 @@ class DataFrame(object):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    @since(1.3)
-    def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-
-        >>> df.registerTempTable("people")
-        >>> df2 = spark.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-
-        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
-        self._jdf.createOrReplaceTempView(name)
-
     @since(2.0)
     def createTempView(self, name):
         """Creates a local temporary view with this DataFrame.

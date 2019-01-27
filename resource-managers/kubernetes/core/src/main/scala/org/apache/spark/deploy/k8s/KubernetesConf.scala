@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s
 
-import scala.collection.mutable
-
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 import org.apache.hadoop.conf.Configuration
 
@@ -28,7 +26,7 @@ import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManag
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.util.Utils
 
 
 private[spark] sealed trait KubernetesRoleSpecificConf
@@ -37,10 +35,15 @@ private[spark] sealed trait KubernetesRoleSpecificConf
  * Structure containing metadata for Kubernetes logic that builds a Spark driver.
  */
 private[spark] case class KubernetesDriverSpecificConf(
-    mainAppResource: Option[MainAppResource],
+    mainAppResource: MainAppResource,
     mainClass: String,
     appName: String,
-    appArgs: Seq[String]) extends KubernetesRoleSpecificConf
+    appArgs: Seq[String],
+    pyFiles: Seq[String] = Nil) extends KubernetesRoleSpecificConf {
+
+  require(mainAppResource != null, "Main resource must be provided.")
+
+}
 
 /*
  * Structure containing metadata for Kubernetes logic that builds a Spark executor.
@@ -72,7 +75,6 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleSecretEnvNamesToKeyRefs: Map[String, String],
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
-    sparkFiles: Seq[String],
     hadoopConfSpec: Option[HadoopConfSpec]) {
 
   def hadoopConfigMapName: String = s"$appResourceNamePrefix-hadoop-config"
@@ -83,23 +85,6 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     new KubernetesHadoopDelegationTokenManager(conf, hConf)
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
-
-  def sparkJars(): Seq[String] = sparkConf
-    .getOption("spark.jars")
-    .map(str => str.split(",").toSeq)
-    .getOrElse(Seq.empty[String])
-
-  def pyFiles(): Option[String] = sparkConf
-    .get(KUBERNETES_PYSPARK_PY_FILES)
-
-  def pySparkMainResource(): Option[String] = sparkConf
-    .get(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE)
-
-  def pySparkPythonVersion(): String = sparkConf
-      .get(PYSPARK_MAJOR_PYTHON_VERSION)
-
-  def sparkRMainResource(): Option[String] = sparkConf
-    .get(KUBERNETES_R_MAIN_APP_RESOURCE)
 
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
@@ -132,58 +117,11 @@ private[spark] object KubernetesConf {
       appName: String,
       appResourceNamePrefix: String,
       appId: String,
-      mainAppResource: Option[MainAppResource],
+      mainAppResource: MainAppResource,
       mainClass: String,
       appArgs: Array[String],
       maybePyFiles: Option[String],
       hadoopConfDir: Option[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
-    val sparkConfWithMainAppJar = sparkConf.clone()
-    val additionalFiles = mutable.ArrayBuffer.empty[String]
-    mainAppResource.foreach {
-        case JavaMainAppResource(res) =>
-          val previousJars = sparkConf
-            .getOption("spark.jars")
-            .map(_.split(","))
-            .getOrElse(Array.empty)
-          if (!previousJars.contains(res)) {
-            sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
-          }
-        // The function of this outer match is to account for multiple nonJVM
-        // bindings that will all have increased default MEMORY_OVERHEAD_FACTOR to 0.4
-        case nonJVM: NonJVMResource =>
-          nonJVM match {
-            case PythonMainAppResource(res) =>
-              additionalFiles += res
-              maybePyFiles.foreach{maybePyFiles =>
-                additionalFiles.appendAll(maybePyFiles.split(","))}
-              sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
-            case RMainAppResource(res) =>
-              additionalFiles += res
-              sparkConfWithMainAppJar.set(KUBERNETES_R_MAIN_APP_RESOURCE, res)
-          }
-          sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
-    }
-
-    val trimmedJars = sparkConfWithMainAppJar.getOption("spark.jars")
-      .map(_.split(","))
-      .getOrElse(Array.empty)
-      .map(_.trim)
-      .filterNot(_.isEmpty)
-
-    if (trimmedJars.nonEmpty) {
-      sparkConfWithMainAppJar.setJars(trimmedJars)
-    }
-
-    val trimmedFiles = sparkConfWithMainAppJar.getOption("spark.files")
-      .map(_.split(","))
-      .getOrElse(Array.empty)
-      .map(_.trim)
-      .filterNot(_.isEmpty)
-
-    if (trimmedFiles.nonEmpty) {
-      sparkConfWithMainAppJar.set("spark.files", trimmedFiles.mkString(","))
-    }
-
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
     require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), "Label with key " +
@@ -210,11 +148,6 @@ private[spark] object KubernetesConf {
     KubernetesVolumeUtils.parseVolumesWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX).map(_.get)
 
-    val sparkFiles = sparkConf
-      .getOption("spark.files")
-      .map(str => str.split(",").toSeq)
-      .getOrElse(Seq.empty[String]) ++ additionalFiles
-
     val hadoopConfigMapName = sparkConf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
     KubernetesUtils.requireNandDefined(
       hadoopConfDir,
@@ -227,10 +160,12 @@ private[spark] object KubernetesConf {
       } else {
         None
       }
+    val pyFiles = maybePyFiles.map(Utils.stringToSeq).getOrElse(Nil)
+
 
     KubernetesConf(
-      sparkConfWithMainAppJar,
-      KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
+      sparkConf.clone(),
+      KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs, pyFiles),
       appResourceNamePrefix,
       appId,
       Some(s"$appResourceNamePrefix-submitted-local-files"),
@@ -240,7 +175,6 @@ private[spark] object KubernetesConf {
       driverSecretEnvNamesToKeyRefs,
       driverEnvs,
       driverVolumes,
-      sparkFiles,
       hadoopConfSpec)
   }
 
@@ -298,7 +232,6 @@ private[spark] object KubernetesConf {
       executorEnvSecrets,
       executorEnv,
       executorVolumes,
-      Seq.empty[String],
       None)
   }
 }

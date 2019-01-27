@@ -218,7 +218,6 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None,
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
       useDataTables: Boolean = false): Seq[Node] = {

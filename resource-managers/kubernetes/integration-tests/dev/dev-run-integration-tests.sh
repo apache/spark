@@ -29,7 +29,12 @@ SERVICE_ACCOUNT=
 CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
-SCALA_VERSION="$($TEST_ROOT_DIR/build/mvn org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=scala.binary.version | grep -v '\[' )"
+MVN="$TEST_ROOT_DIR/build/mvn"
+
+SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
+    | grep -v "INFO"\
+    | grep -v "WARNING"\
+    | tail -n 1)
 
 # Parse arguments
 while (( "$#" )); do
