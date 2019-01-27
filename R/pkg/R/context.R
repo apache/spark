@@ -81,6 +81,26 @@ objectFile <- function(sc, path, minPartitions = NULL) {
   RDD(jrdd, "byte")
 }
 
+makeSplits <- function(numSerializedSlices, length) {
+  # Generate the slice ids to put each row
+  # For instance, for numSerializedSlices of 22, length of 50
+  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
+  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
+  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
+  # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
+  if (numSerializedSlices > 0) {
+    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
+      # nolint start
+      start <- trunc((as.numeric(x) * length) / numSerializedSlices)
+      end <- trunc(((as.numeric(x) + 1) * length) / numSerializedSlices)
+      # nolint end
+      rep(start, end - start)
+    }))
+  } else {
+    1
+  }
+}
+
 #' Create an RDD from a homogeneous list or vector.
 #'
 #' This function creates an RDD from a local homogeneous list in R. The elements
@@ -143,25 +163,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
   numSerializedSlices <- min(len, max(numSlices, ceiling(objectSize / sizeLimit)))
 
-  # Generate the slice ids to put each row
-  # For instance, for numSerializedSlices of 22, length of 50
-  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
-  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
-  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
-  # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
-  splits <- if (numSerializedSlices > 0) {
-    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
-      # nolint start
-      start <- trunc((as.numeric(x) * len) / numSerializedSlices)
-      end <- trunc(((as.numeric(x) + 1) * len) / numSerializedSlices)
-      # nolint end
-      rep(start, end - start)
-    }))
-  } else {
-    1
-  }
-
-  slices <- split(coll, splits)
+  slices <- split(coll, makeSplits(numSerializedSlices, len))
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws
