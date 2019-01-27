@@ -307,6 +307,63 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
+test_that("createDataFrame Arrow optimization", {
+  skip_if_not_installed("arrow")
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    expected <- collect(createDataFrame(mtcars))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    expect_equal(collect(createDataFrame(mtcars)), expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("createDataFrame Arrow optimization - type specification", {
+  skip_if_not_installed("arrow")
+  rdf <- data.frame(list(list(a = 1,
+                              b = "a",
+                              c = TRUE,
+                              d = 1.1,
+                              e = 1L,
+                              f = as.Date("1990-02-24"),
+                              g = as.POSIXct("1990-02-24 12:34:56"))))
+
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  conf <- callJMethod(sparkSession, "conf")
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    expected <- collect(createDataFrame(rdf))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    expect_equal(collect(createDataFrame(rdf)), expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
 test_that("read/write csv as DataFrame", {
   if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
