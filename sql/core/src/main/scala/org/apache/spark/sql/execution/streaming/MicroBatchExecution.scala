@@ -501,19 +501,14 @@ class MicroBatchExecution(
     // Rewire the plan to use the new attributes that were returned by the source.
     val newAttributePlan = newBatchesPlan transformAllExpressions {
       case ct: CurrentTimestamp =>
+        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
+        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
+        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
-          ct.dataType)
+          ct.dataType, Some("Dummy TimeZoneId"))
       case cd: CurrentDate =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           cd.dataType, cd.timeZoneId)
-    }
-
-    // Pre-resolve new attributes to ensure all attributes are resolved before
-    // accessing schema of logical plan. Note that it only leverages the information
-    // of attributes, so we don't need to concern about the value of literals.
-
-    val newAttrPlanPreResolvedForSchema = newAttributePlan transformAllExpressions {
-      case cbt: CurrentBatchTimestamp => cbt.toLiteral
     }
 
     val triggerLogicalPlan = sink match {
@@ -521,7 +516,7 @@ class MicroBatchExecution(
       case s: StreamingWriteSupportProvider =>
         val writer = s.createStreamingWriteSupport(
           s"$runId",
-          newAttrPlanPreResolvedForSchema.schema,
+          newAttributePlan.schema,
           outputMode,
           new DataSourceOptions(extraOptions.asJava))
         WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, writer), newAttributePlan)
