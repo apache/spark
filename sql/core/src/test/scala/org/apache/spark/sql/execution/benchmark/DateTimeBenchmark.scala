@@ -103,11 +103,21 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           "SECOND", "WEEK", "QUARTER").foreach { level =>
         run(N, s"date_trunc $level", s"date_trunc('$level', $timestampExpr)")
       }
-
       val dateExpr = "cast(cast(id as timestamp) as date)"
       Seq("year", "yyyy", "yy", "mon", "month", "mm").foreach { level =>
         run(N, s"trunc $level", s"trunc('$level', $dateExpr)")
       }
+    }
+    runBenchmark("Parsing") {
+      val n = 1000000
+      val timestampStrExpr = "concat('2019-01-27 11:02:01.', cast(mod(id, 1000) as string))"
+      val pattern = "'yyyy-MM-dd HH:mm:ss.SSS'"
+      run(n, "to timestamp str", timestampStrExpr)
+      run(n, "to_timestamp", s"to_timestamp($timestampStrExpr, $pattern)")
+      run(n, "to_unix_timestamp", s"to_unix_timestamp($timestampStrExpr, $pattern)")
+      val dateStrExpr = "concat('2019-01-', cast(mod(id, 25) as string))"
+      run(n, "to date str", dateStrExpr)
+      run(n, "to_date", s"to_date($dateStrExpr, 'yyyy-MM-dd')")
     }
   }
 }
