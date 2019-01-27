@@ -192,6 +192,7 @@ of the most common options to set are:
     is added to executor resource requests.
 
     NOTE: Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
+    NOTE: Python memory usage is dependent on Python's 'resource' module; therefore, the behaviors and limitations are inherited.
   </td>
 </tr>
 <tr>
