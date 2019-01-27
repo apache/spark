@@ -207,6 +207,36 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(e: Column): Column = approx_count_distinct(e)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(columnName: String): Column = approx_count_distinct(columnName)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(e: Column, rsd: Double): Column = approx_count_distinct(e, rsd)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(columnName: String, rsd: Double): Column = {
+    approx_count_distinct(Column(columnName), rsd)
+  }
+
+  /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
    * @group agg_funcs
@@ -1109,6 +1139,27 @@ object functions {
    * @since 1.6.0
    */
   def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   *
+   * {{{
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use monotonically_increasing_id()", "2.0.0")
+  def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
 
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
@@ -2092,6 +2143,20 @@ object functions {
   def tanh(columnName: String): Column = tanh(Column(columnName))
 
   /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(e: Column): Column = degrees(e)
+
+  /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(columnName: String): Column = degrees(Column(columnName))
+
+  /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
    * @param e angle in radians
@@ -2112,6 +2177,20 @@ object functions {
    * @since 2.1.0
    */
   def degrees(columnName: String): Column = degrees(Column(columnName))
+
+  /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(e: Column): Column = radians(e)
+
+  /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(columnName: String): Column = radians(Column(columnName))
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
