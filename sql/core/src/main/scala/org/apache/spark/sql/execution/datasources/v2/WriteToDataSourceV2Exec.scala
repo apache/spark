@@ -130,7 +130,7 @@ case class WriteToDataSourceV2Exec(
 /**
  * Helper for physical plans that build batch writes.
  */
-private[sql] trait BatchWriteHelper {
+trait BatchWriteHelper {
   def table: SupportsBatchWrite
   def query: SparkPlan
   def writeOptions: DataSourceOptions
@@ -145,7 +145,7 @@ private[sql] trait BatchWriteHelper {
 /**
  * The base physical plan for writing data into data source v2.
  */
-private[sql] trait V2TableWriteExec extends UnaryExecNode {
+trait V2TableWriteExec extends UnaryExecNode {
   def query: SparkPlan
 
   var commitProgress: Option[StreamWriterCommitProgress] = None

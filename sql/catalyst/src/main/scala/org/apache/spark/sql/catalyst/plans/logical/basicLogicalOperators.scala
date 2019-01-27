@@ -367,7 +367,7 @@ case class Join(
 /**
  * Base trait for DataSourceV2 write commands
  */
-private[sql] trait V2WriteCommand extends Command {
+trait V2WriteCommand extends Command {
   def table: NamedRelation
   def query: LogicalPlan
 
