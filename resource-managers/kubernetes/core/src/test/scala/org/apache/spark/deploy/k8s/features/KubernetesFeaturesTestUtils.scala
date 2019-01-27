@@ -16,15 +16,19 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import java.io.File
 
+import com.google.common.base.Charsets
+import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.util.Utils
 
 object KubernetesFeaturesTestUtils {
 
@@ -48,6 +52,16 @@ object KubernetesFeaturesTestUtils {
           SparkPod(configuredPod, originalPod.container)
         }
       })
+    mockStep
+  }
+
+  def getMockConfigStepForLocalFiles[T <: MountLocalFilesFeatureStep](
+       stepType: String, stepClass: Class[T]): T = {
+    val mockStep = getMockConfigStepForStepType(stepType, stepClass)
+    val tempDir = Utils.createTempDir()
+    val tempFile1 = new File(tempDir, "file1.txt")
+    Files.write("a", tempFile1, Charsets.UTF_8)
+    when(mockStep.allFiles()).thenReturn(Seq(tempFile1.getAbsolutePath))
     mockStep
   }
 

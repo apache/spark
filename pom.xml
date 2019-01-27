@@ -107,8 +107,6 @@
     <module>external/avro</module>
     <module>dists/hadoop-palantir-bom</module>
     <module>dists/hadoop-palantir</module>
-    <module>resource-managers/kubernetes/core</module>
-    <module>resource-managers/kubernetes/integration-tests</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 

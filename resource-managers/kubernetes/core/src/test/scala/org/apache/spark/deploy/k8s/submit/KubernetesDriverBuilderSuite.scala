@@ -16,10 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.io.File
-
-import com.google.common.base.Charsets
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.Mockito._
@@ -28,7 +24,6 @@ import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE}
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.util.Utils
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
@@ -62,7 +57,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val driverCommandStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     DRIVER_CMD_STEP_TYPE, classOf[DriverCommandFeatureStep])
 
-  private val localFilesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+  private val localFilesStep = KubernetesFeaturesTestUtils.getMockConfigStepForLocalFiles(
     LOCAL_FILES_STEP_TYPE, classOf[MountLocalDriverFilesFeatureStep])
 
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
@@ -116,6 +111,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
+      LOCAL_FILES_STEP_TYPE,
       DRIVER_CMD_STEP_TYPE)
   }
 
@@ -143,25 +139,15 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
+      LOCAL_FILES_STEP_TYPE,
       SECRETS_STEP_TYPE,
       ENV_SECRETS_STEP_TYPE,
       DRIVER_CMD_STEP_TYPE)
   }
 
-  test("Apply mounting small local files when present..") {
-    val tempDir = Utils.createTempDir()
-    val tempFile1 = new File(tempDir, "file1.txt")
-    Files.write("a", tempFile1, Charsets.UTF_8)
-    val tempFile2 = new File(tempDir, "file2.txt")
-    Files.write("b", tempFile2, Charsets.UTF_8)
-    val allFiles = Seq(
-      tempFile1.getAbsolutePath,
-      s"file://${tempFile2.getAbsolutePath}",
-      "https://localhost:9000/file3.txt")
-    val sparkConf = new SparkConf(false)
-      .set("spark.files", allFiles.mkString(","))
+  test("Apply mounting small local files when present.") {
     val conf = KubernetesConf(
-      sparkConf,
+      new SparkConf(false),
       KubernetesDriverSpecificConf(
         JavaMainAppResource(None),
         "test-app",
@@ -216,6 +202,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
+      LOCAL_FILES_STEP_TYPE,
       MOUNT_VOLUMES_STEP_TYPE,
       DRIVER_CMD_STEP_TYPE)
   }
@@ -244,8 +231,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
-      TEMPLATE_VOLUME_STEP_TYPE)
+      LOCAL_FILES_STEP_TYPE,
+      DRIVER_CMD_STEP_TYPE)
   }
 
   test("Apply HadoopSteps if HADOOP_CONF_DIR is defined.") {
@@ -275,6 +262,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
+      LOCAL_FILES_STEP_TYPE,
       DRIVER_CMD_STEP_TYPE,
       HADOOP_GLOBAL_STEP_TYPE)
   }
@@ -306,6 +294,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
+      LOCAL_FILES_STEP_TYPE,
       DRIVER_CMD_STEP_TYPE,
       HADOOP_GLOBAL_STEP_TYPE)
   }

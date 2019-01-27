@@ -95,7 +95,7 @@ private[spark] class KubernetesDriverBuilder(
     val localFiles = KubernetesUtils.submitterLocalFiles(localFilesFeature.allFiles)
         .map(new File(_))
     require(localFiles.forall(_.isFile), s"All submitted local files must be present and not" +
-      s" directories, Got got: ${localFiles.map(_.getAbsolutePath).mkString(",")}")
+      s" directories, Got: ${localFiles.map(_.getAbsolutePath).mkString(",")}")
 
     val totalFileSize = localFiles.map(_.length()).sum
     val totalSizeBytesString = Utils.bytesToString(totalFileSize)

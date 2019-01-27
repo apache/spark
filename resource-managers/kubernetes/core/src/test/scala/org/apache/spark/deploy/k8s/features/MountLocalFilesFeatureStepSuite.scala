@@ -51,6 +51,7 @@ class MountLocalFilesFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
       "https://localhost:9000/file3.txt")
     localFiles = Seq(firstLocalFile, secondLocalFile)
     val sparkConf = new SparkConf(false)
+        .set("spark.files", sparkFiles.mkString(","))
     kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(

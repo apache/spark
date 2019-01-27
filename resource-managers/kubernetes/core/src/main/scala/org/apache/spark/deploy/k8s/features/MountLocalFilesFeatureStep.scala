@@ -34,7 +34,7 @@ private[spark] class MountLocalDriverFilesFeatureStep(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
   extends MountLocalFilesFeatureStep(kubernetesConf) {
 
-  lazy val allFiles: Seq[String] = {
+  val allFiles: Seq[String] = {
     Utils.stringToSeq(kubernetesConf.sparkConf.get("spark.files", "")) ++
       kubernetesConf.roleSpecificConf.pyFiles ++
       (kubernetesConf.roleSpecificConf.mainAppResource match {
@@ -49,15 +49,17 @@ private[spark] class MountLocalExecutorFilesFeatureStep(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
   extends MountLocalFilesFeatureStep(kubernetesConf) {
 
-  lazy val allFiles: Seq[String] = Nil
+  val allFiles: Seq[String] = Nil
 }
 
 private[spark] abstract class MountLocalFilesFeatureStep(
     kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
   extends KubernetesFeatureConfigStep {
-  require(kubernetesConf.mountLocalFilesSecretName.isDefined,
-    "Shouldn't be using this feature without a secret name.")
-  private val secretName = kubernetesConf.mountLocalFilesSecretName.get
+  private lazy val secretName = {
+    require(kubernetesConf.mountLocalFilesSecretName.isDefined,
+      "Shouldn't be using this feature without a secret name.")
+    kubernetesConf.mountLocalFilesSecretName.get
+  }
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val resolvedPod = new PodBuilder(pod.pod)
