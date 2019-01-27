@@ -159,6 +159,7 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveRelations ::
+      ResolveOutputRelation ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -178,7 +179,6 @@ class Analyzer(
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
-      ResolveOutputRelation ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -2246,7 +2246,7 @@ class Analyzer(
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case append @ AppendData(table, query, isByName)
-          if table.resolved && query.resolved && !append.resolved =>
+          if table.resolved && query.resolved && !append.writeResolved =>
         val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
         if (projection != query) {
@@ -2256,7 +2256,7 @@ class Analyzer(
         }
 
       case overwrite @ OverwriteByExpression(table, _, query, isByName)
-        if table.resolved && query.resolved && !overwrite.resolved =>
+        if table.resolved && query.resolved && !overwrite.writeResolved =>
         val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
         if (projection != query) {
@@ -2266,7 +2266,7 @@ class Analyzer(
         }
 
       case overwrite @ OverwritePartitionsDynamic(table, query, isByName)
-        if table.resolved && query.resolved && !overwrite.resolved =>
+        if table.resolved && query.resolved && !overwrite.writeResolved =>
         val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
         if (projection != query) {

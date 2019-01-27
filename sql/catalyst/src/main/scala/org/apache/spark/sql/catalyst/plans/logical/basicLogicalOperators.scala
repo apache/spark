@@ -373,7 +373,9 @@ private[sql] trait V2WriteCommand extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override lazy val resolved: Boolean = {
+  override lazy val resolved: Boolean = writeResolved
+
+  def writeResolved: Boolean = {
     table.resolved && query.resolved && query.output.size == table.output.size &&
         query.output.zip(table.output).forall {
           case (inAttr, outAttr) =>
@@ -410,7 +412,9 @@ case class OverwriteByExpression(
     table: NamedRelation,
     deleteExpr: Expression,
     query: LogicalPlan,
-    isByName: Boolean) extends V2WriteCommand
+    isByName: Boolean) extends V2WriteCommand {
+  override lazy val resolved: Boolean = writeResolved && deleteExpr.resolved
+}
 
 object OverwriteByExpression {
   def byName(
