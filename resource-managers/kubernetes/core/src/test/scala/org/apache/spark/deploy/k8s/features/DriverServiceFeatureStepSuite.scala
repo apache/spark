@@ -26,6 +26,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.util.Clock
 
 class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
@@ -59,7 +60,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       KubernetesConf(
         sparkConf,
         KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
+          JavaMainAppResource(None), "main", "app", Seq.empty),
         SHORT_RESOURCE_NAME_PREFIX,
         "app-id",
         None,
@@ -69,7 +70,6 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Nil,
-        Seq.empty[String],
         hadoopConfSpec = None))
     assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
     assert(configurationStep.getAdditionalKubernetesResources().size === 1)
@@ -93,7 +93,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
           .set(org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT, 8080)
           .set(KUBERNETES_NAMESPACE, "my-namespace"),
         KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
+          JavaMainAppResource(None), "main", "app", Seq.empty),
         SHORT_RESOURCE_NAME_PREFIX,
         "app-id",
         None,
@@ -103,7 +103,6 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Nil,
-        Seq.empty[String],
         hadoopConfSpec = None))
     val expectedServiceName = SHORT_RESOURCE_NAME_PREFIX +
       DriverServiceFeatureStep.DRIVER_SVC_POSTFIX
@@ -117,7 +116,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       KubernetesConf(
         sparkConf,
         KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
+          JavaMainAppResource(None), "main", "app", Seq.empty),
         SHORT_RESOURCE_NAME_PREFIX,
         "app-id",
         None,
@@ -127,7 +126,6 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Nil,
-        Seq.empty[String],
         hadoopConfSpec = None))
     val resolvedService = configurationStep
       .getAdditionalKubernetesResources()
@@ -150,7 +148,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       KubernetesConf(
         sparkConf.set(KUBERNETES_NAMESPACE, "my-namespace"),
         KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
+          JavaMainAppResource(None), "main", "app", Seq.empty),
         LONG_RESOURCE_NAME_PREFIX,
         "app-id",
         None,
@@ -160,7 +158,6 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Nil,
-        Seq.empty[String],
         hadoopConfSpec = None),
       clock)
     val driverService = configurationStep
@@ -180,7 +177,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         KubernetesConf(
           sparkConf.set(org.apache.spark.internal.config.DRIVER_BIND_ADDRESS, "host"),
           KubernetesDriverSpecificConf(
-            None, "main", "app", Seq.empty),
+            JavaMainAppResource(None), "main", "app", Seq.empty),
           LONG_RESOURCE_NAME_PREFIX,
           "app-id",
           None,
@@ -190,7 +187,6 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
           Map.empty,
           Map.empty,
           Nil,
-          Seq.empty[String],
           hadoopConfSpec = None),
         clock)
       fail("The driver bind address should not be allowed.")
@@ -208,7 +204,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         KubernetesConf(
           sparkConf,
           KubernetesDriverSpecificConf(
-            None, "main", "app", Seq.empty),
+            JavaMainAppResource(None), "main", "app", Seq.empty),
           LONG_RESOURCE_NAME_PREFIX,
           "app-id",
           None,
@@ -218,7 +214,6 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
           Map.empty,
           Map.empty,
           Nil,
-          Seq.empty[String],
           hadoopConfSpec = None),
         clock)
       fail("The driver host address should not be allowed.")

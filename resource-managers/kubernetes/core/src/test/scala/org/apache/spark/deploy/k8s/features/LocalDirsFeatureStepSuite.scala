@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private val defaultLocalDir = "/var/data/default-local-dir"
@@ -36,7 +37,7 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
-        None,
+        JavaMainAppResource(None),
         "app-name",
         "main",
         Seq.empty),
@@ -49,7 +50,6 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       hadoopConfSpec = None)
   }
 

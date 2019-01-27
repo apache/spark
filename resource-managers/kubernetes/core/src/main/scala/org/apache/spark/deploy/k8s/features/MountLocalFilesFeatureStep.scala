@@ -19,16 +19,40 @@ package org.apache.spark.deploy.k8s.features
 import java.io.File
 import java.nio.file.Paths
 
-import com.google.common.io.{BaseEncoding, Files}
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, SecretBuilder}
 import scala.collection.JavaConverters._
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import com.google.common.io.{BaseEncoding, Files}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, SecretBuilder}
+
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, PythonMainAppResource, RMainAppResource}
 import org.apache.spark.util.Utils
 
-private[spark] class MountLocalFilesFeatureStep(
+private[spark] class MountLocalDriverFilesFeatureStep(
+    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
+  extends MountLocalFilesFeatureStep(kubernetesConf) {
+
+  lazy val allFiles: Seq[String] = {
+    Utils.stringToSeq(kubernetesConf.sparkConf.get("spark.files", "")) ++
+      kubernetesConf.roleSpecificConf.pyFiles ++
+      (kubernetesConf.roleSpecificConf.mainAppResource match {
+        case JavaMainAppResource(_) => Nil
+        case PythonMainAppResource(res) => Seq(res)
+        case RMainAppResource(res) => Seq(res)
+      })
+  }
+}
+
+private[spark] class MountLocalExecutorFilesFeatureStep(
+    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+  extends MountLocalFilesFeatureStep(kubernetesConf) {
+
+  lazy val allFiles: Seq[String] = Nil
+}
+
+private[spark] abstract class MountLocalFilesFeatureStep(
     kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
   extends KubernetesFeatureConfigStep {
   require(kubernetesConf.mountLocalFilesSecretName.isDefined,
@@ -38,30 +62,29 @@ private[spark] class MountLocalFilesFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val resolvedPod = new PodBuilder(pod.pod)
       .editOrNewSpec()
-        .addNewVolume()
-          .withName("submitted-files")
-            .withNewSecret()
-            .withSecretName(secretName)
-            .endSecret()
-          .endVolume()
+      .addNewVolume()
+      .withName("submitted-files")
+      .withNewSecret()
+      .withSecretName(secretName)
+      .endSecret()
+      .endVolume()
       .endSpec()
       .build()
     val resolvedContainer = new ContainerBuilder(pod.container)
       .addNewEnv()
-        .withName(ENV_MOUNTED_FILES_FROM_SECRET_DIR)
-        .withValue(MOUNTED_FILES_SECRET_DIR)
-        .endEnv()
+      .withName(ENV_MOUNTED_FILES_FROM_SECRET_DIR)
+      .withValue(MOUNTED_FILES_SECRET_DIR)
+      .endEnv()
       .addNewVolumeMount()
-        .withName("submitted-files")
-        .withMountPath(MOUNTED_FILES_SECRET_DIR)
-        .endVolumeMount()
+      .withName("submitted-files")
+      .withMountPath(MOUNTED_FILES_SECRET_DIR)
+      .endVolumeMount()
       .build()
     SparkPod(resolvedPod, resolvedContainer)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    val allFiles = kubernetesConf.sparkFiles
-    val resolvedFiles = allFiles
+    val resolvedFiles = allFiles()
       .map(file => {
         val uri = Utils.resolveURI(file)
         val scheme = Option(uri.getScheme).getOrElse("file")
@@ -78,7 +101,7 @@ private[spark] class MountLocalFilesFeatureStep(
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    val localFiles = kubernetesConf.sparkFiles
+    val localFiles = allFiles()
       .map(Utils.resolveURI)
       .filter { file =>
         Option(file.getScheme).getOrElse("file") == "file"
@@ -91,10 +114,12 @@ private[spark] class MountLocalFilesFeatureStep(
     }.toMap
     val localFilesSecret = new SecretBuilder()
       .withNewMetadata()
-        .withName(secretName)
-        .endMetadata()
+      .withName(secretName)
+      .endMetadata()
       .withData(localFileBase64Contents.asJava)
       .build()
     Seq(localFilesSecret)
   }
+
+  def allFiles(): Seq[String]
 }

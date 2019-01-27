@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.cloud
 
+import java.nio.file.Paths
+
 import io.fabric8.kubernetes.client.{Config, DefaultKubernetesClient}
 import io.fabric8.kubernetes.client.utils.Utils
 import org.apache.commons.lang3.StringUtils
@@ -37,8 +39,7 @@ private[spark] class KubeConfigBackend(var context: String)
     // Auto-configure K8S client from K8S config file
     if (Utils.getSystemPropertyOrEnvVar(Config.KUBERNETES_KUBECONFIG_FILE, null: String) == null) {
       // Fabric 8 client will automatically assume a default location in this case
-      logWarning(
-        s"No explicit KUBECONFIG specified, will assume .kube/config under your home directory")
+      logWarning("No explicit KUBECONFIG specified, will assume $HOME/.kube/config")
     }
     val config = Config.autoConfigure(context)
 

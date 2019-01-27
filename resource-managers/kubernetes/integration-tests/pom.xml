@@ -155,14 +155,10 @@
         <executions>
           <execution>
             <id>test</id>
+            <phase>none</phase>
             <goals>
               <goal>test</goal>
             </goals>
-            <configuration>
-              <!-- The negative pattern below prevents integration tests such as
-                   KubernetesSuite from running in the test phase. -->
-              <suffixes>(?&lt;!Suite)</suffixes>
-            </configuration>
           </execution>
           <execution>
             <id>integration-test</id>

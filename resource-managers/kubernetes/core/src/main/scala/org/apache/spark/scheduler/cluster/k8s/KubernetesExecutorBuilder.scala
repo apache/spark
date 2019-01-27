@@ -34,8 +34,8 @@ private[spark] class KubernetesExecutorBuilder(
       => MountSecretsFeatureStep =
       new MountSecretsFeatureStep(_),
     provideMountLocalFilesStep:
-      (KubernetesConf[_ <: KubernetesRoleSpecificConf]) => MountLocalFilesFeatureStep =
-      new MountLocalFilesFeatureStep(_),
+      (KubernetesConf[KubernetesExecutorSpecificConf]) => MountLocalExecutorFilesFeatureStep =
+      new MountLocalExecutorFilesFeatureStep(_),
     provideEnvSecretsStep:
       (KubernetesConf[_ <: KubernetesRoleSpecificConf] => EnvSecretsFeatureStep) =
       new EnvSecretsFeatureStep(_),

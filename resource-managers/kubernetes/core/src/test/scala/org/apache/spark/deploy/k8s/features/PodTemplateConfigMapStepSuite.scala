@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
 class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
   private var sparkConf: SparkConf = _
@@ -36,7 +37,7 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
     kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
-        None,
+        JavaMainAppResource(None),
         "app-name",
         "main",
         Seq.empty),
@@ -49,7 +50,6 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Option.empty)
     templateFile = Files.createTempFile("pod-template", "yml").toFile
     templateFile.deleteOnExit()

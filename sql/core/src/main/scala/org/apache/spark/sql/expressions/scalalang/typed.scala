@@ -80,7 +80,7 @@ object typed {
   // TODO:
   // stddevOf: Double
   // varianceOf: Double
-  // approxCountDistinct: Long
+  // approx_count_distinct: Long
 
   // minOf: T
   // maxOf: T

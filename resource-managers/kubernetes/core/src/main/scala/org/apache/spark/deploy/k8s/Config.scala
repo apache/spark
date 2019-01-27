@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 
@@ -121,34 +122,6 @@ private[spark] object Config extends Logging {
   val KUBERNETES_PYSPARK_PY_FILES =
     ConfigBuilder("spark.kubernetes.python.pyFiles")
       .doc("The PyFiles that are distributed via client arguments")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_PYSPARK_MAIN_APP_RESOURCE =
-    ConfigBuilder("spark.kubernetes.python.mainAppResource")
-      .doc("The main app resource for pyspark jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_PYSPARK_APP_ARGS =
-    ConfigBuilder("spark.kubernetes.python.appArgs")
-      .doc("The app arguments for PySpark Jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_R_MAIN_APP_RESOURCE =
-    ConfigBuilder("spark.kubernetes.r.mainAppResource")
-      .doc("The main app resource for SparkR jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_R_APP_ARGS =
-    ConfigBuilder("spark.kubernetes.r.appArgs")
-      .doc("The app arguments for SparkR Jobs")
       .internal()
       .stringConf
       .createOptional
@@ -291,6 +264,7 @@ private[spark] object Config extends Logging {
       .doc("This sets the resource type internally")
       .internal()
       .stringConf
+      .checkValues(Set(APP_RESOURCE_TYPE_JAVA, APP_RESOURCE_TYPE_PYTHON, APP_RESOURCE_TYPE_R))
       .createOptional
 
   val KUBERNETES_LOCAL_DIRS_TMPFS =

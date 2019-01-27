@@ -366,13 +366,13 @@
         <artifactId>okhttp</artifactId>
         <version>${okhttp.version}</version>
       </dependency>
-      <!-- This artifact is a shaded version of ASM 6.x. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm6-shaded
+      <!-- This artifact is a shaded version of ASM 7.x. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm7-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
-        <artifactId>xbean-asm6-shaded</artifactId>
-        <version>4.8</version>
+        <artifactId>xbean-asm7-shaded</artifactId>
+        <version>4.12</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope

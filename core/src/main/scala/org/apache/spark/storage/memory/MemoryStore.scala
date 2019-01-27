@@ -35,6 +35,7 @@ import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -343,12 +344,12 @@ private[spark] class MemoryStore(
 
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
-    val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
-      safeLogWarning("Initial memory threshold " +
-        "is too large to be set as chunk size. Chunk size has been capped",
-        SafeArg.of("threshold", Utils.bytesToString(initialMemoryThreshold)),
-        SafeArg.of("cappedChunkSize", Utils.bytesToString(Int.MaxValue)))
-      Int.MaxValue
+    val chunkSize = if (initialMemoryThreshold > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      safeLogWarning("Initial memory threshold of is too large to be set as chunk size. " +
+        "Chunk size has been capped",
+        SafeArg.of("initialMemoryThreshold", Utils.bytesToString(initialMemoryThreshold)),
+        SafeArg.of("chunkSize", Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)))
+      ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     } else {
       initialMemoryThreshold.toInt
     }

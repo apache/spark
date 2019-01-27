@@ -29,6 +29,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.util.Utils
 
 class MountLocalFilesFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
@@ -53,7 +54,7 @@ class MountLocalFilesFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
     kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
-        None,
+        JavaMainAppResource(None),
         "test-app",
         "main",
         Seq.empty),
@@ -66,9 +67,8 @@ class MountLocalFilesFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
       Map.empty,
       Map.empty,
       Seq.empty,
-      sparkFiles,
       None)
-    stepUnderTest = new MountLocalFilesFeatureStep(kubernetesConf)
+    stepUnderTest = new MountLocalDriverFilesFeatureStep(kubernetesConf)
   }
 
   test("Attaches a secret volume and secret name.") {

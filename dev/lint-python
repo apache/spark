@@ -26,9 +26,13 @@ PYCODESTYLE_REPORT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-report.txt"
 PYDOCSTYLE_REPORT_PATH="$SPARK_ROOT_DIR/dev/pydocstyle-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
+
 PYDOCSTYLEBUILD="pydocstyle"
-EXPECTED_PYDOCSTYLEVERSION="3.0.0"
-PYDOCSTYLEVERSION=$(python -c 'import pkg_resources; print(pkg_resources.get_distribution("pydocstyle").version)' 2> /dev/null)
+MINIMUM_PYDOCSTYLEVERSION="3.0.0"
+
+FLAKE8BUILD="flake8"
+MINIMUM_FLAKE8="3.5.0"
+
 SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
 SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 
@@ -87,27 +91,47 @@ else
     rm "$PYCODESTYLE_REPORT_PATH"
 fi
 
-# stop the build if there are Python syntax errors or undefined names
-flake8 . --count --select=E901,E999,F821,F822,F823 --max-line-length=100 --show-source --statistics
-flake8_status="${PIPESTATUS[0]}"
+# Check by flake8
+if hash "$FLAKE8BUILD" 2> /dev/null; then
+    FLAKE8VERSION="$( $FLAKE8BUILD --version  2> /dev/null )"
+    VERSION=($FLAKE8VERSION)
+    IS_EXPECTED_FLAKE8=$(python -c 'from distutils.version import LooseVersion; \
+print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_FLAKE8'"""))' 2> /dev/null)
+    if [[ "$IS_EXPECTED_FLAKE8" == "True" ]]; then
+        # stop the build if there are Python syntax errors or undefined names
+        $FLAKE8BUILD . --count --select=E901,E999,F821,F822,F823 --max-line-length=100 --show-source --statistics
+        flake8_status="${PIPESTATUS[0]}"
 
-if [ "$flake8_status" -eq 0 ]; then
-    lint_status=0
+        if [ "$flake8_status" -eq 0 ]; then
+            lint_status=0
+        else
+            lint_status=1
+        fi
+
+        if [ "$lint_status" -ne 0 ]; then
+            echo "flake8 checks failed."
+            exit "$lint_status"
+        else
+            echo "flake8 checks passed."
+        fi
+    else
+        echo "The flake8 version needs to be "$MINIMUM_FLAKE8" at latest. Your current version is '"$FLAKE8VERSION"'."
+        echo "flake8 checks failed."
+        exit 1
+    fi
 else
-    lint_status=1
-fi
-
-if [ "$lint_status" -ne 0 ]; then
+    echo >&2 "The flake8 command was not found."
     echo "flake8 checks failed."
-    exit "$lint_status"
-else
-    echo "flake8 checks passed."
+    exit 1
 fi
 
 # Check python document style, skip check if pydocstyle is not installed.
 if hash "$PYDOCSTYLEBUILD" 2> /dev/null; then
-    if [[ "$PYDOCSTYLEVERSION" == "$EXPECTED_PYDOCSTYLEVERSION" ]]; then
-        pydocstyle --config=dev/tox.ini $DOC_PATHS_TO_CHECK >> "$PYDOCSTYLE_REPORT_PATH"
+    PYDOCSTYLEVERSION="$( $PYDOCSTYLEBUILD --version  2> /dev/null )"
+    IS_EXPECTED_PYDOCSTYLEVERSION=$(python -c 'from distutils.version import LooseVersion; \
+print(LooseVersion("""'$PYDOCSTYLEVERSION'""") >= LooseVersion("""'$MINIMUM_PYDOCSTYLEVERSION'"""))')
+    if [[ "$IS_EXPECTED_PYDOCSTYLEVERSION" == "True" ]]; then
+        $PYDOCSTYLEBUILD --config=dev/tox.ini $DOC_PATHS_TO_CHECK >> "$PYDOCSTYLE_REPORT_PATH"
         pydocstyle_status="${PIPESTATUS[0]}"
 
         if [ "$compile_status" -eq 0 -a "$pydocstyle_status" -eq 0 ]; then
@@ -121,7 +145,7 @@ if hash "$PYDOCSTYLEBUILD" 2> /dev/null; then
         fi
 
     else
-        echo "The pydocstyle version needs to be latest 3.0.0. Skipping pydoc checks for now"
+        echo "The pydocstyle version needs to be "$MINIMUM_PYDOCSTYLEVERSION" at latest. Your current version is "$PYDOCSTYLEVERSION". Skipping pydoc checks for now."
     fi
 else
   echo >&2 "The pydocstyle command was not found. Skipping pydoc checks for now"

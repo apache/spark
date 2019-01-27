@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  * @param maybePyFiles additional Python files via --py-files
  */
 private[spark] case class ClientArguments(
-    mainAppResource: Option[MainAppResource],
+    mainAppResource: MainAppResource,
     mainClass: String,
     driverArgs: Array[String],
     maybePyFiles: Option[String],
@@ -53,18 +53,18 @@ private[spark] case class ClientArguments(
 private[spark] object ClientArguments {
 
   def fromCommandLineArgs(args: Array[String]): ClientArguments = {
-    var mainAppResource: Option[MainAppResource] = None
+    var mainAppResource: MainAppResource = JavaMainAppResource(None)
     var mainClass: Option[String] = None
     val driverArgs = mutable.ArrayBuffer.empty[String]
     var maybePyFiles : Option[String] = None
 
     args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
-        mainAppResource = Some(JavaMainAppResource(primaryJavaResource))
+        mainAppResource = JavaMainAppResource(Some(primaryJavaResource))
       case Array("--primary-py-file", primaryPythonResource: String) =>
-        mainAppResource = Some(PythonMainAppResource(primaryPythonResource))
+        mainAppResource = PythonMainAppResource(primaryPythonResource)
       case Array("--primary-r-file", primaryRFile: String) =>
-        mainAppResource = Some(RMainAppResource(primaryRFile))
+        mainAppResource = RMainAppResource(primaryRFile)
       case Array("--other-py-files", pyFiles: String) =>
         maybePyFiles = Some(pyFiles)
       case Array("--main-class", clazz: String) =>

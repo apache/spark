@@ -53,8 +53,6 @@ private[ui] class StageTableBase(
   val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
   val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
   val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
-  val parameterStagePrevPageSize =
-    UIUtils.stripXSS(request.getParameter(stageTag + ".prevPageSize"))
 
   val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
   val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>
@@ -65,18 +63,7 @@ private[ui] class StageTableBase(
     stageSortColumn == "Stage Id"
   )
   val stagePageSize = Option(parameterStagePageSize).map(_.toInt).getOrElse(100)
-  val stagePrevPageSize = Option(parameterStagePrevPageSize).map(_.toInt)
-    .getOrElse(stagePageSize)
 
-  val page: Int = {
-    // If the user has changed to a larger page size, then go to page 1 in order to avoid
-    // IndexOutOfBoundsException.
-    if (stagePageSize <= stagePrevPageSize) {
-      stagePage
-    } else {
-      1
-    }
-  }
   val currentTime = System.currentTimeMillis()
 
   val toNodeSeq = try {
@@ -96,7 +83,7 @@ private[ui] class StageTableBase(
       isFailedStage,
       parameterOtherTable,
       request
-    ).table(page)
+    ).table(stagePage)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
       <div class="alert alert-error">
@@ -160,8 +147,6 @@ private[ui] class StagePagedTable(
       "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
-
-  override def prevPageSizeFormField: String = stageTag + ".prevPageSize"
 
   override def pageNumberFormField: String = stageTag + ".page"
 

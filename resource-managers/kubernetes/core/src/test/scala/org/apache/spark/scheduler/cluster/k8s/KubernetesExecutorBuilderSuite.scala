@@ -42,7 +42,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
   private val mountLocalFilesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    MOUNT_LOCAL_FILES_STEP_TYPE, classOf[MountLocalFilesFeatureStep])
+    MOUNT_LOCAL_FILES_STEP_TYPE, classOf[MountLocalExecutorFilesFeatureStep])
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
   private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
@@ -81,7 +81,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
@@ -101,7 +100,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map("secret-name" -> "secret-key"),
       Map.empty,
       Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -125,7 +123,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Seq.empty,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -153,7 +150,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       volumeSpec :: Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -184,7 +180,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Some(HadoopConfSpec(Some("/var/hadoop-conf"), None)))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -213,7 +208,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Some(HadoopConfSpec(None, Some("pre-defined-onfigMapName"))))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -259,7 +253,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Option.empty)
     val sparkPod = KubernetesExecutorBuilder
       .apply(kubernetesClient, sparkConf)
