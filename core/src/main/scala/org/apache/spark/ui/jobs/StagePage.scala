@@ -857,7 +857,7 @@ private[spark] object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    // Some jobs have only 0 partition.
+    // Some jobs have only 0 partitions.
     if (job.stageIds.isEmpty) {
       ("", job.name)
     } else {
