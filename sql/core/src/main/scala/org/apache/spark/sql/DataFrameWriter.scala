@@ -25,7 +25,8 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwritePartitionsDynamic}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
@@ -272,10 +273,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
 
             case SaveMode.Overwrite =>
-              // DataFrameWriter does not support static partition values, so the behavior of
-              // overwrite mode is to replace partitions dynamically.
+              // truncate the table
               runCommand(df.sparkSession, "save") {
-                OverwritePartitionsDynamic.byName(relation, df.logicalPlan)
+                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
               }
 
             case _ =>

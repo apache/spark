@@ -30,9 +30,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchWrite}
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsSaveMode, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsSaveMode, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
@@ -69,8 +69,15 @@ case class OverwriteByExpressionExec(
     writeOptions: DataSourceOptions,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
+  private def isTruncate(filters: Array[Filter]): Boolean = {
+    filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val batchWrite = newWriteBuilder() match {
+      case builder: SupportsTruncate if isTruncate(filters) =>
+        builder.truncate().buildForBatch()
+
       case builder: SupportsOverwrite =>
         builder.overwrite(filters).buildForBatch()
 
