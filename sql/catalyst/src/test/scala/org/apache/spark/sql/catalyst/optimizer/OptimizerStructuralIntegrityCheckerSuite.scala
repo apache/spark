@@ -37,6 +37,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
         val newAttr = UnresolvedAttribute("unresolvedAttr")
         Project(projectList ++ Seq(newAttr), child)
       case agg @ Aggregate(Nil, aggregateExpressions, child) =>
+        // Project cannot host AggregateExpression
         Project(aggregateExpressions, child)
     }
   }
