@@ -225,7 +225,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // use latest to force begin to be 5000
       .option("startingOffsets", startingOffsets)
       // use Long.Max to try to trigger overflow
-      .option("maxOffsetsPerTrigger", Long.MaxValue.toString)
+      .option("maxOffsetsPerTrigger", Long.MaxValue)
       .option("subscribe", topic)
       .option("kafka.metadata.max.age.ms", "1")
       .load()
