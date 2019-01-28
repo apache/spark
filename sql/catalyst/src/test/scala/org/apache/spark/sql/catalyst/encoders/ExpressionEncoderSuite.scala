@@ -128,13 +128,13 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(-3.7f, "primitive float")
   encodeDecodeTest(-3.7, "primitive double")
 
-  encodeDecodeTest(new java.lang.Boolean(false), "boxed boolean")
-  encodeDecodeTest(new java.lang.Byte(-3.toByte), "boxed byte")
-  encodeDecodeTest(new java.lang.Short(-3.toShort), "boxed short")
-  encodeDecodeTest(new java.lang.Integer(-3), "boxed int")
-  encodeDecodeTest(new java.lang.Long(-3L), "boxed long")
-  encodeDecodeTest(new java.lang.Float(-3.7f), "boxed float")
-  encodeDecodeTest(new java.lang.Double(-3.7), "boxed double")
+  encodeDecodeTest(java.lang.Boolean.FALSE, "boxed boolean")
+  encodeDecodeTest(java.lang.Byte.valueOf(-3: Byte), "boxed byte")
+  encodeDecodeTest(java.lang.Short.valueOf(-3: Short), "boxed short")
+  encodeDecodeTest(java.lang.Integer.valueOf(-3), "boxed int")
+  encodeDecodeTest(java.lang.Long.valueOf(-3L), "boxed long")
+  encodeDecodeTest(java.lang.Float.valueOf(-3.7f), "boxed float")
+  encodeDecodeTest(java.lang.Double.valueOf(-3.7), "boxed double")
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
@@ -224,7 +224,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   productTest(
     RepeatedData(
       Seq(1, 2),
-      Seq(new Integer(1), null, new Integer(2)),
+      Seq(Integer.valueOf(1), null, Integer.valueOf(2)),
       Map(1 -> 2L),
       Map(1 -> null),
       PrimitiveData(1, 1, 1, 1, 1, 1, true)))

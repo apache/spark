@@ -162,7 +162,8 @@ public class UnsafeShuffleWriterSuite {
       new SerializedShuffleHandle<>(0, 1, shuffleDep),
       0, // map id
       taskContext,
-      conf
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics()
     );
   }
 
@@ -521,7 +522,8 @@ public class UnsafeShuffleWriterSuite {
         new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,
-        conf);
+        conf,
+        taskContext.taskMetrics().shuffleWriteMetrics());
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.

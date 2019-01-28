@@ -57,7 +57,7 @@ private[spark] class KubernetesExecutorBuilder(
       KubernetesConf[KubernetesExecutorSpecificConf]
       => HadoopSparkUserExecutorFeatureStep) =
       new HadoopSparkUserExecutorFeatureStep(_),
-    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
+    provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {

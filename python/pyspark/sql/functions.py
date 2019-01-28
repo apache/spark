@@ -2606,7 +2606,7 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
-@since(2.4)
+@since(3.0)
 def map_entries(col):
     """
     Collection function: Returns an unordered array of all entries in the given map.

@@ -25,7 +25,7 @@
     <version>18</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent_2.11</artifactId>
+  <artifactId>spark-parent_2.12</artifactId>
   <version>3.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.25</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.7.3</hadoop.version>
+    <hadoop.version>2.7.4</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.4.6</zookeeper.version>
@@ -164,8 +164,8 @@
     <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.11.12</scala.version>
-    <scala.binary.version>2.11</scala.binary.version>
+    <scala.version>2.12.7</scala.version>
+    <scala.binary.version>2.12</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.9.7</fasterxml.jackson.version>
     <snappy.version>1.1.7.2</snappy.version>
@@ -176,8 +176,8 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.8</commons-lang3.version>
-    <commons-compress.version>1.8.1</commons-compress.version>
+    <commons-lang3.version>3.8.1</commons-lang3.version>
+    <commons-compress.version>1.18</commons-compress.version>
     <commons-pool.version>1.6</commons-pool.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <javax-activation.version>1.1.1</javax-activation.version>
@@ -188,7 +188,7 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.2</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
-    <antlr4.version>4.7</antlr4.version>
+    <antlr4.version>4.7.1</antlr4.version>
     <antlr.version>3.4</antlr.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
@@ -481,6 +481,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
         <version>${commons-lang3.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-text</artifactId>
+        <version>1.6</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -2264,7 +2269,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.0.0-M1</version>
+          <version>3.0.0-M2</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2290,6 +2295,7 @@
                       -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
@@ -2307,8 +2313,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <!-- 3.3.1 won't work with zinc; fails to find javac from java.home -->
-          <version>3.2.2</version>
+          <version>3.4.4</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2326,6 +2331,13 @@
               <id>scala-test-compile-first</id>
               <goals>
                 <goal>testCompile</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>attach-scaladocs</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>doc-jar</goal>
               </goals>
             </execution>
           </executions>
@@ -2357,7 +2369,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.7.0</version>
+          <version>3.8.0</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2374,7 +2386,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.22.0</version>
+          <version>3.0.0-M1</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2428,7 +2440,7 @@
         <plugin>
           <groupId>org.scalatest</groupId>
           <artifactId>scalatest-maven-plugin</artifactId>
-          <version>1.0</version>
+          <version>2.0.0</version>
           <!-- Note config is repeated in surefire config -->
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
@@ -2475,7 +2487,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.0.2</version>
+          <version>3.1.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2502,7 +2514,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>
-          <version>3.0.0</version>
+          <version>3.1.0</version>
           <configuration>
             <filesets>
               <fileset>
@@ -2520,9 +2532,12 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.0.0-M1</version>
+          <version>3.0.1</version>
           <configuration>
-            <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
+            <additionalJOptions>
+              <additionalJOption>-Xdoclint:all</additionalJOption>
+              <additionalJOption>-Xdoclint:-missing</additionalJOption>
+            </additionalJOptions>
             <tags>
               <tag>
                 <name>example</name>
@@ -2573,22 +2588,34 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.2.1</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm</artifactId>
+              <version>7.0</version>
+            </dependency>
+            <dependency>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm-commons</artifactId>
+              <version>7.0</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-install-plugin</artifactId>
-          <version>2.5.2</version>
+          <version>3.0.0-M1</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
-          <version>2.8.2</version>
+          <version>3.0.0-M1</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.0.2</version>
+          <version>3.1.1</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -2629,7 +2656,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
-                    <versionRange>[2.6,)</versionRange>
+                    <versionRange>3.1.0</versionRange>
                     <goals>
                       <goal>test-jar</goal>
                     </goals>
@@ -2786,12 +2813,17 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>2.17</version>
+        <version>3.0.0</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
-          <sourceDirectories>${basedir}/src/main/java,${basedir}/src/main/scala</sourceDirectories>
-          <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
+          <sourceDirectories>
+            <directory>${basedir}/src/main/java</directory>
+            <directory>${basedir}/src/main/scala</directory>
+          </sourceDirectories>
+          <testSourceDirectories>
+            <directory>${basedir}/src/test/java</directory>
+          </testSourceDirectories>
           <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
@@ -2801,7 +2833,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.2</version>
+            <version>8.14</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3027,14 +3059,14 @@
 
     <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
-      <id>scala-2.11</id>
+      <id>scala-2.12</id>
     </profile>
 
     <profile>
-      <id>scala-2.12</id>
+      <id>scala-2.11</id>
       <properties>
-        <scala.version>2.12.7</scala.version>
-        <scala.binary.version>2.12</scala.binary.version>
+        <scala.version>2.11.12</scala.version>
+        <scala.binary.version>2.11</scala.binary.version>
       </properties>
       <build>
         <plugins>
@@ -3050,8 +3082,9 @@
                 <configuration>
                   <rules>
                     <bannedDependencies>
-                      <excludes combine.children="append">
-                        <exclude>*:*_2.11</exclude>
+                      <excludes combine.self="override">
+                        <exclude>org.jboss.netty</exclude>
+                        <exclude>org.codehaus.groovy</exclude>
                         <exclude>*:*_2.10</exclude>
                       </excludes>
                     </bannedDependencies>

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -60,7 +60,7 @@ private[sql] object Column {
  *
  * @since 1.6.0
  */
-@InterfaceStability.Stable
+@Stable
 class TypedColumn[-T, U](
     expr: Expression,
     private[sql] val encoder: ExpressionEncoder[U])
@@ -74,6 +74,9 @@ class TypedColumn[-T, U](
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
+
+    // This only inserts inputs into typed aggregate expressions. For untyped aggregate expressions,
+    // the resolving is handled in the analyzer directly.
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(
@@ -127,7 +130,7 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class Column(val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
@@ -1224,7 +1227,7 @@ class Column(val expr: Expression) extends Logging {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**

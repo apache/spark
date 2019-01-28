@@ -514,9 +514,9 @@ object TestingUDT {
 
     override def sqlType: DataType = CalendarIntervalType
     override def serialize(obj: IntervalData): Any =
-      throw new NotImplementedError("Not implemented")
+      throw new UnsupportedOperationException("Not implemented")
     override def deserialize(datum: Any): IntervalData =
-      throw new NotImplementedError("Not implemented")
+      throw new UnsupportedOperationException("Not implemented")
     override def userClass: Class[IntervalData] = classOf[IntervalData]
   }
 
@@ -526,9 +526,10 @@ object TestingUDT {
   private[sql] class NullUDT extends UserDefinedType[NullData] {
 
     override def sqlType: DataType = NullType
-    override def serialize(obj: NullData): Any = throw new NotImplementedError("Not implemented")
+    override def serialize(obj: NullData): Any =
+      throw new UnsupportedOperationException("Not implemented")
     override def deserialize(datum: Any): NullData =
-      throw new NotImplementedError("Not implemented")
+      throw new UnsupportedOperationException("Not implemented")
     override def userClass: Class[NullData] = classOf[NullData]
   }
 }

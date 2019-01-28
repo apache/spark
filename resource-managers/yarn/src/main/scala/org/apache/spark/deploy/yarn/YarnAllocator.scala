@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import java.util.Collections
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -598,13 +597,21 @@ private[yarn] class YarnAllocator(
             (false, s"Container ${containerId}${onHostStr} was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
           case VMEM_EXCEEDED_EXIT_CODE =>
-            (true, memLimitExceededLogMessage(
-              completedContainer.getDiagnostics,
-              VMEM_EXCEEDED_PATTERN))
+            val vmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX virtual memory used".r
+            val diag = vmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
+              .map(_.concat(".")).getOrElse("")
+            val message = "Container killed by YARN for exceeding virtual memory limits. " +
+              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key} or boosting " +
+              s"${YarnConfiguration.NM_VMEM_PMEM_RATIO} or disabling " +
+              s"${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714."
+            (true, message)
           case PMEM_EXCEEDED_EXIT_CODE =>
-            (true, memLimitExceededLogMessage(
-              completedContainer.getDiagnostics,
-              PMEM_EXCEEDED_PATTERN))
+            val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
+            val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
+              .map(_.concat(".")).getOrElse("")
+            val message = "Container killed by YARN for exceeding physical memory limits. " +
+              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
+            (true, message)
           case _ =>
             // all the failures which not covered above, like:
             // disk failure, kill by app master or resource manager, ...
@@ -735,18 +742,6 @@ private[yarn] class YarnAllocator(
 
 private object YarnAllocator {
   val MEM_REGEX = "[0-9.]+ [KMG]B"
-  val PMEM_EXCEEDED_PATTERN =
-    Pattern.compile(s"$MEM_REGEX of $MEM_REGEX physical memory used")
-  val VMEM_EXCEEDED_PATTERN =
-    Pattern.compile(s"$MEM_REGEX of $MEM_REGEX virtual memory used")
   val VMEM_EXCEEDED_EXIT_CODE = -103
   val PMEM_EXCEEDED_EXIT_CODE = -104
-
-  def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
-    val matcher = pattern.matcher(diagnostics)
-    val diag = if (matcher.find()) " " + matcher.group() + "." else ""
-    s"Container killed by YARN for exceeding memory limits. $diag " +
-      "Consider boosting spark.yarn.executor.memoryOverhead or " +
-      "disabling yarn.nodemanager.vmem-check-enabled because of YARN-4714."
-  }
 }

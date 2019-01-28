@@ -14,20 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import glob
-import os
-import sys
-from itertools import chain
-import time
 import operator
-import tempfile
-import random
-import struct
+import os
 import shutil
+<<<<<<< HEAD:python/pyspark/streaming/tests.py
 import unishark
+=======
+import tempfile
+import time
+import unittest
+>>>>>>> 87bd9c75df:python/pyspark/streaming/tests/test_dstream.py
 from functools import reduce
+from itertools import chain
 
+<<<<<<< HEAD:python/pyspark/streaming/tests.py
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -159,6 +159,11 @@ class PySparkStreamingTestCase(unittest.TestCase):
         """Sort the list based on first value."""
         for output in outputs:
             output.sort(key=lambda x: x[0])
+=======
+from pyspark import SparkConf, SparkContext, RDD
+from pyspark.streaming import StreamingContext
+from pyspark.testing.streamingutils import PySparkStreamingTestCase
+>>>>>>> 87bd9c75df:python/pyspark/streaming/tests/test_dstream.py
 
 
 class BasicOperationTests(PySparkStreamingTestCase):
@@ -522,135 +527,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self.fail("a failed func should throw an error")
 
 
-class StreamingListenerTests(PySparkStreamingTestCase):
-
-    duration = .5
-
-    class BatchInfoCollector(StreamingListener):
-
-        def __init__(self):
-            super(StreamingListener, self).__init__()
-            self.batchInfosCompleted = []
-            self.batchInfosStarted = []
-            self.batchInfosSubmitted = []
-            self.streamingStartedTime = []
-
-        def onStreamingStarted(self, streamingStarted):
-            self.streamingStartedTime.append(streamingStarted.time)
-
-        def onBatchSubmitted(self, batchSubmitted):
-            self.batchInfosSubmitted.append(batchSubmitted.batchInfo())
-
-        def onBatchStarted(self, batchStarted):
-            self.batchInfosStarted.append(batchStarted.batchInfo())
-
-        def onBatchCompleted(self, batchCompleted):
-            self.batchInfosCompleted.append(batchCompleted.batchInfo())
-
-    def test_batch_info_reports(self):
-        batch_collector = self.BatchInfoCollector()
-        self.ssc.addStreamingListener(batch_collector)
-        input = [[1], [2], [3], [4]]
-
-        def func(dstream):
-            return dstream.map(int)
-        expected = [[1], [2], [3], [4]]
-        self._test_func(input, func, expected)
-
-        batchInfosSubmitted = batch_collector.batchInfosSubmitted
-        batchInfosStarted = batch_collector.batchInfosStarted
-        batchInfosCompleted = batch_collector.batchInfosCompleted
-        streamingStartedTime = batch_collector.streamingStartedTime
-
-        self.wait_for(batchInfosCompleted, 4)
-
-        self.assertEqual(len(streamingStartedTime), 1)
-
-        self.assertGreaterEqual(len(batchInfosSubmitted), 4)
-        for info in batchInfosSubmitted:
-            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
-            self.assertGreaterEqual(info.submissionTime(), 0)
-
-            for streamId in info.streamIdToInputInfo():
-                streamInputInfo = info.streamIdToInputInfo()[streamId]
-                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
-                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
-                for key in streamInputInfo.metadata():
-                    self.assertIsNotNone(streamInputInfo.metadata()[key])
-                self.assertIsNotNone(streamInputInfo.metadataDescription())
-
-            for outputOpId in info.outputOperationInfos():
-                outputInfo = info.outputOperationInfos()[outputOpId]
-                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
-                self.assertGreaterEqual(outputInfo.id(), 0)
-                self.assertIsNotNone(outputInfo.name())
-                self.assertIsNotNone(outputInfo.description())
-                self.assertGreaterEqual(outputInfo.startTime(), -1)
-                self.assertGreaterEqual(outputInfo.endTime(), -1)
-                self.assertIsNone(outputInfo.failureReason())
-
-            self.assertEqual(info.schedulingDelay(), -1)
-            self.assertEqual(info.processingDelay(), -1)
-            self.assertEqual(info.totalDelay(), -1)
-            self.assertEqual(info.numRecords(), 0)
-
-        self.assertGreaterEqual(len(batchInfosStarted), 4)
-        for info in batchInfosStarted:
-            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
-            self.assertGreaterEqual(info.submissionTime(), 0)
-
-            for streamId in info.streamIdToInputInfo():
-                streamInputInfo = info.streamIdToInputInfo()[streamId]
-                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
-                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
-                for key in streamInputInfo.metadata():
-                    self.assertIsNotNone(streamInputInfo.metadata()[key])
-                self.assertIsNotNone(streamInputInfo.metadataDescription())
-
-            for outputOpId in info.outputOperationInfos():
-                outputInfo = info.outputOperationInfos()[outputOpId]
-                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
-                self.assertGreaterEqual(outputInfo.id(), 0)
-                self.assertIsNotNone(outputInfo.name())
-                self.assertIsNotNone(outputInfo.description())
-                self.assertGreaterEqual(outputInfo.startTime(), -1)
-                self.assertGreaterEqual(outputInfo.endTime(), -1)
-                self.assertIsNone(outputInfo.failureReason())
-
-            self.assertGreaterEqual(info.schedulingDelay(), 0)
-            self.assertEqual(info.processingDelay(), -1)
-            self.assertEqual(info.totalDelay(), -1)
-            self.assertEqual(info.numRecords(), 0)
-
-        self.assertGreaterEqual(len(batchInfosCompleted), 4)
-        for info in batchInfosCompleted:
-            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
-            self.assertGreaterEqual(info.submissionTime(), 0)
-
-            for streamId in info.streamIdToInputInfo():
-                streamInputInfo = info.streamIdToInputInfo()[streamId]
-                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
-                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
-                for key in streamInputInfo.metadata():
-                    self.assertIsNotNone(streamInputInfo.metadata()[key])
-                self.assertIsNotNone(streamInputInfo.metadataDescription())
-
-            for outputOpId in info.outputOperationInfos():
-                outputInfo = info.outputOperationInfos()[outputOpId]
-                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
-                self.assertGreaterEqual(outputInfo.id(), 0)
-                self.assertIsNotNone(outputInfo.name())
-                self.assertIsNotNone(outputInfo.description())
-                self.assertGreaterEqual(outputInfo.startTime(), 0)
-                self.assertGreaterEqual(outputInfo.endTime(), 0)
-                self.assertIsNone(outputInfo.failureReason())
-
-            self.assertGreaterEqual(info.schedulingDelay(), 0)
-            self.assertGreaterEqual(info.processingDelay(), 0)
-            self.assertGreaterEqual(info.totalDelay(), 0)
-            self.assertEqual(info.numRecords(), 0)
-
-
 class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 15
@@ -726,156 +602,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
 
         expected = [[2], [4], [6], [6], [6], [6]]
         self._test_func(input, func, expected)
-
-
-class StreamingContextTests(PySparkStreamingTestCase):
-
-    duration = 0.1
-    setupCalled = False
-
-    def _add_input_stream(self):
-        inputs = [range(1, x) for x in range(101)]
-        stream = self.ssc.queueStream(inputs)
-        self._collect(stream, 1, block=False)
-
-    def test_stop_only_streaming_context(self):
-        self._add_input_stream()
-        self.ssc.start()
-        self.ssc.stop(False)
-        self.assertEqual(len(self.sc.parallelize(range(5), 5).glom().collect()), 5)
-
-    def test_stop_multiple_times(self):
-        self._add_input_stream()
-        self.ssc.start()
-        self.ssc.stop(False)
-        self.ssc.stop(False)
-
-    def test_queue_stream(self):
-        input = [list(range(i + 1)) for i in range(3)]
-        dstream = self.ssc.queueStream(input)
-        result = self._collect(dstream, 3)
-        self.assertEqual(input, result)
-
-    def test_text_file_stream(self):
-        d = tempfile.mkdtemp()
-        self.ssc = StreamingContext(self.sc, self.duration)
-        dstream2 = self.ssc.textFileStream(d).map(int)
-        result = self._collect(dstream2, 2, block=False)
-        self.ssc.start()
-        for name in ('a', 'b'):
-            time.sleep(1)
-            with open(os.path.join(d, name), "w") as f:
-                f.writelines(["%d\n" % i for i in range(10)])
-        self.wait_for(result, 2)
-        self.assertEqual([list(range(10)), list(range(10))], result)
-
-    def test_binary_records_stream(self):
-        d = tempfile.mkdtemp()
-        self.ssc = StreamingContext(self.sc, self.duration)
-        dstream = self.ssc.binaryRecordsStream(d, 10).map(
-            lambda v: struct.unpack("10b", bytes(v)))
-        result = self._collect(dstream, 2, block=False)
-        self.ssc.start()
-        for name in ('a', 'b'):
-            time.sleep(1)
-            with open(os.path.join(d, name), "wb") as f:
-                f.write(bytearray(range(10)))
-        self.wait_for(result, 2)
-        self.assertEqual([list(range(10)), list(range(10))], [list(v[0]) for v in result])
-
-    def test_union(self):
-        input = [list(range(i + 1)) for i in range(3)]
-        dstream = self.ssc.queueStream(input)
-        dstream2 = self.ssc.queueStream(input)
-        dstream3 = self.ssc.union(dstream, dstream2)
-        result = self._collect(dstream3, 3)
-        expected = [i * 2 for i in input]
-        self.assertEqual(expected, result)
-
-    def test_transform(self):
-        dstream1 = self.ssc.queueStream([[1]])
-        dstream2 = self.ssc.queueStream([[2]])
-        dstream3 = self.ssc.queueStream([[3]])
-
-        def func(rdds):
-            rdd1, rdd2, rdd3 = rdds
-            return rdd2.union(rdd3).union(rdd1)
-
-        dstream = self.ssc.transform([dstream1, dstream2, dstream3], func)
-
-        self.assertEqual([2, 3, 1], self._take(dstream, 3))
-
-    def test_transform_pairrdd(self):
-        # This regression test case is for SPARK-17756.
-        dstream = self.ssc.queueStream(
-            [[1], [2], [3]]).transform(lambda rdd: rdd.cartesian(rdd))
-        self.assertEqual([(1, 1), (2, 2), (3, 3)], self._take(dstream, 3))
-
-    def test_get_active(self):
-        self.assertEqual(StreamingContext.getActive(), None)
-
-        # Verify that getActive() returns the active context
-        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
-        self.ssc.start()
-        self.assertEqual(StreamingContext.getActive(), self.ssc)
-
-        # Verify that getActive() returns None
-        self.ssc.stop(False)
-        self.assertEqual(StreamingContext.getActive(), None)
-
-        # Verify that if the Java context is stopped, then getActive() returns None
-        self.ssc = StreamingContext(self.sc, self.duration)
-        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
-        self.ssc.start()
-        self.assertEqual(StreamingContext.getActive(), self.ssc)
-        self.ssc._jssc.stop(False)
-        self.assertEqual(StreamingContext.getActive(), None)
-
-    def test_get_active_or_create(self):
-        # Test StreamingContext.getActiveOrCreate() without checkpoint data
-        # See CheckpointTests for tests with checkpoint data
-        self.ssc = None
-        self.assertEqual(StreamingContext.getActive(), None)
-
-        def setupFunc():
-            ssc = StreamingContext(self.sc, self.duration)
-            ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
-            self.setupCalled = True
-            return ssc
-
-        # Verify that getActiveOrCreate() (w/o checkpoint) calls setupFunc when no context is active
-        self.setupCalled = False
-        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
-        self.assertTrue(self.setupCalled)
-
-        # Verify that getActiveOrCreate() returns active context and does not call the setupFunc
-        self.ssc.start()
-        self.setupCalled = False
-        self.assertEqual(StreamingContext.getActiveOrCreate(None, setupFunc), self.ssc)
-        self.assertFalse(self.setupCalled)
-
-        # Verify that getActiveOrCreate() calls setupFunc after active context is stopped
-        self.ssc.stop(False)
-        self.setupCalled = False
-        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
-        self.assertTrue(self.setupCalled)
-
-        # Verify that if the Java context is stopped, then getActive() returns None
-        self.ssc = StreamingContext(self.sc, self.duration)
-        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
-        self.ssc.start()
-        self.assertEqual(StreamingContext.getActive(), self.ssc)
-        self.ssc._jssc.stop(False)
-        self.setupCalled = False
-        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
-        self.assertTrue(self.setupCalled)
-
-    def test_await_termination_or_timeout(self):
-        self._add_input_stream()
-        self.ssc.start()
-        self.assertFalse(self.ssc.awaitTerminationOrTimeout(0.001))
-        self.ssc.stop(False)
-        self.assertTrue(self.ssc.awaitTerminationOrTimeout(0.001))
 
 
 class CheckpointTests(unittest.TestCase):
@@ -1042,98 +768,8 @@ class CheckpointTests(unittest.TestCase):
         self.ssc.stop(True, True)
 
 
-class KinesisStreamTests(PySparkStreamingTestCase):
-
-    def test_kinesis_stream_api(self):
-        # Don't start the StreamingContext because we cannot test it in Jenkins
-        kinesisStream1 = KinesisUtils.createStream(
-            self.ssc, "myAppNam", "mySparkStream",
-            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2)
-        kinesisStream2 = KinesisUtils.createStream(
-            self.ssc, "myAppNam", "mySparkStream",
-            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
-            "awsAccessKey", "awsSecretKey")
-
-    def test_kinesis_stream(self):
-        if not are_kinesis_tests_enabled:
-            sys.stderr.write(
-                "Skipped test_kinesis_stream (enable by setting environment variable %s=1"
-                % kinesis_test_environ_var)
-            return
-
-        import random
-        kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
-        kinesisTestUtils = self.ssc._jvm.org.apache.spark.streaming.kinesis.KinesisTestUtils(2)
-        try:
-            kinesisTestUtils.createStream()
-            aWSCredentials = kinesisTestUtils.getAWSCredentials()
-            stream = KinesisUtils.createStream(
-                self.ssc, kinesisAppName, kinesisTestUtils.streamName(),
-                kinesisTestUtils.endpointUrl(), kinesisTestUtils.regionName(),
-                InitialPositionInStream.LATEST, 10, StorageLevel.MEMORY_ONLY,
-                aWSCredentials.getAWSAccessKeyId(), aWSCredentials.getAWSSecretKey())
-
-            outputBuffer = []
-
-            def get_output(_, rdd):
-                for e in rdd.collect():
-                    outputBuffer.append(e)
-
-            stream.foreachRDD(get_output)
-            self.ssc.start()
-
-            testData = [i for i in range(1, 11)]
-            expectedOutput = set([str(i) for i in testData])
-            start_time = time.time()
-            while time.time() - start_time < 120:
-                kinesisTestUtils.pushData(testData)
-                if expectedOutput == set(outputBuffer):
-                    break
-                time.sleep(10)
-            self.assertEqual(expectedOutput, set(outputBuffer))
-        except:
-            import traceback
-            traceback.print_exc()
-            raise
-        finally:
-            self.ssc.stop(False)
-            kinesisTestUtils.deleteStream()
-            kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
-
-
-# Search jar in the project dir using the jar name_prefix for both sbt build and maven build because
-# the artifact jars are in different directories.
-def search_jar(dir, name_prefix):
-    # We should ignore the following jars
-    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-    jars = (glob.glob(os.path.join(dir, "target/scala-*/" + name_prefix + "-*.jar")) +  # sbt build
-            glob.glob(os.path.join(dir, "target/" + name_prefix + "_*.jar")))  # maven build
-    return [jar for jar in jars if not jar.endswith(ignored_jar_suffixes)]
-
-
-def _kinesis_asl_assembly_dir():
-    SPARK_HOME = os.environ["SPARK_HOME"]
-    return os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
-
-
-def search_kinesis_asl_assembly_jar():
-    jars = search_jar(_kinesis_asl_assembly_dir(), "spark-streaming-kinesis-asl-assembly")
-    if not jars:
-        return None
-    elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs: %s; please "
-                         "remove all but one") % (", ".join(jars)))
-    else:
-        return jars[0]
-
-
-# Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
-kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
-are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
-
 if __name__ == "__main__":
+<<<<<<< HEAD:python/pyspark/streaming/tests.py
     from pyspark.streaming.tests import *
     kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
 
@@ -1179,3 +815,12 @@ if __name__ == "__main__":
         if not result.wasSuccessful():
             failed = True
     sys.exit(failed)
+=======
+    from pyspark.streaming.tests.test_dstream import *
+
+    try:
+        import xmlrunner
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
+    except ImportError:
+        unittest.main(verbosity=2)
+>>>>>>> 87bd9c75df:python/pyspark/streaming/tests/test_dstream.py
