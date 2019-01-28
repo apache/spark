@@ -67,6 +67,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
+import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -343,16 +344,16 @@ private[spark] object Utils extends Logging {
    */
   def copyStreamUpTo(
       in: InputStream,
-      out: OutputStream,
+      out: ChunkedByteBufferOutputStream,
       maxSize: Long,
-      closeStreams: Boolean = false): Boolean = {
+      closeStreams: Boolean = false): (Boolean, InputStream) = {
     var count = 0L
-    tryWithSafeFinally {
-      val bufSize = 8192
-      val buf = new Array[Byte](bufSize)
+    val streamCopied = tryWithSafeFinally {
+      val bufSize = Math.min(8192L, maxSize)
+      val buf = new Array[Byte](bufSize.toInt)
       var n = 0
       while (n != -1 && count < maxSize) {
-        n = in.read(buf, 0, Math.min(maxSize - count, bufSize.toLong).toInt)
+        n = in.read(buf, 0, Math.min(maxSize - count, bufSize).toInt)
         if (n != -1) {
           out.write(buf, 0, n)
           count += n
@@ -369,6 +370,12 @@ private[spark] object Utils extends Logging {
           out.close()
         }
       }
+    }
+    if (streamCopied) {
+      (streamCopied, out.toChunkedByteBuffer.toInputStream(dispose = true))
+    } else {
+      (streamCopied, new SequenceInputStream(
+        out.toChunkedByteBuffer.toInputStream(dispose = true), in))
     }
   }
 

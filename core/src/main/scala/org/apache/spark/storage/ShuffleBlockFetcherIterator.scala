@@ -73,6 +73,7 @@ final class ShuffleBlockFetcherIterator(
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
+    detectCorruptUseExtraMemory: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -471,20 +472,16 @@ final class ShuffleBlockFetcherIterator(
             // maxBytesInFlight/3. If stream is longer, then corruption will be caught while reading
             // the stream.
             streamCompressedOrEncrypted = !input.eq(in)
-            if (detectCorrupt && streamCompressedOrEncrypted) {
+            if (streamCompressedOrEncrypted && detectCorruptUseExtraMemory) {
               isStreamCopied = true
               val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
               // Decompress the block upto maxBytesInFlight/3 at once to detect any corruption which
               // could increase the memory usage and potentially increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              isStreamCopied = Utils.copyStreamUpTo(
+              val (completeStreamCopied: Boolean, newStream: InputStream) = Utils.copyStreamUpTo(
                 input, out, maxBytesInFlight / 3, closeStreams = true)
-              if (isStreamCopied) {
-                input = out.toChunkedByteBuffer.toInputStream(dispose = true)
-              } else {
-                input = new SequenceInputStream(
-                  out.toChunkedByteBuffer.toInputStream(dispose = true), input)
-              }
+              isStreamCopied = completeStreamCopied
+              input = newStream
             }
           } catch {
             case e: IOException =>
@@ -519,7 +516,11 @@ final class ShuffleBlockFetcherIterator(
     currentResult = result.asInstanceOf[SuccessFetchResult]
     (currentResult.blockId,
       new BufferReleasingInputStream(
-        input, this, currentResult.blockId, currentResult.address, streamCompressedOrEncrypted))
+        input,
+        this,
+        currentResult.blockId,
+        currentResult.address,
+        detectCorrupt && streamCompressedOrEncrypted))
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {

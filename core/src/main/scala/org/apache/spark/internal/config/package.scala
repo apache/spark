@@ -955,6 +955,22 @@ package object config {
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
 
+  private[spark] val SHUFFLE_DETECT_CORRUPT =
+    ConfigBuilder("spark.shuffle.detectCorrupt")
+      .doc("If enabled, IOException thrown while reading a compressed/encrypted stream will be " +
+        "converted to a FetchFailedException, to ensure that previous stage is retried")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_DETECT_CORRUPT_MEMORY =
+    ConfigBuilder("spark.shuffle.detectCorrupt.useExtraMemory")
+      .doc("If enabled, part of a compressed/encrypted stream will be de-compressed/de-crypted " +
+        "by using extra memory to detect early corruption. Any IOException thrown will cause " +
+        "the task to be retried once and if it fails again with same exception, then " +
+        "FetchFailedException will be thrown to retry previous stage")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")
       .internal()

@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream}
+  FileOutputStream, InputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -43,6 +43,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -209,6 +210,51 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     Utils.copyStream(new ByteArrayInputStream(bytes), os)
 
     assert(os.toByteArray.toList.equals(bytes.toList))
+  }
+
+  test("copyStreamUpTo") {
+    // input array initialization
+    val bytes = Array.ofDim[Byte](1200)
+    Random.nextBytes(bytes)
+
+    var os: ChunkedByteBufferOutputStream = null
+    var in: InputStream = null
+    var copiedStream: InputStream = null
+    try {
+      os = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+      in = new ByteArrayInputStream(bytes.take(900))
+      val (cp1: Boolean, input1: InputStream) = Utils.copyStreamUpTo(in, os, 1000, true)
+      copiedStream = input1
+      assert(cp1)
+      assert(in.read() === -1)
+      IOUtils.closeQuietly(copiedStream)
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(os)
+
+      os = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+      in = new ByteArrayInputStream(bytes.take(1000))
+      val (cp2: Boolean, input2: InputStream) = Utils.copyStreamUpTo(in, os, 1000, true)
+      copiedStream = input2
+      assert(!cp2)
+      assert(in.read() === -1)
+      IOUtils.closeQuietly(copiedStream)
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(os)
+
+      os = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+      in = new ByteArrayInputStream(bytes.take(1100))
+      val (cp3: Boolean, input3: InputStream) = Utils.copyStreamUpTo(in, os, 1000, true)
+      copiedStream = input3
+      assert(!cp3)
+      assert(in.read() != -1)
+      IOUtils.closeQuietly(copiedStream)
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(os)
+    } finally {
+      IOUtils.closeQuietly(copiedStream)
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(os)
+    }
   }
 
   test("memoryStringToMb") {

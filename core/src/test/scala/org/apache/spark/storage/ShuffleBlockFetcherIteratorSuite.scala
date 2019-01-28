@@ -119,6 +119,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      false,
       metrics)
 
     // 3 local blocks fetched in initialization
@@ -198,6 +199,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      false,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
     verify(blocks(ShuffleBlockId(0, 0, 0)), times(0)).release()
@@ -326,6 +328,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      false,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -414,6 +417,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      true,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -480,6 +484,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      true,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
     // Only one block should be returned which has corruption after maxBytesInFlight/3
     val (id, st) = iterator.next()
@@ -529,16 +534,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      true,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
     val (id, st) = iterator.next()
-    // The returned stream is a concatenated stream
+    // Check that the test setup is correct -- make sure we have a concatenated stream.
     assert (st.asInstanceOf[BufferReleasingInputStream].delegate.isInstanceOf[SequenceInputStream])
 
     val dst = new DataInputStream(st)
     for (i <- 1 to 2500) {
       assert(i === dst.readInt())
     }
-    assert(dst.available() === 0)
+    assert(dst.read() === -1)
     dst.close()
   }
 
@@ -590,6 +596,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       Int.MaxValue,
+      true,
       false,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
@@ -653,6 +660,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         maxBlocksInFlightPerAddress = Int.MaxValue,
         maxReqSizeShuffleToMem = 200,
         detectCorrupt = true,
+        false,
         taskContext.taskMetrics.createTempShuffleReadMetrics())
     }
 
@@ -700,6 +708,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      false,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
     // All blocks fetched return zero length and should trigger a receive-side error:
