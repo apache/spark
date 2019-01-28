@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
  * E.g, with temporary view `t` using [[FileDataSourceV2]], inserting into  view `t` fails
  * since there is no corresponding physical plan.
  * SPARK-23817: This is a temporary hack for making current data source V2 work. It should be
- * removed when write path of file data source v2 is finished.
+ * removed when Catalog of file data source v2 is finished.
  */
 class FallbackOrcDataSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
