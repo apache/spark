@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 
-import scala.concurrent.{TimeoutException, Future}
+import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
 import scala.util.Random
 
