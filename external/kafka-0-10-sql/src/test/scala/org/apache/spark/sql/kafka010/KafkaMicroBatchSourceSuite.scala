@@ -204,11 +204,12 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       StopStream)
   }
 
-  test("Rate limit set to Long.Max should not overflow integer during end offset calculation[SPARK-26718]") {
+  test("Rate limit set to Long.Max should not overflow integer " +
+    "during end offset calculation[SPARK-26718]") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
-    testUtils.sendMessages(topic, (0 until 5000).map(_.toString).toArray, Some(0))   // fill in 5000 messages to trigger potential integer overflow
-
+    // fill in 5000 messages to trigger potential integer overflow
+    testUtils.sendMessages(topic, (0 until 5000).map(_.toString).toArray, Some(0))
 
     val partitionOffsets = Map(
       new TopicPartition(topic, 0) -> 5000L
@@ -221,8 +222,10 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("startingOffsets", startingOffsets)                 // use latest to force begin to be 5000
-      .option("maxOffsetsPerTrigger", Long.MaxValue.toString)     // use Long.Max to try to trigger overflow
+      // use latest to force begin to be 5000
+      .option("startingOffsets", startingOffsets)
+      // use Long.Max to try to trigger overflow
+      .option("maxOffsetsPerTrigger", Long.MaxValue.toString)
       .option("subscribe", topic)
       .option("kafka.metadata.max.age.ms", "1")
       .load()

@@ -195,7 +195,11 @@ private[kafka010] class KafkaSource(
             // need to be careful of integer overflow
             // therefore added canary checks where to see if off variable could be overflowed
             // refer to [https://issues.apache.org/jira/browse/SPARK-26718]
-            val off = if (prorateLong > Long.MaxValue - begin) Long.MaxValue else begin + prorateLong
+            val off = if (prorateLong > Long.MaxValue - begin) {
+              Long.MaxValue
+            } else {
+              begin + prorateLong
+            }
             logDebug(s"rateLimit $tp new offset is $off")
             // Paranoia, make sure not to return an offset that's past end
             Math.min(end, off)
