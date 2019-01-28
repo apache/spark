@@ -40,6 +40,7 @@ object YarnSparkHadoopUtil {
 
   val MEMORY_OVERHEAD_FACTOR = 0.10
   val MEMORY_OVERHEAD_MIN = 384L
+  val SHARED_MEMORY_OVERHEAD_MIN = 128L
 
   val ANY_HOST = "*"
 

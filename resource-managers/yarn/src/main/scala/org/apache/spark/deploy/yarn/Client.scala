@@ -78,6 +78,11 @@ private[spark] class Client(
   private var stagingDirPath: Path = _
 
   // AM related configurations
+  private val amCores = if (isClusterMode) {
+    sparkConf.get(DRIVER_CORES)
+  } else {
+    sparkConf.get(AM_CORES)
+  }
   private val amMemory = if (isClusterMode) {
     sparkConf.get(DRIVER_MEMORY).toInt
   } else {
@@ -85,19 +90,23 @@ private[spark] class Client(
   }
   private val amMemoryOverhead = {
     val amMemoryOverheadEntry = if (isClusterMode) DRIVER_MEMORY_OVERHEAD else AM_MEMORY_OVERHEAD
+    val sharedMemoryOverhead = if (amCores > 1) SHARED_MEMORY_OVERHEAD_MIN else 0L
+    val estimatedMemoryOverhead =
+      (MEMORY_OVERHEAD_FACTOR * amCores * amMemory - sharedMemoryOverhead).toLong
     sparkConf.get(amMemoryOverheadEntry).getOrElse(
-      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
-  }
-  private val amCores = if (isClusterMode) {
-    sparkConf.get(DRIVER_CORES)
-  } else {
-    sparkConf.get(AM_CORES)
+      math.max(estimatedMemoryOverhead, MEMORY_OVERHEAD_MIN)).toInt
   }
 
   // Executor related configurations
+  private val executorCores = sparkConf.get(EXECUTOR_CORES)
   private val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
-  private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
+  private val executorMemoryOverhead = {
+    val sharedMemoryOverhead = if (executorCores > 1) SHARED_MEMORY_OVERHEAD_MIN else 0L
+    val estimatedMemoryOverhead =
+      (MEMORY_OVERHEAD_FACTOR * executorCores * executorMemory - sharedMemoryOverhead).toLong
+    sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
+      math.max(estimatedMemoryOverhead, MEMORY_OVERHEAD_MIN)).toInt
+  }
 
   private val isPython = sparkConf.get(IS_PYTHON_APP)
   private val pysparkWorkerMemory: Int = if (isPython) {
