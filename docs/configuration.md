@@ -191,9 +191,7 @@ of the most common options to set are:
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
     <br/>
-    <em>Note:</em> Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
-    <br/>
-    <em>Note:</em> Python memory usage is dependent on Python's 'resource' module; therefore, the behaviors and limitations are inherited.
+    <em>Note:</em> This feature is dependent on Python's `resource` module; therefore, the behaviors and limitations are inherited.
   </td>
 </tr>
 <tr>
@@ -226,7 +224,7 @@ of the most common options to set are:
     comma-separated list of multiple directories on different disks.
 
     <br/>
-    <em>Note:</em> In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone), MESOS_SANDBOX (Mesos) or
+    <em>Note:</em> This will be overridden by SPARK_LOCAL_DIRS (Standalone), MESOS_SANDBOX (Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
