@@ -216,8 +216,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
     val startingOffsets = JsonUtils.partitionOffsets(partitionOffsets)
 
-    val sparkSession = spark
-    import sparkSession.implicits._
     val kafka = spark
       .readStream
       .format("kafka")
