@@ -41,7 +41,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * Manager for delegation tokens in a Spark application.
  *
- * When configured with a principal and a keytab, this manager will make sure long-running apps can
+ * When delegation token renewal is enabled, this manager will make sure long-running apps can
  * run without interruption while accessing secured services. It periodically logs in to the KDC
  * with user-provided credentials, and contacts all the configured secure services to obtain
  * delegation tokens to be distributed to the rest of the application.
@@ -49,6 +49,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * New delegation tokens are created once 75% of the renewal interval of the original tokens has
  * elapsed. The new tokens are sent to the Spark driver endpoint. The driver is tasked with
  * distributing the tokens to other processes that might need them.
+ *
+ * Renewal can be enabled in two different ways: by providing a principal and keytab to Spark, or by
+ * enabling renewal based on the local credential cache. The latter has the drawback that Spark
+ * can't create new TGTs by itself, so the user has to manually update the Kerberos ticket cache
+ * externally.
  *
  * This class can also be used just to create delegation tokens, by calling the
  * `obtainDelegationTokens` method. This option does not require calling the `start` method nor
@@ -81,7 +86,11 @@ private[spark] class HadoopDelegationTokenManager(
   private var renewalExecutor: ScheduledExecutorService = _
 
   /** @return Whether delegation token renewal is enabled. */
-  def renewalEnabled: Boolean = principal != null
+  def renewalEnabled: Boolean = sparkConf.get(KERBEROS_RENEWAL_CREDENTIALS) match {
+    case "keytab" => principal != null
+    case "ccache" => UserGroupInformation.getCurrentUser().hasKerberosCredentials()
+    case _ => false
+  }
 
   /**
    * Start the token renewer. Requires a principal and keytab. Upon start, the renewer will
@@ -121,7 +130,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   def stop(): Unit = {
     if (renewalExecutor != null) {
-      renewalExecutor.shutdown()
+      renewalExecutor.shutdownNow()
     }
   }
 
@@ -182,7 +191,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   private def scheduleRenewal(delay: Long): Unit = {
     val _delay = math.max(0, delay)
-    logInfo(s"Scheduling login from keytab in ${UIUtils.formatDuration(delay)}.")
+    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(delay)}.")
 
     val renewalTask = new Runnable() {
       override def run(): Unit = {
@@ -206,6 +215,9 @@ private[spark] class HadoopDelegationTokenManager(
       schedulerRef.send(UpdateDelegationTokens(tokens))
       tokens
     } catch {
+      case _: InterruptedException =>
+        // Ignore, may happen if shutting down.
+        null
       case e: Exception =>
         val delay = TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
         logWarning(s"Failed to update tokens, will try again in ${UIUtils.formatDuration(delay)}!" +
@@ -239,11 +251,19 @@ private[spark] class HadoopDelegationTokenManager(
   }
 
   private def doLogin(): UserGroupInformation = {
-    logInfo(s"Attempting to login to KDC using principal: $principal")
-    require(new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
-    val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
-    logInfo("Successfully logged into KDC.")
-    ugi
+    if (principal != null) {
+      logInfo(s"Attempting to login to KDC using principal: $principal")
+      require(new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
+      val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+      logInfo("Successfully logged into KDC.")
+      ugi
+    } else {
+      logInfo(s"Attempting to load user's ticket cache.")
+      val ccache = sparkConf.getenv("KRB5CCNAME")
+      val user = Option(sparkConf.getenv("KRB5PRINCIPAL")).getOrElse(
+        UserGroupInformation.getCurrentUser().getUserName())
+      UserGroupInformation.getUGIFromTicketCache(ccache, user)
+    }
   }
 
   private def loadProviders(): Map[String, HadoopDelegationTokenProvider] = {
