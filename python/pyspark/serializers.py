@@ -830,6 +830,11 @@ class ChunkedStream(object):
 
     @property
     def closed(self):
+        """
+        Return True if the `wrapped` object has been closed.
+        NOTE: this property is required by pyarrow to be used as a file-like object in
+        pyarrow.RecordBatchStreamWriter from ArrowStreamSerializer
+        """
         return self.wrapped.closed
 
 
