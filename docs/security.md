@@ -776,16 +776,32 @@ The following options provides finer-grained control for this feature:
 Long-running applications may run into issues if their run time exceeds the maximum delegation
 token lifetime configured in services it needs to access.
 
-Spark supports automatically creating new tokens for these applications when running in YARN mode.
-Kerberos credentials need to be provided to the Spark application via the `spark-submit` command,
-using the `--principal` and `--keytab` parameters.
+This feature is not available everywhere. In particular, it's only implemented
+on YARN and Kubernetes (both client and cluster modes), and on Mesos when using client mode.
 
-The provided keytab will be copied over to the machine running the Application Master via the Hadoop
-Distributed Cache. For this reason, it's strongly recommended that both YARN and HDFS be secured
-with encryption, at least.
+Spark supports automatically creating new tokens for these applications. There are two ways to
+enable this functionality.
 
-The Kerberos login will be periodically renewed using the provided credentials, and new delegation
-tokens for supported will be created.
+### Using a Keytab
+
+By providing Spark with a principal and keytab (e.g. using `spark-submit` with `--principal`
+and `--keytab` parameters), the application will maintain a valid Kerberos login that can be
+used to retrieve delegation tokens indefinitely.
+
+Note that when using a keytab in cluster mode, it will be copied over to the machine running the
+Spark driver. In the case of YARN, this means using HDFS as a staging area for the keytab, so it's
+strongly recommended that both YARN and HDFS be secured with encryption, at least.
+
+### Using a ticket cache
+
+By setting `spark.kerberos.renewal.credentials` to `ccache` in Spark's configuration, the local
+Kerberos ticket cache will be used for authentication. Spark will keep the ticket renewed during its
+renewable life, but after it expires a new ticket needs to be acquired (e.g. by running `kinit`).
+
+It's up to the user to maintain an updated ticket cache that Spark can use.
+
+The location of the ticket cache can be customized by setting the `KRB5CCNAME` environment
+variable.
 
 ## Secure Interaction with Kubernetes
 
