@@ -468,24 +468,19 @@ private object YarnClusterDriver extends Logging with Matchers {
         }
 
         val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
-        val host = YarnContainerInfoHelper.getNodeManagerHost
-        val port = YarnContainerInfoHelper.getNodeManagerPort
-        val httpPort = YarnContainerInfoHelper.getNodeManagerHttpPort
-        val httpScheme = YarnContainerInfoHelper.getYarnHttpScheme(yarnConf)
         val containerId = YarnContainerInfoHelper.getContainerId(container = None)
         val user = Utils.getCurrentUserName()
-        val clusterId: Option[String] = YarnContainerInfoHelper.getClusterId(yarnConf)
 
         assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
 
         assert(listener.driverAttributes.nonEmpty)
         val driverAttributes = listener.driverAttributes.get
         val expectationAttributes = Map(
-          "HTTP_SCHEME" -> httpScheme,
-          "NM_HOST" -> host,
-          "NM_PORT" -> port.toString,
-          "NM_HTTP_PORT" -> httpPort.toString,
-          "CLUSTER_ID" -> clusterId.getOrElse(""),
+          "HTTP_SCHEME" -> YarnContainerInfoHelper.getYarnHttpScheme(yarnConf),
+          "NM_HOST" -> YarnContainerInfoHelper.getNodeManagerHost,
+          "NM_PORT" -> YarnContainerInfoHelper.getNodeManagerPort.toString,
+          "NM_HTTP_PORT" -> YarnContainerInfoHelper.getNodeManagerHttpPort.toString,
+          "CLUSTER_ID" -> YarnContainerInfoHelper.getClusterId(yarnConf).getOrElse(""),
           "CONTAINER_ID" -> ConverterUtils.toString(containerId),
           "USER" -> user,
           "LOG_FILES" -> "stderr,stdout")
