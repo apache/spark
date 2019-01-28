@@ -22,3 +22,7 @@
 
 * Gradle plugin to easily create custom docker images for use with k8s
 * Filter rLibDir by exists so that daemon.R references the correct file [460](https://github.com/palantir/spark/pull/460)
+
+# Reverted
+* [SPARK-25908](https://issues.apache.org/jira/browse/SPARK-25908) - Removal of `monotonicall_increasing_id`, `toDegree`, `toRadians`, `approxCountDistinct`, `unionAll`
+* [SPARK-25862](https://issues.apache.org/jira/browse/SPARK-25862) - Removal of `unboundedPreceding`, `unboundedFollowing`, `currentRow`
