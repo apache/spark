@@ -2426,6 +2426,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     countForMalformedJSON(0, Seq(""))
   }
 
+  test("SPARK-26745: count() for non-multiline input with empty lines") {
+    val df = spark.read.json(testFile("test-data/with-empty-line.json"))
+    val withEmptyLineData = Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
+    // important to do this .count() first, prior to caching/persisting/computing/collecting, to
+    // test the non-parsed-count pathway
+    assert(df.count() === withEmptyLineData.length,
+           "JSON DataFrame unparsed-count should exclude whitespace-only lines")
+    df.createOrReplaceTempView("jsonWithEmptyLineTable")
+    checkAnswer(sql("select * from jsonWithEmptyLineTable"), withEmptyLineData)
+  }
+
   test("SPARK-25040: empty strings should be disallowed") {
     def failedOnEmptyString(dataType: DataType): Unit = {
        val df = spark.read.schema(s"a ${dataType.catalogString}")
