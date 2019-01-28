@@ -280,7 +280,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem, 1)
+    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
