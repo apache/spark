@@ -60,7 +60,7 @@ class MemoryStoreSuite
   }
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
-    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem, 1)
+    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val blockInfoManager = new BlockInfoManager
     val blockEvictionHandler = new BlockEvictionHandler {
       var memoryStore: MemoryStore = _
@@ -417,7 +417,7 @@ class MemoryStoreSuite
     val bytesPerSmallBlock = memStoreSize / numInitialBlocks
     def testFailureOnNthDrop(numValidBlocks: Int, readLockAfterDrop: Boolean): Unit = {
       val tc = TaskContext.empty()
-      val memManager = new UnifiedMemoryManager(conf, memStoreSize, memStoreSize.toInt, 1)
+      val memManager = new UnifiedMemoryManager(conf, memStoreSize, memStoreSize.toInt / 2, 1)
       val blockInfoManager = new BlockInfoManager
       blockInfoManager.registerTask(tc.taskAttemptId)
       var droppedSoFar = 0
