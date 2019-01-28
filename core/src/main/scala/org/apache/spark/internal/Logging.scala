@@ -25,7 +25,7 @@ import org.apache.log4j._
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkShellLoggingFilter, Utils}
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
@@ -156,14 +156,7 @@ trait Logging {
           }
           rootLogger.getAllAppenders().asScala.foreach {
             case ca: ConsoleAppender =>
-              Option(ca.getThreshold()) match {
-                case Some(t) =>
-                  Logging.consoleAppenderToThreshold.put(ca, t)
-                  if (!t.isGreaterOrEqual(replLevel)) {
-                    ca.setThreshold(replLevel)
-                  }
-                case None => ca.setThreshold(replLevel)
-              }
+              ca.addFilter(new SparkShellLoggingFilter(replLevel))
             case _ => // no-op
           }
         }
@@ -182,7 +175,6 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  private val consoleAppenderToThreshold = new ConcurrentHashMap[ConsoleAppender, Priority]()
 
   val initLock = new Object()
   try {
@@ -213,7 +205,21 @@ private[spark] object Logging {
         rootLogger.setLevel(defaultRootLevel)
         rootLogger.getAllAppenders().asScala.foreach {
           case ca: ConsoleAppender =>
-            ca.setThreshold(consoleAppenderToThreshold.get(ca))
+            // SparkShellLoggingFilter is the last filter
+            ca.getFirstFilter() match {
+              case ssf: SparkShellLoggingFilter =>
+                ca.clearFilters()
+              case f: org.apache.log4j.spi.Filter =>
+                var previous = f
+                var current = previous.getNext()
+                while (current != null && !current.isInstanceOf[SparkShellLoggingFilter]) {
+                  previous = current;
+                  current = previous.getNext()
+                }
+                if (current != null) {
+                  previous.setNext(current.getNext())
+                }
+            }
           case _ => // no-op
         }
       }
