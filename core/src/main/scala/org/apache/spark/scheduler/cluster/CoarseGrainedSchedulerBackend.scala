@@ -110,13 +110,20 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
-  class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-    extends ThreadSafeRpcEndpoint with Logging {
+  class DriverEndpoint extends ThreadSafeRpcEndpoint with Logging {
+
+    override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
 
     // Executors that have been lost, but for which we don't yet know the real exit reason.
     protected val executorsPendingLossReason = new HashSet[String]
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
+
+    // Spark configuration sent to executors. This is a lazy val so that subclasses of the
+    // scheduler can modify the SparkConf object before this view is created.
+    private lazy val sparkProperties = scheduler.sc.conf.getAll
+      .filter { case (k, _) => k.startsWith("spark.") }
+      .toSeq
 
     override def onStart() {
       // Periodically revive offers to allow delay scheduling to work
@@ -386,23 +393,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
-  var driverEndpoint: RpcEndpointRef = null
+  val driverEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint())
 
   protected def minRegisteredRatio: Double = _minRegisteredRatio
 
   override def start() {
-    val properties = new ArrayBuffer[(String, String)]
-    for ((key, value) <- scheduler.sc.conf.getAll) {
-      if (key.startsWith("spark.")) {
-        properties += ((key, value))
-      }
-    }
-
-    // TODO (prashant) send conf instead of properties
-    driverEndpoint = createDriverEndpointRef(properties)
-
     if (UserGroupInformation.isSecurityEnabled()) {
-      delegationTokenManager = createTokenManager(driverEndpoint)
+      delegationTokenManager = createTokenManager()
       delegationTokenManager.foreach { dtm =>
         val tokens = if (dtm.renewalEnabled) {
           dtm.start()
@@ -412,20 +409,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           SparkHadoopUtil.get.serialize(creds)
         }
         if (tokens != null) {
-          delegationTokens.set(tokens)
+          updateDelegationTokens(tokens)
         }
       }
     }
   }
 
-  protected def createDriverEndpointRef(
-      properties: ArrayBuffer[(String, String)]): RpcEndpointRef = {
-    rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint(properties))
-  }
-
-  protected def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new DriverEndpoint(rpcEnv, properties)
-  }
+  protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()
 
   def stopExecutors() {
     try {
@@ -715,12 +705,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Create the delegation token manager to be used for the application. This method is called
    * once during the start of the scheduler backend (so after the object has already been
    * fully constructed), only if security is enabled in the Hadoop configuration.
-   *
-   * @param schedulerRef RPC endpoint for the scheduler, where updated delegation tokens should be
-   *                     sent.
    */
-  protected def createTokenManager(
-      schedulerRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = None
+  protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
 
   /**
    * Called when a new set of delegation tokens is sent to the driver. Child classes can override
