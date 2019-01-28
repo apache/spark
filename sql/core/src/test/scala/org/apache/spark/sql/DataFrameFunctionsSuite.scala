@@ -1153,6 +1153,43 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e2.message.contains(errorMsg2))
   }
 
+  test("array all positions function") {
+    val df = Seq(
+      (Seq[Int](1, 2, 1, 3), "x", 1),
+      (Seq[Int](), "x", 1)
+    ).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(array_allpositions(df("a"), 1)),
+      Seq(Row(Array[java.lang.Integer](1, 3)), Row(Array[java.lang.Integer]()))
+    )
+    checkAnswer(
+      df.selectExpr("array_allpositions(a, 1)"),
+      Seq(Row(Array[java.lang.Integer](1, 3)), Row(Array[java.lang.Integer]()))
+    )
+    checkAnswer(
+      df.selectExpr("array_allpositions(a, c)"),
+      Seq(Row(Array[java.lang.Integer](1, 3)), Row(Array[java.lang.Integer]()))
+    )
+    checkAnswer(
+      df.select(array_allpositions(df("a"), df("c"))),
+      Seq(Row(Array[java.lang.Integer](1, 3)), Row(Array[java.lang.Integer]()))
+    )
+    checkAnswer(
+      df.select(array_allpositions(df("a"), null)),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("array_allpositions(a, null)"),
+      Seq(Row(null), Row(null))
+    )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", "a")).toDF().selectExpr("array_allpositions(_1, _2)")
+    }
+    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+  }
+
   test("element_at function") {
     val df = Seq(
       (Seq[String]("1", "2", "3"), 1),
@@ -1282,6 +1319,68 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
          |key type, but it's [map<int,string>, string].
        """.stripMargin.replace("\n", " ").trim()
     assert(e3.message.contains(errorMsg3))
+  }
+
+  test("array_select function") {
+    val df = Seq(
+      (Seq[String]("1", "2", "3"), Seq(1, 3)),
+      (Seq[String](null, ""), Seq(-1)),
+      (Seq[String](), Seq(2))
+    ).toDF("a", "b")
+
+    intercept[Exception] {
+      checkAnswer(
+        df.select(array_select(df("a"), 0)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }.getMessage.contains("SQL array indices start at 1")
+    intercept[Exception] {
+      checkAnswer(
+        df.select(array_select(df("a"), 1.1)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }
+    checkAnswer(
+      df.select(array_select(df("a"), 4)),
+      Seq(Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(array_select(df("a"), df("b"))),
+      Seq(Row("1"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("array_select(a, b)"),
+      Seq(Row("1"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      df.select(array_select(df("a"), 1)),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(array_select(df("a"), -1)),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_select(a, 4)"),
+      Seq(Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_select(a, 1)"),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("array_select(a, -1)"),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", 1)).toDF().selectExpr("array_select(_1, _2)")
+    }
+    assert(e.message.contains(
+      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
   test("array_union functions") {
