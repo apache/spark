@@ -42,7 +42,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         # Synchronize default timezone between Python and Java
         cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
+        tz = "UTC"
         os.environ["TZ"] = tz
         time.tzset()
 
@@ -503,9 +503,9 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 .withColumn("internal_value", internal_value(col("timestamp")))
             result_la = df_la.select(col("idx"), col("internal_value")).collect()
             # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
-            diff = 3 * 60 * 60 * 1000 * 1000 * 1000
+            diff = 5 * 60 * 60 * 1000 * 1000 * 1000
             result_la_corrected = \
-                df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
+                df_la.select(col("idx"), col("tscopy"), col("internal_value") - diff).collect()
 
         with self.sql_conf({
                 "spark.sql.execution.pandas.respectSessionTimeZone": True,

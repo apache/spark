@@ -34,12 +34,8 @@ RUN mkdir -p $(pyenv root)/versions \
 RUN pyenv global our-miniconda/envs/python2 our-miniconda/envs/python3 \
   && pyenv rehash
 
-RUN $CONDA_BIN install -y -n python2 -c anaconda -c conda-forge xmlrunner \
-  && $CONDA_BIN install -y -n python3 -c anaconda -c conda-forge xmlrunner \
-  && $CONDA_BIN clean --all
-
 # Expose pyenv globally
 ENV PATH=$CIRCLE_HOME/.pyenv/shims:$PATH
 
-RUN PYENV_VERSION=our-miniconda/envs/python2 $CIRCLE_HOME/.pyenv/shims/pip install unishark \
- && PYENV_VERSION=our-miniconda/envs/python3 $CIRCLE_HOME/.pyenv/shims/pip install unishark
+RUN PYENV_VERSION=our-miniconda/envs/python2 $CIRCLE_HOME/.pyenv/shims/pip install unishark unittest-xml-reporting \
+ && PYENV_VERSION=our-miniconda/envs/python3 $CIRCLE_HOME/.pyenv/shims/pip install unishark unittest-xml-reporting

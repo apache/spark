@@ -37,14 +37,10 @@ RUN set -ex && \
 COPY jars /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
-<<<<<<< HEAD
-COPY ${img_path}/spark/entrypoint.sh /opt/
-=======
 COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/
 COPY examples /opt/spark/examples
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
->>>>>>> 87bd9c75df
 
 ENV SPARK_HOME /opt/spark
 

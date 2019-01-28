@@ -17,153 +17,15 @@
 import operator
 import os
 import shutil
-<<<<<<< HEAD:python/pyspark/streaming/tests.py
-import unishark
-=======
 import tempfile
 import time
 import unittest
->>>>>>> 87bd9c75df:python/pyspark/streaming/tests/test_dstream.py
 from functools import reduce
 from itertools import chain
 
-<<<<<<< HEAD:python/pyspark/streaming/tests.py
-if sys.version_info[:2] <= (2, 6):
-    try:
-        import unittest2 as unittest
-    except ImportError:
-        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
-        sys.exit(1)
-else:
-    import unittest
-
-if sys.version >= "3":
-    long = int
-
-from pyspark.context import SparkConf, SparkContext, RDD
-from pyspark.storagelevel import StorageLevel
-from pyspark.streaming.context import StreamingContext
-from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
-from pyspark.streaming.listener import StreamingListener
-
-
-class PySparkStreamingTestCase(unittest.TestCase):
-
-    timeout = 30  # seconds
-    duration = .5
-
-    @classmethod
-    def setUpClass(cls):
-        class_name = cls.__name__
-        conf = SparkConf().set("spark.default.parallelism", 1)
-        cls.sc = SparkContext(appName=class_name, conf=conf)
-        cls.sc.setCheckpointDir(tempfile.mkdtemp())
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.sc.stop()
-        # Clean up in the JVM just in case there has been some issues in Python API
-        try:
-            jSparkContextOption = SparkContext._jvm.SparkContext.get()
-            if jSparkContextOption.nonEmpty():
-                jSparkContextOption.get().stop()
-        except:
-            pass
-
-    def setUp(self):
-        self.ssc = StreamingContext(self.sc, self.duration)
-
-    def tearDown(self):
-        if self.ssc is not None:
-            self.ssc.stop(False)
-        # Clean up in the JVM just in case there has been some issues in Python API
-        try:
-            jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
-            if jStreamingContextOption.nonEmpty():
-                jStreamingContextOption.get().stop(False)
-        except:
-            pass
-
-    def wait_for(self, result, n):
-        start_time = time.time()
-        while len(result) < n and time.time() - start_time < self.timeout:
-            time.sleep(0.01)
-        if len(result) < n:
-            print("timeout after", self.timeout)
-
-    def _take(self, dstream, n):
-        """
-        Return the first `n` elements in the stream (will start and stop).
-        """
-        results = []
-
-        def take(_, rdd):
-            if rdd and len(results) < n:
-                results.extend(rdd.take(n - len(results)))
-
-        dstream.foreachRDD(take)
-
-        self.ssc.start()
-        self.wait_for(results, n)
-        return results
-
-    def _collect(self, dstream, n, block=True):
-        """
-        Collect each RDDs into the returned list.
-
-        :return: list, which will have the collected items.
-        """
-        result = []
-
-        def get_output(_, rdd):
-            if rdd and len(result) < n:
-                r = rdd.collect()
-                if r:
-                    result.append(r)
-
-        dstream.foreachRDD(get_output)
-
-        if not block:
-            return result
-
-        self.ssc.start()
-        self.wait_for(result, n)
-        return result
-
-    def _test_func(self, input, func, expected, sort=False, input2=None):
-        """
-        @param input: dataset for the test. This should be list of lists.
-        @param func: wrapped function. This function should return PythonDStream object.
-        @param expected: expected output for this testcase.
-        """
-        if not isinstance(input[0], RDD):
-            input = [self.sc.parallelize(d, 1) for d in input]
-        input_stream = self.ssc.queueStream(input)
-        if input2 and not isinstance(input2[0], RDD):
-            input2 = [self.sc.parallelize(d, 1) for d in input2]
-        input_stream2 = self.ssc.queueStream(input2) if input2 is not None else None
-
-        # Apply test function to stream.
-        if input2:
-            stream = func(input_stream, input_stream2)
-        else:
-            stream = func(input_stream)
-
-        result = self._collect(stream, len(expected))
-        if sort:
-            self._sort_result_based_on_key(result)
-            self._sort_result_based_on_key(expected)
-        self.assertEqual(expected, result)
-
-    def _sort_result_based_on_key(self, outputs):
-        """Sort the list based on first value."""
-        for output in outputs:
-            output.sort(key=lambda x: x[0])
-=======
 from pyspark import SparkConf, SparkContext, RDD
 from pyspark.streaming import StreamingContext
 from pyspark.testing.streamingutils import PySparkStreamingTestCase
->>>>>>> 87bd9c75df:python/pyspark/streaming/tests/test_dstream.py
 
 
 class BasicOperationTests(PySparkStreamingTestCase):
@@ -769,53 +631,6 @@ class CheckpointTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-<<<<<<< HEAD:python/pyspark/streaming/tests.py
-    from pyspark.streaming.tests import *
-    kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
-
-    if kinesis_asl_assembly_jar is None:
-        kinesis_jar_present = False
-        jars_args = ""
-    else:
-        kinesis_jar_present = True
-        jars_args = "--jars %s" % kinesis_asl_assembly_jar
-
-    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
-    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
-    testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
-                 StreamingListenerTests]
-
-    if kinesis_jar_present is True:
-        testcases.append(KinesisStreamTests)
-    elif are_kinesis_tests_enabled is False:
-        sys.stderr.write("Skipping all Kinesis Python tests as the optional Kinesis project was "
-                         "not compiled into a JAR. To run these tests, "
-                         "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "
-                         "streaming-kinesis-asl-assembly/assembly' or "
-                         "'build/mvn -Pkinesis-asl package' before running this test.")
-    else:
-        raise Exception(
-            ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
-             % _kinesis_asl_assembly_dir()) +
-            "You need to build Spark with 'build/sbt -Pkinesis-asl "
-            "assembly/package streaming-kinesis-asl-assembly/assembly'"
-            "or 'build/mvn -Pkinesis-asl package' before running this test.")
-
-    sys.stderr.write("Running tests: %s \n" % (str(testcases)))
-    failed = False
-    for testcase in testcases:
-        sys.stderr.write("[Running %s]\n" % (testcase))
-        tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
-        runner = unishark.BufferedTestRunner(
-            verbosity=2,
-            reporters=[unishark.XUnitReporter('target/test-reports/pyspark.streaming_{}'.format(
-                os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
-
-        result = runner.run(tests)
-        if not result.wasSuccessful():
-            failed = True
-    sys.exit(failed)
-=======
     from pyspark.streaming.tests.test_dstream import *
 
     try:
@@ -823,4 +638,3 @@ if __name__ == "__main__":
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     except ImportError:
         unittest.main(verbosity=2)
->>>>>>> 87bd9c75df:python/pyspark/streaming/tests/test_dstream.py

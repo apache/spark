@@ -46,7 +46,7 @@ class ArrowTests(ReusedSQLTestCase):
 
         # Synchronize default timezone between Python and Java
         cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
+        tz = "UTC"
         os.environ["TZ"] = tz
         time.tzset()
 
@@ -232,7 +232,7 @@ class ArrowTests(ReusedSQLTestCase):
             self.assertNotEqual(result_ny, result_la)
 
             # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
-            result_la_corrected = [Row(**{k: v - timedelta(hours=3) if k == '8_timestamp_t' else v
+            result_la_corrected = [Row(**{k: v + timedelta(hours=5) if k == '8_timestamp_t' else v
                                           for k, v in row.asDict().items()})
                                    for row in result_la]
             self.assertEqual(result_ny, result_la_corrected)

@@ -227,7 +227,12 @@ object MimaExcludes {
     // [SPARK-26141] Enable custom metrics implementation in shuffle write
     // Following are Java private classes
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.sort.UnsafeShuffleWriter.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.TimeTrackingOutputStream.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.TimeTrackingOutputStream.this"),
+
+    // SafeLogging after MimaUpgrade
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkContext.initializeLogIfNecessary$default$2"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkContext.initializeLogIfNecessary$default$2"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.broadcast.Broadcast.initializeLogIfNecessary$default$2")
   )
 
   // Exclude rules for 2.4.x

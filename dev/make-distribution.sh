@@ -173,7 +173,7 @@ fi
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
 if [[ -z "$DONT_BUILD" ]]; then
-  BUILD_COMMAND=("$MVN" -T 1C $MAYBE_CLEAN package -DskipTests $@)
+  BUILD_COMMAND=("$MVN" $MAYBE_CLEAN package -DskipTests $@)
 
   # Actually build the jar
   echo -e "\nBuilding with..."

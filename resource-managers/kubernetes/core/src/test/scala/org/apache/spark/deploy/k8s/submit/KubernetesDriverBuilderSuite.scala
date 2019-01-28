@@ -189,6 +189,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,
@@ -202,6 +203,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
+      LOCAL_FILES_STEP_TYPE,
       MOUNT_VOLUMES_STEP_TYPE,
       DRIVER_CMD_STEP_TYPE)
   }

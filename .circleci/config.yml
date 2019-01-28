@@ -2,7 +2,7 @@ version: 2
 
 defaults: &defaults
   docker:
-    - image: palantirtechnologies/circle-spark-base:0.1.0
+    - image: palantirtechnologies/circle-spark-base:0.1.3
   resource_class: xlarge
   environment: &defaults-environment
     TERM: dumb
@@ -128,7 +128,7 @@ jobs:
     <<: *defaults
     # Some part of the maven setup fails if there's no R, so we need to use the R image here
     docker:
-      - image: palantirtechnologies/circle-spark-r:0.1.0
+      - image: palantirtechnologies/circle-spark-r:0.1.3
     steps:
       # Saves us from recompiling every time...
       - restore_cache:
@@ -147,12 +147,7 @@ jobs:
           keys:
             - build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
             - build-binaries-
-      - run: |
-          ./build/mvn -T1C -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Psparkr install \
-            | tee -a "/tmp/mvn-install.log"
-      - store_artifacts:
-          path: /tmp/mvn-install.log
-          destination: mvn-install.log
+      - run: ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Psparkr install
       # Get sbt to run trivially, ensures its launcher is downloaded under build/
       - run: ./build/sbt -h || true
       - save_cache:
@@ -300,7 +295,7 @@ jobs:
     # depends on build-sbt, but we only need the assembly jars
     <<: *defaults
     docker:
-      - image: palantirtechnologies/circle-spark-python:0.1.0
+      - image: palantirtechnologies/circle-spark-python:0.1.3
     parallelism: 2
     steps:
       - *checkout-code
@@ -325,7 +320,7 @@ jobs:
     # depends on build-sbt, but we only need the assembly jars
     <<: *defaults
     docker:
-      - image: palantirtechnologies/circle-spark-r:0.1.0
+      - image: palantirtechnologies/circle-spark-r:0.1.3
     steps:
       - *checkout-code
       - attach_workspace:
@@ -438,7 +433,7 @@ jobs:
     <<: *defaults
     # Some part of the maven setup fails if there's no R, so we need to use the R image here
     docker:
-      - image: palantirtechnologies/circle-spark-r:0.1.0
+      - image: palantirtechnologies/circle-spark-r:0.1.3
     steps:
       - *checkout-code
       - restore_cache:
@@ -458,7 +453,7 @@ jobs:
   deploy-gradle:
     <<: *defaults
     docker:
-      - image: palantirtechnologies/circle-spark-r:0.1.0
+      - image: palantirtechnologies/circle-spark-r:0.1.3
     steps:
       - *checkout-code
       - *restore-gradle-wrapper-cache
@@ -470,7 +465,7 @@ jobs:
     <<: *defaults
     # Some part of the maven setup fails if there's no R, so we need to use the R image here
     docker:
-      - image: palantirtechnologies/circle-spark-r:0.1.0
+      - image: palantirtechnologies/circle-spark-r:0.1.3
     steps:
       # This cache contains the whole project after version was set and mvn package was called
       # Restoring first (and instead of checkout) as mvn versions:set mutates real source code...

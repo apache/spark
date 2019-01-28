@@ -85,7 +85,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.collect().toSeq)
   }
 
-<<<<<<< HEAD
   test("union all") {
     val unionDF = testData.union(testData).union(testData)
       .union(testData).union(testData)
@@ -209,8 +208,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-=======
->>>>>>> 87bd9c75df
   test("empty data frame") {
     assert(spark.emptyDataFrame.columns.toSeq === Seq.empty[String])
     assert(spark.emptyDataFrame.count() === 0)
