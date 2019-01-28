@@ -692,9 +692,12 @@ private[spark] class DAGScheduler(
     }
 
     val jobId = nextJobId.getAndIncrement()
+    val startTime = clock.getTimeMillis()
     if (partitions.size == 0) {
       listenerBus.post(
-        SparkListenerJobStart(jobId, clock.getTimeMillis(), Seq[StageInfo](), properties))
+        SparkListenerJobStart(jobId, startTime, Seq[StageInfo](), properties))
+      listenerBus.post(
+        SparkListenerJobEnd(jobId, startTime, JobSucceeded))
       // Return immediately if the job is running 0 tasks
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
@@ -743,13 +746,6 @@ private[spark] class DAGScheduler(
         val callerStackTrace = Thread.currentThread().getStackTrace.tail
         exception.setStackTrace(exception.getStackTrace ++ callerStackTrace)
         throw exception
-    }
-
-    // [SPARK-26714] If the job runs 0 tasks, we can post a SparkListenerJobEnd
-    // event for ui.
-    if (partitions.isEmpty) {
-      listenerBus.post(
-        SparkListenerJobEnd(waiter.jobId, clock.getTimeMillis(), JobSucceeded))
     }
   }
 
