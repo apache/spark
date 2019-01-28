@@ -3235,6 +3235,34 @@ object functions {
   }
 
   /**
+   * Locates the positions of all the occurrences of the value in the given array as an array
+   * of longs. Returns null if either of the arguments are null.
+   *
+   * @note The position is not zero based, but 1 based index. Returns an empty array if value
+   * could not be found in the array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def array_allpositions(column: Column, value: Any): Column = withExpr {
+    ArrayAllPositions(column.expr, lit(value).expr)
+  }
+
+  /**
+   * Selects elements from `array` corresponding to indexes from `idsArray`.
+   *
+   * If `ignoreOutOfIndex` is set to `true`, null values are returned for the elements whose indexes
+   * are out of bounds. An exception is thrown otherwise.
+   *
+   * @note The indexes are 1 based.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def array_select(array: Column, idsArray: Column, ignoreOutOfIndex: Boolean = true): Column =
+    withExpr { ArraySelect(array.expr, idsArray.expr, ignoreOutOfIndex) }
+
+  /**
    * Returns element of array at given index in value if column is array. Returns value for
    * the given key in value if column is map.
    *

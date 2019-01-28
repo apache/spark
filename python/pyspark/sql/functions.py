@@ -1975,6 +1975,23 @@ def array_position(col, value):
     return Column(sc._jvm.functions.array_position(_to_java_column(col), value))
 
 
+@since(3.0)
+def array_allpositions(col, value):
+    """
+    Collection function: Locates the positions of all the occurrences of the value in the given
+    array as an array of longs. Returns null if either of the arguments are null.
+
+    .. note:: The position is not zero based, but 1 based index. Returns an empty array if value
+        could not be found in the array.
+
+    >>> df = spark.createDataFrame([(["a", "b", "a"],), ([],)], ['data'])
+    >>> df.select(array_allpositions(df.data, "a")).collect()
+    [Row(array_allpositions(data, a)=[1, 3]), Row(array_allpositions(data, a)=[])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_allpositions(_to_java_column(col), value))
+
+
 @ignore_unicode_prefix
 @since(2.4)
 def element_at(col, extraction):
@@ -2013,6 +2030,28 @@ def array_remove(col, element):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
+
+
+@ignore_unicode_prefix
+@since(3.0)
+def array_select(col, indexes, ignore_out_of_bounds=True):
+    """
+    Collection function: Selects elements from an array column corresponding to indexes
+    from `indexes` array. If `ignore_out_of_bounds` is set to `True`, null values are
+    returned for out of bounds indexes are out of bounds. An exception is thrown otherwise.
+
+    :param col: name of column containing an array
+    :param indexes: array column containing indexes to check for in array
+
+    .. note:: Indexes are 1 based.
+
+    >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
+    >>> df.select(array_select(df.data, [1, 3])).collect()
+    [Row(array_select(data, [1, 3])=["a", "c"]), Row(array_select(data, [1, 3])=[])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_select(_to_java_column(col),
+        _to_java_column(indexes), ignore_out_of_bounds))
 
 
 @since(2.4)
