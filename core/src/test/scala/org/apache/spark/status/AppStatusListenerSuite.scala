@@ -938,6 +938,24 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     intercept[NoSuchElementException] {
       check[StreamBlockData](stream1.name) { _ => () }
     }
+
+    // Update a BroadcastBlock.
+    val broadcast1 = BroadcastBlockId(1L)
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, broadcast1, level, 1L, 1L)))
+
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.memoryUsed === 1L)
+      assert(exec.info.diskUsed === 1L)
+    }
+
+    // Drop a BroadcastBlock.
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, broadcast1, StorageLevel.NONE, 1L, 1L)))
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.memoryUsed === 0)
+      assert(exec.info.diskUsed === 0)
+    }
   }
 
   test("eviction of old data") {

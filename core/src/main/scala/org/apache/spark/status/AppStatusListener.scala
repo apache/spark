@@ -996,7 +996,9 @@ private[spark] class AppStatusListener(
     }
   }
 
-  def updateBroadcastBlock(event: SparkListenerBlockUpdated, broadcast: BroadcastBlockId): Unit = {
+  private def updateBroadcastBlock(event: SparkListenerBlockUpdated,
+     broadcast: BroadcastBlockId): Unit = {
+    val now = System.nanoTime()
     val executorId = event.blockUpdatedInfo.blockManagerId.executorId
     val storageLevel = event.blockUpdatedInfo.storageLevel
 
@@ -1007,7 +1009,8 @@ private[spark] class AppStatusListener(
     // Function to apply a delta to a value, but ensure that it doesn't go negative.
     def newValue(old: Long, delta: Long): Long = math.max(0, old + delta)
 
-    liveExecutors.get(executorId).foreach { exec =>
+    val maybeExec = liveExecutors.get(executorId)
+    maybeExec.foreach { exec =>
       if (exec.hasMemoryInfo) {
         if (storageLevel.useOffHeap) {
           exec.usedOffHeap = newValue(exec.usedOffHeap, memoryDelta)
@@ -1017,6 +1020,7 @@ private[spark] class AppStatusListener(
       }
       exec.memoryUsed = newValue(exec.memoryUsed, memoryDelta)
       exec.diskUsed = newValue(exec.diskUsed, diskDelta)
+      maybeUpdate(exec, now)
     }
   }
 
