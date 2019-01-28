@@ -204,8 +204,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       StopStream)
   }
 
-  test("Rate limit set to Long.Max should not overflow integer " +
-    "during end offset calculation[SPARK-26718]") {
+  test("SPARK-26718 Rate limit set to Long.Max should not overflow integer " +
+    "during end offset calculation") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
     // fill in 5000 messages to trigger potential integer overflow
