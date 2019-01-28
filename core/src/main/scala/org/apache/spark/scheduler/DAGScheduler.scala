@@ -1162,7 +1162,7 @@ private[spark] class DAGScheduler(
         partitions = stage.rdd.partitions
       }
 
-      if (taskBinaryBytes.length * 1000 > TaskSetManager.TASK_SIZE_TO_WARN_KB) {
+      if (taskBinaryBytes.length > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024) {
         logWarning(s"Broadcasting large task binary with size " +
           s"${Utils.bytesToString(taskBinaryBytes.length)}")
       }
