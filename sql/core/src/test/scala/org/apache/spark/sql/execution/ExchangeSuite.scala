@@ -138,11 +138,11 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
 
   test("SPARK-26601: Make broadcast-exchange thread pool configurable") {
     val previousNumber = SparkSession.getActiveSession.get.sparkContext.conf
-      .get(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER)
+      .get(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD)
 
     SparkSession.getActiveSession.get.sparkContext.conf.
-      set(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER, 1)
-    assert(SQLConf.get.getConf(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER) === 1)
+      set(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD, 1)
+    assert(SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD) === 1)
 
     Future {
       Thread.sleep(5*1000)
@@ -162,6 +162,6 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
 
     // for other test
     SparkSession.getActiveSession.get.sparkContext.conf.
-      set(StaticSQLConf.MAX_BROADCAST_EXCHANGE_THREADNUMBER, previousNumber)
+      set(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD, previousNumber)
   }
 }
