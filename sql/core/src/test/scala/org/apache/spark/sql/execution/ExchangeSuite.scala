@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.execution
 
+
+import scala.concurrent.{TimeoutException, Future}
+import scala.concurrent.duration._
 import scala.util.Random
 
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.ThreadUtils
 
 class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits._
@@ -131,5 +135,34 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val projection1 = cached.select("_1", "_2").queryExecution.executedPlan
     val projection2 = cached.select("_1", "_3").queryExecution.executedPlan
     assert(!projection1.sameResult(projection2))
+  }
+
+  test("SPARK-26601: Make broadcast-exchange thread pool configurable") {
+    val previousNumber = SparkSession.getActiveSession.get.sparkContext.conf
+      .get(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD)
+
+    SparkSession.getActiveSession.get.sparkContext.conf.
+      set(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD, 1)
+    assert(SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD) === 1)
+
+    Future {
+      Thread.sleep(5*1000)
+    } (BroadcastExchangeExec.executionContext)
+
+    val f = Future {} (BroadcastExchangeExec.executionContext)
+    intercept[TimeoutException] {
+      ThreadUtils.awaitResult(f, 3 seconds)
+    }
+
+    var executed = false
+    val ef = Future {
+      executed = true
+    } (BroadcastExchangeExec.executionContext)
+    ThreadUtils.awaitResult(ef, 3 seconds)
+    assert(executed)
+
+    // for other test
+    SparkSession.getActiveSession.get.sparkContext.conf.
+      set(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD, previousNumber)
   }
 }
