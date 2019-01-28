@@ -58,23 +58,14 @@ private[spark] object YarnContainerInfoHelper extends Logging {
       container: Option[Container]): Option[Map[String, String]] = {
     try {
       val yarnConf = new YarnConfiguration(conf)
-
-      val clusterId = getClusterId(yarnConf)
-      val containerId = getContainerId(container)
-      val host = getNodeManagerHost
-      val port = getNodeManagerPort
-      val httpPort = getNodeManagerHttpPort
-      val user = Utils.getCurrentUserName()
-      val httpScheme = getYarnHttpScheme(yarnConf)
-
       Some(Map(
-        "HTTP_SCHEME" -> httpScheme,
-        "NODE_HOST" -> host,
-        "NODE_PORT" -> port.toString,
-        "NODE_HTTP_PORT" -> httpPort.toString,
-        "CLUSTER_ID" -> clusterId.getOrElse(""),
-        "CONTAINER_ID" -> ConverterUtils.toString(containerId),
-        "USER" -> user,
+        "HTTP_SCHEME" -> getYarnHttpScheme(yarnConf),
+        "NM_HOST" -> getNodeManagerHost,
+        "NM_PORT" -> getNodeManagerPort.toString,
+        "NM_HTTP_PORT" -> getNodeManagerHttpPort.toString,
+        "CLUSTER_ID" -> getClusterId(yarnConf).getOrElse(""),
+        "CONTAINER_ID" -> ConverterUtils.toString(getContainerId(container)),
+        "USER" -> Utils.getCurrentUserName(),
         "LOG_FILES" -> "stderr,stdout"
       ))
     } catch {

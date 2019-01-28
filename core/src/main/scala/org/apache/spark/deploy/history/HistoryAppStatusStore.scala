@@ -110,7 +110,7 @@ private[spark] class HistoryAppStatusStore(
       allAttributes: Set[String]): Unit = {
     if (informedForMissingAttributes.compareAndSet(false, true)) {
       logInfo(s"Fail to renew executor log urls: $reason. Required: $allPatterns / " +
-        s"available: $allAttributes. Failing back to show app's original log urls.")
+        s"available: $allAttributes. Falling back to show app's original log urls.")
     }
   }
 
