@@ -724,7 +724,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Mark the task as available for speculation, and then offer another resource,
     // which should be used to launch a speculative copy of the task.
-    manager.speculatableTasks += singleTask.partitionId
+    manager.addPendingSpeculativeTask(singleTask.partitionId)
     val task2 = manager.resourceOffer("execB", "host2", TaskLocality.ANY).get
 
     assert(manager.runningTasks === 2)
@@ -869,7 +869,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index == 1)
 
-    manager.speculatableTasks += 1
+    manager.addPendingSpeculativeTask(1)
     clock.advance(LOCALITY_WAIT_MS)
     // schedule the nonPref task
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 2)
@@ -1151,7 +1151,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
     // killed, so the FakeTaskScheduler is only told about the successful completion
     // of the speculated task.
-    assert(sched.endedTasks(3) === Success)
+    assert(sched.endedTasks(4) === Success)
     // also because the scheduler is a mock, our manager isn't notified about the task killed event,
     // so we do that manually
     manager.handleFailedTask(origTask.taskId, TaskState.KILLED, TaskKilled("test"))
