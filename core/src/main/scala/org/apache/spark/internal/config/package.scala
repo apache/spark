@@ -642,7 +642,7 @@ package object config {
       // extra room.
       .checkValue(
         _ <= Int.MaxValue - 512,
-        "maxRemoteBlockSizeFetchToMem must be less than (Int.MaxValue - 512) bytes.")
+        "maxRemoteBlockSizeFetchToMem cannot be larger than (Int.MaxValue - 512) bytes.")
       .createWithDefaultString("200m")
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
