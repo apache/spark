@@ -483,7 +483,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.upperBoundsOnIntercepts)
 
 
-class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable,
+                              HasTrainingSummary):
     """
     Model fitted by LogisticRegression.
 
@@ -532,23 +533,13 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            java_lrt_summary = self._call_java("summary")
             if self.numClasses <= 2:
-                return BinaryLogisticRegressionTrainingSummary(java_lrt_summary)
+                return BinaryLogisticRegressionTrainingSummary(super().summary)
             else:
-                return LogisticRegressionTrainingSummary(java_lrt_summary)
+                return LogisticRegressionTrainingSummary(super().summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
-
-    @property
-    @since("2.0.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model
-        instance.
-        """
-        return self._call_java("hasSummary")
 
     @since("2.0.0")
     def evaluate(self, dataset):

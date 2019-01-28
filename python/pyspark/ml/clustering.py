@@ -97,7 +97,7 @@ class ClusteringSummary(JavaWrapper):
         return self._call_java("numIter")
 
 
-class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by GaussianMixture.
 
@@ -126,22 +126,13 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model
-        instance.
-        """
-        return self._call_java("hasSummary")
-
-    @property
-    @since("2.1.0")
     def summary(self):
         """
         Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return GaussianMixtureSummary(self._call_java("summary"))
+            return GaussianMixtureSummary(super().summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -323,7 +314,7 @@ class KMeansSummary(ClusteringSummary):
         return self._call_java("trainingCost")
 
 
-class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable):
+class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by KMeans.
 
@@ -337,21 +328,13 @@ class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model instance.
-        """
-        return self._call_java("hasSummary")
-
-    @property
-    @since("2.1.0")
     def summary(self):
         """
         Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return KMeansSummary(self._call_java("summary"))
+            return KMeansSummary(super().summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -507,7 +490,7 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
         return self.getOrDefault(self.distanceMeasure)
 
 
-class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by BisectingKMeans.
 
@@ -536,21 +519,13 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model instance.
-        """
-        return self._call_java("hasSummary")
-
-    @property
-    @since("2.1.0")
     def summary(self):
         """
         Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return BisectingKMeansSummary(self._call_java("summary"))
+            return BisectingKMeansSummary(super().summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
