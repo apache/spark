@@ -59,12 +59,15 @@ object JSONBenchmark extends SqlBasedBenchmark {
         .json(path.getAbsolutePath)
 
       benchmark.addCase("No encoding", numIters) { _ =>
-        spark.read.json(path.getAbsolutePath)
+        spark.read
+          .option("inferTimestamp", false)
+          .json(path.getAbsolutePath)
       }
 
       benchmark.addCase("UTF-8 is set", numIters) { _ =>
         spark.read
           .option("encoding", "UTF-8")
+          .option("inferTimestamp", false)
           .json(path.getAbsolutePath)
       }
 
