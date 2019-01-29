@@ -436,7 +436,6 @@ def post_python_tests_results():
 
         # Remove existing reports
         ["rm", "-fr", "pyspark-coverage-site/*"],
-        ["ls", "-al", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME],
 
         # Copy generated coverage HTML.
         ["cp", "-r", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME, "pyspark-coverage-site/"],
