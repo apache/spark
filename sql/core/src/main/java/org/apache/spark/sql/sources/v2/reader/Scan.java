@@ -67,7 +67,7 @@ public interface Scan {
    * @throws UnsupportedOperationException
    */
   default Batch toBatch() {
-    throw new UnsupportedOperationException("Batch scans are not supported");
+    throw new UnsupportedOperationException(description() + ": Batch scan are not supported");
   }
 
   /**
@@ -83,7 +83,7 @@ public interface Scan {
    * @throws UnsupportedOperationException
    */
   default MicroBatchStream toMicroBatchStream(String checkpointLocation) {
-    throw new UnsupportedOperationException("Micro-batch scans are not supported");
+    throw new UnsupportedOperationException(description() + ": Micro-batch scan are not supported");
   }
 
   /**
@@ -99,6 +99,6 @@ public interface Scan {
    * @throws UnsupportedOperationException
    */
   default ContinuousStream toContinuousStream(String checkpointLocation) {
-    throw new UnsupportedOperationException("Continuous scans are not supported");
+    throw new UnsupportedOperationException(description() + ": Continuous scan are not supported");
   }
 }
