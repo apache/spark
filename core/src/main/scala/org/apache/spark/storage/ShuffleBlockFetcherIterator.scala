@@ -194,7 +194,7 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
    */
-  def cleanup() {
+  private[storage] def cleanup() {
     synchronized {
       isZombie = true
     }
