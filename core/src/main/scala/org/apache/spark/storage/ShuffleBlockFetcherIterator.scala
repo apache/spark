@@ -223,7 +223,7 @@ final class ShuffleBlockFetcherIterator(
     }
     // Null out the referent in cleanup listener to make sure we don't keep a reference
     // to this ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
-    // collected during GC. Otherwise we can metadata on block locations
+    // collected during GC. Otherwise we can metadata on block locations(blocksByAddress)
     cleanupListener.data = null
   }
 
