@@ -626,11 +626,7 @@ def main():
     if modules_with_python_tests:
         # We only run PySpark tests with coverage report in one specific job with
         # Spark master with SBT in Jenkins.
-        is_sbt_master_job = (
-            os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "") == "hadoop2.7"
-            and os.environ.get("SPARK_BRANCH", "") == "master"
-            and os.environ.get("AMPLAB_JENKINS", "") == "true"
-            and os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "") == "sbt")
+        is_sbt_master_job = "SPARK_MATER_SBT_HADOOP_2_7" in os.environ
         is_sbt_master_job = True  # Will remove this right before getting merged.
         run_python_tests(
             modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
