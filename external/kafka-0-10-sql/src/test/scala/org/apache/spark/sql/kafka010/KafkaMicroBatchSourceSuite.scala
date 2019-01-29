@@ -1093,7 +1093,6 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     intercept[IllegalArgumentException] { test(minPartitions = "-1", 1, true) }
   }
 
-
 }
 
 abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
