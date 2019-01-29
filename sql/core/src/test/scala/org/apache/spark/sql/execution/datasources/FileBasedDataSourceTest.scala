@@ -27,15 +27,16 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
 
+  // Defines the data source name to run the test.
   protected val dataSourceName: String
+  // The SQL config key for enabling vectorized reader.
   protected val vectorizedReaderEnabledKey: String
 
   /**
    * Reads data source file from given `path` as `DataFrame` and passes it to given function.
    *
    * @param path           The path to file
-   * @param testVectorized Whether to read the file with vectorized reader. If the data source
-   *                       doesn't support vectorized reader, this is no op.
+   * @param testVectorized Whether to read the file with vectorized reader.
    * @param f              The given function that takes a `DataFrame` as input.
    */
   protected def readFile(path: String, testVectorized: Boolean = true)
