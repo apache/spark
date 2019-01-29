@@ -620,6 +620,10 @@ private class BufferReleasingInputStream(
   override def reset(): Unit = delegate.reset()
 }
 
+/**
+ * A listener to be called at the completion of the ShuffleBlockFetcherIterator
+ * @param data the ShuffleBlockFetcherIterator to process
+ */
 private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterator)
   extends TaskCompletionListener {
 
