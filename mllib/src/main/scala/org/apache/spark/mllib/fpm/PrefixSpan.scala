@@ -179,7 +179,7 @@ class PrefixSpan private (
       freqSequences.persist(data.getStorageLevel)
       freqSequences.count()
     }
-    dataInternalRepr.unpersist(false)
+    dataInternalRepr.unpersist()
 
     new PrefixSpanModel(freqSequences)
   }

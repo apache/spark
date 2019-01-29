@@ -275,7 +275,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       state.x.toArray.clone()
     }
 
-    bcFeaturesStd.destroy(blocking = false)
+    bcFeaturesStd.destroy()
     if (handlePersistence) instances.unpersist()
 
     val rawCoefficients = parameters.slice(2, parameters.length)
@@ -633,7 +633,7 @@ private class AFTCostFun(
         case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
       }, depth = aggregationDepth)
 
-    bcParameters.destroy(blocking = false)
+    bcParameters.destroy()
     (aftAggregator.loss, aftAggregator.gradient)
   }
 }

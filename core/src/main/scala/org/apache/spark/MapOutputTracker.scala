@@ -201,7 +201,7 @@ private class ShuffleStatus(numPartitions: Int) {
       Utils.tryLogNonFatalError {
         // Use `blocking = false` so that this operation doesn't hang while trying to send cleanup
         // RPCs to dead executors.
-        cachedSerializedBroadcast.destroy(blocking = false)
+        cachedSerializedBroadcast.destroy()
       }
       cachedSerializedBroadcast = null
     }

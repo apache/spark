@@ -318,9 +318,9 @@ class Word2Vec extends Serializable with Logging {
     try {
       doFit(dataset, sc, expTable, bcVocab, bcVocabHash)
     } finally {
-      expTable.destroy(blocking = false)
-      bcVocab.destroy(blocking = false)
-      bcVocabHash.destroy(blocking = false)
+      expTable.destroy()
+      bcVocab.destroy()
+      bcVocabHash.destroy()
     }
   }
 
@@ -450,8 +450,8 @@ class Word2Vec extends Serializable with Logging {
         }
         i += 1
       }
-      bcSyn0Global.destroy(false)
-      bcSyn1Global.destroy(false)
+      bcSyn0Global.destroy()
+      bcSyn1Global.destroy()
     }
     newSentences.unpersist()
 

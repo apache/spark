@@ -65,7 +65,7 @@ private[ml] class RDDLossFunction[
       BLAS.axpy(1.0, regGradient, gradient)
       regLoss
     }.getOrElse(0.0)
-    bcCoefficients.destroy(blocking = false)
+    bcCoefficients.destroy()
     (newAgg.loss + regLoss, gradient.asBreeze.toDenseVector)
   }
 }

@@ -163,8 +163,7 @@ class Broadcast(object):
         """
         Destroy all data and metadata related to this broadcast variable.
         Use this with caution; once a broadcast variable has been destroyed,
-        it cannot be used again. This method blocks until destroy has
-        completed.
+        it cannot be used again.
         """
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be destroyed in driver")
