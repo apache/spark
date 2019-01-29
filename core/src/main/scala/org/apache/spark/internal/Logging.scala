@@ -204,26 +204,7 @@ private[spark] object Logging {
       } else {
         val rootLogger = LogManager.getRootLogger()
         rootLogger.setLevel(defaultRootLevel)
-        rootLogger.getAllAppenders().asScala.foreach {
-          case ca: ConsoleAppender =>
-            // SparkShellLoggingFilter is the last filter
-            ca.getFirstFilter() match {
-              case ssf: SparkShellLoggingFilter =>
-                ca.clearFilters()
-              case f: Filter =>
-                var previous = f
-                var current = previous.getNext()
-                while (current != null && !current.isInstanceOf[SparkShellLoggingFilter]) {
-                  previous = current;
-                  current = previous.getNext()
-                }
-                if (current != null) {
-                  previous.setNext(current.getNext())
-                }
-              case _ => // no-op
-            }
-          case _ => // no-op
-        }
+        sparkShellThresholdLevel = null
       }
     }
     this.initialized = false
@@ -242,19 +223,17 @@ private class SparkShellLoggingFilter() extends Filter {
 
   /**
    * If sparkShellThresholdLevel is not defined, this filter is a no-op.
-   * If log level of event is lower than thresholdLevel, then the decision is made based on
-   * whether the log came from root or some custom configuration
+   * If log level of event is not equal to root level, the event is allowed. Otherwise,
+   * the decision is made based on whether the log came from root or some custom configuration
    * @param loggingEvent
    * @return decision for accept/deny log event
    */
   def decide(loggingEvent: LoggingEvent): Int = {
-    val thresholdLevel = Logging.sparkShellThresholdLevel
-    if (thresholdLevel == null) {
+    if (Logging.sparkShellThresholdLevel == null) {
       return Filter.NEUTRAL
     }
     val rootLevel = LogManager.getRootLogger().getLevel()
-    if (loggingEvent.getLevel().isGreaterOrEqual(thresholdLevel) ||
-      !loggingEvent.getLevel().eq(rootLevel)) {
+    if (!loggingEvent.getLevel().eq(rootLevel)) {
       return Filter.NEUTRAL
     }
     var logger = loggingEvent.getLogger()

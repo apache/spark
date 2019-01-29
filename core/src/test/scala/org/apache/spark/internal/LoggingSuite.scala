@@ -30,6 +30,7 @@ class LoggingSuite extends SparkFunSuite {
     val rootLogger = Logger.getRootLogger()
     val originalLevel = rootLogger.getLevel()
     rootLogger.setLevel(Level.INFO)
+    val originalThreshold = Logging.sparkShellThresholdLevel
     Logging.sparkShellThresholdLevel = Level.WARN
     try {
       val logger = Logger.getLogger("a.b.c.D")
@@ -52,6 +53,7 @@ class LoggingSuite extends SparkFunSuite {
       assert(ssf.decide(logEvent2) != Filter.DENY)
     } finally {
       rootLogger.setLevel(originalLevel)
+      Logging.sparkShellThresholdLevel = originalThreshold
     }
   }
 }
