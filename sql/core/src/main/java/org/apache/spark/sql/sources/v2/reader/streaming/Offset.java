@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * An abstract representation of progress through a {@link MicroBatchStream} or
- * {@link ContinuousReadSupport}.
+ * {@link ContinuousStream}.
  * During execution, offsets provided by the data source implementation will be logged and used as
  * restart checkpoints. Each source should provide an offset implementation which the source can use
  * to reconstruct a position in the stream up to which data has been seen/processed.

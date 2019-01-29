@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, ScanConfig}
+import org.apache.spark.sql.sources.v2.reader.InputPartition
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
@@ -911,7 +911,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
     testStream(df, useV2Sink = true)(
       StartStream(trigger = Trigger.Continuous(100)),
-      AssertOnQuery(_.logicalPlan.toJSON.contains("ContinuousExecutionRelation"))
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
   }
 

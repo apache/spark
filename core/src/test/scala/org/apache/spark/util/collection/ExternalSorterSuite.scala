@@ -639,7 +639,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   test("force to spill for external sorter") {
     val conf = createSparkConf(loadDefaults = false, kryo = false)
-      .set("spark.memory.storageFraction", "0.999")
+      .set(MEMORY_STORAGE_FRACTION, 0.999)
       .set(TEST_MEMORY, 471859200L)
       .set(SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD, 0)
     sc = new SparkContext("local", "test", conf)

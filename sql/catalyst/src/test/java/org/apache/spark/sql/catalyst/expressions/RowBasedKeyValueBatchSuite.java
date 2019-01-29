@@ -105,7 +105,7 @@ public class RowBasedKeyValueBatchSuite {
   @Before
   public void setup() {
     memoryManager = new TestMemoryManager(new SparkConf()
-            .set("spark.memory.offHeap.enabled", "false")
+            .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)
             .set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false)
             .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);

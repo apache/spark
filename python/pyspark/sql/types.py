@@ -1688,7 +1688,10 @@ def _check_series_convert_date(series, data_type):
     :param series: pandas.Series
     :param data_type: a Spark data type for the series
     """
-    if type(data_type) == DateType:
+    import pyarrow
+    from distutils.version import LooseVersion
+    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
+    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0") and type(data_type) == DateType:
         return series.dt.date
     else:
         return series
@@ -1703,8 +1706,12 @@ def _check_dataframe_convert_date(pdf, schema):
     :param pdf: pandas.DataFrame
     :param schema: a Spark schema of the pandas.DataFrame
     """
-    for field in schema:
-        pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
+    import pyarrow
+    from distutils.version import LooseVersion
+    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
+    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0"):
+        for field in schema:
+            pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
     return pdf
 
 
