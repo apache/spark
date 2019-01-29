@@ -25,6 +25,11 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.test.SQLTestUtils
 
+/**
+ * A helper trait that provides convenient facilities for file-based data source testing.
+ * Specifically, it is used for Parquet and Orc testing. It can be used to write tests
+ * that are shared between Parquet and Orc.
+ */
 private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
 
   // Defines the data source name to run the test.
