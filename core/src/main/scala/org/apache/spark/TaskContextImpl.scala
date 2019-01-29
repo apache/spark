@@ -87,14 +87,6 @@ private[spark] class TaskContextImpl(
     }
     this
   }
-  @GuardedBy("this")
-  override def removeTaskCompletionListener(listener: TaskCompletionListener)
-      : this.type = synchronized {
-    if (!completed) {
-      onCompleteCallbacks -= listener
-    }
-    this
-  }
 
   @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener)

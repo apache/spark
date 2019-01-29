@@ -31,7 +31,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
-import org.apache.spark.util.{TaskCompletionListener, Utils}
+import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
@@ -160,7 +160,7 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
-  private[this] var cleanupListener: TaskCompletionListener = _
+  private[this] var cleanupListener: ShuffleFetchCompletionListener = _
 
   initialize()
 
@@ -221,9 +221,10 @@ final class ShuffleBlockFetcherIterator(
         logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
       }
     }
-    // Unregister completion callbacks to avoid memory leak for ShuffleBlockFetcherIterator
-    // contains lots of metadata about MapStatus
-    context.removeTaskCompletionListener(cleanupListener)
+    // Null out the referent in cleanup listener to make sure we don't keep a reference
+    // to this ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
+    // collected during GC. Otherwise we can metadata on block locations
+    cleanupListener.data = null
   }
 
   private[this] def sendRequest(req: FetchRequest) {
@@ -369,7 +370,7 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    cleanupListener = _ => cleanup()
+    cleanupListener = new ShuffleFetchCompletionListener(this)
     context.addTaskCompletionListener(cleanupListener)
 
     // Split local and remote blocks.
@@ -515,6 +516,10 @@ final class ShuffleBlockFetcherIterator(
     (currentResult.blockId, new BufferReleasingInputStream(input, this))
   }
 
+  def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
+    CompletionIterator[(BlockId, InputStream), this.type](this, this.cleanup())
+  }
+
   private def fetchUpToMaxBytes(): Unit = {
     // Send fetch requests up to maxBytesInFlight. If you cannot fetch from a remote host
     // immediately, defer the request until the next time it can be processed.
@@ -613,6 +618,16 @@ private class BufferReleasingInputStream(
   override def read(b: Array[Byte], off: Int, len: Int): Int = delegate.read(b, off, len)
 
   override def reset(): Unit = delegate.reset()
+}
+
+private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterator)
+  extends TaskCompletionListener {
+
+  override def onTaskCompletion(context: TaskContext): Unit = {
+    if (data != null) {
+      data.cleanup()
+    }
+  }
 }
 
 private[storage]
