@@ -443,7 +443,7 @@ def post_python_tests_results():
     # 4. Check out to a temporary branch.
     os.chdir("pyspark-coverage-site")
     try:
-        run_cmd(["git", "checkout", "--orphan", "latest_branch"])
+        run_cmd(["git", "symbolic-ref", "HEAD", "refs/heads/latest_branch"])
         # 5. Add all the files.
         run_cmd(["git", "add", "-A"])
         # 6. Commit current test coverage results.
