@@ -44,7 +44,6 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *   -> HiveOrcFilterSuite
  */
 abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
-  import testImplicits._
 
   val orcImp: String = "native"
 

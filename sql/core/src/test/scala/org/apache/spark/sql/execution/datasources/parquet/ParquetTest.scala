@@ -30,7 +30,7 @@ import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
 import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
 import org.apache.parquet.schema.MessageType
 
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
