@@ -21,7 +21,7 @@ import java.io._
 import java.net.URL
 import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
-import java.util.{TimeZone, UUID}
+import java.util.{Locale, TimeZone, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -35,6 +35,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
+import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -132,27 +133,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempPath { dir =>
       val df = spark.read.format("avro").load(episodesAvro)
       df.select("doctor", "title").write.format("avro").save(dir.getCanonicalPath)
-    }
-  }
-
-  test("test NULL avro type") {
-    withTempPath { dir =>
-      val fields =
-        Seq(new Field("null", Schema.create(Type.NULL), "doc", null.asInstanceOf[AnyVal])).asJava
-      val schema = Schema.createRecord("name", "docs", "namespace", false)
-      schema.setFields(fields)
-      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
-      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
-      dataFileWriter.create(schema, new File(s"$dir.avro"))
-      val avroRec = new GenericData.Record(schema)
-      avroRec.put("null", null)
-      dataFileWriter.append(avroRec)
-      dataFileWriter.flush()
-      dataFileWriter.close()
-
-      intercept[IncompatibleSchemaException] {
-        spark.read.format("avro").load(s"$dir.avro")
-      }
     }
   }
 
@@ -900,6 +880,32 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getCause.getMessage
       assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
         "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes"))
+    }
+  }
+
+  test("error handling for unsupported Interval data types") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      var msg = intercept[AnalysisException] {
+        sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
+      }.getMessage
+      assert(msg.contains("Cannot save interval data type into external storage."))
+
+      msg = intercept[AnalysisException] {
+        spark.udf.register("testType", () => new IntervalData())
+        sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
+      }.getMessage
+      assert(msg.toLowerCase(Locale.ROOT)
+        .contains(s"data source does not support calendarinterval data type."))
+    }
+  }
+
+  test("support Null data types") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      val df = sql("select null")
+      df.write.format("avro").mode("overwrite").save(tempDir)
+      checkAnswer(spark.read.format("avro").load(tempDir), df)
     }
   }
 
