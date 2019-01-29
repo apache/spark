@@ -58,12 +58,6 @@ private[yarn] class ExecutorRunnable(
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
 
-  val clusterId: Option[String] = try {
-    Some(YarnConfiguration.getClusterId(conf))
-  } catch {
-    case _: HadoopIllegalArgumentException => None
-  }
-
   def run(): Unit = {
     logDebug("Starting Executor Container")
     nmClient = NMClient.createNMClient()
