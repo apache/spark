@@ -123,6 +123,12 @@ private[spark] class DiskStore(
     }
   }
 
+  def moveFileToBlock(sourceFile: File, blockSize: Long, targetBlockId: BlockId): Unit = {
+    blockSizes.put(targetBlockId, blockSize)
+    val targetFile = diskManager.getFile(targetBlockId.name)
+    sourceFile.renameTo(targetFile)
+  }
+
   def contains(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     file.exists()

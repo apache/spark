@@ -80,6 +80,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
+  private def createSparkConf(): SparkConf =
+    new SparkConf(false)
+      .set("spark.app.id", "test")
+      .set(IS_TESTING, true)
+      .set(MEMORY_FRACTION, 1.0)
+      .set(MEMORY_STORAGE_FRACTION, 0.999)
+      .set("spark.kryoserializer.buffer", "1m")
+      .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER,
@@ -112,14 +121,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
-    conf = new SparkConf(false)
-      .set("spark.app.id", "test")
-      .set(IS_TESTING, true)
-      .set(MEMORY_FRACTION, 1.0)
-      .set(MEMORY_STORAGE_FRACTION, 0.999)
-      .set("spark.kryoserializer.buffer", "1m")
-      .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
-
+    if (conf == null) {
+      conf = createSparkConf()
+    }
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set(DRIVER_PORT, rpcEnv.address.port)
 
@@ -890,7 +894,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, 0)
-    memoryManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
 
     // The put should fail since a1 is not serializable.
@@ -903,6 +906,51 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Make sure get a1 doesn't hang and returns None.
     failAfter(1 second) {
       assert(store.getSingleAndReleaseLock("a1").isEmpty, "a1 should not be in store")
+    }
+  }
+
+  def testPutBlockDataAsStream(
+      name: String,
+      blockManager: BlockManager,
+      storageLevel: StorageLevel): Unit = {
+    val message = "message"
+    val ser = serializer.newInstance().serialize(message).array()
+    val blockId = new ShuffleDataBlockId(0, 0, 0)
+    val streamCallbackWithId =
+      blockManager.putBlockDataAsStream(blockId, storageLevel, ClassTag(message.getClass))
+    streamCallbackWithId.onData("0", ByteBuffer.wrap(ser))
+    streamCallbackWithId.onComplete("0")
+    val blockStatusOption = blockManager.getStatus(blockId)
+    assert(!blockStatusOption.isEmpty)
+    val blockStatus = blockStatusOption.get
+    assert((blockStatus.diskSize > 0) === storageLevel.useDisk)
+    assert((blockStatus.memSize > 0) === storageLevel.useMemory)
+    assert(blockManager.getBlockData(blockId).nioByteBuffer().array() === ser)
+  }
+
+  Seq(
+    "caching" -> StorageLevel.MEMORY_ONLY,
+    "caching on disk" -> StorageLevel.DISK_ONLY
+  ).foreach { case (name, storageLevel) =>
+    encryptionTestHelper(name, createSparkConf()) { case (name, conf) =>
+      test(s"test putBlockDataAsStream with $name") {
+        val ioEncryptionKey =
+          if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None
+        val securityMgr = new SecurityManager(conf, ioEncryptionKey)
+        val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
+        val transfer =
+          new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+        val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
+        val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+          serializerManager, conf, memoryManager, mapOutputTracker,
+          shuffleManager, transfer, securityMgr, 0)
+        try {
+          blockManager.initialize("app-id")
+          testPutBlockDataAsStream(name, blockManager, storageLevel)
+        } finally {
+          blockManager.stop()
+        }
+      }
     }
   }
 

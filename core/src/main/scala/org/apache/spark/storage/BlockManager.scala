@@ -221,6 +221,145 @@ private[spark] class BlockManager(
     new BlockManager.RemoteBlockDownloadFileManager(this)
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
+  private abstract class BlockStoreUpdater[T](tellMaster: Boolean, keepReadLock: Boolean) {
+
+    protected def toBlockData: BlockData
+
+    protected def saveContent(): Unit
+
+    /**
+     * Put the given data according to the given level in one of the block stores, replicating
+     * the values if necessary.
+     *
+     * If the block already exists, this method will not overwrite it.
+     *
+     *
+     * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
+     *                     block already exists). If false, this method will hold no locks when it
+     *                     returns.
+     * @return true if the block was already present or if the put succeeded, false otherwise.
+     */
+    protected def doSave(
+        blockSize: Long,
+        blockId: BlockId,
+        level: StorageLevel,
+        classTag: ClassTag[T]): Boolean = {
+      doPut(blockId, level, classTag, tellMaster, keepReadLock) { info =>
+        val startTimeNs = System.nanoTime()
+        // Since we're storing bytes, initiate the replication before storing them locally.
+        // This is faster as data is already serialized and ready to send.
+        val replicationFuture = if (level.replication > 1) {
+          Future {
+            // This is a blocking action and should run in futureExecutionContext which is a cached
+            // thread pool. The ByteBufferBlockData wrapper is not disposed of to avoid releasing
+            // buffers that are owned by the caller.
+            replicate(blockId, toBlockData, level, classTag)
+          }(futureExecutionContext)
+        } else {
+          null
+        }
+        saveContent()
+        val putBlockStatus = getCurrentBlockStatus(blockId, info)
+        val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
+        if (blockWasSuccessfullyStored) {
+          // Now that the block is in either the memory or disk store,
+          // tell the master about it.
+          info.size = blockSize
+          if (tellMaster && info.tellMaster) {
+            reportBlockStatus(blockId, putBlockStatus)
+          }
+          addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
+        }
+        logDebug(s"Put block ${blockId} locally took ${Utils.getUsedTimeNs(startTimeNs)}")
+        if (level.replication > 1) {
+          // Wait for asynchronous replication to finish
+          try {
+            ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
+          } catch {
+            case NonFatal(t) =>
+              throw new Exception("Error occurred while waiting for replication to finish", t)
+          }
+        }
+        if (blockWasSuccessfullyStored) {
+          None
+        } else {
+          Some(blockSize)
+        }
+      }.isEmpty
+    }
+  }
+
+  /**
+   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
+   * so may corrupt or change the data stored by the `BlockManager`.
+   */
+  private case class ByteBufferBlockStoreUpdater[T](
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      bytes: ChunkedByteBuffer,
+      tellMaster: Boolean = true,
+      keepReadLock: Boolean = false) extends BlockStoreUpdater[T](tellMaster, keepReadLock) {
+
+    override def toBlockData: BlockData = new ByteBufferBlockData(bytes, false)
+
+    override def saveContent(): Unit = {
+      if (level.useMemory) {
+        // Put it in memory first, even if it also has useDisk set to true;
+        // We will drop it to disk later if the memory store can't hold it.
+        val putSucceeded = if (level.deserialized) {
+          val values =
+            serializerManager.dataDeserializeStream(blockId, bytes.toInputStream())(classTag)
+          memoryStore.putIteratorAsValues(blockId, values, classTag) match {
+            case Right(_) => true
+            case Left(iter) =>
+              // If putting deserialized values in memory failed, we will put the bytes directly to
+              // disk, so we don't need this iterator and can close it to free resources earlier.
+              iter.close()
+              false
+          }
+        } else {
+          val memoryMode = level.memoryMode
+          memoryStore.putBytes(blockId, bytes.size, memoryMode, () => {
+            if (memoryMode == MemoryMode.OFF_HEAP &&
+              bytes.chunks.exists(buffer => !buffer.isDirect)) {
+              bytes.copy(Platform.allocateDirectBuffer)
+            } else {
+              bytes
+            }
+          })
+        }
+        if (!putSucceeded && level.useDisk) {
+          logWarning(s"Persisting block $blockId to disk instead.")
+          diskStore.putBytes(blockId, bytes)
+        }
+      } else if (level.useDisk) {
+        diskStore.putBytes(blockId, bytes)
+      }
+    }
+
+    def save(blockSize: Long): Boolean = doSave(blockSize, blockId, level, classTag)
+
+  }
+
+  private case class TempFileBlockStoreUpdater[T](
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      tmpFile: File,
+      tmpBlockId: BlockId,
+      blockSize: Long,
+      tellMaster: Boolean = true,
+      keepReadLock: Boolean = false) extends BlockStoreUpdater[T](tellMaster, keepReadLock) {
+
+    override def toBlockData: BlockData = diskStore.getBytes(tmpBlockId)
+
+    override def saveContent(): Unit = diskStore.moveFileToBlock(tmpFile, blockSize, blockId)
+
+    def save(): Boolean = doSave(blockSize, blockId, level, classTag)
+
+  }
+
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
    * the appId may not be known at BlockManager instantiation time (in particular for the driver,
@@ -412,10 +551,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
-    // TODO if we're going to only put the data in the disk store, we should just write it directly
-    // to the final location, but that would require a deeper refactor of this code.  So instead
-    // we just write to a temp file, and call putBytes on the data in that file.
-    val tmpFile = diskBlockManager.createTempLocalBlock()._2
+    val (tmpBlockId, tmpFile) = diskBlockManager.createTempLocalBlock()
     val channel = new CountingWritableChannel(
       Channels.newChannel(serializerManager.wrapForEncryption(new FileOutputStream(tmpFile))))
     logTrace(s"Streaming block $blockId to tmp file $tmpFile")
@@ -435,24 +571,27 @@ private[spark] class BlockManager(
         // Note this is all happening inside the netty thread as soon as it reads the end of the
         // stream.
         channel.close()
-        // TODO SPARK-25035 Even if we're only going to write the data to disk after this, we end up
-        // using a lot of memory here. We'll read the whole file into a regular
-        // byte buffer and OOM.  We could at least read the tmp file as a stream.
-        val buffer = securityManager.getIOEncryptionKey() match {
-          case Some(key) =>
-            // we need to pass in the size of the unencrypted block
-            val blockSize = channel.getCount
-            val allocator = level.memoryMode match {
-              case MemoryMode.ON_HEAP => ByteBuffer.allocate _
-              case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
-            }
-            new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
+        val blockSize = channel.getCount
+        if (level == StorageLevel.DISK_ONLY) {
+          val blockStoreUpdater =
+            TempFileBlockStoreUpdater(blockId, level, classTag, tmpFile, tmpBlockId, blockSize)
+          blockStoreUpdater.save()
+        } else {
+          val buffer = securityManager.getIOEncryptionKey() match {
+            case Some(key) =>
+              // we need to pass in the size of the unencrypted block
+              val allocator = level.memoryMode match {
+                case MemoryMode.ON_HEAP => ByteBuffer.allocate _
+                case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
+              }
+              new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
 
-          case None =>
-            ChunkedByteBuffer.fromFile(tmpFile)
+            case None =>
+              ChunkedByteBuffer.fromFile(tmpFile)
+          }
+          putBytes(blockId, buffer, level)(classTag)
+          tmpFile.delete()
         }
-        putBytes(blockId, buffer, level)(classTag)
-        tmpFile.delete()
       }
 
       override def onFailure(streamId: String, cause: Throwable): Unit = {
@@ -953,111 +1092,14 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true): Boolean = {
     require(bytes != null, "Bytes is null")
-    doPutBytes(blockId, bytes, level, implicitly[ClassTag[T]], tellMaster)
+    val blockStoreUpdater =
+      ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster)
+    blockStoreUpdater.save(bytes.size)
   }
 
   /**
-   * Put the given bytes according to the given level in one of the block stores, replicating
-   * the values if necessary.
-   *
-   * If the block already exists, this method will not overwrite it.
-   *
-   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
-   * so may corrupt or change the data stored by the `BlockManager`.
-   *
-   * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
-   *                     block already exists). If false, this method will hold no locks when it
-   *                     returns.
-   * @return true if the block was already present or if the put succeeded, false otherwise.
-   */
-  private def doPutBytes[T](
-      blockId: BlockId,
-      bytes: ChunkedByteBuffer,
-      level: StorageLevel,
-      classTag: ClassTag[T],
-      tellMaster: Boolean = true,
-      keepReadLock: Boolean = false): Boolean = {
-    doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
-      val startTimeNs = System.nanoTime()
-      // Since we're storing bytes, initiate the replication before storing them locally.
-      // This is faster as data is already serialized and ready to send.
-      val replicationFuture = if (level.replication > 1) {
-        Future {
-          // This is a blocking action and should run in futureExecutionContext which is a cached
-          // thread pool. The ByteBufferBlockData wrapper is not disposed of to avoid releasing
-          // buffers that are owned by the caller.
-          replicate(blockId, new ByteBufferBlockData(bytes, false), level, classTag)
-        }(futureExecutionContext)
-      } else {
-        null
-      }
-
-      val size = bytes.size
-
-      if (level.useMemory) {
-        // Put it in memory first, even if it also has useDisk set to true;
-        // We will drop it to disk later if the memory store can't hold it.
-        val putSucceeded = if (level.deserialized) {
-          val values =
-            serializerManager.dataDeserializeStream(blockId, bytes.toInputStream())(classTag)
-          memoryStore.putIteratorAsValues(blockId, values, classTag) match {
-            case Right(_) => true
-            case Left(iter) =>
-              // If putting deserialized values in memory failed, we will put the bytes directly to
-              // disk, so we don't need this iterator and can close it to free resources earlier.
-              iter.close()
-              false
-          }
-        } else {
-          val memoryMode = level.memoryMode
-          memoryStore.putBytes(blockId, size, memoryMode, () => {
-            if (memoryMode == MemoryMode.OFF_HEAP &&
-                bytes.chunks.exists(buffer => !buffer.isDirect)) {
-              bytes.copy(Platform.allocateDirectBuffer)
-            } else {
-              bytes
-            }
-          })
-        }
-        if (!putSucceeded && level.useDisk) {
-          logWarning(s"Persisting block $blockId to disk instead.")
-          diskStore.putBytes(blockId, bytes)
-        }
-      } else if (level.useDisk) {
-        diskStore.putBytes(blockId, bytes)
-      }
-
-      val putBlockStatus = getCurrentBlockStatus(blockId, info)
-      val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
-      if (blockWasSuccessfullyStored) {
-        // Now that the block is in either the memory or disk store,
-        // tell the master about it.
-        info.size = size
-        if (tellMaster && info.tellMaster) {
-          reportBlockStatus(blockId, putBlockStatus)
-        }
-        addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
-      }
-      logDebug(s"Put block ${blockId} locally took ${Utils.getUsedTimeNs(startTimeNs)}")
-      if (level.replication > 1) {
-        // Wait for asynchronous replication to finish
-        try {
-          ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
-        } catch {
-          case NonFatal(t) =>
-            throw new Exception("Error occurred while waiting for replication to finish", t)
-        }
-      }
-      if (blockWasSuccessfullyStored) {
-        None
-      } else {
-        Some(bytes)
-      }
-    }.isEmpty
-  }
-
-  /**
-   * Helper method used to abstract common code from [[doPutBytes()]] and [[doPutIterator()]].
+   * Helper method used to abstract common code from [[BlockStoreUpdater.doSave()]]
+   * and [[doPutIterator()]].
    *
    * @param putBody a function which attempts the actual put() and returns None on success
    *                or Some on failure.

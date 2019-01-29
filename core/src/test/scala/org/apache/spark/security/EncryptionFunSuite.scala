@@ -33,9 +33,13 @@ trait EncryptionFunSuite {
     }
   }
 
-  final protected def encryptionTestHelper(name: String)(fn: (String, SparkConf) => Unit): Unit = {
+  final protected def encryptionTestHelper(name: String)(fn: (String, SparkConf) => Unit): Unit =
+    encryptionTestHelper(name, new SparkConf())(fn)
+
+  final protected def encryptionTestHelper(name: String, sparkConf: SparkConf)
+      (fn: (String, SparkConf) => Unit): Unit = {
     Seq(false, true).foreach { encrypt =>
-      val conf = new SparkConf().set(IO_ENCRYPTION_ENABLED, encrypt)
+      val conf = sparkConf.set(IO_ENCRYPTION_ENABLED, encrypt)
       fn(s"$name (encryption = ${ if (encrypt) "on" else "off" })", conf)
     }
   }
