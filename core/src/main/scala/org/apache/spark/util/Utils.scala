@@ -53,8 +53,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.log4j.{Level, LogManager}
-import org.apache.log4j.spi.{Filter, LoggingEvent}
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
@@ -2286,18 +2284,8 @@ private[spark] object Utils extends Logging {
   def setLogLevel(l: org.apache.log4j.Level) {
     val rootLogger = org.apache.log4j.Logger.getRootLogger()
     rootLogger.setLevel(l)
-    rootLogger.getAllAppenders().asScala.foreach {
-      case ca: org.apache.log4j.ConsoleAppender =>
-        var f = ca.getFirstFilter()
-        while (f != null) {
-          f match {
-            case ssf: SparkShellLoggingFilter =>
-              ssf.setThresholdLevel(l)
-          }
-          f = f.getNext()
-        }
-      case _ => // no-op
-    }
+    // Setting threshold to null as rootLevel will define log level for spark-shell
+    Logging.sparkShellThresholdLevel = null
   }
 
   /**
@@ -2999,34 +2987,5 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
     System.arraycopy(buffer, pos, nonCircularBuffer, 0, buffer.length - pos)
     System.arraycopy(buffer, 0, nonCircularBuffer, buffer.length - pos, pos)
     new String(nonCircularBuffer, StandardCharsets.UTF_8)
-  }
-}
-
-private[spark] class SparkShellLoggingFilter(var thresholdLevel: Level) extends Filter {
-
-  /**
-   * If log level of event is lower than thresholdLevel, then the decision is made based on
-   * whether the log came from root or some custom configuration
-   * @param loggingEvent
-   * @return decision for accept/deny log event
-   */
-  def decide(loggingEvent: LoggingEvent): Int = {
-    val rootLevel = LogManager.getRootLogger().getLevel()
-    if (loggingEvent.getLevel().isGreaterOrEqual(thresholdLevel) ||
-          !loggingEvent.getLevel().eq(rootLevel)) {
-      return Filter.NEUTRAL
-    }
-    var logger = loggingEvent.getLogger()
-    while(logger.getParent() != null) {
-      if (logger.getLevel() != null) {
-        return Filter.NEUTRAL
-      }
-      logger = logger.getParent()
-    }
-    return Filter.DENY
-  }
-
-  private[spark] def setThresholdLevel(level: Level): Unit = {
-    thresholdLevel = level
   }
 }
