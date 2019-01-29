@@ -18,19 +18,18 @@
 package org.apache.spark.executor
 
 import java.net.URL
-import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark._
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.Utils
+import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RetrieveSparkAppConfig, SparkAppConfig}
+import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 
-private[spark] class CoarseGrainedExecutorBackend(
+private[spark] class YarnCoarseGrainedExecutorBackend(
     rpcEnv: RpcEnv,
     driverUrl: String,
     executorId: String,
@@ -38,29 +37,29 @@ private[spark] class CoarseGrainedExecutorBackend(
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv)
-  extends BaseCoarseGrainedExecutorBackend(
+  extends CoarseGrainedExecutorBackend(
     rpcEnv,
     driverUrl,
     executorId,
     hostname,
     cores,
     userClassPath,
-    env) {
+    env) with Logging {
+
+  private lazy val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(env.conf)
 
   override def extractLogUrls: Map[String, String] = {
-    val prefix = "SPARK_LOG_URL_"
-    sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
+    YarnContainerInfoHelper.getLogUrls(hadoopConfiguration, container = None)
+      .getOrElse(Map())
   }
 
   override def extractAttributes: Map[String, String] = {
-    val prefix = "SPARK_EXECUTOR_ATTRIBUTE_"
-    sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2))
+    YarnContainerInfoHelper.getAttributes(hadoopConfiguration, container = None)
+      .getOrElse(Map())
   }
 }
 
-private[spark] object CoarseGrainedExecutorBackend extends Logging {
+private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]) {
     var driverUrl: String = null
@@ -111,7 +110,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
 
     val createFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend = { case (rpcEnv, env) =>
-      new CoarseGrainedExecutorBackend(rpcEnv, driverUrl, executorId, hostname, cores,
+      new YarnCoarseGrainedExecutorBackend(rpcEnv, driverUrl, executorId, hostname, cores,
         userClassPath, env)
     }
     BaseCoarseGrainedExecutorBackend.run(driverUrl, executorId, hostname, cores, appId, workerUrl,
@@ -123,17 +122,17 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     // scalastyle:off println
     System.err.println(
       """
-      |Usage: CoarseGrainedExecutorBackend [options]
-      |
-      | Options are:
-      |   --driver-url <driverUrl>
-      |   --executor-id <executorId>
-      |   --hostname <hostname>
-      |   --cores <cores>
-      |   --app-id <appid>
-      |   --worker-url <workerUrl>
-      |   --user-class-path <url>
-      |""".stripMargin)
+        |Usage: YarnCoarseGrainedExecutorBackend [options]
+        |
+        | Options are:
+        |   --driver-url <driverUrl>
+        |   --executor-id <executorId>
+        |   --hostname <hostname>
+        |   --cores <cores>
+        |   --app-id <appid>
+        |   --worker-url <workerUrl>
+        |   --user-class-path <url>
+        |""".stripMargin)
     // scalastyle:on println
     System.exit(1)
   }
