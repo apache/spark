@@ -231,7 +231,15 @@ private[kafka010] class KafkaMicroBatchStream(
             val begin = from.get(tp).getOrElse(fromNew(tp))
             val prorate = limit * (size / total)
             // Don't completely starve small topicpartitions
-            val off = begin + (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
+            val prorateLong = (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
+            // need to be careful of integer overflow
+            // therefore added canary checks where to see if off variable could be overflowed
+            // refer to [https://issues.apache.org/jira/browse/SPARK-26718]
+            val off = if (prorateLong > Long.MaxValue - begin) {
+              Long.MaxValue
+            } else {
+              begin + prorateLong
+            }
             // Paranoia, make sure not to return an offset that's past end
             Math.min(end, off)
           }.getOrElse(end)
