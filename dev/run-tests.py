@@ -443,22 +443,26 @@ def post_python_tests_results():
     for f in glob.glob("%s/python/test_coverage/htmlcov/*" % SPARK_HOME):
         shutil.copy(f, "pyspark-coverage-site/")
     # 4. Check out to a temporary branch.
-    run_cmd(with_pyspark_coverage_site + ["git", "checkout", "--orphan", "latest_branch"])
-    # 5. Add all the files.
-    run_cmd(with_pyspark_coverage_site + ["git", "add", "-A"])
-    # 6. Commit current test coverage results.
-    run_cmd(with_pyspark_coverage_site + [
-        "git",
-        "commit",
-        "-am",
-        '"Coverage report at latest commit in Apache Spark"',
-        '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
-    # 7. Delete the old branch.
-    run_cmd(with_pyspark_coverage_site + ["git", "branch", "-D", "gh-pages"])
-    # 8. Rename the temporary branch to master.
-    run_cmd(with_pyspark_coverage_site + ["git", "branch", "-m", "gh-pages"])
-    # 9. Finally, force update to our repository.
-    run_cmd(with_pyspark_coverage_site + ["git", "push", "-f", "origin", "gh-pages"])
+    os.chdir("pyspark-coverage-site")
+    try:
+        run_cmd(with_pyspark_coverage_site + ["git", "checkout", "--orphan", "latest_branch"])
+        # 5. Add all the files.
+        run_cmd(with_pyspark_coverage_site + ["git", "add", "-A"])
+        # 6. Commit current test coverage results.
+        run_cmd(with_pyspark_coverage_site + [
+            "git",
+            "commit",
+            "-am",
+            '"Coverage report at latest commit in Apache Spark"',
+            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
+        # 7. Delete the old branch.
+        run_cmd(with_pyspark_coverage_site + ["git", "branch", "-D", "gh-pages"])
+        # 8. Rename the temporary branch to master.
+        run_cmd(with_pyspark_coverage_site + ["git", "branch", "-m", "gh-pages"])
+        # 9. Finally, force update to our repository.
+        run_cmd(with_pyspark_coverage_site + ["git", "push", "-f", "origin", "gh-pages"])
+    finally:
+        os.chdir("..")
 
 
 def run_python_packaging_tests():
