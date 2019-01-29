@@ -268,6 +268,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       Int.MaxValue,
       true,
+      false,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
 
