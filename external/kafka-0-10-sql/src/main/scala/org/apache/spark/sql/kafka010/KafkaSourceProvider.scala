@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -48,7 +48,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with RelationProvider
     with CreatableRelationProvider
     with StreamingWriteSupportProvider
-    with ContinuousReadSupportProvider
     with TableProvider
     with Logging {
   import KafkaSourceProvider._
@@ -105,46 +104,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   override def getTable(options: DataSourceOptions): KafkaTable = {
     new KafkaTable(strategy(options.asMap().asScala.toMap))
-  }
-
-  /**
-   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport]] to read
-   * Kafka data in a continuous streaming query.
-   */
-  override def createContinuousReadSupport(
-      metadataPath: String,
-      options: DataSourceOptions): KafkaContinuousReadSupport = {
-    val parameters = options.asMap().asScala.toMap
-    validateStreamOptions(parameters)
-    // Each running query should use its own group id. Otherwise, the query may be only assigned
-    // partial data since Kafka will assign partitions to multiple consumers having the same group
-    // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
-
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
-
-    val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
-      STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
-
-    val kafkaOffsetReader = new KafkaOffsetReader(
-      strategy(caseInsensitiveParams),
-      kafkaParamsForDriver(specifiedKafkaParams),
-      parameters,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
-
-    new KafkaContinuousReadSupport(
-      kafkaOffsetReader,
-      kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-      parameters,
-      metadataPath,
-      startingStreamOffsets,
-      failOnDataLoss(caseInsensitiveParams))
   }
 
   /**
@@ -406,7 +365,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   class KafkaTable(strategy: => ConsumerStrategy) extends Table
-    with SupportsMicroBatchRead {
+    with SupportsMicroBatchRead with SupportsContinuousRead {
 
     override def name(): String = s"Kafka $strategy"
 
@@ -445,6 +404,40 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         kafkaOffsetReader,
         kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
         options,
+        checkpointLocation,
+        startingStreamOffsets,
+        failOnDataLoss(caseInsensitiveParams))
+    }
+
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+      val parameters = options.asMap().asScala.toMap
+      validateStreamOptions(parameters)
+      // Each running query should use its own group id. Otherwise, the query may be only assigned
+      // partial data since Kafka will assign partitions to multiple consumers having the same group
+      // id. Hence, we should generate a unique id for each query.
+      val uniqueGroupId = streamingUniqueGroupId(parameters, checkpointLocation)
+
+      val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+      val specifiedKafkaParams =
+        parameters
+          .keySet
+          .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
+          .map { k => k.drop(6).toString -> parameters(k) }
+          .toMap
+
+      val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+        caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+
+      val kafkaOffsetReader = new KafkaOffsetReader(
+        strategy(caseInsensitiveParams),
+        kafkaParamsForDriver(specifiedKafkaParams),
+        parameters,
+        driverGroupIdPrefix = s"$uniqueGroupId-driver")
+
+      new KafkaContinuousStream(
+        kafkaOffsetReader,
+        kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
+        parameters,
         checkpointLocation,
         startingStreamOffsets,
         failOnDataLoss(caseInsensitiveParams))

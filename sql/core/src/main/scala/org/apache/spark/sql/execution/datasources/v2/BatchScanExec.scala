@@ -19,31 +19,29 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.sources.v2.reader._
 
 /**
- * Physical plan node for scanning a micro-batch of data from a data source.
+ * Physical plan node for scanning a batch of data from a data source v2.
  */
-case class MicroBatchScanExec(
-    output: Seq[Attribute],
-    @transient scan: Scan,
-    @transient stream: MicroBatchStream,
-    @transient start: Offset,
-    @transient end: Offset) extends DataSourceV2ScanExecBase {
+case class BatchScanExec(
+    output: Seq[AttributeReference],
+    @transient scan: Scan) extends DataSourceV2ScanExecBase {
+
+  @transient lazy val batch = scan.toBatch
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: MicroBatchScanExec => this.stream == other.stream
+    case other: BatchScanExec => this.batch == other.batch
     case _ => false
   }
 
-  override def hashCode(): Int = stream.hashCode()
+  override def hashCode(): Int = batch.hashCode()
 
-  override lazy val partitions: Seq[InputPartition] = stream.planInputPartitions(start, end)
+  override lazy val partitions: Seq[InputPartition] = batch.planInputPartitions()
 
-  override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
+  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
     new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
