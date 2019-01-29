@@ -429,6 +429,8 @@ def post_python_tests_results():
     spark_test_key = os.environ.get("SPARK_TEST_KEY")
     with_pyspark_coverage_site = ["cd", "pyspark-coverage-site", "&&"]
     commands = [[
+        ["ls", "-al", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME],
+
         # Clone PySpark coverage site.
         "git",
         "clone",
@@ -436,7 +438,6 @@ def post_python_tests_results():
 
         # Remove existing reports
         ["rm", "-fr", "pyspark-coverage-site/*"],
-        ["ls", "-al", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME],
 
         # Copy generated coverage HTML.
         ["cp", "-r", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME, "pyspark-coverage-site/"],

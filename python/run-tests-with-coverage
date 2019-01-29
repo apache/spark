@@ -64,4 +64,6 @@ $COV_EXEC report --include "pyspark/*"
 echo "Generating HTML files for PySpark coverage under $COVERAGE_DIR/htmlcov"
 $COV_EXEC html --ignore-errors --include "pyspark/*" --directory "$COVERAGE_DIR/htmlcov"
 
+ls -al "$COVERAGE_DIR/htmlcov"
+
 popd
