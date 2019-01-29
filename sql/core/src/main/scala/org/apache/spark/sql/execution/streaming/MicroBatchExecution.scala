@@ -99,7 +99,7 @@ class MicroBatchExecution(
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(dsOptions).build()
           val stream = scan.toMicroBatchStream(metadataPath)
-          StreamingDataSourceV2Relation(output, scan.description(), stream)
+          StreamingDataSourceV2Relation(output, scan, stream)
         })
       case s @ StreamingRelationV2(ds, dsName, _, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {

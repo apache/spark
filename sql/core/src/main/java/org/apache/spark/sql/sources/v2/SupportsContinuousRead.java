@@ -15,24 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.reader.Scan;
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 
 /**
- * A mix in interface for {@link BatchReadSupport}. Data sources can implement this interface to
- * report statistics to Spark.
- *
- * As of Spark 2.4, statistics are reported to the optimizer before any operator is pushed to the
- * data source. Implementations that return more accurate statistics based on pushed operators will
- * not improve query performance until the planner can push operators before getting stats.
+ * An empty mix-in interface for {@link Table}, to indicate this table supports streaming scan with
+ * continuous mode.
+ * <p>
+ * If a {@link Table} implements this interface, the
+ * {@link SupportsRead#newScanBuilder(DataSourceOptions)} must return a {@link ScanBuilder} that
+ * builds {@link Scan} with {@link Scan#toContinuousStream(String)} implemented.
+ * </p>
  */
 @Evolving
-// TODO: remove it, after we finish the API refactor completely.
-public interface OldSupportsReportStatistics extends ReadSupport {
-
-  /**
-   * Returns the estimated statistics of this data source scan.
-   */
-  Statistics estimateStatistics(ScanConfig config);
-}
+public interface SupportsContinuousRead extends SupportsRead { }

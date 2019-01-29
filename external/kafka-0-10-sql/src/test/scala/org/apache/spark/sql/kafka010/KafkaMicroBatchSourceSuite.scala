@@ -28,14 +28,13 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
 
-import org.apache.kafka.clients.admin.{AdminClient, ConsumerGroupListing}
-import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
-import org.apache.spark.sql.execution.datasources.v2.{OldStreamingDataSourceV2Relation, StreamingDataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -118,17 +117,10 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case r: StreamingDataSourceV2Relation
-              if r.stream.isInstanceOf[KafkaMicroBatchStream] =>
-            r.stream.asInstanceOf[KafkaMicroBatchStream]
-        } ++ (query.get.lastExecution match {
-          case null => Seq()
-          case e => e.logical.collect {
-            case r: OldStreamingDataSourceV2Relation
-                if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-              r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
-          }
-        })
+          case r: StreamingDataSourceV2Relation if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
+              r.stream.isInstanceOf[KafkaContinuousStream] =>
+            r.stream
+        }
       }.distinct
 
       if (sources.isEmpty) {

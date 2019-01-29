@@ -19,23 +19,16 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
-import org.apache.spark.sql.sources.v2.reader.PartitionReader;
-import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory;
 import org.apache.spark.sql.sources.v2.reader.Scan;
 
 /**
- * A {@link SparkDataStream} for streaming queries with micro-batch mode.
+ * A {@link SparkDataStream} for streaming queries with continuous mode.
  */
 @Evolving
-public interface MicroBatchStream extends SparkDataStream {
+public interface ContinuousStream extends SparkDataStream {
 
   /**
-   * Returns the most recent offset available.
-   */
-  Offset latestOffset();
-
-  /**
-   * Returns a list of {@link InputPartition input partitions} given the start and end offsets. Each
+   * Returns a list of {@link InputPartition input partitions} given the start offset. Each
    * {@link InputPartition} represents a data split that can be processed by one Spark task. The
    * number of input partitions returned here is the same as the number of RDD partitions this scan
    * outputs.
@@ -44,14 +37,34 @@ public interface MicroBatchStream extends SparkDataStream {
    * and is responsible for creating splits for that filter, which is not a full scan.
    * </p>
    * <p>
-   * This method will be called multiple times, to launch one Spark job for each micro-batch in this
-   * data stream.
+   * This method will be called to launch one Spark job for reading the data stream. It will be
+   * called more than once, if {@link #needsReconfiguration()} returns true and Spark needs to
+   * launch a new job.
    * </p>
    */
-  InputPartition[] planInputPartitions(Offset start, Offset end);
+  InputPartition[] planInputPartitions(Offset start);
 
   /**
-   * Returns a factory to create a {@link PartitionReader} for each {@link InputPartition}.
+   * Returns a factory to create a {@link ContinuousPartitionReader} for each
+   * {@link InputPartition}.
    */
-  PartitionReaderFactory createReaderFactory();
+  ContinuousPartitionReaderFactory createContinuousReaderFactory();
+
+  /**
+   * Merge partitioned offsets coming from {@link ContinuousPartitionReader} instances
+   * for each partition to a single global offset.
+   */
+  Offset mergeOffsets(PartitionOffset[] offsets);
+
+  /**
+   * The execution engine will call this method in every epoch to determine if new input
+   * partitions need to be generated, which may be required if for example the underlying
+   * source system has had partitions added or removed.
+   *
+   * If true, the Spark job to scan this continuous data stream will be interrupted and Spark will
+   * launch it again with a new list of {@link InputPartition input partitions}.
+   */
+  default boolean needsReconfiguration() {
+    return false;
+  }
 }
