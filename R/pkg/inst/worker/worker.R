@@ -49,7 +49,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
       names(inputData) <- colNames
     } else {
       # Check to see if inputData is a valid data.frame
-      stopifnot(deserializer == "byte")
+      stopifnot(deserializer == "byte" || deserializer == "arrow")
       stopifnot(class(inputData) == "data.frame")
     }
 
@@ -63,7 +63,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
       output <- split(output, seq(nrow(output)))
     } else {
       # Serialize the output to a byte array
-      stopifnot(serializer == "byte")
+      stopifnot(serializer == "byte" || serializer == "arrow")
     }
   } else {
     output <- computeFunc(partition, inputData)
@@ -171,6 +171,10 @@ if (isEmpty != 0) {
       data <- dataWithKeys$data
     } else if (deserializer == "row") {
       data <- SparkR:::readMultipleObjects(inputCon)
+    } else if (deserializer == "arrow" && mode == 2) {
+      dataWithKeys <- SparkR:::readDeserializeInArrow(inputCon)
+      keys <- dataWithKeys$keys
+      data <- dataWithKeys$data
     }
 
     # Timing reading input data for execution
@@ -181,16 +185,35 @@ if (isEmpty != 0) {
                     colNames, computeFunc, data)
        } else {
         # gapply mode
+        outputs <- list()
         for (i in 1:length(data)) {
           # Timing reading input data for execution
           inputElap <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],
                       colNames, computeFunc, data[[i]])
           computeElap <- elapsedSecs()
-          outputResult(serializer, output, outputCon)
+          if (deserializer == "arrow") {
+            requireNamespace("arrow", quietly = TRUE)
+            outputs[[length(outputs) + 1L]] <- output
+          } else {
+            outputResult(serializer, output, outputCon)
+          }
           outputElap <- elapsedSecs()
           computeInputElapsDiff <-  computeInputElapsDiff + (computeElap - inputElap)
           outputComputeElapsDiff <- outputComputeElapsDiff + (outputElap - computeElap)
+        }
+
+        if (deserializer == "arrow") {
+          requireNamespace("arrow", quietly = TRUE)
+          # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
+          # Using matrix with rbind is almost the fastest and minimzed way to
+          # concatenate data frames.
+          combined_output <- as.data.frame(do.call("rbind", lapply(outputs, as.matrix)))
+
+          # Likewise, there looks no way to send each batch in streaming format via socket
+          # connection. See ARROW-4512.
+          # So, it writes the whole Arrow streaming-formatted binary at once for now.
+          SparkR:::writeRaw(outputCon, arrow::write_arrow(combined_output, raw()))
         }
       }
     } else {

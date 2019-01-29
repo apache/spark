@@ -229,6 +229,17 @@ gapplyInternal <- function(x, func, schema) {
   if (is.character(schema)) {
     schema <- structType(schema)
   }
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  if (arrowEnabled) {
+    if (inherits(schema, "structType")) {
+      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
+        stop("Arrow optimization with gapply[Collect] does not support FloatType type yet.")
+      }
+      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "BinaryType"))) {
+        stop("Arrow optimization with gapply[Collect] does not support Binary type yet.")
+      }
+    }
+  }
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                        connection = NULL)
   broadcastArr <- lapply(ls(.broadcastNames),

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.MapFunction
@@ -31,7 +32,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, FunctionUtils, LogicalGroupState}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.r.ArrowRRunner
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.GroupStateTimeout
 import org.apache.spark.sql.types._
 
@@ -433,6 +436,71 @@ case class FlatMapGroupsInRExec(
         val result = outputIter.map { bytes => Row.fromSeq(Seq(bytes)) }
         result.map(outputObject)
       }
+    }
+  }
+}
+
+/**
+ * Similar with [[FlatMapGroupsInRExec]] but serializes and deserializes input/output in
+ * Arrow format.
+ * This is also somewhat similar with
+ * [[org.apache.spark.sql.execution.python.FlatMapGroupsInPandasExec]].
+ */
+case class FlatMapGroupsInRWithArrowExec(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
+    output: Seq[Attribute],
+    keyDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    child: SparkPlan) extends UnaryExecNode {
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def producedAttributes: AttributeSet = AttributeSet(output)
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    if (groupingAttributes.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(groupingAttributes) :: Nil
+    }
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val grouped = GroupedIterator(iter, groupingAttributes, child.output)
+      val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+      val runner = new ArrowRRunner(
+        func, packageNames, broadcastVars, inputSchema, SQLConf.get.sessionLocalTimeZone)
+
+      val groupedByRKey = grouped.map { case (key, rowIter) =>
+        val newKey = rowToRBytes(getKey(key).asInstanceOf[Row])
+        (newKey, rowIter)
+      }
+
+      // The communication mechanism is as follows:
+      //
+      //    JVM side                        R side
+      //
+      // 1. Grouped internal rows --------> Arrow record natches
+      // 2. Grouped keys          --------> Regular serialized keys
+      // 3.                                 Converts each Arrow record batch to each R data frame
+      // 4.                                 Deserializes keys
+      // 5.                                 Maps each key and each R Data frame
+      // 4.                                 Computes vectorized operations by each R data frame
+      // 5.                                 Converts all R data frames to Arrow record batches
+      // 6. Columnar batches      <-------- Arrow record batches
+      // 7. Read each row from
+      //    batch's row view.
+      //
+      // Note that, unlike Python vectorization implementation, R side sends Arrow formatted
+      // binary in a batch due to the limitation of R API. See also ARROW-4512.
+      val columnarBatchIter = runner.compute(groupedByRKey, -1)
+      val outputProject = UnsafeProjection.create(output, output)
+      columnarBatchIter.flatMap(_.rowIterator().asScala).map(outputProject)
     }
   }
 }
