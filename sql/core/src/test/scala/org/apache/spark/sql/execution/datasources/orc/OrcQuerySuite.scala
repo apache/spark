@@ -270,10 +270,16 @@ abstract class OrcQueryTest extends OrcTest {
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
-    withOrcTable(data, "t") {
-      sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+
+    withOrcFile(data) { file =>
+      withTempView("t") {
+        spark.read.orc(file).createOrReplaceTempView("t")
+        checkAnswer(spark.table("t"), data.map(Row.fromTuple))
+        sql("INSERT INTO TABLE t SELECT * FROM tmp")
+        checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+      }
     }
+
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tmp"),
       ignoreIfNotExists = true,
