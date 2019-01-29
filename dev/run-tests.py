@@ -25,6 +25,8 @@ import random
 import re
 import sys
 import subprocess
+import glob
+import shutil
 from collections import namedtuple
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
@@ -428,43 +430,41 @@ def post_python_tests_results():
         sys.exit(1)
     spark_test_key = os.environ.get("SPARK_TEST_KEY")
     with_pyspark_coverage_site = ["cd", "pyspark-coverage-site", "&&"]
-    commands = [[
+    run_cmd([
         # Clone PySpark coverage site.
         "git",
         "clone",
-        "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key],
+        "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key])
 
-        # Remove existing reports
-        ["rm", "-fr", "pyspark-coverage-site/*"],
+    # Remove existing reports
+    run_cmd(["rm", "-fr"] + glob.glob("pyspark-coverage-site/*"))
 
-        # Copy generated coverage HTML.
-        ["cp", "-r", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME, "pyspark-coverage-site/"],
+    # Copy generated coverage HTML.
+    for f in glob.glob("%s/python/test_coverage/htmlcov/*" % SPARK_HOME):
+        shutil.copy(f, "pyspark-coverage-site/")
 
-        # Check out to a temporary branch.
-        with_pyspark_coverage_site + ["git", "checkout", "--orphan", "latest_branch"],
+    # Check out to a temporary branch.
+    run_cmd(with_pyspark_coverage_site + ["git", "checkout", "--orphan", "latest_branch"])
 
-        # Add all the files.
-        with_pyspark_coverage_site + ["git", "add", "-A"],
+    # Add all the files.
+    run_cmd(with_pyspark_coverage_site + ["git", "add", "-A"])
 
-        # Commit current test coverage results.
-        with_pyspark_coverage_site + [
-            "git",
-            "commit",
-            "-am",
-            '"Coverage report at latest commit in Apache Spark"',
-            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'],
+    # Commit current test coverage results.
+    run_cmd(with_pyspark_coverage_site + [
+        "git",
+        "commit",
+        "-am",
+        '"Coverage report at latest commit in Apache Spark"',
+        '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
 
-        # Delete the old branch.
-        with_pyspark_coverage_site + ["git", "branch", "-D", "gh-pages"],
+    # Delete the old branch.
+    run_cmd(with_pyspark_coverage_site + ["git", "branch", "-D", "gh-pages"])
 
-        # Rename the temporary branch to master.
-        with_pyspark_coverage_site + ["git", "branch", "-m", "gh-pages"],
+    # Rename the temporary branch to master.
+    run_cmd(with_pyspark_coverage_site + ["git", "branch", "-m", "gh-pages"])
 
-        # Finally, force update to our repository.
-        with_pyspark_coverage_site + ["git", "push", "-f", "origin", "gh-pages"]]
-
-    for command in commands:
-        run_cmd(command)
+    # Finally, force update to our repository.
+    run_cmd(with_pyspark_coverage_site + ["git", "push", "-f", "origin", "gh-pages"])
 
 
 def run_python_packaging_tests():
