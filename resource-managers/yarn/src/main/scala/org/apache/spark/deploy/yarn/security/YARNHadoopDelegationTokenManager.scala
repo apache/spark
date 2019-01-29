@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn.security
 import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
@@ -43,9 +44,21 @@ private[spark] class YARNHadoopDelegationTokenManager(
   extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf, _schedulerRef) {
 
   private val credentialProviders = {
-    ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
-      .asScala
-      .toList
+    val loader = ServiceLoader.load(classOf[ServiceCredentialProvider],
+      Utils.getContextOrSparkClassLoader)
+    val providers = mutable.ArrayBuffer[ServiceCredentialProvider]()
+
+    val iterator = loader.iterator
+    while (iterator.hasNext) {
+      try {
+        providers += iterator.next
+      } catch {
+        case t: Throwable =>
+          logDebug(s"Failed to load provider.", t)
+      }
+    }
+
+    providers
       .filter { p => isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap

@@ -34,12 +34,16 @@ class YARNHadoopDelegationTokenManagerSuite extends SparkFunSuite {
   }
 
   test("Correctly loads credential providers") {
+    ExceptionThrowingServiceCredentialProvider.constructed = false
     credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(credentialManager.isProviderLoaded("yarn-test"))
+    // This checks that providers are loaded independently and they have no effect on each other
+    assert(ExceptionThrowingServiceCredentialProvider.constructed)
+    assert(!credentialManager.isProviderLoaded("throw"))
   }
 }
 
-class YARNTestCredentialProvider extends ServiceCredentialProvider {
+private class YARNTestCredentialProvider extends ServiceCredentialProvider {
   override def serviceName: String = "yarn-test"
 
   override def credentialsRequired(conf: Configuration): Boolean = true
@@ -48,4 +52,22 @@ class YARNTestCredentialProvider extends ServiceCredentialProvider {
       hadoopConf: Configuration,
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = None
+}
+
+private class ExceptionThrowingServiceCredentialProvider extends ServiceCredentialProvider {
+  ExceptionThrowingServiceCredentialProvider.constructed = true
+  throw new IllegalArgumentException
+
+  override def serviceName: String = "throw"
+
+  override def credentialsRequired(conf: Configuration): Boolean = true
+
+  override def obtainCredentials(
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = None
+}
+
+private object ExceptionThrowingServiceCredentialProvider {
+  var constructed = false
 }
