@@ -18,8 +18,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.mapreduce.Job
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.execution.datasources.{WriteJobDescription, WriteTaskResult}
+import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -27,9 +29,14 @@ class FileBatchWrite(
     job: Job,
     description: WriteJobDescription,
     committer: FileCommitProtocol)
-  extends BatchWrite {
+  extends BatchWrite with Logging {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    committer.commitJob(job, messages.map(_.asInstanceOf[WriteTaskResult].commitMsg))
+    val results = messages.map(_.asInstanceOf[WriteTaskResult])
+    committer.commitJob(job, results.map(_.commitMsg))
+    logInfo(s"Write Job ${description.uuid} committed.")
+
+    processStats(description.statsTrackers, results.map(_.summary.stats))
+    logInfo(s"Finished processing stats for write job ${description.uuid}.")
   }
 
   override def useCommitCoordinator(): Boolean = false
