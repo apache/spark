@@ -157,19 +157,19 @@ private[spark] class TaskSetManager(
 
   // Set of pending tasks that can be speculated for each executor.
   private[scheduler] var pendingSpeculatableTasksForExecutor =
-    new HashMap[String, ArrayBuffer[Int]]
+    new HashMap[String, HashSet[Int]]
 
   // Set of pending tasks that can be speculated for each host.
-  private[scheduler] var pendingSpeculatableTasksForHost = new HashMap[String, ArrayBuffer[Int]]
+  private[scheduler] var pendingSpeculatableTasksForHost = new HashMap[String, HashSet[Int]]
 
   // Set of pending tasks that can be speculated with no locality preferences.
-  private[scheduler] val pendingSpeculatableTasksWithNoPrefs = new ArrayBuffer[Int]
+  private[scheduler] val pendingSpeculatableTasksWithNoPrefs = new HashSet[Int]
 
   // Set of pending tasks that can be speculated for each rack.
-  private[scheduler] var pendingSpeculatableTasksForRack = new HashMap[String, ArrayBuffer[Int]]
+  private[scheduler] var pendingSpeculatableTasksForRack = new HashMap[String, HashSet[Int]]
 
   // Set of all pending tasks that can be speculated.
-  private[scheduler] val allPendingSpeculatableTasks = new ArrayBuffer[Int]
+  private[scheduler] val allPendingSpeculatableTasks = new HashSet[Int]
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
   private[scheduler] val taskInfos = new HashMap[Long, TaskInfo]
@@ -262,12 +262,12 @@ private[spark] class TaskSetManager(
       loc match {
         case e: ExecutorCacheTaskLocation =>
           pendingSpeculatableTasksForExecutor.getOrElseUpdate(
-            e.executorId, new ArrayBuffer) += index
+            e.executorId, new HashSet) += index
         case _ =>
       }
-      pendingSpeculatableTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
+      pendingSpeculatableTasksForHost.getOrElseUpdate(loc.host, new HashSet) += index
       for (rack <- sched.getRackForHost(loc.host)) {
-        pendingSpeculatableTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+        pendingSpeculatableTasksForRack.getOrElseUpdate(rack, new HashSet) += index
       }
     }
 
@@ -336,16 +336,15 @@ private[spark] class TaskSetManager(
   private def dequeueSpeculativeTaskFromList(
     execId: String,
     host: String,
-    list: ArrayBuffer[Int]): Option[Int] = {
-    var indexOffset = list.size
-    while (indexOffset > 0) {
-      indexOffset -= 1
-      val index = list(indexOffset)
-      if (!isTaskBlacklistedOnExecOrNode(index, execId, host) && !hasAttemptOnHost(index, host)) {
-        // This should almost always be list.trimEnd(1) to remove tail
-        list.remove(indexOffset)
-        if (!successful(index)) {
-          return Some(index)
+    list: HashSet[Int]): Option[Int] = {
+    if (!list.isEmpty) {
+      for (index <- list) {
+        if (!isTaskBlacklistedOnExecOrNode(index, execId, host) && !hasAttemptOnHost(index, host)) {
+          // This should almost always be list.trimEnd(1) to remove tail
+          list -= index
+          if (!successful(index)) {
+            return Some(index)
+          }
         }
       }
     }
@@ -376,14 +375,14 @@ private[spark] class TaskSetManager(
       // Check for process-local tasks; note that tasks can be process-local
       // on multiple nodes when we replicate cached blocks, as in Spark Streaming
     for (index <- dequeueSpeculativeTaskFromList(
-      execId, host, pendingSpeculatableTasksForExecutor.getOrElse(execId, ArrayBuffer()))) {
+      execId, host, pendingSpeculatableTasksForExecutor.getOrElse(execId, HashSet()))) {
       return Some((index, TaskLocality.PROCESS_LOCAL))
     }
 
     // Check for node-local tasks
     if (TaskLocality.isAllowed(locality, TaskLocality.NODE_LOCAL)) {
       for (index <- dequeueSpeculativeTaskFromList(
-        execId, host, pendingSpeculatableTasksForHost.getOrElse(host, ArrayBuffer()))) {
+        execId, host, pendingSpeculatableTasksForHost.getOrElse(host, HashSet()))) {
         return Some((index, TaskLocality.NODE_LOCAL))
       }
     }
@@ -401,7 +400,7 @@ private[spark] class TaskSetManager(
       for {
         rack <- sched.getRackForHost(host)
         index <- dequeueSpeculativeTaskFromList(
-          execId, host, pendingSpeculatableTasksForRack.getOrElse(rack, ArrayBuffer()))
+          execId, host, pendingSpeculatableTasksForRack.getOrElse(rack, HashSet()))
       } {
         return Some((index, TaskLocality.RACK_LOCAL))
       }

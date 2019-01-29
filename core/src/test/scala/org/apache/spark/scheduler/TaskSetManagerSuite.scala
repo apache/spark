@@ -1151,7 +1151,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
     // killed, so the FakeTaskScheduler is only told about the successful completion
     // of the speculated task.
-    assert(sched.endedTasks(4) === Success)
+    assert(sched.endedTasks(3) === Success)
     // also because the scheduler is a mock, our manager isn't notified about the task killed event,
     // so we do that manually
     manager.handleFailedTask(origTask.taskId, TaskState.KILLED, TaskKilled("test"))
