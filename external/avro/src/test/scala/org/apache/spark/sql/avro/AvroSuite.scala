@@ -900,7 +900,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("SPARK-24204 error handling for unsupported Null data types") {
+  test("support Null data types") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
       val df = sql("select null")
