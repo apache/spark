@@ -40,9 +40,9 @@ import org.apache.spark.util.ThreadUtils
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
   private class EndpointData(
-      val name: String,
-      val endpoint: RpcEndpoint,
-      val ref: NettyRpcEndpointRef) {
+                              val name: String,
+                              val endpoint: RpcEndpoint,
+                              val ref: NettyRpcEndpointRef) {
     val inbox = new Inbox(ref, endpoint)
   }
 
@@ -113,10 +113,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-        postMessage(name, message, (e) => { e match {
-          case e: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${e.getMessage}")
-          case e: Throwable => logWarning(s"Message $message dropped. ${e.getMessage}")
-        }}
+      postMessage(name, message, (e) => { e match {
+        case e: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${e.getMessage}")
+        case e: Throwable => logWarning(s"Message $message dropped. ${e.getMessage}")
+      }}
       )}
   }
 
@@ -150,9 +150,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
    * @param callbackIfStopped callback function if the endpoint is stopped.
    */
   private def postMessage(
-      endpointName: String,
-      message: InboxMessage,
-      callbackIfStopped: (Exception) => Unit): Unit = {
+                           endpointName: String,
+                           message: InboxMessage,
+                           callbackIfStopped: (Exception) => Unit): Unit = {
     val error = synchronized {
       val data = endpoints.get(endpointName)
       if (stopped) {
@@ -194,23 +194,27 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     endpoints.containsKey(name)
   }
 
-  def getNumOfThreads(conf: SparkConf, defaultNumThreads: Int): Int = {
+  def getNumOfThreads(conf: SparkConf): Int = {
     val executorId = conf.get("spark.executor.id", "")
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER ||
-                    executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
     val side = if (isDriver) "driver" else "executor"
-    val num = conf.getInt(s"spark.$side.rpc.netty.dispatcher.numThreads", defaultNumThreads)
-    if (num > 0) num else defaultNumThreads
+
+    val num = conf.getInt(s"spark.$side.rpc.netty.dispatcher.numThreads", -1)
+    if (num > 0) {
+      num
+    } else {
+      val availableCores =
+        if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
+      nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
+        .getOrElse(math.max(2, availableCores))
+    }
   }
 
   /** Thread pool used for dispatching messages. */
   private val threadpool: ThreadPoolExecutor = {
-    val availableCores =
-      if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
-    val numThreads = nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
-        .getOrElse(math.max(2, availableCores))
-    val finalNumThreads = getNumOfThreads(nettyEnv.conf, numThreads)
-    val pool = ThreadUtils.newDaemonFixedThreadPool(finalNumThreads, "dispatcher-event-loop")
+    val numThreads = getNumOfThreads(nettyEnv.conf)
+    val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
     for (i <- 0 until numThreads) {
       pool.execute(new MessageLoop)
     }

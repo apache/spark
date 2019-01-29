@@ -43,12 +43,23 @@ object SparkTransportConf {
     // Specify thread configuration based on our JVM's allocation of cores (rather than necessarily
     // assuming we have all the machine's cores).
     // NB: Only set if serverThreads/clientThreads not already set.
+    val serverSpecificThreads = getSpecificNumOfThreads(conf, module, true)
+    val clientSpecificThreads = getSpecificNumOfThreads(conf, module, false)
     val numThreads = NettyUtils.defaultNumThreads(numUsableCores)
-    val finalServerNumThreads = getNumOfThreads(conf, module, true, numThreads)
-    val finalClientNumThreads = getNumOfThreads(conf, module, false, numThreads)
 
-    conf.setIfMissing(s"spark.$module.io.serverThreads", finalServerNumThreads)
-    conf.setIfMissing(s"spark.$module.io.clientThreads", finalClientNumThreads)
+    // override threads configurations with side (driver and executor) specific values
+    val serverKey = s"spark.$module.io.serverThreads"
+    if (serverSpecificThreads > 0) {
+      conf.set(serverKey, serverSpecificThreads.toString)
+    } else {
+      conf.setIfMissing(serverKey, numThreads.toString)
+    }
+    val clientKey = s"spark.$module.io.clientThreads"
+    if (clientSpecificThreads > 0) {
+      conf.set(clientKey, clientSpecificThreads.toString)
+    } else {
+      conf.setIfMissing(clientKey, numThreads.toString)
+    }
 
     new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)
@@ -64,26 +75,21 @@ object SparkTransportConf {
    * @param conf the [[SparkConf]]
    * @param module the module name
    * @param server if true, it's for the serverThreads. Otherwise, it's for the clientThreads.
-   * @param defaultNumThreads default number of threads
-   * @return
+   * @return the configured number of threads, or -1 if not configured.
    */
-  def getNumOfThreads(
-      conf: SparkConf,
-      module: String,
-      server: Boolean,
-      defaultNumThreads: Int): String = {
+  def getSpecificNumOfThreads(
+                               conf: SparkConf,
+                               module: String,
+                               server: Boolean): Int = {
     val executorId = conf.get("spark.executor.id", "")
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER ||
-                    executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
     val side = if (isDriver) "driver" else "executor"
 
-    val num =
-      if (server) {
-        conf.getInt(s"spark.$side.$module.io.serverThreads", defaultNumThreads)
-      } else {
-        conf.getInt(s"spark.$side.$module.io.clientThreads", defaultNumThreads)
-      }
-
-    if (num > 0) num.toString else defaultNumThreads.toString
+    if (server) {
+      conf.getInt(s"spark.$side.$module.io.serverThreads", -1)
+    } else {
+      conf.getInt(s"spark.$side.$module.io.clientThreads", -1)
+    }
   }
 }
