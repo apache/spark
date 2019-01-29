@@ -37,10 +37,9 @@ private[spark] object YarnContainerInfoHelper extends Logging {
       val containerId = getContainerId(container)
       val user = Utils.getCurrentUserName()
       val httpScheme = getYarnHttpScheme(yarnConf)
-      val host = getNodeManagerHost
-      val httpPort = getNodeManagerHttpPort
+      val httpAddress = getNodeManagerHttpAddress(container)
 
-      val baseUrl = s"$httpScheme$host:$httpPort/node/containerlogs/$containerId/$user"
+      val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
       logDebug(s"Base URL for logs: $baseUrl")
 
       Some(Map(
@@ -60,9 +59,7 @@ private[spark] object YarnContainerInfoHelper extends Logging {
       val yarnConf = new YarnConfiguration(conf)
       Some(Map(
         "HTTP_SCHEME" -> getYarnHttpScheme(yarnConf),
-        "NM_HOST" -> getNodeManagerHost,
-        "NM_PORT" -> getNodeManagerPort.toString,
-        "NM_HTTP_PORT" -> getNodeManagerHttpPort.toString,
+        "NM_HTTP_ADDRESS" -> getNodeManagerHttpAddress(container),
         "CLUSTER_ID" -> getClusterId(yarnConf).getOrElse(""),
         "CONTAINER_ID" -> ConverterUtils.toString(getContainerId(container)),
         "USER" -> Utils.getCurrentUserName(),
@@ -98,9 +95,9 @@ private[spark] object YarnContainerInfoHelper extends Logging {
     if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
   }
 
-  def getNodeManagerHost: String = System.getenv(Environment.NM_HOST.name())
-
-  def getNodeManagerPort: Int = System.getenv(Environment.NM_PORT.name()).toInt
-
-  def getNodeManagerHttpPort: Int = System.getenv(Environment.NM_HTTP_PORT.name()).toInt
+  def getNodeManagerHttpAddress(container: Option[Container]): String = container match {
+    case Some(c) => c.getNodeHttpAddress
+    case None => System.getenv(Environment.NM_HOST.name()) + ":" +
+      System.getenv(Environment.NM_HTTP_PORT.name())
+  }
 }
