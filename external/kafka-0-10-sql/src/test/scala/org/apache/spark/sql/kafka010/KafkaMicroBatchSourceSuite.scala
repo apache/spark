@@ -208,7 +208,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     "during end offset calculation") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
-    // fill in 5000 messages to trigger potential integer overflow
+    // fill in 5 messages to trigger potential integer overflow
     testUtils.sendMessages(topic, (0 until 5).map(_.toString).toArray, Some(0))
 
     val partitionOffsets = Map(
@@ -220,7 +220,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      // use latest to force begin to be 5000
+      // use latest to force begin to be 5
       .option("startingOffsets", startingOffsets)
       // use Long.Max to try to trigger overflow
       .option("maxOffsetsPerTrigger", Long.MaxValue)
