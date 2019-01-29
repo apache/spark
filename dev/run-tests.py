@@ -429,8 +429,6 @@ def post_python_tests_results():
               "PySpark coverage results.")
         sys.exit(1)
     spark_test_key = os.environ.get("SPARK_TEST_KEY")
-    with_pyspark_coverage_site = ["cd", "pyspark-coverage-site", "&&"]
-
     # The steps below uploads HTMLs to 'github.com/spark-test/pyspark-coverage-site'.
     # 1. Clone PySpark coverage site.
     run_cmd([
@@ -445,22 +443,22 @@ def post_python_tests_results():
     # 4. Check out to a temporary branch.
     os.chdir("pyspark-coverage-site")
     try:
-        run_cmd(with_pyspark_coverage_site + ["git", "checkout", "--orphan", "latest_branch"])
+        run_cmd(["git", "checkout", "--orphan", "latest_branch"])
         # 5. Add all the files.
-        run_cmd(with_pyspark_coverage_site + ["git", "add", "-A"])
+        run_cmd(["git", "add", "-A"])
         # 6. Commit current test coverage results.
-        run_cmd(with_pyspark_coverage_site + [
+        run_cmd([
             "git",
             "commit",
             "-am",
             '"Coverage report at latest commit in Apache Spark"',
             '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
         # 7. Delete the old branch.
-        run_cmd(with_pyspark_coverage_site + ["git", "branch", "-D", "gh-pages"])
+        run_cmd(["git", "branch", "-D", "gh-pages"])
         # 8. Rename the temporary branch to master.
-        run_cmd(with_pyspark_coverage_site + ["git", "branch", "-m", "gh-pages"])
+        run_cmd(["git", "branch", "-m", "gh-pages"])
         # 9. Finally, force update to our repository.
-        run_cmd(with_pyspark_coverage_site + ["git", "push", "-f", "origin", "gh-pages"])
+        run_cmd(["git", "push", "-f", "origin", "gh-pages"])
     finally:
         os.chdir("..")
 
