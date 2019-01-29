@@ -760,7 +760,7 @@ private[spark] class AppStatusListener(
       // Use RDD distribution to update executor memory and disk usage info.
       liveRDD.getDistributions().foreach { case (executorId, rddDist) =>
         val maybeExec = liveExecutors.get(executorId)
-        updateExecutorMemoryDiskUsed(maybeExec, storageLevel, -rddDist.memoryUsed,
+        updateExecutorMemoryDiskInfo(maybeExec, storageLevel, -rddDist.memoryUsed,
           -rddDist.diskUsed, Option(-rddDist.offHeapUsed), Option(-rddDist.onHeapUsed))
         maybeExec.foreach(exec => maybeUpdate(exec, now))
       }
@@ -877,7 +877,7 @@ private[spark] class AppStatusListener(
 
     // Update the executor stats first, since they are used to calculate the free memory
     // on tracked RDD distributions.
-    updateExecutorMemoryDiskUsed(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
+    updateExecutorMemoryDiskInfo(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
 
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
     // can update the executor information too.
@@ -990,12 +990,13 @@ private[spark] class AppStatusListener(
     val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
 
     val maybeExec = liveExecutors.get(executorId)
-    updateExecutorMemoryDiskUsed(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
+    updateExecutorMemoryDiskInfo(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
     maybeExec.foreach(exec => maybeUpdate(exec, now))
 
   }
+    
   // update executor memory and disk usage info
-  private def updateExecutorMemoryDiskUsed(
+  private def updateExecutorMemoryDiskInfo(
       maybeExec: Option[LiveExecutor],
       storageLevel: StorageLevel,
       memoryDelta: Long,
