@@ -435,18 +435,18 @@ def post_python_tests_results():
         "git",
         "clone",
         "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key])
-    # 2. Remove existing reports
+    # 2. Remove existing HTMLs.
     run_cmd(["rm", "-fr"] + glob.glob("pyspark-coverage-site/*"))
-    # 3. Copy generated coverage HTML.
+    # 3. Copy generated coverage HTMLs.
     for f in glob.glob("%s/python/test_coverage/htmlcov/*" % SPARK_HOME):
         shutil.copy(f, "pyspark-coverage-site/")
-    # 4. Check out to a temporary branch.
     os.chdir("pyspark-coverage-site")
     try:
+        # 4. Check out to a temporary branch.
         run_cmd(["git", "symbolic-ref", "HEAD", "refs/heads/latest_branch"])
         # 5. Add all the files.
         run_cmd(["git", "add", "-A"])
-        # 6. Commit current test coverage results.
+        # 6. Commit current HTMLs.
         run_cmd([
             "git",
             "commit",
