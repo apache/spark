@@ -1053,8 +1053,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // scale tolerance by number of samples with constant factor
       // Note: constant factor was tuned by running some tests where there were no zero
       // feature values and validating we are never within tolerance
-      val factor = 100
-      val tolerance = Utils.EPSILON * unweightedNumSamples * factor
+      val tolerance = Utils.EPSILON * unweightedNumSamples * 100
       // add expected zero value count and get complete statistics
       val valueCountMap = if (weightedNumSamples - partNumSamples > tolerance) {
         partValueCountMap + (0.0 -> (weightedNumSamples - partNumSamples))
