@@ -209,10 +209,10 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
     // fill in 5000 messages to trigger potential integer overflow
-    testUtils.sendMessages(topic, (0 until 5000).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (0 until 5).map(_.toString).toArray, Some(0))
 
     val partitionOffsets = Map(
-      new TopicPartition(topic, 0) -> 5000L
+      new TopicPartition(topic, 0) -> 5L
     )
     val startingOffsets = JsonUtils.partitionOffsets(partitionOffsets)
 
