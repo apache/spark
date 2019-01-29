@@ -1050,8 +1050,12 @@ private[spark] object RandomForest extends Logging with Serializable {
       // Calculate the expected number of samples for finding splits
       val weightedNumSamples = samplesFractionForFindSplits(metadata) *
         metadata.weightedNumExamples
+      // scale tolerance by number of samples with constant factor
+      // Note: constant factor was tuned by running some tests where there were no zero
+      // feature values and validating we are never within tolerance
+      val factor = 100
+      val tolerance = Utils.EPSILON * unweightedNumSamples * factor
       // add expected zero value count and get complete statistics
-      val tolerance = Utils.EPSILON * unweightedNumSamples * unweightedNumSamples
       val valueCountMap = if (weightedNumSamples - partNumSamples > tolerance) {
         partValueCountMap + (0.0 -> (weightedNumSamples - partNumSamples))
       } else {
