@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
-class AttributeReferenceSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-
-  val confName: String = SQLConf.ATTR_COMPARE_NEW.key
+class AttributeReferenceSuite extends SQLTestUtils with TestHiveSingleton {
 
   val query: String = "select * from (select a.id as newid, a.name from a join b" +
     " where a.id = b.id) temp  join c  on temp.newid = c.id"
@@ -46,19 +42,13 @@ class AttributeReferenceSuite extends QueryTest with SQLTestUtils with TestHiveS
   }
 
 
-  test(s"Tests to check for presence of exchange when falg is enable/disabled") {
-    val confs = Array("true" -> 3, "false" -> 4)
-
-    confs.foreach { conf =>
-      withSQLConf(confName -> conf._1) {
-        val df = spark.sql(query)
-        val executedPlan = df.queryExecution.executedPlan
-        val exchanges = executedPlan.collect {
-          case e: Exchange => e
-        }
-        assert(exchanges.size == conf._2)
-      }
+  test(s"Tests to check for presence of exchange when flag is enable/disabled") {
+    val df = spark.sql(query)
+    val executedPlan = df.queryExecution.executedPlan
+    val exchanges = executedPlan.collect {
+      case e: Exchange => e
     }
+    assert(exchanges.size == 3)
   }
 
   protected override def afterAll(): Unit = {

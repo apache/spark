@@ -150,14 +150,6 @@ object SQLConf {
     }
   }
 
-  val ATTR_COMPARE_NEW =
-    buildConf("spark.sql.attribute.compare.new")
-      .doc("When true, semanticEquals of Attribute reference" +
-        " also checks the associated metadata object's exprId" +
-        " before failing the comparison")
-      .booleanConf
-      .createWithDefault(false)
-
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -2027,8 +2019,6 @@ class SQLConf extends Serializable with Logging {
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
-
-  def useAttrCompareNew: Boolean = getConf(ATTR_COMPARE_NEW)
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)

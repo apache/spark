@@ -178,8 +178,7 @@ case class Alias(child: Expression, name: String)(
   override def toAttribute: Attribute = {
     if (resolved) {
       if (resolved) {
-        val newCompare = SQLConf.get.useAttrCompareNew
-        val newMetadata = if (newCompare && child.isInstanceOf[AttributeReference]) {
+        val newMetadata = if (child.isInstanceOf[AttributeReference]) {
           val attr = child.asInstanceOf[AttributeReference]
           val exprId = attr.exprId
           new MetadataBuilder()
@@ -258,14 +257,7 @@ case class AttributeReference(
    * Returns true iff the expression id is the same for both attributes.
    */
   def sameRef(other: AttributeReference): Boolean = {
-    lazy val check: Boolean = try {
-      exprId.toString == other.metadata.getString("exprId")
-    } catch {
-      case _ =>
-        false
-    }
-    this.exprId == other.exprId || (SQLConf.get.useAttrCompareNew &&
-      check)
+    this.exprId == other.exprId
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -276,6 +268,8 @@ case class AttributeReference(
   }
 
   override def semanticEquals(other: Expression): Boolean = other match {
+    case ar: AttributeReference if ar.metadata.contains("exprId") =>
+      exprId.toString == ar.metadata.getString("exprId")
     case ar: AttributeReference => sameRef(ar)
     case _ => false
   }
