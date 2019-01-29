@@ -759,18 +759,10 @@ private[spark] class AppStatusListener(
 
       // Use RDD distribution to update executor memory and disk usage info.
       liveRDD.getDistributions().foreach { case (executorId, rddDist) =>
-        liveExecutors.get(executorId).foreach { exec =>
-          if (exec.hasMemoryInfo) {
-            if (storageLevel.useOffHeap) {
-              exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, -rddDist.offHeapUsed)
-            } else {
-              exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, -rddDist.onHeapUsed)
-            }
-          }
-          exec.memoryUsed = addDeltaToValue(exec.memoryUsed, -rddDist.memoryUsed)
-          exec.diskUsed = addDeltaToValue(exec.diskUsed, -rddDist.diskUsed)
-          maybeUpdate(exec, now)
-        }
+        val maybeExec = liveExecutors.get(executorId)
+        updateExecutorMemoryDiskUsed(maybeExec, storageLevel, -rddDist.memoryUsed,
+          -rddDist.diskUsed, Option(-rddDist.offHeapUsed), Option(-rddDist.onHeapUsed))
+        maybeExec.foreach(exec => maybeUpdate(exec, now))
       }
     }
 
@@ -885,17 +877,7 @@ private[spark] class AppStatusListener(
 
     // Update the executor stats first, since they are used to calculate the free memory
     // on tracked RDD distributions.
-    maybeExec.foreach { exec =>
-      if (exec.hasMemoryInfo) {
-        if (storageLevel.useOffHeap) {
-          exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, memoryDelta)
-        } else {
-          exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, memoryDelta)
-        }
-      }
-      exec.memoryUsed = addDeltaToValue(exec.memoryUsed, memoryDelta)
-      exec.diskUsed = addDeltaToValue(exec.diskUsed, diskDelta)
-    }
+    updateExecutorMemoryDiskUsed(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
 
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
     // can update the executor information too.
@@ -996,8 +978,9 @@ private[spark] class AppStatusListener(
     }
   }
 
-  private def updateBroadcastBlock(event: SparkListenerBlockUpdated,
-     broadcast: BroadcastBlockId): Unit = {
+  private def updateBroadcastBlock(
+      event: SparkListenerBlockUpdated,
+      broadcast: BroadcastBlockId): Unit = {
     val now = System.nanoTime()
     val executorId = event.blockUpdatedInfo.blockManagerId.executorId
     val storageLevel = event.blockUpdatedInfo.storageLevel
@@ -1006,21 +989,29 @@ private[spark] class AppStatusListener(
     val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
     val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
 
-    // Function to apply a delta to a value, but ensure that it doesn't go negative.
-    def newValue(old: Long, delta: Long): Long = math.max(0, old + delta)
-
     val maybeExec = liveExecutors.get(executorId)
+    updateExecutorMemoryDiskUsed(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
+    maybeExec.foreach(exec => maybeUpdate(exec, now))
+
+  }
+  // update executor memory and disk usage info
+  private def updateExecutorMemoryDiskUsed(
+      maybeExec: Option[LiveExecutor],
+      storageLevel: StorageLevel,
+      memoryDelta: Long,
+      diskDelta: Long,
+      OffHeapDelta: Option[Long],
+      OnHeapDelta: Option[Long]): Unit = {
     maybeExec.foreach { exec =>
       if (exec.hasMemoryInfo) {
         if (storageLevel.useOffHeap) {
-          exec.usedOffHeap = newValue(exec.usedOffHeap, memoryDelta)
+          exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, OffHeapDelta.getOrElse(memoryDelta))
         } else {
-          exec.usedOnHeap = newValue(exec.usedOnHeap, memoryDelta)
+          exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, OnHeapDelta.getOrElse(memoryDelta))
         }
       }
-      exec.memoryUsed = newValue(exec.memoryUsed, memoryDelta)
-      exec.diskUsed = newValue(exec.diskUsed, diskDelta)
-      maybeUpdate(exec, now)
+      exec.memoryUsed = addDeltaToValue(exec.memoryUsed, memoryDelta)
+      exec.diskUsed = addDeltaToValue(exec.diskUsed, diskDelta)
     }
   }
 
