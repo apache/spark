@@ -40,11 +40,12 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
    */
   protected def readFile(path: String, testVectorized: Boolean = true)
       (f: DataFrame => Unit): Unit = {
-    (true :: false :: Nil).foreach { vectorized =>
-      if (!vectorized || testVectorized) {
-        withSQLConf(vectorizedReaderEnabledKey -> vectorized.toString) {
-          f(spark.read.format(dataSourceName).load(path.toString))
-        }
+    withSQLConf(vectorizedReaderEnabledKey -> "false") {
+      f(spark.read.format(dataSourceName).load(path.toString))
+    }
+    if (testVectorized) {
+      withSQLConf(vectorizedReaderEnabledKey -> "true") {
+        f(spark.read.format(dataSourceName).load(path.toString))
       }
     }
   }
