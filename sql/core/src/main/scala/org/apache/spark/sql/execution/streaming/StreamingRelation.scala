@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceV2, Table}
+import org.apache.spark.sql.sources.v2.{DataSourceV2, Table}
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -103,30 +103,6 @@ case class StreamingRelationV2(
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
 
-  override def computeStats(): Statistics = Statistics(
-    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
-  )
-
-  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
-}
-
-/**
- * Used to link a [[DataSourceV2]] into a continuous processing execution.
- */
-case class ContinuousExecutionRelation(
-    source: ContinuousReadSupportProvider,
-    extraOptions: Map[String, String],
-    output: Seq[Attribute])(session: SparkSession)
-  extends LeafNode with MultiInstanceRelation {
-
-  override def otherCopyArgs: Seq[AnyRef] = session :: Nil
-  override def isStreaming: Boolean = true
-  override def toString: String = source.toString
-
-  // There's no sensible value here. On the execution path, this relation will be
-  // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
-  // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
-  // value.
   override def computeStats(): Statistics = Statistics(
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )

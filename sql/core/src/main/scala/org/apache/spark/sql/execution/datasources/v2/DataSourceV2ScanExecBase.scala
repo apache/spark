@@ -19,39 +19,26 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
 
-/**
- * Physical plan node for scanning a batch of data from a data source.
- */
-case class DataSourceV2ScanExec(
-    output: Seq[AttributeReference],
-    scanDesc: String,
-    @transient batch: Batch)
-  extends LeafExecNode with ColumnarBatchScan {
+trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
+
+  def scan: Scan
+
+  def partitions: Seq[InputPartition]
+
+  def readerFactory: PartitionReaderFactory
 
   override def simpleString(maxFields: Int): String = {
-    s"ScanV2${truncatedString(output, "[", ", ", "]", maxFields)} $scanDesc"
+    s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
   }
 
-  // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
-  override def equals(other: Any): Boolean = other match {
-    case other: DataSourceV2ScanExec => this.batch == other.batch
-    case _ => false
-  }
-
-  override def hashCode(): Int = batch.hashCode()
-
-  private lazy val partitions = batch.planInputPartitions()
-
-  private lazy val readerFactory = batch.createReaderFactory()
-
-  override def outputPartitioning: physical.Partitioning = batch match {
+  override def outputPartitioning: physical.Partitioning = scan match {
     case _ if partitions.length == 1 =>
       SinglePartition
 
@@ -70,13 +57,11 @@ case class DataSourceV2ScanExec(
     partitions.exists(readerFactory.supportColumnarReads)
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
-  }
+  def inputRDD: RDD[InternalRow]
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
       WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {

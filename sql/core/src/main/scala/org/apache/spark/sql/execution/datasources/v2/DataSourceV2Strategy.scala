@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 
 object DataSourceV2Strategy extends Strategy {
@@ -117,7 +117,7 @@ object DataSourceV2Strategy extends Strategy {
            |Output: ${output.mkString(", ")}
          """.stripMargin)
 
-      val plan = DataSourceV2ScanExec(output, scan.description(), scan.toBatch)
+      val plan = BatchScanExec(output, scan)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, plan)).getOrElse(plan)
@@ -130,15 +130,14 @@ object DataSourceV2Strategy extends Strategy {
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
         MicroBatchScanExec(
-          r.output, r.scanDesc, microBatchStream, r.startOffset.get, r.endOffset.get)) :: Nil
+          r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)) :: Nil
 
-    case r: OldStreamingDataSourceV2Relation =>
-      // TODO: support operator pushdown for streaming data sources.
-      val scanConfig = r.scanConfigBuilder.build()
+    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isEmpty =>
+      val continuousStream = r.stream.asInstanceOf[ContinuousStream]
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
         ContinuousScanExec(
-          r.output, r.source, r.options, r.pushedFilters, r.readSupport, scanConfig)) :: Nil
+          r.output, r.scan, continuousStream, r.startOffset.get)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
@@ -158,8 +157,7 @@ object DataSourceV2Strategy extends Strategy {
 
     case Repartition(1, false, child) =>
       val isContinuous = child.find {
-        case s: OldStreamingDataSourceV2Relation =>
-          s.readSupport.isInstanceOf[ContinuousReadSupport]
+        case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[ContinuousStream]
         case _ => false
       }.isDefined
 

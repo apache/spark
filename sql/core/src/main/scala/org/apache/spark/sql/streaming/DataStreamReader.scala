@@ -30,9 +30,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -183,39 +181,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
           case _ => provider.getTable(dsOptions)
         }
         table match {
-          case s: SupportsMicroBatchRead =>
+          case _: SupportsMicroBatchRead | _: SupportsContinuousRead =>
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
-                provider, source, s, options,
-                table.schema.toAttributes, v1Relation)(sparkSession))
-
-          case _ if ds.isInstanceOf[ContinuousReadSupportProvider] =>
-            val provider = ds.asInstanceOf[ContinuousReadSupportProvider]
-            var tempReadSupport: ContinuousReadSupport = null
-            val schema = try {
-              val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
-              tempReadSupport = if (userSpecifiedSchema.isDefined) {
-                provider.createContinuousReadSupport(
-                  userSpecifiedSchema.get, tmpCheckpointPath, dsOptions)
-              } else {
-                provider.createContinuousReadSupport(tmpCheckpointPath, dsOptions)
-              }
-              tempReadSupport.fullSchema()
-            } finally {
-              // Stop tempReader to avoid side-effect thing
-              if (tempReadSupport != null) {
-                tempReadSupport.stop()
-                tempReadSupport = null
-              }
-            }
-            Dataset.ofRows(
-              sparkSession,
-              // TODO: do not pass null as table after finish the API refactor for continuous
-              // stream.
-              StreamingRelationV2(
-                provider, source, table = null, options,
-                schema.toAttributes, v1Relation)(sparkSession))
+                provider, source, table, options, table.schema.toAttributes, v1Relation)(
+                sparkSession))
 
           // fallback to v1
           case _ => Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
