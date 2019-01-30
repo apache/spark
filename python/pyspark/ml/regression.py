@@ -202,7 +202,7 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritabl
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            return LinearRegressionTrainingSummary(super().summary)
+            return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -1673,7 +1673,8 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            return GeneralizedLinearRegressionTrainingSummary(super().summary)
+            return GeneralizedLinearRegressionTrainingSummary(
+                super(GeneralizedLinearRegressionModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)

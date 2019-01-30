@@ -132,7 +132,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainin
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return GaussianMixtureSummary(super().summary)
+            return GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -334,7 +334,7 @@ class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable, HasTrainingS
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return KMeansSummary(super().summary)
+            return KMeansSummary(super(KMeansModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -525,7 +525,7 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainin
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return BisectingKMeansSummary(super().summary)
+            return BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)

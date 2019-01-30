@@ -621,7 +621,7 @@ class HasTrainingSummary(object):
     """
 
     @property
-    @since("3.0.0")
+    @since("2.1.0")
     def hasSummary(self):
         """
         Indicates whether a training summary exists for this model
@@ -630,14 +630,10 @@ class HasTrainingSummary(object):
         return self._call_java("hasSummary")
 
     @property
-    @since("3.0.0")
+    @since("2.1.0")
     def summary(self):
         """
         Gets summary of the model trained on the training set. An exception is thrown if
         no summary exists.
         """
-        if self.hasSummary:
-            return (self._call_java("summary"))
-        else:
-            raise RuntimeError("No training summary available for this %s" %
-                               self.__class__.__name__)
+        return (self._call_java("summary"))

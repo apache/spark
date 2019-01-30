@@ -534,9 +534,11 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         """
         if self.hasSummary:
             if self.numClasses <= 2:
-                return BinaryLogisticRegressionTrainingSummary(super().summary)
+                return BinaryLogisticRegressionTrainingSummary(super(LogisticRegressionModel,
+                                                                     self).summary)
             else:
-                return LogisticRegressionTrainingSummary(super().summary)
+                return LogisticRegressionTrainingSummary(super(LogisticRegressionModel,
+                                                               self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
