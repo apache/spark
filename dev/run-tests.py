@@ -616,14 +616,13 @@ def main():
         build_spark_assembly_sbt(hadoop_version, should_run_java_style_checks)
 
     # run the test suites
-    # run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
+    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         # We only run PySpark tests with coverage report in one specific job with
         # Spark master with SBT in Jenkins.
         is_sbt_master_job = "SPARK_MATER_SBT_HADOOP_2_7" in os.environ
-        is_sbt_master_job = True  # Will remove this right before getting merged.
         run_python_tests(
             modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
         run_python_packaging_tests()
