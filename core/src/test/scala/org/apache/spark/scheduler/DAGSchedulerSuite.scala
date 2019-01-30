@@ -2902,16 +2902,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(makeCompletionEvent(taskToComplete, Success, Nil, Nil))
     assert(completedPartitions.getOrElse(reduceStage, Set()) === Set(taskToComplete.partitionId))
 
-    assert(completedPartitions(taskSets(3).stageId).contains(
-      taskSets(3).tasks(1).partitionId) == false, "Corresponding partition id for" +
-      " stage 1 attempt 1 is not complete yet")
-
     // this will mark partition id 1 of stage 1 attempt 0 as complete. So we expect the status
     // of that partition id to be reflected for stage 1 attempt 1 as well.
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(1), Success, Nil, Nil))
-    assert(completedPartitions.get(taskSets(3).stageId).get.contains(
-      taskSets(3).tasks(1).partitionId) == true)
     assert(completedPartitions(reduceStage) === Set(
       taskSets(3).tasks(1).partitionId, taskSets(3).tasks(3).partitionId))
   }

@@ -126,11 +126,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         failedTaskSetException = exception
       }
       override def taskEnded(
-        task: Task[_],
-        reason: TaskEndReason,
-        result: Any,
-        accumUpdates: Seq[AccumulatorV2[_, _]],
-        taskInfo: TaskInfo): Unit = {
+          task: Task[_],
+          reason: TaskEndReason,
+          result: Any,
+          accumUpdates: Seq[AccumulatorV2[_, _]],
+          taskInfo: TaskInfo): Unit = {
         if (reason == Success) {
           // For SPARK-23433 / SPARK-25250, need to make DAGScheduler lets all tasksets know
           // about complete partitions.  Super implementation is not enough, because we've mocked
