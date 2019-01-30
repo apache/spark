@@ -455,6 +455,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
           break;
         case CONF:
+          checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
           conf.put(setConf[0], setConf[1]);

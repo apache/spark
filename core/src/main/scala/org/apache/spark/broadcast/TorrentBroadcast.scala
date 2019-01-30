@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
@@ -74,14 +74,14 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   @transient private var blockSize: Int = _
 
   private def setConf(conf: SparkConf) {
-    compressionCodec = if (conf.getBoolean("spark.broadcast.compress", true)) {
+    compressionCodec = if (conf.get(config.BROADCAST_COMPRESS)) {
       Some(CompressionCodec.createCodec(conf))
     } else {
       None
     }
     // Note: use getSizeAsKb (not bytes) to maintain compatibility if no units are provided
-    blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
-    checksumEnabled = conf.getBoolean("spark.broadcast.checksum", true)
+    blockSize = conf.get(config.BROADCAST_BLOCKSIZE).toInt * 1024
+    checksumEnabled = conf.get(config.BROADCAST_CHECKSUM)
   }
   setConf(SparkEnv.get.conf)
 
@@ -236,7 +236,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
               throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
             }
           case None =>
-            logInfo("Started reading broadcast variable " + id)
+            val estimatedTotalSize = Utils.bytesToString(numBlocks * blockSize)
+            logInfo(s"Started reading broadcast variable $id with $numBlocks pieces " +
+              s"(estimated total size $estimatedTotalSize)")
             val startTimeMs = System.currentTimeMillis()
             val blocks = readBlocks()
             logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))

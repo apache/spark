@@ -9,7 +9,7 @@ displayTitle: Parquet Files
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data. When writing Parquet files, all columns are automatically converted to be nullable for
+of the original data. When reading Parquet files, all columns are automatically converted to be nullable for
 compatibility reasons.
 
 ### Loading Data Programmatically
@@ -292,18 +292,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     <p>
       When true, the Parquet data source merges schemas collected from all data files, otherwise the
       schema is picked from the summary file or a random data file if no summary file is available.
-    </p>
-  </td>
-</tr>
-<tr>
-  <td><code>spark.sql.optimizer.metadataOnly</code></td>
-  <td>true</td>
-  <td>
-    <p>
-      When true, enable the metadata-only query optimization that use the table's metadata to
-      produce the partition columns instead of table scans. It applies when all the columns scanned
-      are partition columns and the query has an aggregate operator that satisfies distinct
-      semantics.
     </p>
   </td>
 </tr>

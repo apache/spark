@@ -40,10 +40,10 @@ import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HiveDelegationTokenProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -126,7 +126,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val tokenProvider = new HiveDelegationTokenProvider()
     if (tokenProvider.delegationTokensRequired(sparkConf, hadoopConf)) {
       val credentials = new Credentials()
-      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, credentials)
+      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, Set.empty, credentials)
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 

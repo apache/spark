@@ -16,7 +16,6 @@
 #
 
 ARG base_img
-ARG spark_uid=185
 
 FROM $base_img
 WORKDIR /
@@ -38,6 +37,7 @@ RUN apk add --no-cache python && \
     # Removed the .cache to save space
     rm -r /root/.cache
 
+COPY python/pyspark ${SPARK_HOME}/python/pyspark
 COPY python/lib ${SPARK_HOME}/python/lib
 ENV PYTHONPATH ${SPARK_HOME}/python/lib/pyspark.zip:${SPARK_HOME}/python/lib/py4j-*.zip
 
@@ -45,4 +45,5 @@ WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
 
 # Specify the User that the actual main process will run as
+ARG spark_uid=185
 USER ${spark_uid}

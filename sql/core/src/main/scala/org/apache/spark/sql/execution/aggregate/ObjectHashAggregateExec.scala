@@ -77,7 +77,7 @@ case class ObjectHashAggregateExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time")
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build")
   )
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
@@ -140,15 +140,15 @@ case class ObjectHashAggregateExec(
     }
   }
 
-  override def verboseString: String = toString(verbose = true)
+  override def verboseString(maxFields: Int): String = toString(verbose = true, maxFields)
 
-  override def simpleString: String = toString(verbose = false)
+  override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)
 
-  private def toString(verbose: Boolean): String = {
+  private def toString(verbose: Boolean, maxFields: Int): String = {
     val allAggregateExpressions = aggregateExpressions
-    val keyString = truncatedString(groupingExpressions, "[", ", ", "]")
-    val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]")
-    val outputString = truncatedString(output, "[", ", ", "]")
+    val keyString = truncatedString(groupingExpressions, "[", ", ", "]", maxFields)
+    val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
+    val outputString = truncatedString(output, "[", ", ", "]", maxFields)
     if (verbose) {
       s"ObjectHashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
     } else {

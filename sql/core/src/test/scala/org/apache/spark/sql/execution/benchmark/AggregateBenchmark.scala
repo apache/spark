@@ -22,7 +22,7 @@ import java.util.HashMap
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.execution.vectorized.AggregateHashMap
@@ -473,10 +473,10 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
           value.setInt(0, 555)
           val taskMemoryManager = new TaskMemoryManager(
-            new StaticMemoryManager(
+            new UnifiedMemoryManager(
               new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
               Long.MaxValue,
-              Long.MaxValue,
+              Long.MaxValue / 2,
               1),
             0)
           val map = new LongToUnsafeRowMap(taskMemoryManager, 64)
@@ -504,11 +504,11 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       Seq("off", "on").foreach { heap =>
         benchmark.addCase(s"BytesToBytesMap ($heap Heap)") { _ =>
           val taskMemoryManager = new TaskMemoryManager(
-            new StaticMemoryManager(
+            new UnifiedMemoryManager(
               new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, s"${heap == "off"}")
                 .set(MEMORY_OFFHEAP_SIZE.key, "102400000"),
               Long.MaxValue,
-              Long.MaxValue,
+              Long.MaxValue / 2,
               1),
             0)
           val map = new BytesToBytesMap(taskMemoryManager, 1024, 64L << 20)

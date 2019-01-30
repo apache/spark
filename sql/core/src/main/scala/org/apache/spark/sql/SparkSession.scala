@@ -93,7 +93,7 @@ class SparkSession private(
   private[sql] def this(sc: SparkContext) {
     this(sc, None, None,
       SparkSession.applyExtensions(
-        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
+        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
         new SparkSessionExtensions))
   }
 
@@ -649,7 +649,7 @@ class SparkSession private(
    */
   def sql(sqlText: String): DataFrame = {
     val tracker = new QueryPlanningTracker
-    val plan = tracker.measureTime(QueryPlanningTracker.PARSING) {
+    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       sessionState.sqlParser.parsePlan(sqlText)
     }
     Dataset.ofRows(self, plan, tracker)
@@ -950,7 +950,7 @@ object SparkSession extends Logging {
         }
 
         applyExtensions(
-          sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
+          sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
           extensions)
 
         session = new SparkSession(sparkContext, None, None, extensions)
@@ -1138,14 +1138,13 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Initialize extensions for given extension classname. This class will be applied to the
+   * Initialize extensions for given extension classnames. The classes will be applied to the
    * extensions passed into this function.
    */
   private def applyExtensions(
-      extensionOption: Option[String],
+      extensionConfClassNames: Seq[String],
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
-    if (extensionOption.isDefined) {
-      val extensionConfClassName = extensionOption.get
+    extensionConfClassNames.foreach { extensionConfClassName =>
       try {
         val extensionConfClass = Utils.classForName(extensionConfClassName)
         val extensionConf = extensionConfClass.getConstructor().newInstance()

@@ -397,7 +397,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Join(
           Project(Seq($"x.key"), SubqueryAlias("x", input)),
           Project(Seq($"y.key"), SubqueryAlias("y", input)),
-          Cross, None))
+          Cross, None, JoinHint.NONE))
 
     assertAnalysisSuccess(query)
   }
@@ -578,7 +578,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
     val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
     val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
-    val join = Join(left, right, Inner, None)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
     assertAnalysisSuccess(
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }

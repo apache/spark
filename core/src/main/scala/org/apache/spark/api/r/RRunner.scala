@@ -27,6 +27,8 @@ import scala.util.Try
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.internal.config.R._
 import org.apache.spark.util.Utils
 
 /**
@@ -123,7 +125,8 @@ private[spark] class RRunner[U](
       partitionIndex: Int): Unit = {
     val env = SparkEnv.get
     val taskContext = TaskContext.get()
-    val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+    val bufferSize = System.getProperty(BUFFER_SIZE.key,
+      BUFFER_SIZE.defaultValueString).toInt
     val stream = new BufferedOutputStream(output, bufferSize)
 
     new Thread("writer for R") {
@@ -340,11 +343,10 @@ private[r] object RRunner {
     // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
     // but kept here for backward compatibility.
     val sparkConf = SparkEnv.get.conf
-    var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
-    rCommand = sparkConf.get("spark.r.command", rCommand)
+    var rCommand = sparkConf.get(SPARKR_COMMAND)
+    rCommand = sparkConf.get(R_COMMAND).orElse(Some(rCommand)).get
 
-    val rConnectionTimeout = sparkConf.getInt(
-      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
+    val rConnectionTimeout = sparkConf.get(R_BACKEND_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir(0) + "/SparkR/worker/" + script

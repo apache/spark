@@ -36,6 +36,8 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
@@ -85,6 +87,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("run Spark in yarn-cluster mode") {
     testBasicYarnApp(false)
+  }
+
+  test("run Spark in yarn-client mode with unmanaged am") {
+    testBasicYarnApp(true, Map(YARN_UNMANAGED_AM.key -> "true"))
   }
 
   test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
@@ -192,7 +198,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val propsFile = createConfFile()
     val handle = new SparkLauncher(env)
       .setSparkHome(sys.props("spark.test.home"))
-      .setConf("spark.ui.enabled", "false")
+      .setConf(UI_ENABLED.key, "false")
       .setPropertiesFile(propsFile)
       .setMaster("yarn")
       .setDeployMode("client")
@@ -441,7 +447,7 @@ private object YarnClusterDriver extends Logging with Matchers {
 
       // If we are running in yarn-cluster mode, verify that driver logs links and present and are
       // in the expected format.
-      if (conf.get("spark.submit.deployMode") == "cluster") {
+      if (conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
         assert(listener.driverLogs.nonEmpty)
         val driverLogs = listener.driverLogs.get
         assert(driverLogs.size === 2)
