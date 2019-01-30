@@ -135,7 +135,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     execIds.foreach { id =>
       listener.onExecutorAdded(SparkListenerExecutorAdded(time, id,
-        new ExecutorInfo(s"$id.example.com", 1, Map())))
+        new ExecutorInfo(s"$id.example.com", 1, Map.empty, Map.empty)))
     }
 
     execIds.foreach { id =>
@@ -685,7 +685,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val bm2 = BlockManagerId("2", "2.example.com", 84)
     Seq(bm1, bm2).foreach { bm =>
       listener.onExecutorAdded(SparkListenerExecutorAdded(1L, bm.executorId,
-        new ExecutorInfo(bm.host, 1, Map())))
+        new ExecutorInfo(bm.host, 1, Map.empty, Map.empty)))
       listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm, maxMemory))
       check[ExecutorSummaryWrapper](bm.executorId) { exec =>
         assert(exec.info.maxMemory === maxMemory)
@@ -1553,7 +1553,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   /** Create an executor added event for the specified executor Id. */
   private def createExecutorAddedEvent(executorId: Int) = {
-    SparkListenerExecutorAdded(0L, executorId.toString, new ExecutorInfo("host1", 1, Map.empty))
+    SparkListenerExecutorAdded(0L, executorId.toString,
+      new ExecutorInfo("host1", 1, Map.empty, Map.empty))
   }
 
   /** Create an executor added event for the specified executor Id. */

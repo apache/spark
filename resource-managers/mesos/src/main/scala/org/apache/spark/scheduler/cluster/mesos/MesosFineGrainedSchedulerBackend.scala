@@ -328,7 +328,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
         slaveIdToWorkerOffer.get(slaveId).foreach(o =>
           listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), slaveId,
             // TODO: Add support for log urls for Mesos
-            new ExecutorInfo(o.host, o.cores, Map.empty)))
+            new ExecutorInfo(o.host, o.cores, Map.empty, Map.empty)))
         )
         logTrace(s"Launching Mesos tasks on slave '$slaveId', tasks:\n${getTasksSummary(tasks)}")
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)

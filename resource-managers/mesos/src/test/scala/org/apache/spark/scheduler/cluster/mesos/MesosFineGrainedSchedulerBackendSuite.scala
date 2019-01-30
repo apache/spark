@@ -86,7 +86,8 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1",
+        new ExecutorInfo("host1", 2, Map.empty, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.getSparkHome()).thenReturn(Option("/spark-home"))
@@ -117,7 +118,8 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1",
+        new ExecutorInfo("host1", 2, Map.empty, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.getSparkHome()).thenReturn(Option("/spark-home"))
@@ -157,7 +159,8 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1",
+        new ExecutorInfo("host1", 2, Map.empty, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
@@ -217,7 +220,8 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1",
+        new ExecutorInfo("host1", 2, Map.empty, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
@@ -308,7 +312,8 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1",
+        new ExecutorInfo("host1", 2, Map.empty, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)

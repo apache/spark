@@ -211,7 +211,8 @@ private[spark] object JsonProtocol {
     ("Timestamp" -> applicationStart.time) ~
     ("User" -> applicationStart.sparkUser) ~
     ("App Attempt ID" -> applicationStart.appAttemptId.map(JString(_)).getOrElse(JNothing)) ~
-    ("Driver Logs" -> applicationStart.driverLogs.map(mapToJson).getOrElse(JNothing))
+    ("Driver Logs" -> applicationStart.driverLogs.map(mapToJson).getOrElse(JNothing)) ~
+    ("Driver Attributes" -> applicationStart.driverAttributes.map(mapToJson).getOrElse(JNothing))
   }
 
   def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
@@ -486,7 +487,8 @@ private[spark] object JsonProtocol {
   def executorInfoToJson(executorInfo: ExecutorInfo): JValue = {
     ("Host" -> executorInfo.executorHost) ~
     ("Total Cores" -> executorInfo.totalCores) ~
-    ("Log Urls" -> mapToJson(executorInfo.logUrlMap))
+    ("Log Urls" -> mapToJson(executorInfo.logUrlMap)) ~
+    ("Attributes" -> mapToJson(executorInfo.attributes))
   }
 
   def blockUpdatedInfoToJson(blockUpdatedInfo: BlockUpdatedInfo): JValue = {
@@ -693,7 +695,9 @@ private[spark] object JsonProtocol {
     val sparkUser = (json \ "User").extract[String]
     val appAttemptId = jsonOption(json \ "App Attempt ID").map(_.extract[String])
     val driverLogs = jsonOption(json \ "Driver Logs").map(mapFromJson)
-    SparkListenerApplicationStart(appName, appId, time, sparkUser, appAttemptId, driverLogs)
+    val driverAttributes = jsonOption(json \ "Driver Attributes").map(mapFromJson)
+    SparkListenerApplicationStart(appName, appId, time, sparkUser, appAttemptId, driverLogs,
+      driverAttributes)
   }
 
   def applicationEndFromJson(json: JValue): SparkListenerApplicationEnd = {
@@ -1061,7 +1065,11 @@ private[spark] object JsonProtocol {
     val executorHost = (json \ "Host").extract[String]
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
-    new ExecutorInfo(executorHost, totalCores, logUrls)
+    val attributes = jsonOption(json \ "Attributes") match {
+      case Some(attr) => mapFromJson(attr).toMap
+      case None => Map.empty[String, String]
+    }
+    new ExecutorInfo(executorHost, totalCores, logUrls, attributes)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {
