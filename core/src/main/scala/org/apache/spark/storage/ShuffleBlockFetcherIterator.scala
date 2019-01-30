@@ -629,7 +629,7 @@ private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterat
       data.cleanup()
       // Null out the referent here to make sure we don't keep a reference to this
       // ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
-      // collected during GC. Otherwise we can metadata on block locations(blocksByAddress)
+      // collected during GC. Otherwise we can hold metadata on block locations(blocksByAddress)
       data = null
     }
   }
