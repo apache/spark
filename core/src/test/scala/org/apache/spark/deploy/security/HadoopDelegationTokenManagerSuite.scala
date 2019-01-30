@@ -36,7 +36,6 @@ private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationT
   override def obtainDelegationTokens(
     hadoopConf: Configuration,
     sparkConf: SparkConf,
-    fileSystems: Set[FileSystem],
     creds: Credentials): Option[Long] = throw new IllegalArgumentException
 }
 
