@@ -88,7 +88,7 @@ public class TransportContext {
   // Separate thread pool for handling ChunkFetchRequest. This helps to enable throttling
   // max number of TransportServer worker threads that are blocked on writing response
   // of ChunkFetchRequest message back to the client via the underlying channel.
-  private static EventLoopGroup chunkFetchWorkers;
+  private EventLoopGroup chunkFetchWorkers;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this(conf, rpcHandler, false, false);
