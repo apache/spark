@@ -27,6 +27,7 @@ import scala.collection.mutable.ListBuffer
 
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.{config, Logging}
@@ -126,7 +127,7 @@ private[spark] class DiskStore(
   def moveFileToBlock(sourceFile: File, blockSize: Long, targetBlockId: BlockId): Unit = {
     blockSizes.put(targetBlockId, blockSize)
     val targetFile = diskManager.getFile(targetBlockId.name)
-    sourceFile.renameTo(targetFile)
+    FileUtils.moveFile(sourceFile, targetFile)
   }
 
   def contains(blockId: BlockId): Boolean = {

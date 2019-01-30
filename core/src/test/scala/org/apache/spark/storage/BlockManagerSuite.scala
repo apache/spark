@@ -80,8 +80,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
-  private def createSparkConf(): SparkConf =
-    new SparkConf(false)
+  private def init(sparkConf: SparkConf): Unit =
+    sparkConf
       .set("spark.app.id", "test")
       .set(IS_TESTING, true)
       .set(MEMORY_FRACTION, 1.0)
@@ -121,7 +121,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
-    conf = createSparkConf()
+    conf = new SparkConf(false)
+    init(conf)
 
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set(DRIVER_PORT, rpcEnv.address.port)
@@ -931,8 +932,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     "caching" -> StorageLevel.MEMORY_ONLY,
     "caching on disk" -> StorageLevel.DISK_ONLY
   ).foreach { case (name, storageLevel) =>
-    encryptionTestHelper(name, createSparkConf()) { case (name, conf) =>
+    encryptionTestHelper(name) { case (name, conf) =>
       test(s"test putBlockDataAsStream with $name") {
+        init(conf)
         val ioEncryptionKey =
           if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None
         val securityMgr = new SecurityManager(conf, ioEncryptionKey)

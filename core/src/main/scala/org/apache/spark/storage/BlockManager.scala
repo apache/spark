@@ -233,7 +233,6 @@ private[spark] class BlockManager(
      *
      * If the block already exists, this method will not overwrite it.
      *
-     *
      * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
      *                     block already exists). If false, this method will hold no locks when it
      *                     returns.
