@@ -632,18 +632,7 @@ private[spark] class BlockManager(
    */
   def getLocalBytes(blockId: BlockId): Option[BlockData] = {
     logDebug(s"Getting local block $blockId as bytes")
-    // As an optimization for map output fetches, if the block is for a shuffle, return it
-    // without acquiring a lock; the disk store never deletes (recent) items so this should work
-    if (blockId.isShuffle) {
-      val shuffleBlockResolver = shuffleManager.shuffleBlockResolver
-      // TODO: This should gracefully handle case where local block is not available. Currently
-      // downstream code will throw an exception.
-      val buf = new ChunkedByteBuffer(
-        shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
-      Some(new ByteBufferBlockData(buf, true))
-    } else {
-      blockInfoManager.lockForReading(blockId).map { info => doGetLocalBytes(blockId, info) }
-    }
+    blockInfoManager.lockForReading(blockId).map { info => doGetLocalBytes(blockId, info) }
   }
 
   /**
