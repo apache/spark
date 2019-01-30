@@ -319,7 +319,7 @@ private[spark] class AppStatusListener(
     }
 
     val lastStageInfo = event.stageInfos.sortBy(_.stageId).lastOption
-    val jobName = lastStageInfo.map(_.name).getOrElse("(Unknown job without stages)")
+    val jobName = lastStageInfo.map(_.name).getOrElse("")
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
     val sqlExecutionId = Option(event.properties)
