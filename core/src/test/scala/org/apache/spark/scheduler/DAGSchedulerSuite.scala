@@ -166,10 +166,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // for all stage attempts in the particular stage id, it does not need any info about
     // stageAttemptId. Hence, completed partition id's are stored only for stage id's to mock
     // the method implementation here.
-    override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {
+    override def markPartitionCompletedInAllTaskSets(
+        partitionId: Int,
+        stageId: Int,
+        taskInfo: TaskInfo): Unit = {
       val partitionIds = completedPartitions.getOrElseUpdate(stageId, new HashSet[Int])
       partitionIds.add(partitionId)
-      completedPartitions(stageId) = partitionIds
     }
   }
 
@@ -679,7 +681,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
-      override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {}
+      override def markPartitionCompletedInAllTaskSets(
+          partitionId: Int,
+          stageId: Int,
+          taskInfo: TaskInfo): Unit = {}
     }
     val noKillScheduler = new DAGScheduler(
       sc,
@@ -2897,7 +2902,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(makeCompletionEvent(taskToComplete, Success, Nil, Nil))
     assert(completedPartitions.getOrElse(reduceStage, Set()) === Set(taskToComplete.partitionId))
 
-    assert(completedPartitions.get(taskSets(3).stageId).get.contains(
+    assert(completedPartitions(taskSets(3).stageId).contains(
       taskSets(3).tasks(1).partitionId) == false, "Corresponding partition id for" +
       " stage 1 attempt 1 is not complete yet")
 
@@ -2907,6 +2912,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskSets(1).tasks(1), Success, Nil, Nil))
     assert(completedPartitions.get(taskSets(3).stageId).get.contains(
       taskSets(3).tasks(1).partitionId) == true)
+    assert(completedPartitions(reduceStage) === Set(
+      taskSets(3).tasks(1).partitionId, taskSets(3).tasks(3).partitionId))
   }
 
   /**

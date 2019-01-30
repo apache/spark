@@ -110,12 +110,18 @@ private[spark] trait TaskScheduler {
   def applicationAttemptId(): Option[String]
 
   /**
-   * SPARK-25250: Whenever any Task gets successfully completed, we simply mark the
-   * corresponding partition id as completed in all attempts for that particular stage.
-   * This ensures that multiple attempts of the same task do not keep running even when the
-   * corresponding partition is completed. This method must be called from inside the DAGScheduler
+   * SPARK-25250: Marks the task has completed in all TaskSetManagers for the given stage.
+   * After stage failure and retry, there may be multiple TaskSetManagers for the stage. If an
+   * earlier attempt of a stage completes a task, we should ensure that the later attempts do not
+   * also submit those same tasks.  That also means that a task completion from an earlier attempt
+   * can lead to the entire stage getting marked as successful. Whenever any Task gets
+   * successfully completed, we simply mark the corresponding partition id as completed in all
+   * attempts for that particular stage. This method must be called from inside the DAGScheduler
    * event loop, to ensure a consistent view of all task sets for the given stage.
    */
-  def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit
+  def markPartitionCompletedInAllTaskSets(
+      partitionId: Int,
+      stageId: Int,
+      taskInfo: TaskInfo): Unit
 
 }

@@ -287,7 +287,10 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def completeTasks(partitionId: Int, stageId: Int, taskInfo: TaskInfo): Unit = {
+  override def markPartitionCompletedInAllTaskSets(
+      partitionId: Int,
+      stageId: Int,
+      taskInfo: TaskInfo): Unit = {
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.markPartitionCompleted(partitionId, taskInfo)
     }
@@ -839,23 +842,6 @@ private[spark] class TaskSchedulerImpl(
       manager <- attempts.get(stageAttemptId)
     } yield {
       manager
-    }
-  }
-
-  /**
-   * Marks the task has completed in all TaskSetManagers for the given stage.
-   *
-   * After stage failure and retry, there may be multiple TaskSetManagers for the stage.
-   * If an earlier attempt of a stage completes a task, we should ensure that the later attempts
-   * do not also submit those same tasks.  That also means that a task completion from an earlier
-   * attempt can lead to the entire stage getting marked as successful.
-   */
-  private[scheduler] def markPartitionCompletedInAllTaskSets(
-      stageId: Int,
-      partitionId: Int,
-      taskInfo: TaskInfo) = {
-    taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
-      tsm.markPartitionCompleted(partitionId, taskInfo)
     }
   }
 

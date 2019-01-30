@@ -48,7 +48,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       accumUpdates: Seq[AccumulatorV2[_, _]],
       taskInfo: TaskInfo) {
     taskScheduler.endedTasks(taskInfo.index) = reason
-    taskScheduler.completeTasks(task.partitionId, task.stageId, taskInfo)
+    taskScheduler.markPartitionCompletedInAllTaskSets(task.partitionId, task.stageId, taskInfo)
   }
 
   override def executorAdded(execId: String, host: String) {}
