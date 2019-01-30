@@ -451,7 +451,7 @@ def post_python_tests_results():
             "git",
             "commit",
             "-am",
-            '"Coverage report at latest commit in Apache Spark"',
+            "Coverage report at latest commit in Apache Spark",
             '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
         # 7. Delete the old branch.
         run_cmd(["git", "branch", "-D", "gh-pages"])
