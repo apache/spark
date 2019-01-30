@@ -160,7 +160,8 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
-  private[this] var onCompleteCallback: ShuffleFetchCompletionListener = _
+  private[this] val onCompleteCallback: ShuffleFetchCompletionListener =
+    new ShuffleFetchCompletionListener(this)
 
   initialize()
 
@@ -366,7 +367,6 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    onCompleteCallback = new ShuffleFetchCompletionListener(this)
     context.addTaskCompletionListener(onCompleteCallback)
 
     // Split local and remote blocks.
@@ -634,7 +634,7 @@ private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterat
     }
   }
 
-  // Just a alias for onTaskCompletion to avoid confusing
+  // Just an alias for onTaskCompletion to avoid confusing
   def onComplete(context: TaskContext): Unit = this.onTaskCompletion(context)
 }
 
