@@ -19,12 +19,10 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.util.UUID
-import javax.annotation.concurrent.ThreadSafe
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkConf
-
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
