@@ -121,9 +121,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
-    if (conf == null) {
-      conf = createSparkConf()
-    }
+    conf = createSparkConf()
+
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set(DRIVER_PORT, rpcEnv.address.port)
 

@@ -342,7 +342,7 @@ private[spark] class BlockManager(
 
   }
 
-  private case class TempFileBlockStoreUpdater[T](
+  private case class TempFileBasedBlockStoreUpdater[T](
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[T],
@@ -351,6 +351,8 @@ private[spark] class BlockManager(
       blockSize: Long,
       tellMaster: Boolean = true,
       keepReadLock: Boolean = false) extends BlockStoreUpdater[T](tellMaster, keepReadLock) {
+
+    require(level == StorageLevel.DISK_ONLY, "This can be used only for handling DISK_ONLY level")
 
     override def toBlockData: BlockData = diskStore.getBytes(tmpBlockId)
 
@@ -574,7 +576,7 @@ private[spark] class BlockManager(
         val blockSize = channel.getCount
         if (level == StorageLevel.DISK_ONLY) {
           val blockStoreUpdater =
-            TempFileBlockStoreUpdater(blockId, level, classTag, tmpFile, tmpBlockId, blockSize)
+            TempFileBasedBlockStoreUpdater(blockId, level, classTag, tmpFile, tmpBlockId, blockSize)
           blockStoreUpdater.save()
         } else {
           val buffer = securityManager.getIOEncryptionKey() match {
