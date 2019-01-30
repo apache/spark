@@ -15,20 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.writer;
+package org.apache.spark.sql.sources.v2.writer.streaming;
 
-import java.io.Serializable;
+import org.apache.spark.annotation.Unstable;
+import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
+import org.apache.spark.sql.streaming.OutputMode;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite;
+// TODO: remove it when we have `SupportsTruncate`
+@Unstable
+public interface SupportsOutputMode extends WriteBuilder {
 
-/**
- * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
- * as the input parameter of {@link BatchWrite#commit(WriterCommitMessage[])} or
- * {@link StreamingWrite#commit(long, WriterCommitMessage[])}.
- *
- * This is an empty interface, data sources should define their own message class and use it when
- * generating messages at executor side and handling the messages at driver side.
- */
-@Evolving
-public interface WriterCommitMessage extends Serializable {}
+  WriteBuilder outputMode(OutputMode mode);
+}

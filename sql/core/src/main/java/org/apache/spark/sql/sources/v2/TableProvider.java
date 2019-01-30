@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.StructType;
  * </p>
  */
 @Evolving
-// TODO: do not extend `DataSourceV2`, after we finish the API refactor completely.
-public interface TableProvider extends DataSourceV2 {
+public interface TableProvider {
 
   /**
    * Return a {@link Table} instance to do read/write with user-specified options.

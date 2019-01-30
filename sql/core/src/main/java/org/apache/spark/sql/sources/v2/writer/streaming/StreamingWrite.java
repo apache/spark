@@ -22,13 +22,26 @@ import org.apache.spark.sql.sources.v2.writer.DataWriter;
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
 
 /**
- * An interface that defines how to write the data to data source for streaming processing.
+ * An interface that defines how to write the data to data source in streaming queries.
  *
- * Streaming queries are divided into intervals of data called epochs, with a monotonically
- * increasing numeric ID. This writer handles commits and aborts for each successive epoch.
+ * The writing procedure is:
+ *   1. Create a writer factory by {@link #createStreamingWriterFactory()}, serialize and send it to
+ *      all the partitions of the input data(RDD).
+ *   2. For each epoch in each partition, create the data writer, and write the data of the epoch in
+ *      the partition with this writer. If all the data are written successfully, call
+ *      {@link DataWriter#commit()}. If exception happens during the writing, call
+ *      {@link DataWriter#abort()}.
+ *   3. If writers in all partitions of one epoch are successfully committed, call
+ *      {@link #commit(long, WriterCommitMessage[])}. If some writers are aborted, or the job failed
+ *      with an unknown reason, call {@link #abort(long, WriterCommitMessage[])}.
+ *
+ * While Spark will retry failed writing tasks, Spark won't retry failed writing jobs. Users should
+ * do it manually in their Spark applications if they want to retry.
+ *
+ * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
 @Evolving
-public interface StreamingWriteSupport {
+public interface StreamingWrite {
 
   /**
    * Creates a writer factory which will be serialized and sent to executors.

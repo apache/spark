@@ -24,7 +24,7 @@ import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
  * An empty mix-in interface for {@link Table}, to indicate this table supports batch write.
  * <p>
  * If a {@link Table} implements this interface, the
- * {@link SupportsWrite#newWriteBuilder(DataSourceOptions)}  must return a {@link WriteBuilder}
+ * {@link SupportsWrite#newWriteBuilder(DataSourceOptions)} must return a {@link WriteBuilder}
  * with {@link WriteBuilder#buildForBatch()} implemented.
  * </p>
  */

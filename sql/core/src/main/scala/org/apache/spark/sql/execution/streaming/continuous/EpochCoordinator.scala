@@ -25,7 +25,7 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeR
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.util.RpcUtils
 
 private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
@@ -82,7 +82,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
    * Create a reference to a new [[EpochCoordinator]].
    */
   def create(
-      writeSupport: StreamingWriteSupport,
+      writeSupport: StreamingWrite,
       stream: ContinuousStream,
       query: ContinuousExecution,
       epochCoordinatorId: String,
@@ -115,7 +115,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
  *   have both committed and reported an end offset for a given epoch.
  */
 private[continuous] class EpochCoordinator(
-    writeSupport: StreamingWriteSupport,
+    writeSupport: StreamingWrite,
     stream: ContinuousStream,
     query: ContinuousExecution,
     startEpoch: Long,

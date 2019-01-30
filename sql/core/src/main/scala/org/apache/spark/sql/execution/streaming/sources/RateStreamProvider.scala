@@ -40,8 +40,7 @@ import org.apache.spark.sql.types._
  *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
-class RateStreamProvider extends DataSourceV2
-  with TableProvider with DataSourceRegister {
+class RateStreamProvider extends TableProvider with DataSourceRegister {
   import RateStreamProvider._
 
   override def getTable(options: DataSourceOptions): Table = {

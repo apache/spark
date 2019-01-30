@@ -26,7 +26,7 @@ import org.apache.spark.sql.sources.v2.writer.DataWriter;
 
 /**
  * A factory of {@link DataWriter} returned by
- * {@link StreamingWriteSupport#createStreamingWriterFactory()}, which is responsible for creating
+ * {@link StreamingWrite#createStreamingWriterFactory()}, which is responsible for creating
  * and initializing the actual data writer at executor side.
  *
  * Note that, the writer factory will be serialized and sent to executors, then the data writer

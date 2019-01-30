@@ -32,8 +32,9 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamingWriteSupportProvider, SupportsContinuousRead}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsContinuousRead, SupportsStreamingWrite}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.sources.v2.writer.streaming.SupportsOutputMode
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
 
@@ -42,7 +43,7 @@ class ContinuousExecution(
     name: String,
     checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    sink: StreamingWriteSupportProvider,
+    sink: SupportsStreamingWrite,
     trigger: Trigger,
     triggerClock: Clock,
     outputMode: OutputMode,
@@ -174,12 +175,15 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createStreamingWriteSupport(
-      s"$runId",
-      withNewSources.schema,
-      outputMode,
-      new DataSourceOptions(extraOptions.asJava))
-    val planWithSink = WriteToContinuousDataSource(writer, withNewSources)
+    // TODO: we should translate OutputMode to concrete write actions like truncate, but
+    // the truncate action is being developed in SPARK-26666.
+    val writeBuilder = sink.newWriteBuilder(new DataSourceOptions(extraOptions.asJava))
+      .withQueryId(runId.toString)
+      .withInputDataSchema(withNewSources.schema)
+    val streamingWrite = writeBuilder.asInstanceOf[SupportsOutputMode]
+      .outputMode(outputMode)
+      .buildForStreaming()
+    val planWithSink = WriteToContinuousDataSource(streamingWrite, withNewSources)
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
@@ -214,9 +218,8 @@ class ContinuousExecution(
       trigger.asInstanceOf[ContinuousTrigger].intervalMs.toString)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
-    val epochEndpoint =
-      EpochCoordinatorRef.create(
-        writer, stream, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+    val epochEndpoint = EpochCoordinatorRef.create(
+      streamingWrite, stream, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {

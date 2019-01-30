@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -33,18 +33,18 @@ import org.apache.spark.sql.types.StructType
 case object KafkaWriterCommitMessage extends WriterCommitMessage
 
 /**
- * A [[StreamingWriteSupport]] for Kafka writing. Responsible for generating the writer factory.
+ * A [[StreamingWrite]] for Kafka writing. Responsible for generating the writer factory.
  *
  * @param topic The topic this writer is responsible for. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-class KafkaStreamingWriteSupport(
+class KafkaStreamingWrite(
     topic: Option[String],
     producerParams: ju.Map[String, Object],
     schema: StructType)
-  extends StreamingWriteSupport {
+  extends StreamingWrite {
 
   validateQuery(schema.toAttributes, producerParams, topic)
 
