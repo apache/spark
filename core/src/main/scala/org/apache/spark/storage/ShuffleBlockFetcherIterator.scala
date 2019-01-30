@@ -160,8 +160,7 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
-  private[this] val onCompleteCallback: ShuffleFetchCompletionListener =
-    new ShuffleFetchCompletionListener(this)
+  private[this] val onCompleteCallback = new ShuffleFetchCompletionListener(this)
 
   initialize()
 
