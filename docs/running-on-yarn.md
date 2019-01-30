@@ -472,6 +472,36 @@ To use a custom metrics.properties for the application master and executors, upd
 </tr>
 </table>
 
+#### Available patterns for SHS custom executor log URL
+
+<table class="table">
+    <tr><th>Pattern</th><th>Meaning</th></tr>
+    <tr>
+      <td>{{HTTP_SCHEME}}</td>
+      <td>`http://` or `https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
+    </tr>
+    <tr>
+      <td>{{NM_HTTP_ADDRESS}}</td>
+      <td>Http URI of the node on which the container is allocated.</td>
+    </tr>
+    <tr>
+      <td>{{CLUSTER_ID}}</td>
+      <td>The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)</td>
+    </tr>
+    <tr>
+      <td>{{CONTAINER_ID}}</td>
+      <td>The ID of container.</td>
+    </tr>
+    <tr>
+      <td>{{USER}}</td>
+      <td>'SPARK_USER' on system environment.</td>
+    </tr>
+    <tr>
+      <td>{{FILE_NAME}}</td>
+      <td>`stdout`, `stderr`.</td>
+    </tr>
+</table>
+
 # Important notes
 
 - Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
