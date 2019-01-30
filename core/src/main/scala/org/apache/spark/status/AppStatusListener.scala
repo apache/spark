@@ -759,11 +759,20 @@ private[spark] class AppStatusListener(
 
       // Use RDD distribution to update executor memory and disk usage info.
       liveRDD.getDistributions().foreach { case (executorId, rddDist) =>
-        val maybeExec = liveExecutors.get(executorId)
-        updateExecutorMemoryDiskInfo(maybeExec, storageLevel, -rddDist.memoryUsed,
-          -rddDist.diskUsed, Option(-rddDist.offHeapUsed), Option(-rddDist.onHeapUsed))
-        maybeExec.foreach(exec => maybeUpdate(exec, now))
+        liveExecutors.get(executorId).foreach { exec =>
+          if (exec.hasMemoryInfo) {
+            if (storageLevel.useOffHeap) {
+              exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, -rddDist.offHeapUsed)
+            } else {
+              exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, -rddDist.onHeapUsed)
+            }
+          }
+          exec.memoryUsed = addDeltaToValue(exec.memoryUsed, -rddDist.memoryUsed)
+          exec.diskUsed = addDeltaToValue(exec.diskUsed, -rddDist.diskUsed)
+          maybeUpdate(exec, now)
+        }
       }
+
     }
 
     kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
@@ -877,7 +886,9 @@ private[spark] class AppStatusListener(
 
     // Update the executor stats first, since they are used to calculate the free memory
     // on tracked RDD distributions.
-    updateExecutorMemoryDiskInfo(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
+    maybeExec.foreach { exec =>
+      updateExecutorMemoryDiskInfo(exec, storageLevel, memoryDelta, diskDelta)
+    }
 
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
     // can update the executor information too.
@@ -989,31 +1000,26 @@ private[spark] class AppStatusListener(
     val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
     val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
 
-    val maybeExec = liveExecutors.get(executorId)
-    updateExecutorMemoryDiskInfo(maybeExec, storageLevel, memoryDelta, diskDelta, None, None)
-    maybeExec.foreach(exec => maybeUpdate(exec, now))
-
+    liveExecutors.get(executorId).foreach { exec =>
+      updateExecutorMemoryDiskInfo(exec, storageLevel, memoryDelta, diskDelta)
+      maybeUpdate(exec, now)
+    }
   }
-    
-  // update executor memory and disk usage info
+
   private def updateExecutorMemoryDiskInfo(
-      maybeExec: Option[LiveExecutor],
+      exec: LiveExecutor,
       storageLevel: StorageLevel,
       memoryDelta: Long,
-      diskDelta: Long,
-      OffHeapDelta: Option[Long],
-      OnHeapDelta: Option[Long]): Unit = {
-    maybeExec.foreach { exec =>
-      if (exec.hasMemoryInfo) {
-        if (storageLevel.useOffHeap) {
-          exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, OffHeapDelta.getOrElse(memoryDelta))
-        } else {
-          exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, OnHeapDelta.getOrElse(memoryDelta))
-        }
+      diskDelta: Long): Unit = {
+    if (exec.hasMemoryInfo) {
+      if (storageLevel.useOffHeap) {
+        exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, memoryDelta)
+      } else {
+        exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, memoryDelta)
       }
-      exec.memoryUsed = addDeltaToValue(exec.memoryUsed, memoryDelta)
-      exec.diskUsed = addDeltaToValue(exec.diskUsed, diskDelta)
     }
+    exec.memoryUsed = addDeltaToValue(exec.memoryUsed, memoryDelta)
+    exec.diskUsed = addDeltaToValue(exec.diskUsed, diskDelta)
   }
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
