@@ -429,7 +429,7 @@ def post_python_tests_results():
               "PySpark coverage results.")
         sys.exit(1)
     spark_test_key = os.environ.get("SPARK_TEST_KEY")
-    # The steps below uploads HTMLs to 'github.com/spark-test/pyspark-coverage-site'.
+    # The steps below upload HTMLs to 'github.com/spark-test/pyspark-coverage-site'.
     # 1. Clone PySpark coverage site.
     run_cmd([
         "git",
