@@ -314,6 +314,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ANSI_SQL_PARSER =
+    buildConf("spark.sql.parser.ansi.enabled")
+      .doc("When true, tries to conform to ANSI SQL syntax.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -1831,6 +1837,8 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def ansiParserEnabled: Boolean = getConf(ANSI_SQL_PARSER)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 

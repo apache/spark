@@ -18,12 +18,14 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 
-class TableIdentifierParserSuite extends SparkFunSuite {
+class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
 
   // Add "$elem$", "$value$" & "$key$"
-  val hiveNonReservedKeyword = Array("add", "admin", "after", "analyze", "archive", "asc", "before",
+  val hiveNonReservedKeywords = Seq("add", "admin", "after", "analyze", "archive", "asc", "before",
     "bucket", "buckets", "cascade", "change", "cluster", "clustered", "clusterstatus", "collection",
     "columns", "comment", "compact", "compactions", "compute", "concatenate", "continue", "cost",
     "data", "day", "databases", "datetime", "dbproperties", "deferred", "defined", "delimited",
@@ -42,7 +44,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "tblproperties", "temporary", "terminated", "tinyint", "touch", "transactions", "unarchive",
     "undo", "uniontype", "unlock", "unset", "unsigned", "uri", "use", "utc", "utctimestamp",
     "view", "while", "year", "work", "transaction", "write", "isolation", "level", "snapshot",
-    "autocommit", "alter", "array", "as", "authorization", "between", "bigint",
+    "autocommit", "all", "any", "alter", "array", "as", "authorization", "between", "bigint",
     "binary", "boolean", "both", "by", "create", "cube", "current_date", "current_timestamp",
     "cursor", "date", "decimal", "delete", "describe", "double", "drop", "exists", "external",
     "false", "fetch", "float", "for", "grant", "group", "grouping", "import", "in",
@@ -53,9 +55,18 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
     "int", "smallint", "timestamp", "at", "position", "both", "leading", "trailing", "extract")
 
-  val hiveStrictNonReservedKeyword = Seq("anti", "full", "inner", "left", "semi", "right",
+  val hiveStrictNonReservedKeywords = Seq("anti", "full", "inner", "left", "semi", "right",
     "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",
     "where", "having", "from", "to", "table", "with", "not")
+
+  val sparkSQLReservedKeywords = Seq("all", "and", "any", "as", "authorization", "both", "case",
+    "cast", "check", "collate", "column", "constraint", "create", "cross", "current_date",
+    "current_time", "current_timestamp", "current_user", "distinct", "else", "end", "except",
+    "false", "fetch", "for", "foreign", "from", "full", "grant", "group", "having", "in", "inner",
+    "intersect", "into", "is", "join", "leading", "left", "natural", "not", "null", "on", "only",
+    "or", "order", "outer", "overlaps", "primary", "references", "right", "select", "session_user",
+    "some", "table", "then", "to", "trailing", "union", "unique", "user", "using", "varying",
+    "when", "where", "with")
 
   test("table identifier") {
     // Regular names.
@@ -76,18 +87,31 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
   }
 
-  test("table identifier - reserved by the SQL-2011 standard") {
-    Seq("all", "any").foreach { keyword =>
-      val errMsg = intercept[ParseException] { parseTableIdentifier(keyword) }.getMessage
-      assert(errMsg.contains(s"'$keyword' is reserved in the ANSI SQL-2011 standard."))
-      assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
-      assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
+  test("table identifier - reserved keywords") {
+    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+      sparkSQLReservedKeywords.foreach { keyword =>
+        val errMsg = intercept[ParseException] {
+          parseTableIdentifier(keyword)
+        }.getMessage
+        assert(errMsg.contains(s"'$keyword' is reserved and you cannot use this keyword " +
+          "as an identifier."))
+        assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
+        assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
+      }
+    }
+
+    // If an ANSI mode disabled, we can use these keywords as identifiers
+    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+      sparkSQLReservedKeywords.foreach { keyword =>
+        assert(TableIdentifier(keyword) === parseTableIdentifier(s"$keyword"))
+        assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
+      }
     }
   }
 
   test("table identifier - strict keywords") {
     // SQL Keywords.
-    hiveStrictNonReservedKeyword.foreach { keyword =>
+    hiveStrictNonReservedKeywords.foreach { keyword =>
       assert(TableIdentifier(keyword) === parseTableIdentifier(keyword))
       assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
       assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
@@ -96,7 +120,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
 
   test("table identifier - non reserved keywords") {
     // Hive keywords are allowed.
-    hiveNonReservedKeyword.foreach { nonReserved =>
+    hiveNonReservedKeywords.foreach { nonReserved =>
       assert(TableIdentifier(nonReserved) === parseTableIdentifier(nonReserved))
     }
   }

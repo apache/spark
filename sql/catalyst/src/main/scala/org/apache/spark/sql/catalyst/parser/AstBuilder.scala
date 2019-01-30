@@ -51,6 +51,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   def this() = this(new SQLConf())
 
+  def ansi: Boolean = conf.ansiParserEnabled
+
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
   }
@@ -1407,11 +1409,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitIdentifier(ctx: IdentifierContext): String = withOrigin(ctx) {
     val keyword = ctx.getText
     if (ctx.reserved() != null) {
-      // This option is expected to come from `spark.sql.parser.ansi.enabled` (pr20433):
-      // val ansi = conf.ansiParserEnabled
-      val ansi = true
       if (ansi) {
-        throw new ParseException(s"'$keyword' is reserved in the ANSI SQL-2011 standard.", ctx)
+        throw new ParseException(
+          s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
       }
     }
     keyword
