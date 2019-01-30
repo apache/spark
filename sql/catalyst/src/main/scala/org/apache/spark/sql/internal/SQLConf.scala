@@ -1610,6 +1610,15 @@ object SQLConf {
         "WHERE, which does not follow SQL standard.")
       .booleanConf
       .createWithDefault(false)
+
+  val MAX_REPEATED_ALIAS_SIZE =
+    buildConf("spark.sql.maxRepeatedAliasSize")
+      .internal()
+      .doc("The maximum size of alias expression that will be substituted multiple times " +
+        "(size defined by the number of nodes in the expression tree). " +
+        "Used by the CollapseProject optimizer, and PhysicalOperation.")
+      .intConf
+      .createWithDefault(100)
 }
 
 /**
@@ -2037,6 +2046,8 @@ class SQLConf extends Serializable with Logging {
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
+
+  def maxRepeatedAliasSize: Int = getConf(SQLConf.MAX_REPEATED_ALIAS_SIZE)
 
   /** ********************** SQLConf functionality methods ************ */
 
