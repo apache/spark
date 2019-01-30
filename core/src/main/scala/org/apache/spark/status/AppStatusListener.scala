@@ -772,7 +772,6 @@ private[spark] class AppStatusListener(
           maybeUpdate(exec, now)
         }
       }
-
     }
 
     kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
