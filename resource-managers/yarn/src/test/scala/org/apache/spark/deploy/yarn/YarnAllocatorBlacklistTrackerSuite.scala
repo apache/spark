@@ -25,7 +25,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.config.{YARN_EXECUTOR_INITIAL_BLACKLISTED_NODES, YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED}
 import org.apache.spark.internal.config.{BLACKLIST_TIMEOUT_CONF, MAX_FAILED_EXEC_PER_NODE}
 import org.apache.spark.util.ManualClock
 
