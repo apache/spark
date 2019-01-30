@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object NamedExpression {
@@ -177,22 +176,18 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      if (resolved) {
-        val newMetadata = if (child.isInstanceOf[AttributeReference]) {
-          val attr = child.asInstanceOf[AttributeReference]
-          val exprId = attr.exprId
-          new MetadataBuilder()
-            .withMetadata(metadata)
-            .putString("exprId", exprId.toString)
-            .build()
-        } else {
-          metadata
-        }
-        AttributeReference(name,
-          child.dataType, child.nullable, newMetadata)(exprId, qualifier)
+      val newMetadata = if (child.isInstanceOf[AttributeReference]) {
+        val attr = child.asInstanceOf[AttributeReference]
+        val exprId = attr.exprId
+        new MetadataBuilder()
+          .withMetadata(metadata)
+          .putString("exprId", exprId.toString)
+          .build()
       } else {
-        UnresolvedAttribute(name)
+        metadata
       }
+      AttributeReference(name,
+        child.dataType, child.nullable, newMetadata)(exprId, qualifier)
     } else {
       UnresolvedAttribute(name)
     }
@@ -256,9 +251,7 @@ case class AttributeReference(
   /**
    * Returns true iff the expression id is the same for both attributes.
    */
-  def sameRef(other: AttributeReference): Boolean = {
-    this.exprId == other.exprId
-  }
+  def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 
   override def equals(other: Any): Boolean = other match {
     case ar: AttributeReference =>
