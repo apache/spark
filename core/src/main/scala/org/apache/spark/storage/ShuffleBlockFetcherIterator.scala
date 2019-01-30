@@ -160,7 +160,7 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
-  private[this] var cleanupListener: ShuffleFetchCompletionListener = _
+  private[this] var onCompleteCallback: ShuffleFetchCompletionListener = _
 
   initialize()
 
@@ -221,10 +221,6 @@ final class ShuffleBlockFetcherIterator(
         logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
       }
     }
-    // Null out the referent in cleanup listener to make sure we don't keep a reference
-    // to this ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
-    // collected during GC. Otherwise we can metadata on block locations(blocksByAddress)
-    cleanupListener.data = null
   }
 
   private[this] def sendRequest(req: FetchRequest) {
@@ -370,8 +366,8 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    cleanupListener = new ShuffleFetchCompletionListener(this)
-    context.addTaskCompletionListener(cleanupListener)
+    onCompleteCallback = new ShuffleFetchCompletionListener(this)
+    context.addTaskCompletionListener(onCompleteCallback)
 
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()
@@ -517,7 +513,8 @@ final class ShuffleBlockFetcherIterator(
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
-    CompletionIterator[(BlockId, InputStream), this.type](this, this.cleanup())
+    CompletionIterator[(BlockId, InputStream), this.type](this,
+      onCompleteCallback.onComplete(context))
   }
 
   private def fetchUpToMaxBytes(): Unit = {
@@ -630,8 +627,15 @@ private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterat
   override def onTaskCompletion(context: TaskContext): Unit = {
     if (data != null) {
       data.cleanup()
+      // Null out the referent here to make sure we don't keep a reference to this
+      // ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
+      // collected during GC. Otherwise we can metadata on block locations(blocksByAddress)
+      data = null
     }
   }
+
+  // Just a alias for onTaskCompletion to avoid confusing
+  def onComplete(context: TaskContext): Unit = this.onTaskCompletion(context)
 }
 
 private[storage]
