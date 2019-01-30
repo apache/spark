@@ -51,7 +51,7 @@ public interface MicroBatchStream extends SparkDataStream {
   InputPartition[] planInputPartitions(Offset start, Offset end);
 
   /**
-   * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
+   * Returns a factory to create a {@link PartitionReader} for each {@link InputPartition}.
    */
   PartitionReaderFactory createReaderFactory();
 }

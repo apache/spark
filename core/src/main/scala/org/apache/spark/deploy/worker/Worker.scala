@@ -102,7 +102,7 @@ private[deploy] class Worker(
 
   // Whether or not cleanup the non-shuffle files on executor exits.
   private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
-    conf.getBoolean("spark.storage.cleanupFilesAfterExecutorExit", true)
+    conf.get(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT)
 
   private var master: Option[RpcEndpointRef] = None
 

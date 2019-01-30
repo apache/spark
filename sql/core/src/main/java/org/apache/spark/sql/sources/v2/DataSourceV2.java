@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * TODO: remove it when we finish the API refactor for streaming side.
+ * TODO: remove it when we finish the API refactor for streaming write side.
  */
 @Evolving
 public interface DataSourceV2 {}

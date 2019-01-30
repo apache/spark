@@ -32,6 +32,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 
@@ -224,7 +225,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   }
 
   private def testCleanupFilesWithConfig(value: Boolean) = {
-    val conf = new SparkConf().set("spark.storage.cleanupFilesAfterExecutorExit", value.toString)
+    val conf = new SparkConf().set(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT, value)
 
     val cleanupCalled = new AtomicBoolean(false)
     when(shuffleService.executorRemoved(any[String], any[String])).thenAnswer(new Answer[Unit] {

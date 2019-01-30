@@ -24,16 +24,15 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousReadSupport
+import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 class TextSocketSourceProvider extends DataSourceV2
-  with TableProvider with ContinuousReadSupportProvider
-  with DataSourceRegister with Logging {
+  with TableProvider with DataSourceRegister with Logging {
 
   private def checkParameters(params: DataSourceOptions): Unit = {
     logWarning("The socket source should not be used for production applications! " +
@@ -58,22 +57,16 @@ class TextSocketSourceProvider extends DataSourceV2
     new TextSocketTable(
       options.get("host").get,
       options.getInt("port", -1),
+      options.getInt("numPartitions", SparkSession.active.sparkContext.defaultParallelism),
       options.getBoolean("includeTimestamp", false))
-  }
-
-  override def createContinuousReadSupport(
-      checkpointLocation: String,
-      options: DataSourceOptions): ContinuousReadSupport = {
-    checkParameters(options)
-    new TextSocketContinuousReadSupport(options)
   }
 
   /** String that represents the format that this data source provider uses. */
   override def shortName(): String = "socket"
 }
 
-class TextSocketTable(host: String, port: Int, includeTimestamp: Boolean)
-  extends Table with SupportsMicroBatchRead {
+class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimestamp: Boolean)
+  extends Table with SupportsMicroBatchRead with SupportsContinuousRead {
 
   override def name(): String = s"Socket[$host:$port]"
 
@@ -90,7 +83,11 @@ class TextSocketTable(host: String, port: Int, includeTimestamp: Boolean)
       override def readSchema(): StructType = schema()
 
       override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-        new TextSocketMicroBatchStream(host, port, options)
+        new TextSocketMicroBatchStream(host, port, numPartitions, options)
+      }
+
+      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+        new TextSocketContinuousStream(host, port, numPartitions, options)
       }
     }
   }
