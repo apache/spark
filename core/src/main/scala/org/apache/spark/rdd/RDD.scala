@@ -212,7 +212,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
    *
-   * @param blocking Whether to block until all blocks are deleted; default is false
+   * @param blocking Whether to block until all blocks are deleted (default: false)
    * @return This RDD.
    */
   def unpersist(blocking: Boolean = false): this.type = {
