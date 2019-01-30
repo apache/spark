@@ -56,6 +56,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
       SparkEnv.get.conf.get(config.SHUFFLE_DETECT_CORRUPT),
       SparkEnv.get.conf.get(config.SHUFFLE_DETECT_CORRUPT_MEMORY),
+      SparkEnv.get.conf.get(config.SHUFFLE_READ_AHEAD_BUFFER_SIZE).toInt,
       readMetrics).toCompletionIterator
 
     val serializerInstance = dep.serializer.newInstance()

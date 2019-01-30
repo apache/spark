@@ -29,6 +29,7 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.ReadAheadInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
@@ -75,6 +76,7 @@ final class ShuffleBlockFetcherIterator(
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
+    readAheadBufferSize: Int,
     shuffleMetrics: ShuffleReadMetricsReporter)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -476,6 +478,10 @@ final class ShuffleBlockFetcherIterator(
             if (streamCompressedOrEncrypted && detectCorruptUseExtraMemory) {
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
               input = Utils.copyStreamUpTo(input, maxBytesInFlight / 3)
+            } else {
+              if (readAheadBufferSize > 0) {
+                input = new ReadAheadInputStream(input, readAheadBufferSize)
+              }
             }
           } catch {
             case e: IOException =>

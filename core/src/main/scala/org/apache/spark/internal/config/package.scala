@@ -946,6 +946,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SHUFFLE_READ_AHEAD_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.read.ahead.buffer.size")
+      .doc("The buffer size for shuffle read ahead, if it is set to 0, shuffle read ahead won't" +
+        "be enabled, and if `spark.shuffle.detectCorrupt.useExtraMemory` is enabled, shuffle" +
+        "read ahead won't be enabled too")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1M")
+
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")
       .doc("Whether to force outstanding writes to disk.")
