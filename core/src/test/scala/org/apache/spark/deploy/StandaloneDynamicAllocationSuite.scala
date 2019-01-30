@@ -497,7 +497,7 @@ class StandaloneDynamicAllocationSuite
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
-    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty)
+    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty, Map.empty)
 
     // Get "localhost" on a blacklist.
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
@@ -621,7 +621,7 @@ class StandaloneDynamicAllocationSuite
       val endpointRef = mock(classOf[RpcEndpointRef])
       val mockAddress = mock(classOf[RpcAddress])
       when(endpointRef.address).thenReturn(mockAddress)
-      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty)
+      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty, Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
       backend.driverEndpoint.askSync[Boolean](message)
     }
