@@ -94,8 +94,8 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   test("test blacklisting bad disk directory") {
     val blockId = new TestBlockId("1")
-    val hash = Utils.nonNegativeHash(blockId)
-    val (badDiskDir, goodDiskDir) = if (hash % rootDirs.length == 0) {
+    val hash = Utils.nonNegativeHash(blockId.name)
+    val (badDiskDir, goodDiskDir) = if (hash % 2 == 0) {
       (rootDir0, rootDir1)
     } else {
       (rootDir1, rootDir0)

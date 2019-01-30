@@ -19,10 +19,12 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.util.UUID
+import javax.annotation.concurrent.ThreadSafe
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkConf
+
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -64,7 +66,13 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     var mostRecentFailure: Exception = null
     // Update blacklist
     val now = System.currentTimeMillis()
-    badDirs.dropWhile(now > dirToBlacklistExpiryTime(_))
+    val unblacklisted = badDirs.filter(now > dirToBlacklistExpiryTime(_))
+    badDirs.synchronized {
+      unblacklisted.foreach { dir =>
+        badDirs -= dir
+        dirToBlacklistExpiryTime.remove(dir)
+      }
+    }
 
     for (attempt <- 0 until maxRetries) {
       val goodDirs = localDirs.filterNot(badDirs.contains(_))
@@ -94,9 +102,10 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       } catch {
         case e: IOException =>
           logError(s"Failed to looking up file $filename in attempt $attempt", e)
-          badDirs += goodDirs(dirId)
-          dirToBlacklistExpiryTime.put(goodDirs(dirId),
-            System.currentTimeMillis() + blacklistTimeout)
+          badDirs.synchronized {
+            badDirs += goodDirs(dirId)
+            dirToBlacklistExpiryTime.put(goodDirs(dirId), now + blacklistTimeout)
+          }
           mostRecentFailure = e
       }
     }
