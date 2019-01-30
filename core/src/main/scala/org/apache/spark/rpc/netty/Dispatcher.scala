@@ -40,9 +40,9 @@ import org.apache.spark.util.ThreadUtils
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
   private class EndpointData(
-                              val name: String,
-                              val endpoint: RpcEndpoint,
-                              val ref: NettyRpcEndpointRef) {
+      val name: String,
+      val endpoint: RpcEndpoint,
+      val ref: NettyRpcEndpointRef) {
     val inbox = new Inbox(ref, endpoint)
   }
 
@@ -113,10 +113,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-      postMessage(name, message, (e) => { e match {
-        case e: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${e.getMessage}")
-        case e: Throwable => logWarning(s"Message $message dropped. ${e.getMessage}")
-      }}
+        postMessage(name, message, (e) => { e match {
+          case e: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${e.getMessage}")
+          case e: Throwable => logWarning(s"Message $message dropped. ${e.getMessage}")
+        }}
       )}
   }
 
@@ -150,9 +150,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
    * @param callbackIfStopped callback function if the endpoint is stopped.
    */
   private def postMessage(
-                           endpointName: String,
-                           message: InboxMessage,
-                           callbackIfStopped: (Exception) => Unit): Unit = {
+      endpointName: String,
+      message: InboxMessage,
+      callbackIfStopped: (Exception) => Unit): Unit = {
     val error = synchronized {
       val data = endpoints.get(endpointName)
       if (stopped) {

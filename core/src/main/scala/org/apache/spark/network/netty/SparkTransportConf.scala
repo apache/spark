@@ -78,9 +78,9 @@ object SparkTransportConf {
    * @return the configured number of threads, or -1 if not configured.
    */
   def getSpecificNumOfThreads(
-                               conf: SparkConf,
-                               module: String,
-                               server: Boolean): Int = {
+      conf: SparkConf,
+      module: String,
+      server: Boolean): Int = {
     val executorId = conf.get("spark.executor.id", "")
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER ||
       executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
