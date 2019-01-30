@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
@@ -626,5 +627,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       relation)
     val res = ViewAnalyzer.execute(view)
     comparePlans(res, expected)
+  }
+
+  test("SPARK-26741: replace aggregate expressions in Sort when Aggregate is not a direct child") {
+    val plan = Sort(Seq(SortOrder(Max('id.attr).toAggregateExpression(), Ascending)), true,
+      Project(Seq('id_alias.attr),
+        Filter('cnt_alias.attr >= 1,
+          Aggregate(Seq('id.attr),
+            Seq(Alias(Max('id.attr).toAggregateExpression(), "id_alias")(),
+              Alias(Count(Literal(1)).toAggregateExpression(), "cnt_alias")()),
+            Range(0, 10, 1, None)))))
+    val analyzedSort = plan.analyze.collectFirst { case s: Sort => s }
+    assert(analyzedSort.isDefined &&
+      analyzedSort.forall(_.order.forall(_.child.isInstanceOf[AttributeReference])))
+
   }
 }

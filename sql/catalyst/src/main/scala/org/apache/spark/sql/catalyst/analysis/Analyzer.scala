@@ -1217,7 +1217,7 @@ class Analyzer(
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
-      case sa @ Sort(_, _, child: Aggregate) => sa
+      case sa @ Sort(_, _, _: Aggregate) => sa
 
       case s @ Sort(order, _, child)
           if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
@@ -1676,6 +1676,23 @@ class Analyzer(
           // just return the original plan.
           case ae: AnalysisException => sort
         }
+      case sort @ Sort(sortOrders, _, child)
+          if sort.resolved && sortOrders.exists(containsAggregate) =>
+        val aggregate = child.collectFirst {
+          case a: Aggregate => a
+        }
+        if (aggregate.isEmpty) return sort
+        val aggExprs = aggregate.get.aggregateExpressions.map(ae =>
+          (ae.toAttribute, CleanupAliases.trimAliases(ae)))
+        val newOrders = sortOrders.map { so =>
+          val newChild = so.child.transformDown {
+            case ae: AggregateExpression =>
+              aggExprs.collectFirst { case (attr, expr) if expr.semanticEquals(ae) => attr }
+                .getOrElse(ae)
+          }
+          so.copy(child = newChild)
+        }
+        sort.copy(order = newOrders)
     }
 
     def containsAggregate(condition: Expression): Boolean = {
@@ -2554,7 +2571,7 @@ object EliminateUnions extends Rule[LogicalPlan] {
  * rule can't work for those parameters.
  */
 object CleanupAliases extends Rule[LogicalPlan] {
-  private def trimAliases(e: Expression): Expression = {
+  private[catalyst] def trimAliases(e: Expression): Expression = {
     e.transformDown {
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
