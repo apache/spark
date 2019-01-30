@@ -2509,7 +2509,7 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
-        self.is_barrier = prev._is_barrier() or isFromBarrier
+        self.is_barrier = isFromBarrier or prev._is_barrier()
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()
