@@ -28,8 +28,8 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
  * Replace the ORC V2 data source of table in [[InsertIntoTable]] to V1 [[FileFormat]].
  * E.g, with temporary view `t` using [[FileDataSourceV2]], inserting into  view `t` fails
  * since there is no corresponding physical plan.
- * SPARK-23817: This is a temporary hack for making current data source V2 work. It should be
- * removed when Catalog of file data source v2 is finished.
+ * This is a temporary hack for making current data source V2 work. It should be
+ * removed when Catalog support of file data source v2 is finished.
  */
 class FallbackOrcDataSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
