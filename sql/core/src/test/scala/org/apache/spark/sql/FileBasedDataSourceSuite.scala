@@ -329,46 +329,49 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
+      // TODO(SPARK-26744): support data type validating in V2 data source, and test V2 as well.
+      withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "orc") {
+        // write path
+        Seq("csv", "json", "parquet", "orc").foreach { format =>
+          var msg = intercept[AnalysisException] {
+            sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
+          }.getMessage
+          assert(msg.contains("Cannot save interval data type into external storage."))
 
-      // write path
-      Seq("csv", "json", "parquet", "orc").foreach { format =>
-        var msg = intercept[AnalysisException] {
-          sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.contains("Cannot save interval data type into external storage."))
+          msg = intercept[AnalysisException] {
+            spark.udf.register("testType", () => new IntervalData())
+            sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
+          }.getMessage
+          assert(msg.toLowerCase(Locale.ROOT)
+            .contains(s"$format data source does not support calendarinterval data type."))
+        }
 
-        msg = intercept[AnalysisException] {
-          spark.udf.register("testType", () => new IntervalData())
-          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support calendarinterval data type."))
-      }
+        // read path
+        Seq("parquet", "csv").foreach { format =>
+          var msg = intercept[AnalysisException] {
+            val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+            spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+            spark.read.schema(schema).format(format).load(tempDir).collect()
+          }.getMessage
+          assert(msg.toLowerCase(Locale.ROOT)
+            .contains(s"$format data source does not support calendarinterval data type."))
 
-      // read path
-      Seq("parquet", "csv").foreach { format =>
-        var msg = intercept[AnalysisException] {
-          val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
-          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-          spark.read.schema(schema).format(format).load(tempDir).collect()
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support calendarinterval data type."))
-
-        msg = intercept[AnalysisException] {
-          val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
-          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-          spark.read.schema(schema).format(format).load(tempDir).collect()
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support calendarinterval data type."))
+          msg = intercept[AnalysisException] {
+            val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+            spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+            spark.read.schema(schema).format(format).load(tempDir).collect()
+          }.getMessage
+          assert(msg.toLowerCase(Locale.ROOT)
+            .contains(s"$format data source does not support calendarinterval data type."))
+        }
       }
     }
   }
 
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
     // TODO(SPARK-26744): support data type validating in V2 data source, and test V2 as well.
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc",
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "orc") {
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
 

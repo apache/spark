@@ -56,7 +56,14 @@ case class WriteToDataSourceV2Exec(batchWrite: BatchWrite, query: SparkPlan)
     val writerFactory = batchWrite.createBatchWriterFactory()
     val useCommitCoordinator = batchWrite.useCommitCoordinator
     val rdd = query.execute()
-    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
+    // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
+    // partition rdd to make sure we at least set up one write task to write the metadata.
+    val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
+      sparkContext.parallelize(Array.empty[InternalRow], 1)
+    } else {
+      rdd
+    }
+    val messages = new Array[WriterCommitMessage](rddWithNonEmptyPartitions.partitions.length)
     val totalNumRowsAccumulator = new LongAccumulator()
 
     logInfo(s"Start processing data source write support: $batchWrite. " +
@@ -64,10 +71,10 @@ case class WriteToDataSourceV2Exec(batchWrite: BatchWrite, query: SparkPlan)
 
     try {
       sparkContext.runJob(
-        rdd,
+        rddWithNonEmptyPartitions,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
           DataWritingSparkTask.run(writerFactory, context, iter, useCommitCoordinator),
-        rdd.partitions.indices,
+        rddWithNonEmptyPartitions.partitions.indices,
         (index, result: DataWritingSparkTaskResult) => {
           val commitMessage = result.writerCommitMessage
           messages(index) = commitMessage
