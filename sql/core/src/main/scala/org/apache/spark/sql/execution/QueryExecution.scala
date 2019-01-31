@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.adaptive.PlanQueryStage
+import org.apache.spark.sql.execution.adaptive.InsertAdaptiveSparkPlan
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -94,32 +94,19 @@ class QueryExecution(
    * row format conversions as needed.
    */
   protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
-    val rules = if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      adaptivePreparations
-    } else {
-      preparations
-    }
-    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp)}
+    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
   }
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     PlanSubqueries(sparkSession),
-    EnsureRequirements(sparkSession.sessionState.conf),
-    CollapseCodegenStages(sparkSession.sessionState.conf),
-    ReuseExchange(sparkSession.sessionState.conf),
-    ReuseSubquery(sparkSession.sessionState.conf))
-
-  // With adaptive execution, whole stage codegen will be done inside `QueryStageExecutor`.
-  protected def adaptivePreparations: Seq[Rule[SparkPlan]] = Seq(
-    PlanSubqueries(sparkSession),
-    EnsureRequirements(sparkSession.sessionState.conf),
-    ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf),
-    // PlanQueryStage needs to be the last rule because it divides the plan into multiple sub-trees
-    // by inserting leaf node QueryStage. Transforming the plan after applying this rule will
-    // only transform node in a sub-tree.
-    PlanQueryStage(sparkSession))
+    EnsureRequirements(sparkSession.sessionState.conf),
+    // `AdaptiveSparkPlan` is a leaf node. If inserted, all the following rules will be no-op as
+    // the original plan is hidden behind `AdaptiveSparkPlan`.
+    InsertAdaptiveSparkPlan(sparkSession),
+    CollapseCodegenStages(sparkSession.sessionState.conf),
+    ReuseExchange(sparkSession.sessionState.conf))
 
   def simpleString: String = withRedaction {
     val concat = new StringConcat()

@@ -15,25 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive
+package org.apache.spark.sql.execution.adaptive.rule
 
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.execution.{CollapseCodegenStages, SparkPlan}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.QueryStage
 
-class QueryStagePlanner(conf: SQLConf) extends RuleExecutor[SparkPlan] {
-
-  override protected def batches: Seq[Batch] = Seq(
-    Batch("QueryStage Optimization", Once,
-      AssertChildStagesMaterialized,
-      ReduceNumShufflePartitions(conf),
-      CollapseCodegenStages(conf)
-    )
-  )
-}
-
-// A sanity check rule to make sure we are running `QueryStagePlanner` on a sub-tree of query plan
-// with all input stages materialized.
+// A sanity check rule to make sure we are running query stage optimizer rules on a sub-tree of
+// query plan with all input stages materialized.
 object AssertChildStagesMaterialized extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transform {
     case q: QueryStage if !q.materialize().isCompleted =>

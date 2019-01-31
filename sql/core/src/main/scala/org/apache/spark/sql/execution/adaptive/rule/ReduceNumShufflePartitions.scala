@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive
+package org.apache.spark.sql.execution.adaptive.rule
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.adaptive.ShuffleQueryStage
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 

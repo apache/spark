@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util.concurrent.CountDownLatch
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,48 +28,33 @@ import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SparkPlanInfo, S
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 
 /**
- * A root node to trigger query stages and execute the query plan adaptively. It incrementally
+ * A root node to execute the query plan adaptively. It creates query stages, and incrementally
  * updates the query plan when a query stage is materialized and provides accurate runtime
- * statistics.
+ * data statistics.
  */
-case class AdaptiveSparkPlan(initialPlan: ResultQueryStage, session: SparkSession)
+case class AdaptiveSparkPlan(initialPlan: SparkPlan, session: SparkSession)
   extends LeafExecNode{
 
   override def output: Seq[Attribute] = initialPlan.output
 
-  @volatile private var currentQueryStage: QueryStage = initialPlan
+  @volatile private var currentPlan: SparkPlan = initialPlan
   @volatile private var error: Throwable = null
-  private val readyLock = new CountDownLatch(1)
 
-  private def replaceStage(oldStage: QueryStage, newStage: QueryStage): QueryStage = {
-    if (oldStage.id == newStage.id) {
-      newStage
-    } else {
-      val newPlanForOldStage = oldStage.plan.transform {
-        case q: QueryStage => replaceStage(q, newStage)
-      }
-      oldStage.withNewPlan(newPlanForOldStage)
-    }
-  }
+  // We will release the lock when we finish planning query stages, or we fail to do the planning.
+  // Getting `resultStage` will be blocked until the lock is release.
+  // This is better than wait()/notify(), as we can easily check if the computation has completed,
+  // by calling `readyLock.getCount()`.
+  private val readyLock = new CountDownLatch(1)
 
   private def createCallback(executionId: Option[Long]): QueryStageTriggerCallback = {
     new QueryStageTriggerCallback {
-      override def onStageUpdated(stage: QueryStage): Unit = {
-        updateCurrentQueryStage(stage, executionId)
-        if (stage.isInstanceOf[ResultQueryStage]) readyLock.countDown()
-      }
-
-      override def onStagePlanningFailed(stage: QueryStage, e: Throwable): Unit = {
-        error = new RuntimeException(
-          s"""
-             |Fail to plan stage ${stage.id}:
-             |${stage.plan.treeString}
-           """.stripMargin, e)
-        readyLock.countDown()
+      override def onPlanUpdate(updatedPlan: SparkPlan): Unit = {
+        updateCurrentPlan(updatedPlan, executionId)
+        if (updatedPlan.isInstanceOf[ResultQueryStage]) readyLock.countDown()
       }
 
       override def onStageMaterializingFailed(stage: QueryStage, e: Throwable): Unit = {
-        error = new RuntimeException(
+        error = new SparkException(
           s"""
              |Fail to materialize stage ${stage.id}:
              |${stage.plan.treeString}
@@ -83,35 +69,34 @@ case class AdaptiveSparkPlan(initialPlan: ResultQueryStage, session: SparkSessio
     }
   }
 
-  private def updateCurrentQueryStage(newStage: QueryStage, executionId: Option[Long]): Unit = {
-    currentQueryStage = replaceStage(currentQueryStage, newStage)
+  private def updateCurrentPlan(newPlan: SparkPlan, executionId: Option[Long]): Unit = {
+    currentPlan = newPlan
     executionId.foreach { id =>
       session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         id,
         SQLExecution.getQueryExecution(id).toString,
-        SparkPlanInfo.fromSparkPlan(currentQueryStage)))
+        SparkPlanInfo.fromSparkPlan(currentPlan)))
     }
   }
 
-  def resultStage: ResultQueryStage = {
+  def finalPlan: ResultQueryStage = {
     if (readyLock.getCount > 0) {
       val sc = session.sparkContext
       val executionId = Option(sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
-      val trigger = new QueryStageTrigger(session, createCallback(executionId))
-      trigger.start()
-      trigger.trigger(initialPlan)
+      val creator = new QueryStageCreator(initialPlan, session, createCallback(executionId))
+      creator.start()
       readyLock.await()
-      trigger.stop()
+      creator.stop()
     }
 
     if (error != null) throw error
-    currentQueryStage.asInstanceOf[ResultQueryStage]
+    currentPlan.asInstanceOf[ResultQueryStage]
   }
 
-  override def executeCollect(): Array[InternalRow] = resultStage.executeCollect()
-  override def executeTake(n: Int): Array[InternalRow] = resultStage.executeTake(n)
-  override def executeToIterator(): Iterator[InternalRow] = resultStage.executeToIterator()
-  override def doExecute(): RDD[InternalRow] = resultStage.execute()
+  override def executeCollect(): Array[InternalRow] = finalPlan.executeCollect()
+  override def executeTake(n: Int): Array[InternalRow] = finalPlan.executeTake(n)
+  override def executeToIterator(): Iterator[InternalRow] = finalPlan.executeToIterator()
+  override def doExecute(): RDD[InternalRow] = finalPlan.execute()
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
@@ -120,7 +105,7 @@ case class AdaptiveSparkPlan(initialPlan: ResultQueryStage, session: SparkSessio
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int): Unit = {
-    currentQueryStage.generateTreeString(
+    currentPlan.generateTreeString(
       depth, lastChildren, append, verbose, "", false, maxFields)
   }
 }

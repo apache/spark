@@ -53,7 +53,7 @@ private[execution] object SparkPlanInfo {
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val children = plan match {
       case ReusedExchangeExec(_, child) => child :: Nil
-      case a: AdaptiveSparkPlan => a.resultStage.plan :: Nil
+      case a: AdaptiveSparkPlan => a.finalPlan.plan :: Nil
       case stage: QueryStage => stage.plan :: Nil
       case _ => plan.children ++ plan.subqueries
     }

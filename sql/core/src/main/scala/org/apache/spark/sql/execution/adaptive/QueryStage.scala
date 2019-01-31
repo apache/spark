@@ -29,8 +29,9 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
 
 /**
- * In adaptive execution mode, an execution plan is divided into multiple QueryStages w.r.t. the
- * exchange as boundary. Each QueryStage is a sub-tree that runs in a single Spark stage.
+ * A query stage is an individual sub-tree of a query plan, which can be executed ahead and provide
+ * accurate data statistics. For example, a sub-tree under shuffle/broadcast node is a query stage.
+ * Each query stage runs in a single Spark job/stage.
  */
 abstract class QueryStage extends LeafExecNode {
 
@@ -65,6 +66,7 @@ abstract class QueryStage extends LeafExecNode {
   override def executeToIterator(): Iterator[InternalRow] = plan.executeToIterator()
   override def doExecute(): RDD[InternalRow] = plan.execute()
   override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
+  override def doCanonicalize(): SparkPlan = plan.canonicalized
 
   // TODO: maybe we should not hide QueryStage entirely from explain result.
   override def generateTreeString(
@@ -86,7 +88,7 @@ abstract class QueryStage extends LeafExecNode {
 case class ResultQueryStage(id: Int, plan: SparkPlan) extends QueryStage {
 
   override def materialize(): Future[Any] = {
-    Future.unit
+    throw new IllegalStateException("Cannot materialize ResultQueryStage.")
   }
 
   override def withNewPlan(newPlan: SparkPlan): QueryStage = {
@@ -95,7 +97,7 @@ case class ResultQueryStage(id: Int, plan: SparkPlan) extends QueryStage {
 }
 
 /**
- * A shuffle QueryStage whose child is a ShuffleExchangeExec.
+ * A shuffle QueryStage whose child is a [[ShuffleExchangeExec]].
  */
 case class ShuffleQueryStage(id: Int, plan: ShuffleExchangeExec) extends QueryStage {
 
@@ -119,7 +121,7 @@ case class ShuffleQueryStage(id: Int, plan: ShuffleExchangeExec) extends QuerySt
 }
 
 /**
- * A broadcast QueryStage whose child is a BroadcastExchangeExec.
+ * A broadcast QueryStage whose child is a [[BroadcastExchangeExec]].
  */
 case class BroadcastQueryStage(id: Int, plan: BroadcastExchangeExec) extends QueryStage {
 
