@@ -43,7 +43,7 @@ if __name__ == "__main__":
     pic = PowerIterationClustering(k=2, maxIter=20, initMode="degree", weightCol="weight")
 
     # Shows the cluster assignment
-    assignments = pic.assignClusters(df).show()
+    pic.assignClusters(df).show()
     # $example off$
 
     spark.stop()
