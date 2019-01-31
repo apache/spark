@@ -124,6 +124,8 @@ private[avro] class AvroFileFormat extends FileFormat
 
   override def shortName(): String = "avro"
 
+  override def toString(): String = "Avro"
+
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
