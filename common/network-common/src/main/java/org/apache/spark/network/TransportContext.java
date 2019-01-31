@@ -88,7 +88,7 @@ public class TransportContext {
   // Separate thread pool for handling ChunkFetchRequest. This helps to enable throttling
   // max number of TransportServer worker threads that are blocked on writing response
   // of ChunkFetchRequest message back to the client via the underlying channel.
-  private EventLoopGroup chunkFetchWorkers;
+  private final EventLoopGroup chunkFetchWorkers;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this(conf, rpcHandler, false, false);
@@ -122,14 +122,15 @@ public class TransportContext {
     this.closeIdleConnections = closeIdleConnections;
     this.isClientOnly = isClientOnly;
 
-    if (chunkFetchWorkers == null &&
-        conf.getModuleName() != null &&
+    if (conf.getModuleName() != null &&
         conf.getModuleName().equalsIgnoreCase("shuffle") &&
         !isClientOnly) {
       chunkFetchWorkers = NettyUtils.createEventLoop(
           IOMode.valueOf(conf.ioMode()),
           conf.chunkFetchHandlerThreads(),
           "shuffle-chunk-fetch-handler");
+    } else {
+      chunkFetchWorkers = null;
     }
   }
 
