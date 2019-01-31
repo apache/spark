@@ -96,6 +96,13 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
   }
 
+  test("block addition, and block to batch allocation with many blocks") {
+    val receivedBlockTracker = createTracker(setCheckpointDir = true)
+    val blockInfos = generateBlockInfos(100000)
+    blockInfos.map(receivedBlockTracker.addBlock)
+    receivedBlockTracker.allocateBlocksToBatch(1)
+  }
+
   test("recovery with write ahead logs should remove only allocated blocks from received queue") {
     val manualClock = new ManualClock
     val batchTime = manualClock.getTimeMillis()
@@ -362,8 +369,8 @@ class ReceivedBlockTrackerSuite
   }
 
   /** Generate blocks infos using random ids */
-  def generateBlockInfos(): Seq[ReceivedBlockInfo] = {
-    List.fill(5)(ReceivedBlockInfo(streamId, Some(0L), None,
+  def generateBlockInfos(blockCount: Int = 5): Seq[ReceivedBlockInfo] = {
+    List.fill(blockCount)(ReceivedBlockInfo(streamId, Some(0L), None,
       BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)), Some(0L))))
   }
 
