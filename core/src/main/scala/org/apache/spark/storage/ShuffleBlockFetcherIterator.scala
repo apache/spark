@@ -442,8 +442,8 @@ final class ShuffleBlockFetcherIterator(
               //
               // - BypassMergeSortShuffleWriterSuite: "write with some empty partitions"
               // - UnsafeShuffleWriterSuite: "writeEmptyIterator"
-              // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or writing"
-              //
+              // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or
+              // writing"
               // There is not an explicit test for SortShuffleWriter but the underlying APIs that
               // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
               // which returns a zero-size from commitAndGet() in case no records were written
