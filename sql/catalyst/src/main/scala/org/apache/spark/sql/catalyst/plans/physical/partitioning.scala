@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import org.apache.spark.sql.catalyst.analysis.CleanupAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -198,7 +199,8 @@ object Partitioning {
     inputPartitioning match {
       case partitioning: Expression =>
         val exprToEquiv = partitioning.references.map { attr =>
-          attr -> expressions.filter(_.sameResult(attr))
+          attr -> expressions.filter(e =>
+            CleanupAliases.trimAliases(e).semanticEquals(attr))
         }.filterNot { case (attr, exprs) =>
           exprs.size == 1 && exprs.forall(_ == attr)
         }
@@ -283,10 +285,10 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       required match {
         case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l, r) => l.sameResult(r)
+            case (l, r) => l.semanticEquals(r)
           }
         case ClusteredDistribution(requiredClustering, _) =>
-          expressions.forall(x => requiredClustering.exists(_.sameResult(x)))
+          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
         case _ => false
       }
     }
@@ -341,7 +343,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
         case ClusteredDistribution(requiredClustering, _) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.sameResult(x)))
+          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
         case _ => false
       }
     }

@@ -223,34 +223,13 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Returns true when two expressions will always compute the same output, even if they differ
+   * Returns true when two expressions will always compute the same result, even if they differ
    * cosmetically (i.e. capitalization of names in attributes may be different).
    *
    * See [[Canonicalize]] for more details.
-   *
-   * This method should be used (instead of `sameResult`) when comparing if 2 expressions are the
-   * same and one can replace the other (eg. in Optimizer/Analyzer rules where we want to replace
-   * equivalent expressions). It should not be used (and `sameResult` should be used instead) when
-   * comparing if 2 expressions produce the same results (in this case `semanticEquals` can be too
-   * strict).
    */
   def semanticEquals(other: Expression): Boolean =
     deterministic && other.deterministic && canonicalized == other.canonicalized
-
-  /**
-   * Returns true when two expressions will always compute the same result, even if the output from
-   * plan perspective may be different, because of different names or similar differences.
-   * Usually this means that their canonicalized form equals, but it may also not be the case, as
-   * different output expressions can evaluate to the same result as well (eg. when an expression
-   * is aliased).
-   *
-   * This method should be used (instead of `semanticEquals`) when checking if 2 expressions
-   * produce the same results (eg. as in the case we are interested to check if the ordering is the
-   * same). It should not be used (and `semanticEquals` should be used instead) when comparing if 2
-   * expressions are the same and one can replace the other.
-   */
-  final def sameResult(other: Expression): Boolean =
-    CleanupAliases.trimAliases(this) semanticEquals CleanupAliases.trimAliases(other)
 
   /**
    * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard

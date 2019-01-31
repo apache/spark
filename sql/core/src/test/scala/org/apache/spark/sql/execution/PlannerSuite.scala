@@ -780,23 +780,6 @@ class PlannerSuite extends SharedSQLContext {
         classOf[PartitioningCollection])
     }
   }
-
-  test("SPARK-25951: avoid redundant shuffle on rename") {
-    val renamedA = Alias(exprA, "a")()
-    val doubleRename = Alias(Alias(exprA, "a")(), "b")()
-    val plan1 = ShuffleExchangeExec(
-      HashPartitioning(exprA :: Nil, 5),
-      DummySparkPlan(outputPartitioning = HashPartitioning(doubleRename :: Nil, 5)))
-    val plan2 = ShuffleExchangeExec(
-      HashPartitioning(exprA :: Nil, 5),
-      DummySparkPlan(outputPartitioning = HashPartitioning(renamedA :: Nil, 5)))
-    val smjExec = SortMergeJoinExec(
-      doubleRename :: Nil, renamedA :: Nil, Inner, None, plan1, plan2)
-
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    assert(outputPlan.collect { case _: ShuffleExchangeExec => true }.isEmpty)
-  }
 }
 
 // Used for unit-testing EnsureRequirements
