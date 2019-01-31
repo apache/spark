@@ -20,6 +20,7 @@ import java.util.{Optional, UUID}
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
@@ -58,61 +59,28 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
   }
 
   override def buildForBatch(): BatchWrite = {
-    assert(schema != null, "Missing input data schema")
-    assert(queryId != null, "Missing query ID")
-    assert(mode != null, "Missing save mode")
-    assert(options.paths().length == 1)
-    DataSource.validateSchema(schema)
+    validateInputs()
     val pathName = options.paths().head
     val path = new Path(pathName)
     val sparkSession = SparkSession.active
     val optionsAsScala = options.asMap().asScala.toMap
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
-    val job = Job.getInstance(hadoopConf)
+    val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = pathName)
 
-    job.setOutputKeyClass(classOf[Void])
-    job.setOutputValueClass(classOf[InternalRow])
-    FileOutputFormat.setOutputPath(job, path)
-
-    val caseInsensitiveOptions = CaseInsensitiveMap(optionsAsScala)
-    // Note: prepareWrite has side effect. It sets "job".
-    val outputWriterFactory =
-      prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
-    val allColumns = schema.toAttributes
-    lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
-    val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
-    // TODO: after partitioning is supported in V2:
-    //       1. filter out partition columns in `dataColumns`.
-    //       2. Don't use Seq.empty for `partitionColumns`.
-    val description = new WriteJobDescription(
-      uuid = UUID.randomUUID().toString,
-      serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
-      outputWriterFactory = outputWriterFactory,
-      allColumns = allColumns,
-      dataColumns = allColumns,
-      partitionColumns = Seq.empty,
-      bucketIdExpression = None,
-      path = pathName,
-      customPartitionLocations = Map.empty,
-      maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
-        .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
-      timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
-        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
-      statsTrackers = Seq(statsTracker)
-    )
+    val description =
+      createWriteJobDescription(sparkSession, hadoopConf, job, pathName, optionsAsScala)
 
     val fs = path.getFileSystem(hadoopConf)
     mode match {
-      case SaveMode.ErrorIfExists if (fs.exists(path)) =>
+      case SaveMode.ErrorIfExists if fs.exists(path) =>
         val qualifiedOutputPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
 
-      case SaveMode.Ignore if (fs.exists(path)) =>
+      case SaveMode.Ignore if fs.exists(path) =>
         null
 
       case SaveMode.Overwrite =>
@@ -136,5 +104,56 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
+
+  private def validateInputs(): Unit = {
+    assert(schema != null, "Missing input data schema")
+    assert(queryId != null, "Missing query ID")
+    assert(mode != null, "Missing save mode")
+    assert(options.paths().length == 1)
+    DataSource.validateSchema(schema)
+  }
+
+  private def getJobInstance(hadoopConf: Configuration, path: Path): Job = {
+    val job = Job.getInstance(hadoopConf)
+    job.setOutputKeyClass(classOf[Void])
+    job.setOutputValueClass(classOf[InternalRow])
+    FileOutputFormat.setOutputPath(job, path)
+    job
+  }
+
+  private def createWriteJobDescription(
+      sparkSession: SparkSession,
+      hadoopConf: Configuration,
+      job: Job,
+      pathName: String,
+      options: Map[String, String]): WriteJobDescription = {
+    val caseInsensitiveOptions = CaseInsensitiveMap(options)
+    // Note: prepareWrite has side effect. It sets "job".
+    val outputWriterFactory =
+      prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
+    val allColumns = schema.toAttributes
+    val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
+    val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
+    val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
+    // TODO: after partitioning is supported in V2:
+    //       1. filter out partition columns in `dataColumns`.
+    //       2. Don't use Seq.empty for `partitionColumns`.
+    new WriteJobDescription(
+      uuid = UUID.randomUUID().toString,
+      serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
+      outputWriterFactory = outputWriterFactory,
+      allColumns = allColumns,
+      dataColumns = allColumns,
+      partitionColumns = Seq.empty,
+      bucketIdExpression = None,
+      path = pathName,
+      customPartitionLocations = Map.empty,
+      maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
+        .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
+      timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
+        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
+      statsTrackers = Seq(statsTracker)
+    )
+  }
 }
 
