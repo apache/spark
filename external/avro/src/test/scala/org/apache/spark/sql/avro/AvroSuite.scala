@@ -896,7 +896,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)
-        .contains(s"data source does not support calendarinterval data type."))
+        .contains(s"avro data source does not support calendarinterval data type."))
     }
   }
 
