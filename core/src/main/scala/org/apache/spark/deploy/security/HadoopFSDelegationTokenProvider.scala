@@ -147,7 +147,7 @@ private[deploy] object HadoopFSDelegationTokenProvider {
         .map(new Path(_).getFileSystem(hadoopConf))
         .getOrElse(defaultFS)
     } else {
-        defaultFS
+      defaultFS
     }
 
     // Add the list of available namenodes for all namespaces in HDFS federation.
