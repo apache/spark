@@ -217,9 +217,6 @@ object JSONBenchmark extends SqlBasedBenchmark {
       benchmark.addCase(s"Select 1 column + count()", numIters) { _ =>
         ds.select($"col1").filter((_: Row) => true).count()
       }
-      benchmark.addCase(s"count()", numIters) { _ =>
-        ds.count()
-      }
 
       benchmark.run()
     }
