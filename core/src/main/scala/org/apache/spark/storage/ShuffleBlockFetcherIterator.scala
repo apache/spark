@@ -471,7 +471,7 @@ final class ShuffleBlockFetcherIterator(
                   if (address == blockManager.blockManagerId) {
                     logError("Failed to create input stream from local block", e)
                   } else {
-                    logError("Failed to create input stream from remote block twice", e)
+                    logError("Failed to create input stream from remote downloaded block twice", e)
                   }
                   throwFetchFailedException(blockId, address, e)
                 }

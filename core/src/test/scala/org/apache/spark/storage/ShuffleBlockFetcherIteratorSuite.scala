@@ -418,7 +418,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       }
     })
 
-    // The next block is a correct ShuffleBlockId (the second and third are corrupt and retried)
+    // The next block is a correct ShuffleBlock (the second and third are corrupt and retried)
     val (id2, _) = iterator.next()
     assert(id2 == ShuffleBlockId(0, 1, 0))
   }
