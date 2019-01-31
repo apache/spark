@@ -24,6 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.util.control.Breaks._
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -416,81 +417,90 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case r @ SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
-          if (address != blockManager.blockManagerId) {
-            numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
-            shuffleMetrics.incRemoteBytesRead(buf.size)
-            if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
-              shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
-            }
-            shuffleMetrics.incRemoteBlocksFetched(1)
-          }
-          if (!localBlocks.contains(blockId)) {
-            bytesInFlight -= size
-          }
-          if (isNetworkReqDone) {
-            reqsInFlight -= 1
-            logDebug("Number of requests in flight " + reqsInFlight)
-          }
-
-          if (buf.size == 0) {
-            // We will never legitimately receive a zero-size block. All blocks with zero records
-            // have zero size and all zero-size blocks have no records (and hence should never
-            // have been requested in the first place). This statement relies on behaviors of the
-            // shuffle writers, which are guaranteed by the following test cases:
-            //
-            // - BypassMergeSortShuffleWriterSuite: "write with some empty partitions"
-            // - UnsafeShuffleWriterSuite: "writeEmptyIterator"
-            // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or writing"
-            //
-            // There is not an explicit test for SortShuffleWriter but the underlying APIs that
-            // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
-            // which returns a zero-size from commitAndGet() in case no records were written
-            // since the last call.
-            val msg = s"Received a zero-size buffer for block $blockId from $address " +
-              s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
-            throwFetchFailedException(blockId, address, new IOException(msg))
-          }
-
-          val in = try {
-            buf.createInputStream()
-          } catch {
-            // The exception could only be throwed by local shuffle block
-            case e: IOException =>
-              assert(buf.isInstanceOf[FileSegmentManagedBuffer])
-              logError("Failed to create input stream from local block", e)
-              buf.release()
-              throwFetchFailedException(blockId, address, e)
-          }
-          var isStreamCopied: Boolean = false
-          try {
-            input = streamWrapper(blockId, in)
-            // Only copy the stream if it's wrapped by compression or encryption, also the size of
-            // block is small (the decompressed block is smaller than maxBytesInFlight)
-            if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
-              isStreamCopied = true
-              val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
-              // Decompress the whole block at once to detect any corruption, which could increase
-              // the memory usage tne potential increase the chance of OOM.
-              // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              Utils.copyStream(input, out, closeStreams = true)
-              input = out.toChunkedByteBuffer.toInputStream(dispose = true)
-            }
-          } catch {
-            case e: IOException =>
-              buf.release()
-              if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                || corruptedBlocks.contains(blockId)) {
-                throwFetchFailedException(blockId, address, e)
-              } else {
-                logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
-                corruptedBlocks += blockId
-                fetchRequests += FetchRequest(address, Array((blockId, size)))
-                result = null
+          breakable {
+            if (address != blockManager.blockManagerId) {
+              numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+              shuffleMetrics.incRemoteBytesRead(buf.size)
+              if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
+                shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
               }
-          } finally {
-            // TODO: release the buf here to free memory earlier
-            if (isStreamCopied) {
-              in.close()
+              shuffleMetrics.incRemoteBlocksFetched(1)
+            }
+            if (!localBlocks.contains(blockId)) {
+              bytesInFlight -= size
+            }
+            if (isNetworkReqDone) {
+              reqsInFlight -= 1
+              logDebug("Number of requests in flight " + reqsInFlight)
+            }
+
+            if (buf.size == 0) {
+              // We will never legitimately receive a zero-size block. All blocks with zero records
+              // have zero size and all zero-size blocks have no records (and hence should never
+              // have been requested in the first place). This statement relies on behaviors of the
+              // shuffle writers, which are guaranteed by the following test cases:
+              //
+              // - BypassMergeSortShuffleWriterSuite: "write with some empty partitions"
+              // - UnsafeShuffleWriterSuite: "writeEmptyIterator"
+              // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or writing"
+              //
+              // There is not an explicit test for SortShuffleWriter but the underlying APIs that
+              // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
+              // which returns a zero-size from commitAndGet() in case no records were written
+              // since the last call.
+              val msg = s"Received a zero-size buffer for block $blockId from $address " +
+                s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
+              throwFetchFailedException(blockId, address, new IOException(msg))
+            }
+
+            val in = try {
+              buf.createInputStream()
+            } catch {
+              // The exception could only be throwed by local shuffle block
+              case e: IOException =>
+                assert(buf.isInstanceOf[FileSegmentManagedBuffer])
+                logError("Failed to create input stream from local block", e)
+                buf.release()
+                if (address != blockManager.blockManagerId && !corruptedBlocks.contains(blockId)) {
+                  corruptedBlocks += blockId
+                  fetchRequests += FetchRequest(address, Array((blockId, size)))
+                  result = null
+                  break()
+                } else {
+                  throwFetchFailedException(blockId, address, e)
+                }
+            }
+            var isStreamCopied: Boolean = false
+            try {
+              input = streamWrapper(blockId, in)
+              // Only copy the stream if it's wrapped by compression or encryption, also the size of
+              // block is small (the decompressed block is smaller than maxBytesInFlight)
+              if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+                isStreamCopied = true
+                val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+                // Decompress the whole block at once to detect any corruption, which could increase
+                // the memory usage tne potential increase the chance of OOM.
+                // TODO: manage the memory used here, and spill it into disk in case of OOM.
+                Utils.copyStream(input, out, closeStreams = true)
+                input = out.toChunkedByteBuffer.toInputStream(dispose = true)
+              }
+            } catch {
+              case e: IOException =>
+                buf.release()
+                if (buf.isInstanceOf[FileSegmentManagedBuffer]
+                  || corruptedBlocks.contains(blockId)) {
+                  throwFetchFailedException(blockId, address, e)
+                } else {
+                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                  corruptedBlocks += blockId
+                  fetchRequests += FetchRequest(address, Array((blockId, size)))
+                  result = null
+                }
+            } finally {
+              // TODO: release the buf here to free memory earlier
+              if (isStreamCopied) {
+                in.close()
+              }
             }
           }
 
