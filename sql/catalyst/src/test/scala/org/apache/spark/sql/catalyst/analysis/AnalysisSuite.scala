@@ -168,8 +168,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       .orderBy('b.asc)
 
     val expected2 = testRelation2
-      .groupBy(a, c, b)(a, c, alias_a3, alias_b)
-      .orderBy(alias_b.toAttribute.asc)
+      .groupBy(a, c, b)(a, c, alias_a3, b)
+      .orderBy(b.asc)
       .select(a, c, alias_a3.toAttribute)
 
     checkAnalysis(plan2, expected2)
@@ -374,7 +374,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected = testRelation2
       .groupBy(a, c)(alias1, alias2, alias3)
       .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
-      .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
     checkAnalysis(plan, expected)
   }
 

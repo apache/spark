@@ -1626,15 +1626,17 @@ class Analyzer(
           val maybeResolvedSortOrders =
             sortOrder.map(resolveExpressionBottomUp(_, child).asInstanceOf[SortOrder])
           val unresolvedSortOrders = maybeResolvedSortOrders.filter { s =>
-            !s.resolved || !s.references.subsetOf(child.outputSet) || containsAggregate(s)
+            !s.resolved || containsAggregate(s)
           }
-          val aliasedOrdering =
-            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
-          val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
+          val namedExpressionsOrdering =
+            unresolvedSortOrders.map(_.child match {
+              case ne: NamedExpression => ne
+              case o => Alias(o, "aggOrder")()
+            })
+          val aggregatedOrdering = aggregate.copy(aggregateExpressions = namedExpressionsOrdering)
           val resolvedAggregate: Aggregate =
             executeSameContext(aggregatedOrdering).asInstanceOf[Aggregate]
-          val resolvedAliasedOrdering: Seq[Alias] =
-            resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
+          val resolvedNamedExpressionsOrdering = resolvedAggregate.aggregateExpressions
 
           // If we pass the analysis check, then the ordering expressions should only reference to
           // aggregate expressions or grouping expressions, and it's safe to push them down to
@@ -1648,11 +1650,15 @@ class Analyzer(
           // to push down this ordering expression and can reference the original aggregate
           // expression instead.
           val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
+          val evaluatedOrderings = resolvedNamedExpressionsOrdering.zip(unresolvedSortOrders).map {
             case (evaluated, order) =>
+              val evaluatedExpr = evaluated match {
+                case a: Alias => a.child
+                case other => other
+              }
               val index = originalAggExprs.indexWhere {
-                case Alias(childExpr, _) => childExpr semanticEquals evaluated.child
-                case other => other semanticEquals evaluated.child
+                case Alias(childExpr, _) => childExpr semanticEquals evaluatedExpr
+                case other => other semanticEquals evaluatedExpr
               }
 
               if (index == -1) {
