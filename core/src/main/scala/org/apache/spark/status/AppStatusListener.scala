@@ -991,15 +991,15 @@ private[spark] class AppStatusListener(
   private def updateBroadcastBlock(
       event: SparkListenerBlockUpdated,
       broadcast: BroadcastBlockId): Unit = {
-    val now = System.nanoTime()
     val executorId = event.blockUpdatedInfo.blockManagerId.executorId
-    val storageLevel = event.blockUpdatedInfo.storageLevel
-
-    // Whether values are being added to or removed from the existing accounting.
-    val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
-    val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
-
     liveExecutors.get(executorId).foreach { exec =>
+      val now = System.nanoTime()
+      val storageLevel = event.blockUpdatedInfo.storageLevel
+
+      // Whether values are being added to or removed from the existing accounting.
+      val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
+      val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
+
       updateExecutorMemoryDiskInfo(exec, storageLevel, memoryDelta, diskDelta)
       maybeUpdate(exec, now)
     }
