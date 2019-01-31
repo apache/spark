@@ -805,7 +805,6 @@ private[spark] class TaskSetManager(
         if (tasksSuccessful == numTasks) {
           isZombie = true
         }
-        maybeFinishTaskSet()
       }
     }
   }
