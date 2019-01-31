@@ -262,7 +262,7 @@ case class AttributeReference(
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case ar: AttributeReference if ar.metadata.contains("exprId") =>
-      exprId.toString == ar.metadata.getString("exprId")
+      sameRef(ar) || exprId.toString == ar.metadata.getString("exprId")
     case ar: AttributeReference => sameRef(ar)
     case _ => false
   }
