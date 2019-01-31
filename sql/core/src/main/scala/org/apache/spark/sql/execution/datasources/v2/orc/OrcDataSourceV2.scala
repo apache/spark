@@ -20,7 +20,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, Table}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 class OrcDataSourceV2 extends FileDataSourceV2 {
 
@@ -42,5 +42,22 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
     val tableName = getTableName(options)
     val fileIndex = getFileIndex(options, Some(schema))
     OrcTable(tableName, sparkSession, fileIndex, Some(schema))
+  }
+}
+
+object OrcDataSourceV2 {
+  def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType) && supportDataType(valueType)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
+
+    case _ => false
   }
 }

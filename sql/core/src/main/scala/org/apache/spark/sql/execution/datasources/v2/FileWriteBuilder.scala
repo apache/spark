@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 abstract class FileWriteBuilder(options: DataSourceOptions)
@@ -104,12 +104,24 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
+  /**
+   * Returns whether this format supports the given [[DataType]] in write path.
+   * By default all data types are supported.
+   */
+  def supportDataType(dataType: DataType): Boolean = true
+
   private def validateInputs(): Unit = {
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
     assert(mode != null, "Missing save mode")
     assert(options.paths().length == 1)
     DataSource.validateSchema(schema)
+    schema.foreach { field =>
+      if (!supportDataType(field.dataType)) {
+        throw new AnalysisException(
+          s"$this data source does not support ${field.dataType.catalogString} data type.")
+      }
+    }
   }
 
   private def getJobInstance(hadoopConf: Configuration, path: Path): Job = {

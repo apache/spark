@@ -889,14 +889,15 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       var msg = intercept[AnalysisException] {
         sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage."))
+      assert(msg.toLowerCase(Locale.ROOT)
+        .contains("avro data source does not support calendarinterval data type."))
 
       msg = intercept[AnalysisException] {
         spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)
-        .contains(s"avro data source does not support calendarinterval data type."))
+        .contains("avro data source does not support calendarinterval data type."))
     }
   }
 

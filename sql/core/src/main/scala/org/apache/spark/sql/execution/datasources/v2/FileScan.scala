@@ -18,21 +18,28 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, Scan}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 abstract class FileScan(
     sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex) extends Scan with Batch {
+    fileIndex: PartitioningAwareFileIndex,
+    readSchema: StructType) extends Scan with Batch {
   /**
    * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(path: Path): Boolean = {
     false
   }
+
+  /**
+   * Returns whether this format supports the given [[DataType]] in write path.
+   * By default all data types are supported.
+   */
+  def supportDataType(dataType: DataType): Boolean = true
 
   protected def partitions: Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
@@ -57,5 +64,13 @@ abstract class FileScan(
     partitions.toArray
   }
 
-  override def toBatch: Batch = this
+  override def toBatch: Batch = {
+    readSchema.foreach { field =>
+      if (!supportDataType(field.dataType)) {
+        throw new AnalysisException(
+          s"$this data source does not support ${field.dataType.catalogString} data type.")
+      }
+    }
+    this
+  }
 }
