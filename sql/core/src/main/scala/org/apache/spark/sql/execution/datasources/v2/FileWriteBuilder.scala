@@ -70,7 +70,6 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = pathName)
-
     val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, pathName, optionsAsScala)
 
