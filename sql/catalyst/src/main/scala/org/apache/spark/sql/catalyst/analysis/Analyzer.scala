@@ -2147,27 +2147,34 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, inputsNullSafe, _, _, _, _)
-            if inputsNullSafe.contains(false) =>
+        case udf @ ScalaUDF(_, _, inputs, primitiveInputs, _, _, _, _)
+            if primitiveInputs.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
-          assert(inputsNullSafe.length == inputs.length)
+          assert(primitiveInputs.length == inputs.length)
 
-          // TODO: skip null handling for not-nullable primitive inputs after we can completely
-          // trust the `nullable` information.
-          val inputsNullCheck = inputsNullSafe.zip(inputs)
-            .filter { case (nullSafe, _) => !nullSafe }
-            .map { case (_, expr) => IsNull(expr) }
-            .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
-          // Once we add an `If` check above the udf, it is safe to mark those checked inputs
-          // as null-safe (i.e., set `inputsNullSafe` all `true`), because the null-returning
-          // branch of `If` will be called if any of these checked inputs is null. Thus we can
-          // prevent this rule from being applied repeatedly.
-          val newInputsNullSafe = inputsNullSafe.map(_ => true)
-          inputsNullCheck
-            .map(If(_, Literal.create(null, udf.dataType),
-              udf.copy(inputsNullSafe = newInputsNullSafe)))
-            .getOrElse(udf)
+          val inputNullCheck = primitiveInputs.zip(inputs).collect {
+            case (isPrimitive, input) if isPrimitive && input.nullable => IsNull(input)
+          }.reduceLeftOption[Expression](Or)
+
+          if (inputNullCheck.isDefined) {
+            // Once we add an `If` check above the udf, it is safe to mark those checked inputs
+            // as null-safe (i.e., wrap with `KnownNotNull`), because the null-returning
+            // branch of `If` will be called if any of these checked inputs is null. Thus we can
+            // prevent this rule from being applied repeatedly.
+            val newInputs = primitiveInputs.zip(inputs).map {
+              case (isPrimitive, input) =>
+                if (isPrimitive && input.nullable) {
+                  KnownNotNull(input)
+                } else {
+                  input
+                }
+            }
+            val newUDF = udf.copy(children = newInputs)
+            If(inputNullCheck.get, Literal.create(null, udf.dataType), newUDF)
+          } else {
+            udf
+          }
       }
     }
   }
