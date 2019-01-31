@@ -631,7 +631,8 @@ object ScalaReflection extends ScalaReflection {
               "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
           }
 
-          val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType),
+          // inputObject won't be null with If's guard below
+          val fieldValue = Invoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
             returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
