@@ -495,7 +495,7 @@ class StreamSuite extends StreamTest {
       // `extended = false` only displays the physical plan.
       assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2".r
+      assert("BatchScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
@@ -505,7 +505,7 @@ class StreamSuite extends StreamTest {
       // plan.
       assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2".r
+      assert("BatchScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
@@ -548,17 +548,17 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
 
       // `extended = false` only displays the physical plan.
-      assert("Streaming RelationV2 ContinuousMemoryStream".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2 ContinuousMemoryStream".r
+      assert("ContinuousScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
 
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("Streaming RelationV2 ContinuousMemoryStream".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2 ContinuousMemoryStream".r
+      assert("ContinuousScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
     } finally {
       q.stop()
@@ -1081,21 +1081,19 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp / current_date" +
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
     " to Dataset - use v2 sink") {
     testCurrentTimestampOnStreamingQuery(useV2Sink = true)
   }
 
-  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp / current_date" +
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
     " to Dataset - use v1 sink") {
     testCurrentTimestampOnStreamingQuery(useV2Sink = false)
   }
 
   private def testCurrentTimestampOnStreamingQuery(useV2Sink: Boolean): Unit = {
     val input = MemoryStream[Int]
-    val df = input.toDS()
-      .withColumn("cur_timestamp", lit(current_timestamp()))
-      .withColumn("cur_date", lit(current_date()))
+    val df = input.toDS().withColumn("cur_timestamp", lit(current_timestamp()))
 
     def assertBatchOutputAndUpdateLastTimestamp(
         rows: Seq[Row],
@@ -1106,8 +1104,6 @@ class StreamSuite extends StreamTest {
       val row = rows.head
       assert(row.getInt(0) === expectedValue)
       assert(row.getTimestamp(1).getTime >= curTimestamp)
-      val days = DateTimeUtils.millisToDays(row.getDate(2).getTime)
-      assert(days == curDate || days == curDate + 1)
       row.getTimestamp(1).getTime
     }
 

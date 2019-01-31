@@ -381,7 +381,21 @@ case class GetMapValue(child: Expression, key: Expression)
   override def right: Expression = key
 
   /** `Null` is returned for invalid ordinals. */
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (key.foldable && !key.nullable) {
+    val keyObj = key.eval()
+    child match {
+      case m: CreateMap if m.resolved =>
+        m.keys.zip(m.values).filter { case (k, _) => k.foldable && !k.nullable }.find {
+          case (k, _) if k.eval() == keyObj => true
+          case _ => false
+        }.map(_._2.nullable).getOrElse(true)
+      case _ =>
+        true
+    }
+  } else {
+    true
+  }
+
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 

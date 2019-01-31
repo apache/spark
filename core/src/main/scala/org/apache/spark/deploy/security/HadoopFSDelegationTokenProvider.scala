@@ -100,7 +100,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
       creds: Credentials): Credentials = {
 
     filesystems.foreach { fs =>
-      logInfo("getting token for: " + fs)
+      logInfo(s"getting token for: $fs with renewer $renewer")
       fs.addDelegationTokens(renewer, creds)
     }
 
@@ -114,22 +114,22 @@ private[deploy] class HadoopFSDelegationTokenProvider
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
-    sparkConf.get(PRINCIPAL).flatMap { renewer =>
-      val creds = new Credentials()
-      fetchDelegationTokens(renewer, filesystems, creds)
+    val renewer = UserGroupInformation.getCurrentUser().getUserName()
 
-      val renewIntervals = creds.getAllTokens.asScala.filter {
-        _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
-      }.flatMap { token =>
-        Try {
-          val newExpiration = token.renew(hadoopConf)
-          val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
-          val interval = newExpiration - identifier.getIssueDate
-          logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
-          interval
-        }.toOption
-      }
-      if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
+    val creds = new Credentials()
+    fetchDelegationTokens(renewer, filesystems, creds)
+
+    val renewIntervals = creds.getAllTokens.asScala.filter {
+      _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
+    }.flatMap { token =>
+      Try {
+        val newExpiration = token.renew(hadoopConf)
+        val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
+        val interval = newExpiration - identifier.getIssueDate
+        logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
+        interval
+      }.toOption
     }
+    if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
   }
 }
