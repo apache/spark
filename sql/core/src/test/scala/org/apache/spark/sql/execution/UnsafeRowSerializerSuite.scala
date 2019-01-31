@@ -129,7 +129,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
   }
 
   test("SPARK-10403: unsafe row serializer with SortShuffleManager") {
-    val conf = new SparkConf().set(SHUFFLE_MANAGER, "sort")
+    val conf = new SparkConf()
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))

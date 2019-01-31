@@ -302,7 +302,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
    * =========================================== */
 
   private def emptyDataStream(conf: SparkConf) {
-    conf.set(SHUFFLE_MANAGER, "sort")
     sc = new SparkContext("local", "test", conf)
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
 
@@ -335,7 +334,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   private def fewElementsPerPartition(conf: SparkConf) {
-    conf.set(SHUFFLE_MANAGER, "sort")
     sc = new SparkContext("local", "test", conf)
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
 
@@ -377,7 +375,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   private def emptyPartitionsWithSpilling(conf: SparkConf) {
     val size = 1000
-    conf.set(SHUFFLE_MANAGER, "sort")
     conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     sc = new SparkContext("local", "test", conf)
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
@@ -402,7 +399,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   private def testSpillingInLocalCluster(conf: SparkConf, numReduceTasks: Int) {
     val size = 5000
-    conf.set(SHUFFLE_MANAGER, "sort")
     conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 4)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
@@ -462,7 +458,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   private def cleanupIntermediateFilesInSorter(withFailures: Boolean): Unit = {
     val size = 1200
     val conf = createSparkConf(loadDefaults = false, kryo = false)
-    conf.set(SHUFFLE_MANAGER, "sort")
     conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 4)
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = sc.env.blockManager.diskBlockManager
@@ -491,7 +486,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   private def cleanupIntermediateFilesInShuffle(withFailures: Boolean): Unit = {
     val size = 1200
     val conf = createSparkConf(loadDefaults = false, kryo = false)
-    conf.set(SHUFFLE_MANAGER, "sort")
     conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 4)
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = sc.env.blockManager.diskBlockManager
@@ -529,7 +523,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     if (withSpilling) {
       conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     }
-    conf.set(SHUFFLE_MANAGER, "sort")
     sc = new SparkContext("local", "test", conf)
     val agg =
       if (withPartialAgg) {
@@ -561,7 +554,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   private def sortWithoutBreakingSortingContracts(conf: SparkConf) {
     val size = 100000
     val conf = createSparkConf(loadDefaults = true, kryo = false)
-    conf.set(SHUFFLE_MANAGER, "sort")
     conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
@@ -619,7 +611,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   test("sorting updates peak execution memory") {
     val spillThreshold = 1000
     val conf = createSparkConf(loadDefaults = false, kryo = false)
-      .set(SHUFFLE_MANAGER, "sort")
       .set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, spillThreshold)
     sc = new SparkContext("local", "test", conf)
     // Avoid aggregating here to make sure we're not also using ExternalAppendOnlyMap

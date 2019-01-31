@@ -39,7 +39,7 @@ import org.apache.spark.storage._
  * suitable for cleaner tests and provides some utility functions. Subclasses can use different
  * config options, in particular, a different shuffle manager class
  */
-abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[SortShuffleManager])
+abstract class ContextCleanerSuiteBase
   extends SparkFunSuite with BeforeAndAfter with LocalSparkContext
 {
   implicit val defaultTimeout = timeout(10000 millis)
@@ -49,7 +49,6 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
     .set(CLEANER_REFERENCE_TRACKING_BLOCKING, true)
     .set(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE, true)
     .set(CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS, true)
-    .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
 
   before {
     sc = new SparkContext(conf)
@@ -319,7 +318,6 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       .setAppName("ContextCleanerSuite")
       .set(CLEANER_REFERENCE_TRACKING_BLOCKING, true)
       .set(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE, true)
-      .set(config.SHUFFLE_MANAGER, shuffleManager.getName)
     sc = new SparkContext(conf2)
 
     val numRdds = 10

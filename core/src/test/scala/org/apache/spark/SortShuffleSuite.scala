@@ -43,7 +43,6 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
     // before/after a test, it could return the same directory even if this property
     // is configured.
     Utils.clearLocalRootDirs()
-    conf.set(config.SHUFFLE_MANAGER, "sort")
   }
 
   override def beforeEach(): Unit = {

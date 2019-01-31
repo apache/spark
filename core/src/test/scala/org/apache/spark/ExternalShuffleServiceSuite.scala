@@ -42,7 +42,6 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     val transportContext = new TransportContext(transportConf, rpcHandler)
     server = transportContext.createServer()
 
-    conf.set(config.SHUFFLE_MANAGER, "sort")
     conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
     conf.set(config.SHUFFLE_SERVICE_PORT, server.getPort)
   }

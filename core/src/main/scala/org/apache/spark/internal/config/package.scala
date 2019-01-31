@@ -873,11 +873,6 @@ package object config {
       .intConf
       .createWithDefault(200)
 
-  private[spark] val SHUFFLE_MANAGER =
-    ConfigBuilder("spark.shuffle.manager")
-      .stringConf
-      .createWithDefault("sort")
-
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")
