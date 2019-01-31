@@ -122,16 +122,14 @@ public class TransportContext {
     this.closeIdleConnections = closeIdleConnections;
     this.isClientOnly = isClientOnly;
 
-    synchronized(TransportContext.class) {
-      if (chunkFetchWorkers == null &&
-          conf.getModuleName() != null &&
-          conf.getModuleName().equalsIgnoreCase("shuffle") &&
-          !isClientOnly) {
-        chunkFetchWorkers = NettyUtils.createEventLoop(
-            IOMode.valueOf(conf.ioMode()),
-            conf.chunkFetchHandlerThreads(),
-            "shuffle-chunk-fetch-handler");
-      }
+    if (chunkFetchWorkers == null &&
+        conf.getModuleName() != null &&
+        conf.getModuleName().equalsIgnoreCase("shuffle") &&
+        !isClientOnly) {
+      chunkFetchWorkers = NettyUtils.createEventLoop(
+          IOMode.valueOf(conf.ioMode()),
+          conf.chunkFetchHandlerThreads(),
+          "shuffle-chunk-fetch-handler");
     }
   }
 
