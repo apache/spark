@@ -40,7 +40,8 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
  */
-private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
+private[sql] class SharedState(val sparkContext: SparkContext, initConfig: Map[String, String])
+  extends Logging {
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
@@ -101,7 +102,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    */
   lazy val externalCatalog: ExternalCatalogWithListener = {
     val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
-      SharedState.externalCatalogClassName(sparkContext.conf),
+      SharedState.externalCatalogClassName(sparkContext.conf, initConfig),
       sparkContext.conf,
       sparkContext.hadoopConfiguration)
 
@@ -165,8 +166,11 @@ object SharedState extends Logging {
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 
-  private def externalCatalogClassName(conf: SparkConf): String = {
-    conf.get(CATALOG_IMPLEMENTATION) match {
+  private def externalCatalogClassName(
+      conf: SparkConf,
+      initSessionConfig: Map[String, String]): String = {
+    initSessionConfig
+      .getOrElse(CATALOG_IMPLEMENTATION.key, conf.get(CATALOG_IMPLEMENTATION)) match {
       case "hive" => HIVE_EXTERNAL_CATALOG_CLASS_NAME
       case "in-memory" => classOf[InMemoryCatalog].getCanonicalName
     }
