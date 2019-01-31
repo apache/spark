@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Optional, UUID}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -25,16 +25,16 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
-import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchWrite}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 abstract class FileWriteBuilder(options: DataSourceOptions)
@@ -70,7 +70,7 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = pathName)
-    val description =
+    lazy val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, pathName, optionsAsScala)
 
     val fs = path.getFileSystem(hadoopConf)
