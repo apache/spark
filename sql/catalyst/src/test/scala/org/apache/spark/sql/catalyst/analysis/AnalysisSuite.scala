@@ -637,9 +637,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
             Seq(Alias(Max('id.attr).toAggregateExpression(), "id_alias")(),
               Alias(Count(Literal(1)).toAggregateExpression(), "cnt_alias")()),
             Range(0, 10, 1, None)))))
-    val analyzedSort = plan.analyze.collectFirst { case s: Sort => s }
-    assert(analyzedSort.isDefined &&
-      analyzedSort.forall(_.order.forall(_.child.isInstanceOf[AttributeReference])))
+    val analyzedSort = normalizeExprIds(plan.analyze)
+    val expectedSortOrder = Seq(SortOrder('id_alias.long.withExprId(ExprId(0)), Ascending))
+    assert(analyzedSort.isInstanceOf[Sort] &&
+      analyzedSort.asInstanceOf[Sort].order == expectedSortOrder)
 
   }
 }

@@ -1217,7 +1217,8 @@ class Analyzer(
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
-      case sa @ Sort(_, _, _: Aggregate) => sa
+      case sa @ Sort(_, _, child)
+        if child.collectFirst { case _: Aggregate => true }.isDefined => sa
 
       case s @ Sort(order, _, child)
           if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
@@ -1612,14 +1613,20 @@ class Analyzer(
           case ae: AnalysisException => f
         }
 
-      case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
-
+      case sort @ Sort(sortOrder, global, child)
+          if child.resolved && child.collectFirst { case _: Aggregate => true }.isDefined =>
+        // The Aggregate plan may be not a direct child of sort when there is a HAVING clause.
+        // In that case a `Filter` and/or a `Project` can be present between the `Sort` and the
+        // related `Aggregate`.
+        val aggregate = child.collectFirst { case a: Aggregate => a }.get
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
           // If a sort order is unresolved, containing references not in aggregate, or containing
           // `AggregateExpression`, we need to push down it to the underlying aggregate operator.
-          val unresolvedSortOrders = sortOrder.filter { s =>
-            !s.resolved || !s.references.subsetOf(aggregate.outputSet) || containsAggregate(s)
+          val maybeResolvedSortOrders =
+            sortOrder.map(resolveExpressionBottomUp(_, child).asInstanceOf[SortOrder])
+          val unresolvedSortOrders = maybeResolvedSortOrders.filter { s =>
+            !s.resolved || !s.references.subsetOf(child.outputSet) || containsAggregate(s)
           }
           val aliasedOrdering =
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
@@ -1644,7 +1651,7 @@ class Analyzer(
           val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
             case (evaluated, order) =>
               val index = originalAggExprs.indexWhere {
-                case Alias(child, _) => child semanticEquals evaluated.child
+                case Alias(childExpr, _) => childExpr semanticEquals evaluated.child
                 case other => other semanticEquals evaluated.child
               }
 
@@ -1666,37 +1673,44 @@ class Analyzer(
           // we need to check this and prevent applying this rule multiple times
           if (sortOrder == finalSortOrders) {
             sort
+          } else if (needsPushDown.isEmpty) {
+            Sort(finalSortOrders, global, child)
           } else {
-            Project(aggregate.output,
+            Project(child.output,
               Sort(finalSortOrders, global,
-                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+                pushDownMissingAttrs(needsPushDown, child)))
           }
         } catch {
           // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
           // just return the original plan.
           case ae: AnalysisException => sort
         }
-      case sort @ Sort(sortOrders, _, child)
-          if sort.resolved && sortOrders.exists(containsAggregate) =>
-        val aggregate = child.collectFirst {
-          case a: Aggregate => a
-        }
-        if (aggregate.isEmpty) return sort
-        val aggExprs = aggregate.get.aggregateExpressions.map(ae =>
-          (ae.toAttribute, CleanupAliases.trimAliases(ae)))
-        val newOrders = sortOrders.map { so =>
-          val newChild = so.child.transformDown {
-            case ae: AggregateExpression =>
-              aggExprs.collectFirst { case (attr, expr) if expr.semanticEquals(ae) => attr }
-                .getOrElse(ae)
-          }
-          so.copy(child = newChild)
-        }
-        sort.copy(order = newOrders)
     }
 
     def containsAggregate(condition: Expression): Boolean = {
       condition.find(_.isInstanceOf[AggregateExpression]).isDefined
+    }
+
+    private def pushDownMissingAttrs(
+        missingAttrs: Seq[NamedExpression], plan: LogicalPlan): LogicalPlan = {
+      // Missing attributes can be unresolved attributes or resolved attributes which are not in
+      // the output attributes of the plan.
+      plan match {
+        case p: Project =>
+          // Recursively pushing down expressions on the child of current plan.
+          val newChild = pushDownMissingAttrs(missingAttrs, p.child)
+          Project(p.projectList ++ missingAttrs.map(_.toAttribute), newChild)
+
+        case a @ Aggregate(_, aggExprs, _) =>
+          a.copy(aggregateExpressions = aggExprs ++ missingAttrs)
+
+        // For other operators (eg. Filter), push down recursively
+        case n: UnaryNode =>
+          n.withNewChildren(Seq(pushDownMissingAttrs(missingAttrs, n.child)))
+
+        // This is an unexpected case, we cannot go on pushing down
+        case other => other
+      }
     }
   }
 
