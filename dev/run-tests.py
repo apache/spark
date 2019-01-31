@@ -622,7 +622,7 @@ def main():
     if modules_with_python_tests:
         # We only run PySpark tests with coverage report in one specific job with
         # Spark master with SBT in Jenkins.
-        is_sbt_master_job = "SPARK_MATER_SBT_HADOOP_2_7" in os.environ
+        is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
         run_python_tests(
             modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
         run_python_packaging_tests()
