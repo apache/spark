@@ -191,7 +191,9 @@ of the most common options to set are:
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
     <br/>
-    <em>Note:</em> This feature is dependent on Python's `resource` module; therefore, the behaviors and limitations are inherited.
+    <em>Note:</em> This feature is dependent on Python's `resource` module; therefore, the behaviors and 
+    limitations are inherited. For instance, Windows does not support resource limiting and actual 
+    resource is not limited on MacOS.
   </td>
 </tr>
 <tr>
