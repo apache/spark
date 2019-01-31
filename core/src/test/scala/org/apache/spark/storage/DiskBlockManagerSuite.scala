@@ -21,9 +21,10 @@ import java.io.{File, FileWriter}
 import java.util.UUID
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.util.Utils
+
+import org.apache.spark.internal.config
+import org.apache.spark.util.{ManualClock, Utils}
 
 class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
@@ -92,23 +93,58 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     writer.close()
   }
 
-  test("test blacklisting bad disk directory") {
-    val blockId = new TestBlockId("1")
-    val hash = Utils.nonNegativeHash(blockId.name)
-    val (badDiskDir, goodDiskDir) = if (hash % 2 == 0) {
-      (rootDir0, rootDir1)
-    } else {
-      (rootDir1, rootDir0)
-    }
+  test(s"test blacklisting bad disk directory") {
+    for ((badDiskDir, goodDiskDir) <- Seq((rootDir0, rootDir1), (rootDir1, rootDir0))) {
+      val blockId1 = TestBlockId("1")
+      val blockId2 = TestBlockId("2")
+      val blockId3 = TestBlockId("3")
 
-    // Delete dirs to simulate disk error
-    Utils.deleteRecursively(badDiskDir)
-    try {
-      val file = diskBlockManager.getFile(blockId)
-      val fileRootDir = file.getParentFile.getParentFile.getParentFile
-      assert(file != null && file.getParentFile.exists() && fileRootDir === goodDiskDir)
-    } finally {
-      badDiskDir.mkdirs()
+      val conf = testConf.clone
+      conf.set("spark.local.dir", rootDirs)
+      conf.set(config.DISK_STORE_BLACKLIST_TIMEOUT.key, "10000")
+      val manualClock = new ManualClock(10000L)
+      val diskBlockManager = new DiskBlockManager(conf, true, manualClock)
+
+      // Get file succeed when no disk turns bad
+      val file1 = diskBlockManager.getFile(blockId1)
+      assert(file1 != null)
+
+      // Delete badDiskDir to simulate disk broken
+      Utils.deleteRecursively(badDiskDir)
+
+      // Get new file succeed when single disk is broken
+      try {
+        val file2 = diskBlockManager.getFile(blockId2)
+        val rootDirOfFile2 = file2.getParentFile.getParentFile.getParentFile
+        assert(file2 != null && file2.getParentFile.exists() && rootDirOfFile2 === goodDiskDir)
+        if (diskBlockManager.badDirs.nonEmpty) {
+          assert(diskBlockManager.badDirs.size === 1)
+          assert(diskBlockManager.badDirs.exists(_.getParentFile === badDiskDir))
+          assert(diskBlockManager.dirToBlacklistExpiryTime.size === 1)
+          assert(diskBlockManager.dirToBlacklistExpiryTime.exists { case (f, expireTime) =>
+            f.getParentFile === badDiskDir && expireTime === 20000
+          })
+        }
+
+        // Get file succeed after bad disk blacklisted
+        val file3 = diskBlockManager.getFile(blockId1)
+        assert(file1 === file3)
+
+        val file4 = diskBlockManager.getFile(blockId2)
+        val rootDirOfFile4 = file4.getParentFile.getParentFile.getParentFile
+        assert(file4 != null && file4.getParentFile.exists() && rootDirOfFile4 === goodDiskDir)
+      } finally {
+        diskBlockManager.localDirs.foreach(_.mkdirs())
+      }
+
+      manualClock.advance(10000)
+
+      // Update blacklist when getting file for new block
+      // Bad disk directory is fixed here, so blacklist should be empty
+      assert(diskBlockManager.getFile(blockId3) != null)
+      assert(diskBlockManager.badDirs.isEmpty)
+      assert(diskBlockManager.dirToBlacklistExpiryTime.isEmpty)
+      diskBlockManager.stop()
     }
   }
 }

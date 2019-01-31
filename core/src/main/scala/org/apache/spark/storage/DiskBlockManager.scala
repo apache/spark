@@ -19,13 +19,15 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -34,9 +36,12 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  * Block files are hashed among the directories listed in spark.local.dir (or in
  * SPARK_LOCAL_DIRS, if it's set).
  */
-private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolean) extends Logging {
+private[spark] class DiskBlockManager(conf: SparkConf,
+  deleteFilesOnStop: Boolean, clock: Clock = new SystemClock()) extends Logging {
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
+  private[spark] val maxRetries = conf.get(config.DISK_STORE_MAX_RETIRES)
+  private[spark] val blacklistTimeout = conf.get(config.DISK_STORE_BLACKLIST_TIMEOUT)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
@@ -50,10 +55,10 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
-  private val badDirs = ArrayBuffer[File]()
-  private val maxRetries = conf.get(config.DISK_STORE_MAX_RETIRES)
-  private val blacklistTimeout = conf.get(config.DISK_STORE_BLACKLIST_TIMEOUT)
-  private val dirToBlacklistExpiryTime = new HashMap[File, Long]
+  private[spark] val badDirs = ArrayBuffer[File]()
+  private[spark] val dirToBlacklistExpiryTime = new HashMap[File, Long]
+  // Filename hash to dirId, it should be small enough to put into memory
+  private[spark] val migratedDirIdIndex = new ConcurrentHashMap[Int, Int].asScala
 
   private val shutdownHook = addShutdownHook()
 
@@ -62,52 +67,61 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
   def getFile(filename: String): File = {
     var mostRecentFailure: Exception = null
-    // Update blacklist
-    val now = System.currentTimeMillis()
-    val unblacklisted = badDirs.filter(now > dirToBlacklistExpiryTime(_))
-    badDirs.synchronized {
+    // Figure out which local directory it hashes to, and which subdirectory in that
+    val hash = Utils.nonNegativeHash(filename)
+    val dirId = migratedDirIdIndex.getOrElse(hash, hash % localDirs.length)
+    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+
+    // Create the subdirectory if it doesn't already exist
+    val subDir = subDirs(dirId).synchronized {
+      // Update blacklist
+      val now = clock.getTimeMillis()
+      val unblacklisted = badDirs.filter(now >= dirToBlacklistExpiryTime(_))
       unblacklisted.foreach { dir =>
         badDirs -= dir
         dirToBlacklistExpiryTime.remove(dir)
       }
-    }
 
-    for (attempt <- 0 until maxRetries) {
-      val goodDirs = localDirs.filterNot(badDirs.contains(_))
-      if (goodDirs.isEmpty) {
-        throw new IOException("No good disk directories available")
-      }
-      // Figure out which local directory it hashes to, and which subdirectory in that
-      val hash = Utils.nonNegativeHash(filename)
-      val dirId = hash % goodDirs.length
-      val subDirId = (hash / goodDirs.length) % subDirsPerLocalDir
-      try {
-        // Create the subdirectory if it doesn't already exist
-        val subDir = subDirs(dirId).synchronized {
-          val old = subDirs(dirId)(subDirId)
-          if (old != null) {
-            old
+      val old = subDirs(dirId)(subDirId)
+      if (old != null) {
+        old
+      } else {
+        assert(!migratedDirIdIndex.contains(dirId))
+        var succeed = false
+        var newDir: File = null
+        for (attempt <- 0 until maxRetries if !succeed) {
+          val isBlacklisted = badDirs.contains(localDirs(dirId))
+          val goodDirId = if (isBlacklisted) {
+            localDirs.indexWhere(!badDirs.contains(_))
           } else {
-            val newDir = new File(goodDirs(dirId), "%02x".format(subDirId))
+            dirId
+          }
+          try {
+            if (goodDirId < 0) {
+              throw new IOException("No good disk directories available")
+            }
+            newDir = new File(localDirs(goodDirId), "%02x".format(subDirId))
             if (!newDir.exists() && !newDir.mkdir()) {
               throw new IOException(s"Failed to create local dir in $newDir.")
             }
-            subDirs(dirId)(subDirId) = newDir
-            newDir
+            subDirs(goodDirId)(subDirId) = newDir
+            if (goodDirId != dirId) {
+              migratedDirIdIndex.put(hash, goodDirId)
+            }
+            succeed = true
+          } catch {
+            case e: IOException =>
+              logError(s"Failed to looking up file $filename in attempt $attempt", e)
+              badDirs += localDirs(dirId)
+              dirToBlacklistExpiryTime.put(localDirs(dirId), now + blacklistTimeout)
+              mostRecentFailure = e
           }
+          Option(newDir).getOrElse(throw mostRecentFailure)
         }
-        return new File(subDir, filename)
-      } catch {
-        case e: IOException =>
-          logError(s"Failed to looking up file $filename in attempt $attempt", e)
-          badDirs.synchronized {
-            badDirs += goodDirs(dirId)
-            dirToBlacklistExpiryTime.put(goodDirs(dirId), now + blacklistTimeout)
-          }
-          mostRecentFailure = e
+        newDir
       }
     }
-    throw mostRecentFailure
+    new File(subDir, filename)
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)

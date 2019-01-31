@@ -285,8 +285,8 @@ package object config {
       .createWithDefault(64)
 
   private[spark] val DISK_STORE_BLACKLIST_TIMEOUT =
-    ConfigBuilder("spark.diskStore.blacklist.timeout")
-      .timeConf(TimeUnit.SECONDS)
+    ConfigBuilder("spark.diskStore.blacklist.timeoutMs")
+      .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1d")
 
   private[spark] val DISK_STORE_MAX_RETIRES =
