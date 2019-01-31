@@ -22,8 +22,25 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.STAGING_DIR
 
 class HadoopFSDelegationTokenProviderSuite extends SparkFunSuite with Matchers {
+  test("hadoopFSsToAccess should return defaultFS even if not configured") {
+    val sparkConf = new SparkConf()
+    val defaultFS = "hdfs://localhost:8020"
+    val statingDir = "hdfs://localhost:8021"
+    sparkConf.set("spark.master", "yarn-client")
+    sparkConf.set(STAGING_DIR, statingDir)
+    val hadoopConf = new Configuration()
+    hadoopConf.set("fs.defaultFS", defaultFS)
+    val expected = Set(
+      new Path(defaultFS).getFileSystem(hadoopConf),
+      new Path(statingDir).getFileSystem(hadoopConf)
+    )
+    val result = HadoopFSDelegationTokenProvider.hadoopFSsToAccess(sparkConf, hadoopConf)
+    result should be (expected)
+  }
+
   test("SPARK-24149: retrieve all namenodes from HDFS") {
     val sparkConf = new SparkConf()
     sparkConf.set("spark.master", "yarn-client")

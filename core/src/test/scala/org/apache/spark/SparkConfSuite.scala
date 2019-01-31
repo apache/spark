@@ -264,6 +264,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.scheduler.listenerbus.eventqueue.size", "84")
     assert(conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY) === 84)
+
+    conf.set("spark.yarn.access.hadoopFileSystems", "testNode")
+    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
   }
 
   test("akka deprecated configs") {

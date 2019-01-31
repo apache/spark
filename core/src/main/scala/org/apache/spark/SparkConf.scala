@@ -638,7 +638,8 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
         "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
       DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
-      DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore.")
+      DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
+      DeprecatedConfig("spark.yarn.access.namenodes", "3.0.0", "Not used anymore.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -700,8 +701,6 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
-    "spark.yarn.access.hadoopFileSystems" -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
       AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
@@ -715,7 +714,9 @@ private[spark] object SparkConf extends Logging {
     PRINCIPAL.key -> Seq(
       AlternateConfig("spark.yarn.principal", "3.0")),
     KERBEROS_RELOGIN_PERIOD.key -> Seq(
-      AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0"))
+      AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0")),
+    KERBEROS_FILESYSTEMS_TO_ACCESS.key -> Seq(
+      AlternateConfig(YARN_FILESYSTEMS_TO_ACCESS.key, "3.0"))
   )
 
   /**
