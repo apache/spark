@@ -177,9 +177,9 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
    * Filters the schema from the given file by the requested fields.
    * Schema field ordering from the file is preserved.
    */
-  private[sql] def pruneDataSchema(
+  def pruneDataSchema(
       fileDataSchema: StructType,
-      requestedRootFields: Seq[RootField]) = {
+      requestedRootFields: Seq[RootField]): StructType = {
     // Merge the requested root fields into a single schema. Note the ordering of the fields
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
@@ -292,6 +292,6 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
    * was derived from an attribute or had a proper child. `prunedIfAnyChildAccessed` means
    * whether this root field can be pruned if any of child field is used in the query.
    */
-  private[sql] case class RootField(field: StructField, derivedFromAtt: Boolean,
+  case class RootField(field: StructField, derivedFromAtt: Boolean,
     prunedIfAnyChildAccessed: Boolean = false)
 }
