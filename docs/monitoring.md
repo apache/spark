@@ -659,6 +659,7 @@ set of sinks to which metrics are reported. The following instances are currentl
 * `driver`: The Spark driver process (the process in which your SparkContext is created).
 * `shuffleService`: The Spark shuffle service.
 * `applicationMaster`: The Spark ApplicationMaster when running on YARN.
+* `mesos_cluster`: The Spark cluster scheduler when running on Mesos.
 
 Each instance can report to zero or more _sinks_. Sinks are contained in the
 `org.apache.spark.metrics.sink` package:
