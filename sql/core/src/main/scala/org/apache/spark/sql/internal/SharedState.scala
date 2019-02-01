@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.net.URL
 import java.util.Locale
 
+import scala.collection.Map
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -36,6 +37,7 @@ import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
+
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
  */
@@ -48,11 +50,10 @@ private[sql] class SharedState(val sparkContext: SparkContext, initConfig: Map[S
   // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
   // `SharedState` instance. This will be done only once then shared across `SparkSession`s
   initConfig.foreach { case (k, v) =>
-    logDebug(s"Applying initiate SparkSession options to SparkConf/HadoopConf: $k -> $v")
+    logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
     conf.set(k, v)
     hadoopConf.set(k, v)
   }
-  logInfo("Applied all initiate SparkSession options to the brand new SharedState")
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
@@ -87,7 +88,9 @@ private[sql] class SharedState(val sparkContext: SparkContext, initConfig: Map[S
       sparkWarehouseDir
     }
   }
+  sparkContext.conf.set(WAREHOUSE_PATH.key, warehousePath)
   logInfo(s"Warehouse path is '$warehousePath'.")
+
 
   /**
    * Class for caching query results reused in future executions.
@@ -118,7 +121,7 @@ private[sql] class SharedState(val sparkContext: SparkContext, initConfig: Map[S
       SessionCatalog.DEFAULT_DATABASE,
       "default database",
       CatalogUtils.stringToURI(warehousePath),
-      Map())
+      Map.empty[String, String])
     // Create default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we
