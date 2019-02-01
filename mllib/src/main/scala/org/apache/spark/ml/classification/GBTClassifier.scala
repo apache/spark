@@ -180,7 +180,6 @@ class GBTClassifier @Since("1.4.0") (
       (convert2LabeledPoint(dataset), null)
     }
 
-    val numFeatures = trainDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
 
     val numClasses = 2
@@ -196,7 +195,6 @@ class GBTClassifier @Since("1.4.0") (
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
       validationIndicatorCol)
-    instr.logNumFeatures(numFeatures)
     instr.logNumClasses(numClasses)
 
     val (baseLearners, learnerWeights) = if (withValidation) {
@@ -205,6 +203,9 @@ class GBTClassifier @Since("1.4.0") (
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
     }
+
+    val numFeatures = baseLearners.head.numFeatures
+    instr.logNumFeatures(numFeatures)
 
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
@@ -427,7 +428,9 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
         s" trees based on metadata but found ${trees.length} trees.")
       val model = new GBTClassificationModel(metadata.uid,
         trees, treeWeights, numFeatures)
-      metadata.getAndSetParams(model)
+      // We ignore the impurity while loading models because in previous models it was wrongly
+      // set to gini (see SPARK-25959).
+      metadata.getAndSetParams(model, Some(List("impurity")))
       model
     }
   }

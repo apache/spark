@@ -18,9 +18,11 @@
 package org.apache.spark.sql.hive.orc
 
 import java.net.URI
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -31,10 +33,12 @@ import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.orc.OrcConf.COMPRESS
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SPARK_VERSION_SHORT, TaskContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -274,12 +278,14 @@ private[orc] class OrcOutputWriter(
 
   override def close(): Unit = {
     if (recordWriterInstantiated) {
+      // Hive 1.2.1 ORC initializes its private `writer` field at the first write.
+      OrcFileFormat.addSparkVersionMetadata(recordWriter)
       recordWriter.close(Reporter.NULL)
     }
   }
 }
 
-private[orc] object OrcFileFormat extends HiveInspectors {
+private[orc] object OrcFileFormat extends HiveInspectors with Logging {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 
@@ -338,5 +344,19 @@ private[orc] object OrcFileFormat extends HiveInspectors {
     val ids = requestedSchema.map(a => dataSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+  }
+
+  /**
+   * Add a metadata specifying Spark version.
+   */
+  def addSparkVersionMetadata(recordWriter: RecordWriter[NullWritable, Writable]): Unit = {
+    try {
+      val writerField = recordWriter.getClass.getDeclaredField("writer")
+      writerField.setAccessible(true)
+      val writer = writerField.get(recordWriter).asInstanceOf[Writer]
+      writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
+    } catch {
+      case NonFatal(e) => log.warn(e.toString, e)
+    }
   }
 }

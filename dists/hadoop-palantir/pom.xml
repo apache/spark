@@ -20,12 +20,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-dist_2.11-hadoop-palantir-bom</artifactId>
+    <artifactId>spark-dist_2.12-hadoop-palantir-bom</artifactId>
     <version>3.0.0-SNAPSHOT</version>
     <relativePath>../hadoop-palantir-bom/pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-dist_2.11-hadoop-palantir</artifactId>
+  <artifactId>spark-dist_2.12-hadoop-palantir</artifactId>
   <name>Spark Project Dist Palantir Hadoop</name>
   <url>http://spark.apache.org/</url>
   <packaging>pom</packaging>
@@ -57,7 +57,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-avro_2.11</artifactId>
+      <artifactId>spark-avro_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>

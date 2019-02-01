@@ -261,7 +261,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
   ).foreach { case (source, trigger) =>
     test(s"SPARK-25460: session options are respected in structured streaming sources - $source") {
       // `keyPrefix` and `shortName` are the same in this test case
-      val readSource = source.newInstance().shortName()
+      val readSource = source.getConstructor().newInstance().shortName()
       val writeSource = "fake-write-microbatch-continuous"
 
       val readOptionName = "optionA"
@@ -299,8 +299,10 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
-      val readSource = DataSource.lookupDataSource(read, spark.sqlContext.conf).newInstance()
-      val writeSource = DataSource.lookupDataSource(write, spark.sqlContext.conf).newInstance()
+      val readSource = DataSource.lookupDataSource(read, spark.sqlContext.conf).
+        getConstructor().newInstance()
+      val writeSource = DataSource.lookupDataSource(write, spark.sqlContext.conf).
+        getConstructor().newInstance()
       (readSource, writeSource, trigger) match {
         // Valid microbatch queries.
         case (_: MicroBatchReadSupportProvider, _: StreamingWriteSupportProvider, t)

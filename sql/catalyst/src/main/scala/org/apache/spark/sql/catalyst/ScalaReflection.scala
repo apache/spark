@@ -357,7 +357,8 @@ object ScalaReflection extends ScalaReflection {
         )
 
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
-        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().
+          getConstructor().newInstance()
         val obj = NewInstance(
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
           Nil,
@@ -365,8 +366,8 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
-          .asInstanceOf[UserDefinedType[_]]
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
+          newInstance().asInstanceOf[UserDefinedType[_]]
         val obj = NewInstance(
           udt.getClass,
           Nil,
@@ -601,7 +602,7 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t)
-          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+          .getAnnotation(classOf[SQLUserDefinedType]).udt().getConstructor().newInstance()
         val obj = NewInstance(
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
           Nil,
@@ -609,8 +610,8 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "serialize", udt, inputObject :: Nil)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
-          .asInstanceOf[UserDefinedType[_]]
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
+          newInstance().asInstanceOf[UserDefinedType[_]]
         val obj = NewInstance(
           udt.getClass,
           Nil,
@@ -721,11 +722,12 @@ object ScalaReflection extends ScalaReflection {
       // Null type would wrongly match the first of them, which is Option as of now
       case t if t <:< definitions.NullTpe => Schema(NullType, nullable = true)
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
-        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().
+          getConstructor().newInstance()
         Schema(udt, nullable = true)
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
-          .asInstanceOf[UserDefinedType[_]]
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
+          newInstance().asInstanceOf[UserDefinedType[_]]
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
@@ -786,12 +788,37 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Finds an accessible constructor with compatible parameters. This is a more flexible search
-   * than the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
-   * matching constructor is returned. Otherwise, it returns `None`.
+   * Finds an accessible constructor with compatible parameters. This is a more flexible search than
+   * the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
+   * matching constructor is returned if it exists. Otherwise, we check for additional compatible
+   * constructors defined in the companion object as `apply` methods. Otherwise, it returns `None`.
    */
-  def findConstructor(cls: Class[_], paramTypes: Seq[Class[_]]): Option[Constructor[_]] = {
-    Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*))
+  def findConstructor[T](cls: Class[T], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => T] = {
+    Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*)) match {
+      case Some(c) => Some(x => c.newInstance(x: _*).asInstanceOf[T])
+      case None =>
+        val companion = mirror.staticClass(cls.getName).companion
+        val moduleMirror = mirror.reflectModule(companion.asModule)
+        val applyMethods = companion.asTerm.typeSignature
+          .member(universe.TermName("apply")).asTerm.alternatives
+        applyMethods.find { method =>
+          val params = method.typeSignature.paramLists.head
+          // Check that the needed params are the same length and of matching types
+          params.size == paramTypes.tail.size &&
+          params.zip(paramTypes.tail).forall { case(ps, pc) =>
+            ps.typeSignature.typeSymbol == mirror.classSymbol(pc)
+          }
+        }.map { applyMethodSymbol =>
+          val expectedArgsCount = applyMethodSymbol.typeSignature.paramLists.head.size
+          val instanceMirror = mirror.reflect(moduleMirror.instance)
+          val method = instanceMirror.reflectMethod(applyMethodSymbol.asMethod)
+          (_args: Seq[AnyRef]) => {
+            // Drop the "outer" argument if it is provided
+            val args = if (_args.size == expectedArgsCount) _args else _args.tail
+            method.apply(args: _*).asInstanceOf[T]
+          }
+        }
+    }
   }
 
   /**
@@ -971,8 +998,19 @@ trait ScalaReflection extends Logging {
     }
   }
 
+  /**
+   * If our type is a Scala trait it may have a companion object that
+   * only defines a constructor via `apply` method.
+   */
+  private def getCompanionConstructor(tpe: Type): Symbol = {
+    tpe.typeSymbol.asClass.companion.asTerm.typeSignature.member(universe.TermName("apply"))
+  }
+
   protected def constructParams(tpe: Type): Seq[Symbol] = {
-    val constructorSymbol = tpe.dealias.member(termNames.CONSTRUCTOR)
+    val constructorSymbol = tpe.member(termNames.CONSTRUCTOR) match {
+      case NoSymbol => getCompanionConstructor(tpe)
+      case sym => sym
+    }
     val params = if (constructorSymbol.isMethod) {
       constructorSymbol.asMethod.paramLists
     } else {

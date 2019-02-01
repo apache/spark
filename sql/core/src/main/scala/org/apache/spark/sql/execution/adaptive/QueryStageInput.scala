@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import java.io.Writer
+
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * QueryStageInput is the leaf node of a QueryStage and is used to hide its child stage. It gets
@@ -58,11 +61,11 @@ abstract class QueryStageInput extends LeafExecNode {
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    childStage.generateTreeString(depth, lastChildren, builder, verbose, "*")
+      addSuffix: Boolean = false): Unit = {
+    childStage.generateTreeString(depth, lastChildren, writer, verbose, "*")
   }
 }
 
@@ -78,13 +81,15 @@ case class ShuffleQueryStageInput(
     partitionStartIndices: Option[Array[Int]] = None)
   extends QueryStageInput {
 
+  override lazy val metrics = SQLMetrics.getShuffleReadMetrics(sparkContext)
+
   override def outputPartitioning: Partitioning = partitionStartIndices.map {
     indices => UnknownPartitioning(indices.length)
   }.getOrElse(super.outputPartitioning)
 
   override def doExecute(): RDD[InternalRow] = {
     val childRDD = childStage.execute().asInstanceOf[ShuffledRowRDD]
-    new ShuffledRowRDD(childRDD.dependency, partitionStartIndices)
+    new ShuffledRowRDD(childRDD.dependency, metrics, partitionStartIndices)
   }
 }
 

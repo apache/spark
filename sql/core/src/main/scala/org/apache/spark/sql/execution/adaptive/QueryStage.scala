@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import java.io.Writer
 import java.util.Properties
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -172,11 +173,11 @@ abstract class QueryStage extends UnaryExecNode {
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, "*")
+      addSuffix: Boolean = false): Unit = {
+    child.generateTreeString(depth, lastChildren, writer, verbose, "*")
   }
 }
 

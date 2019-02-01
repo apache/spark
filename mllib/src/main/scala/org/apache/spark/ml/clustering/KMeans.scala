@@ -279,7 +279,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
 /**
  * K-means clustering with support for k-means|| initialization proposed by Bahmani et al.
  *
- * @see <a href="http://dx.doi.org/10.14778/2180912.2180915">Bahmani et al., Scalable k-means++.</a>
+ * @see <a href="https://doi.org/10.14778/2180912.2180915">Bahmani et al., Scalable k-means++.</a>
  */
 @Since("1.5.0")
 class KMeans @Since("1.5.0") (

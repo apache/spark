@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.TaskContext
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
@@ -762,6 +763,8 @@ case class HashAggregateExec(
       ("true", "true", "", "")
     }
 
+    val oomeClassName = classOf[SparkOutOfMemoryError].getName
+
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
@@ -787,7 +790,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, ${hashEval.value});
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new OutOfMemoryError("No enough memory for aggregation");
+         |    throw new $oomeClassName("No enough memory for aggregation");
          |  }
          |}
        """.stripMargin
@@ -928,9 +931,9 @@ case class HashAggregateExec(
 
     testFallbackStartsAt match {
       case None =>
-        val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
-        val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
-        val outputString = Utils.truncatedString(output, "[", ", ", "]")
+        val keyString = truncatedString(groupingExpressions, "[", ", ", "]")
+        val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]")
+        val outputString = truncatedString(output, "[", ", ", "]")
         if (verbose) {
           s"HashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
         } else {

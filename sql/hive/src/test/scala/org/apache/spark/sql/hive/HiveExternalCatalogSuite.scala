@@ -113,10 +113,4 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     catalog.createDatabase(newDb("dbWithNullDesc").copy(description = null), ignoreIfExists = false)
     assert(catalog.getDatabase("dbWithNullDesc").description == "")
   }
-
-  test("SPARK-23831: Add org.apache.derby to IsolatedClientLoader") {
-    val client1 = HiveUtils.newClientForMetadata(new SparkConf, new Configuration)
-    val client2 = HiveUtils.newClientForMetadata(new SparkConf, new Configuration)
-    assert(!client1.equals(client2))
-  }
 }
