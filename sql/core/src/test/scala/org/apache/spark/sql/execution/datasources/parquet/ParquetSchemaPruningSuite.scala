@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class ParquetSchemaPruningSuite
     extends QueryTest
@@ -342,6 +342,17 @@ class ParquetSchemaPruningSuite
     val query = sql("select id from mixedcase where Col2.b = 2")
     checkScan(query, "struct<id:int,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"), Row(1) :: Nil)
+  }
+
+  test("Pruned schema should not change nullability") {
+    val fields = Seq(StructField("a", IntegerType, nullable = false),
+      StructField("b", IntegerType, nullable = false))
+    val fileDataSchema = StructType(fields)
+
+    val rootFields = Seq(ParquetSchemaPruning.RootField(fields(0), derivedFromAtt = false))
+    val prunedSchema = ParquetSchemaPruning.pruneDataSchema(fileDataSchema, rootFields)
+    assert(prunedSchema(0).name == "a")
+    assert(prunedSchema(0).nullable == false)
   }
 
   // Tests schema pruning for a query whose column and field names are exactly the same as the table
