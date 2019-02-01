@@ -228,16 +228,11 @@ class MulticlassMetrics(JavaModelWrapper):
         sc = predAndLabelsWithOptWeight.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         numCol = len(predAndLabelsWithOptWeight.first())
-        schema = None
-        if (numCol == 2):
-            schema = StructType([
-                StructField("prediction", DoubleType(), nullable=False),
-                StructField("label", DoubleType(), nullable=False)])
-        elif (numCol == 3):
-            schema = StructType([
-                StructField("prediction", DoubleType(), nullable=False),
-                StructField("label", DoubleType(), nullable=False),
-                StructField("weight", DoubleType(), nullable=False)])
+        schema = StructType([
+            StructField("prediction", DoubleType(), nullable=False),
+            StructField("label", DoubleType(), nullable=False)])
+        if (numCol == 3):
+            schema.add("weight", DoubleType(), False)
         df = sql_ctx.createDataFrame(predAndLabelsWithOptWeight, schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MulticlassMetrics
         java_model = java_class(df._jdf)
