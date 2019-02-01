@@ -17,28 +17,54 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SharedState
+import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.util.Utils
 
 class HiveSharedStateSuite extends SparkFunSuite {
 
   test("the catalog should be determined at the very first") {
-    SparkContext.getActive.foreach(_.stop())
-    var sc: SparkContext = null
-    try {
-      val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
-      sc = new SparkContext(conf)
-      val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
-      assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName
-        .contains("HiveExternalCatalog"), "The catalog should be hive ")
+    val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
+    val sc = SparkContext.getOrCreate(conf)
+    val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
+    assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName
+      .contains("HiveExternalCatalog"), "The catalog should be hive ")
 
-      val ss2 = SparkSession.builder().getOrCreate()
-      assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName
-        .contains("HiveExternalCatalog"), "The catalog should be shared across sessions")
-    } finally {
-      if (sc != null && !sc.isStopped) {
-        sc.stop()
-      }
-    }
+    val ss2 = SparkSession.builder().getOrCreate()
+    assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName
+      .contains("HiveExternalCatalog"), "The catalog should be shared across sessions")
+
+  }
+
+  test("using initial configs to generate SharedState") {
+    val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
+    val sc = SparkContext.getOrCreate(conf)
+    val invalidPath = "invalid/path"
+    val metastorePath = Utils.createTempDir()
+    val tmpDb = "tmp_db"
+    val initialConfigs = Map("spark.foo" -> "bar",
+      WAREHOUSE_PATH.key -> invalidPath,
+      ConfVars.METASTOREWAREHOUSE.varname -> invalidPath,
+      CATALOG_IMPLEMENTATION.key -> "hive",
+      ConfVars.METASTORECONNECTURLKEY.varname ->
+        s"jdbc:derby:;databaseName=$metastorePath/metastore_db;create=true",
+      GLOBAL_TEMP_DATABASE.key -> tmpDb)
+    val state = new SharedState(sc, initialConfigs)
+    assert(state.warehousePath !== invalidPath, "warehouse path can't determine by session options")
+    assert(sc.conf.get(WAREHOUSE_PATH.key) !== invalidPath,
+      "warehouse conf in session options can't affect application wide spark conf")
+    assert(sc.hadoopConfiguration.get(ConfVars.METASTOREWAREHOUSE.varname) !== invalidPath,
+      "warehouse conf in session options can't affect application wide hadoop conf")
+
+    assert(!state.sparkContext.conf.contains("spark.foo"),
+      "static spark conf should not be affected by session")
+    assert(state.sparkContext.conf.get(CATALOG_IMPLEMENTATION) === "in-memory")
+    assert(state.globalTempViewManager.database === tmpDb)
+    assert(state.externalCatalog.unwrapped.isInstanceOf[HiveExternalCatalog],
+      "Initial SparkSession options can determine the catalog")
   }
 }
