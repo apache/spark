@@ -38,9 +38,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("EventTimeStats") {
-    val epsilon = 10E-6
+  private val epsilon = 10E-6
 
+  test("EventTimeStats") {
     val stats = EventTimeStats(max = 100, min = 10, avg = 20.0, count = 5)
     stats.add(80L)
     stats.max should be (100)
@@ -57,7 +57,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   test("EventTimeStats: avg on large values") {
-    val epsilon = 10E-6
     val largeValue = 10000000000L // 10B
     // Make sure `largeValue` will cause overflow if we use a Long sum to calc avg.
     assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
@@ -73,6 +72,33 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       count = largeValue)
     stats.merge(stats2)
     stats.avg should be ((largeValue + 0.5) +- epsilon)
+  }
+
+  test("EventTimeStats: zero merge zero") {
+    val stats = EventTimeStats.zero
+    val stats2 = EventTimeStats.zero
+    stats.merge(stats2)
+    stats should be (EventTimeStats.zero)
+  }
+
+  test("EventTimeStats: non-zero merge zero") {
+    val stats = EventTimeStats(max = 10, min = 1, avg = 5.0, count = 3)
+    val stats2 = EventTimeStats.zero
+    stats.merge(stats2)
+    stats.max should be (10L)
+    stats.min should be (1L)
+    stats.avg should be (5.0 +- epsilon)
+    stats.count should be (3L)
+  }
+
+  test("EventTimeStats: zero merge non-zero") {
+    val stats = EventTimeStats.zero
+    val stats2 = EventTimeStats(max = 10, min = 1, avg = 5.0, count = 3)
+    stats.merge(stats2)
+    stats.max should be (10L)
+    stats.min should be (1L)
+    stats.avg should be (5.0 +- epsilon)
+    stats.count should be (3L)
   }
 
   test("error on bad column") {
