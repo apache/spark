@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.collect.Lists;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -52,7 +51,7 @@ public class TransportFrameDecoderSuite {
   public void testConsolidationForDecodingNonFullyWrittenByteBuf() {
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-    ArrayList<ByteBuf> retained = Lists.newArrayList();
+    List<ByteBuf> retained = new ArrayList<>();
     when(ctx.fireChannelRead(any())).thenAnswer(in -> {
       ByteBuf buf = (ByteBuf) in.getArguments()[0];
       retained.add(buf);
