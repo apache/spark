@@ -23,15 +23,23 @@ import org.apache.spark.sql.SparkSession
 class HiveSharedStateSuite extends SparkFunSuite {
 
   test("the catalog should be determined at the very first") {
-    val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
-    val sc = SparkContext.getOrCreate(conf)
-    val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
-    assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName ===
-      "org.apache.spark.sql.hive.HiveExternalCatalog", "The catalog should be hive ")
+    SparkContext.getActive.foreach(_.stop())
+    var sc: SparkContext = null
+    try {
+      val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
+      sc = new SparkContext(conf)
+      val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
+      assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName ===
+        "org.apache.spark.sql.hive.HiveExternalCatalog", "The catalog should be hive ")
 
-    val ss2 = SparkSession.builder().getOrCreate()
-    assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName ===
-      "org.apache.spark.sql.hive.HiveExternalCatalog",
-      "The catalog should be shared across sessions")
+      val ss2 = SparkSession.builder().getOrCreate()
+      assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName ===
+        "org.apache.spark.sql.hive.HiveExternalCatalog",
+        "The catalog should be shared across sessions")
+    } finally {
+      if (sc != null && !sc.isStopped) {
+        sc.stop()
+      }
+    }
   }
 }
