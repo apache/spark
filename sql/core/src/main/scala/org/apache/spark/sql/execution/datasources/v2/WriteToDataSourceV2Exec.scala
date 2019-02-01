@@ -53,7 +53,7 @@ case class AppendDataExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val batchWrite = newWriteBuilder() match {
-      case builder: SupportsSaveMode => // TODO: Remove this
+      case builder: SupportsSaveMode =>
         builder.mode(SaveMode.Append).buildForBatch()
 
       case builder =>
@@ -81,7 +81,7 @@ case class OverwriteByExpressionExec(
       case builder: SupportsOverwrite =>
         builder.overwrite(filters).buildForBatch()
 
-      case builder: SupportsSaveMode => // TODO: Remove this
+      case builder: SupportsSaveMode =>
         builder.mode(SaveMode.Overwrite).buildForBatch()
 
       case _ =>
@@ -102,7 +102,7 @@ case class OverwritePartitionsDynamicExec(
       case builder: SupportsDynamicOverwrite =>
         builder.overwriteDynamicPartitions().buildForBatch()
 
-      case builder: SupportsSaveMode => // TODO: Remove this
+      case builder: SupportsSaveMode =>
         builder.mode(SaveMode.Overwrite).buildForBatch()
 
       case _ =>
