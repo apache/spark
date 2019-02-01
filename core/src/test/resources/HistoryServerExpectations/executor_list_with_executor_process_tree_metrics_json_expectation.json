@@ -44,7 +44,8 @@
     "ProcessTreePythonRSSMemory" : 40284160,
     "ProcessTreeOtherVMemory" : 0,
     "ProcessTreeOtherRSSMemory" : 0
-  }
+  },
+  "attributes" : { }
 }, {
   "id" : "9",
   "hostPort" : "rezamemory-2.gce.something.com:40797",
@@ -94,5 +95,6 @@
     "ProcessTreePythonRSSMemory" : 69013504,
     "ProcessTreeOtherVMemory" : 0,
     "ProcessTreeOtherRSSMemory" : 0
-  }
+  },
+  "attributes" : { }
 } ]

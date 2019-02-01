@@ -116,7 +116,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set("spark.app.id", "test")
       .set(IS_TESTING, true)
       .set(MEMORY_FRACTION, 1.0)
-      .set(MEMORY_STORAGE_FRACTION, 1.0)
+      .set(MEMORY_STORAGE_FRACTION, 0.999)
       .set("spark.kryoserializer.buffer", "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
@@ -1242,7 +1242,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("SPARK-13328: refresh block locations (fetch should fail after hitting a threshold)") {
     val mockBlockTransferService =
-      new MockBlockTransferService(conf.getInt("spark.block.failures.beforeLocationRefresh", 5))
+      new MockBlockTransferService(conf.get(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH))
     val store =
       makeBlockManager(8000, "executor1", transferService = Option(mockBlockTransferService))
     store.putSingle("item", 999L, StorageLevel.MEMORY_ONLY, tellMaster = true)
@@ -1251,7 +1251,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("SPARK-13328: refresh block locations (fetch should succeed after location refresh)") {
     val maxFailuresBeforeLocationRefresh =
-      conf.getInt("spark.block.failures.beforeLocationRefresh", 5)
+      conf.get(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH)
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
     val mockBlockTransferService =
       new MockBlockTransferService(maxFailuresBeforeLocationRefresh)

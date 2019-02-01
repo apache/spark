@@ -15,24 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.kafka010
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.hadoop.conf.Configuration
 
-/**
- * A mix in interface for {@link BatchReadSupport}. Data sources can implement this interface to
- * report statistics to Spark.
- *
- * As of Spark 2.4, statistics are reported to the optimizer before any operator is pushed to the
- * data source. Implementations that return more accurate statistics based on pushed operators will
- * not improve query performance until the planner can push operators before getting stats.
- */
-@Evolving
-// TODO: remove it, after we finish the API refactor completely.
-public interface OldSupportsReportStatistics extends ReadSupport {
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 
-  /**
-   * Returns the estimated statistics of this data source scan.
-   */
-  Statistics estimateStatistics(ScanConfig config);
+class KafkaHadoopDelegationTokenManagerSuite extends SparkFunSuite {
+  private val hadoopConf = new Configuration()
+
+  test("default configuration") {
+    val manager = new HadoopDelegationTokenManager(new SparkConf(false), hadoopConf, null)
+    assert(manager.isProviderLoaded("kafka"))
+  }
 }

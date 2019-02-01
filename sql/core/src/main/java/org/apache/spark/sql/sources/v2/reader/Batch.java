@@ -42,7 +42,7 @@ public interface Batch {
   InputPartition[] planInputPartitions();
 
   /**
-   * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
+   * Returns a factory to create a {@link PartitionReader} for each {@link InputPartition}.
    */
   PartitionReaderFactory createReaderFactory();
 }

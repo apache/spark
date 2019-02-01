@@ -41,6 +41,8 @@ private[spark] abstract class MemoryManager(
     onHeapStorageMemory: Long,
     onHeapExecutionMemory: Long) extends Logging {
 
+  require(onHeapExecutionMemory > 0, "onHeapExecutionMemory must be > 0")
+
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
   @GuardedBy("this")

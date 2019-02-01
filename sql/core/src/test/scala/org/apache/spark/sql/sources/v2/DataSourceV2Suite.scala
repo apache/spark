@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.sources.v2._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
@@ -40,14 +40,14 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
+      case d: BatchScanExec =>
         d.batch.asInstanceOf[AdvancedBatch]
     }.head
   }
 
   private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
+      case d: BatchScanExec =>
         d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
     }.head
   }
@@ -309,7 +309,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       assert(logical.canonicalized.output.length == logicalNumOutput)
 
       val physical = df.queryExecution.executedPlan.collect {
-        case d: DataSourceV2ScanExec => d
+        case d: BatchScanExec => d
       }.head
       assert(physical.canonicalized.output.length == physicalNumOutput)
     }

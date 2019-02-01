@@ -34,7 +34,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.io.{DataOutputBuffer, Text}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
@@ -45,6 +45,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
+import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -55,11 +56,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils}
 
 private[spark] class Client(
     val args: ClientArguments,
-    val sparkConf: SparkConf)
+    val sparkConf: SparkConf,
+    val rpcEnv: RpcEnv)
   extends Logging {
 
   import Client._
@@ -69,6 +72,10 @@ private[spark] class Client(
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
+
+  private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
+  private var appMaster: ApplicationMaster = _
+  private var stagingDirPath: Path = _
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -133,16 +140,14 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
-  // The app staging dir based on the STAGING_DIR configuration if configured
-  // otherwise based on the users home directory.
-  private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
-    .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
-
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
 
   def stop(): Unit = {
+    if (appMaster != null) {
+      appMaster.stopUnmanaged(stagingDirPath)
+    }
     launcherBackend.close()
     yarnClient.stop()
   }
@@ -171,6 +176,12 @@ private[spark] class Client(
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
 
+      // The app staging dir based on the STAGING_DIR configuration if configured
+      // otherwise based on the users home directory.
+      val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
+        .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
+      stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
+
       new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
         Option(appId.toString)).setCurrentContext()
 
@@ -190,8 +201,8 @@ private[spark] class Client(
       appId
     } catch {
       case e: Throwable =>
-        if (appId != null) {
-          cleanupStagingDir(appId)
+        if (stagingDirPath != null) {
+          cleanupStagingDir()
         }
         throw e
     }
@@ -200,13 +211,12 @@ private[spark] class Client(
   /**
    * Cleanup application staging directory.
    */
-  private def cleanupStagingDir(appId: ApplicationId): Unit = {
+  private def cleanupStagingDir(): Unit = {
     if (sparkConf.get(PRESERVE_STAGING_FILES)) {
       return
     }
 
     def cleanupStagingDirInternal(): Unit = {
-      val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
       try {
         val fs = stagingDirPath.getFileSystem(hadoopConf)
         if (fs.delete(stagingDirPath, true)) {
@@ -289,33 +299,28 @@ private[spark] class Client(
             "does not support it", e)
       }
     }
-
+    appContext.setUnmanagedAM(isClientUnmanagedAMEnabled)
     appContext
   }
 
   /**
    * Set up security tokens for launching our ApplicationMaster container.
    *
-   * This method will obtain delegation tokens from all the registered providers, and set them in
-   * the AM's launch context.
+   * In client mode, a set of credentials has been obtained by the scheduler, so they are copied
+   * and sent to the AM. In cluster mode, new credentials are obtained and then sent to the AM,
+   * along with whatever credentials the current user already has.
    */
   private def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = {
-    val credentials = UserGroupInformation.getCurrentUser().getCredentials()
-    val credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf, null)
-    credentialManager.obtainDelegationTokens(credentials)
-
-    // When using a proxy user, copy the delegation tokens to the user's credentials. Avoid
-    // that for regular users, since in those case the user already has access to the TGT,
-    // and adding delegation tokens could lead to expired or cancelled tokens being used
-    // later, as reported in SPARK-15754.
     val currentUser = UserGroupInformation.getCurrentUser()
-    if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
-      currentUser.addCredentials(credentials)
+    val credentials = currentUser.getCredentials()
+
+    if (isClusterMode) {
+      val credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+      credentialManager.obtainDelegationTokens(credentials)
     }
 
-    val dob = new DataOutputBuffer
-    credentials.writeTokenStorageToStream(dob)
-    amContainer.setTokens(ByteBuffer.wrap(dob.getData))
+    val serializedCreds = SparkHadoopUtil.get.serialize(credentials)
+    amContainer.setTokens(ByteBuffer.wrap(serializedCreds))
   }
 
   /** Get the application report from the ResourceManager for an application we have submitted. */
@@ -850,7 +855,6 @@ private[spark] class Client(
     : ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
     val appId = newAppResponse.getApplicationId
-    val appStagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
         findPySparkArchives()
@@ -858,8 +862,8 @@ private[spark] class Client(
         Nil
       }
 
-    val launchEnv = setupLaunchEnv(appStagingDirPath, pySparkArchives)
-    val localResources = prepareLocalResources(appStagingDirPath, pySparkArchives)
+    val launchEnv = setupLaunchEnv(stagingDirPath, pySparkArchives)
+    val localResources = prepareLocalResources(stagingDirPath, pySparkArchives)
 
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources.asJava)
@@ -1041,7 +1045,7 @@ private[spark] class Client(
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
-            cleanupStagingDir(appId)
+            cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) =>
             val msg = s"Failed to contact YARN for application $appId."
@@ -1088,19 +1092,46 @@ private[spark] class Client(
       if (state == YarnApplicationState.FINISHED ||
           state == YarnApplicationState.FAILED ||
           state == YarnApplicationState.KILLED) {
-        cleanupStagingDir(appId)
+        cleanupStagingDir()
         return createAppReport(report)
       }
 
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
         return createAppReport(report)
       }
-
+      if (state == YarnApplicationState.ACCEPTED && isClientUnmanagedAMEnabled &&
+          appMaster == null && report.getAMRMToken != null) {
+        appMaster = startApplicationMasterService(report)
+      }
       lastState = state
     }
 
     // Never reached, but keeps compiler happy
     throw new SparkException("While loop is depleted! This should never happen...")
+  }
+
+  private def startApplicationMasterService(report: ApplicationReport): ApplicationMaster = {
+    // Add AMRMToken to establish connection between RM and AM
+    val token = report.getAMRMToken
+    val amRMToken: org.apache.hadoop.security.token.Token[AMRMTokenIdentifier] =
+      new org.apache.hadoop.security.token.Token[AMRMTokenIdentifier](
+        token.getIdentifier().array(), token.getPassword().array,
+        new Text(token.getKind()), new Text(token.getService()))
+    val currentUGI = UserGroupInformation.getCurrentUser
+    currentUGI.addToken(amRMToken)
+
+    // Start Application Service in a separate thread and continue with application monitoring
+    val appMaster = new ApplicationMaster(
+      new ApplicationMasterArguments(Array.empty), sparkConf, hadoopConf)
+    val amService = new Thread("Unmanaged Application Master Service") {
+      override def run(): Unit = {
+        appMaster.runUnmanaged(rpcEnv, report.getCurrentApplicationAttemptId,
+          stagingDirPath, cachedResourcesConf)
+      }
+    }
+    amService.setDaemon(true)
+    amService.start()
+    appMaster
   }
 
   private def formatReportDetails(report: ApplicationReport): String = {
@@ -1535,7 +1566,7 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     conf.remove(JARS)
     conf.remove(FILES)
 
-    new Client(new ClientArguments(args), conf).run()
+    new Client(new ClientArguments(args), conf, null).run()
   }
 
 }

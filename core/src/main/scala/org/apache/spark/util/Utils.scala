@@ -2284,10 +2284,8 @@ private[spark] object Utils extends Logging {
   def setLogLevel(l: org.apache.log4j.Level) {
     val rootLogger = org.apache.log4j.Logger.getRootLogger()
     rootLogger.setLevel(l)
-    rootLogger.getAllAppenders().asScala.foreach {
-      case ca: org.apache.log4j.ConsoleAppender => ca.setThreshold(l)
-      case _ => // no-op
-    }
+    // Setting threshold to null as rootLevel will define log level for spark-shell
+    Logging.sparkShellThresholdLevel = null
   }
 
   /**

@@ -35,7 +35,7 @@ public interface SupportsPushDownRequiredColumns extends ScanBuilder {
    * also OK to do the pruning partially, e.g., a data source may not be able to prune nested
    * fields, and only prune top-level columns.
    *
-   * Note that, {@link ScanConfig#readSchema()} implementation should take care of the column
+   * Note that, {@link Scan#readSchema()} implementation should take care of the column
    * pruning applied here.
    */
   void pruneColumns(StructType requiredSchema);
