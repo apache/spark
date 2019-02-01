@@ -244,18 +244,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>parquet-1.10.1</id>
-      <!-- This is a temporary repository, only needed for testing before the Parquet release is final -->
-      <name>Parquet 1.10.1 RC0</name>
-      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1022/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
