@@ -1218,7 +1218,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child)
-        if child.collectFirst { case _: Aggregate => true }.isDefined => sa
+        if ResolveAggregateFunctions.relatedAggregate(child).isDefined => sa
 
       case s @ Sort(order, _, child)
           if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
@@ -1614,11 +1614,11 @@ class Analyzer(
         }
 
       case sort @ Sort(sortOrder, global, child)
-          if child.resolved && child.collectFirst { case _: Aggregate => true }.isDefined =>
+          if child.resolved && relatedAggregate(child).isDefined =>
         // The Aggregate plan may be not a direct child of sort when there is a HAVING clause.
         // In that case a `Filter` and/or a `Project` can be present between the `Sort` and the
         // related `Aggregate`.
-        val aggregate = child.collectFirst { case a: Aggregate => a }.get
+        val aggregate = relatedAggregate(child).get
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
           // If a sort order is unresolved, containing references not in aggregate, or containing
@@ -1712,13 +1712,21 @@ class Analyzer(
         case a @ Aggregate(_, aggExprs, _) =>
           a.copy(aggregateExpressions = aggExprs ++ missingAttrs)
 
-        // For other operators (eg. Filter), push down recursively
-        case n: UnaryNode =>
-          n.withNewChildren(Seq(pushDownMissingAttrs(missingAttrs, n.child)))
+        // For Filter, push down recursively
+        case f: Filter =>
+          f.withNewChildren(Seq(pushDownMissingAttrs(missingAttrs, f.child)))
 
         // This is an unexpected case, we cannot go on pushing down
-        case other => other
+        case other => throw new AnalysisException(
+          s"Expected only Project or Filter between a Sort and an Aggregate, but found $other")
       }
+    }
+
+    def relatedAggregate(plan: LogicalPlan): Option[Aggregate] = plan match {
+      case a: Aggregate => Some(a)
+      case p: Project => relatedAggregate(p.child)
+      case f: Filter => relatedAggregate(f.child)
+      case _ => None
     }
   }
 
