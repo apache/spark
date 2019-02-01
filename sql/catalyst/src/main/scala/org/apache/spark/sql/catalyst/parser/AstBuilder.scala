@@ -1408,11 +1408,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   override def visitIdentifier(ctx: IdentifierContext): String = withOrigin(ctx) {
     val keyword = ctx.getText
-    if (ctx.reserved() != null) {
-      if (ansi) {
-        throw new ParseException(
-          s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
-      }
+    if (ansi && ctx.ansiReserved() != null) {
+      throw new ParseException(
+        s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
     }
     keyword
   }
