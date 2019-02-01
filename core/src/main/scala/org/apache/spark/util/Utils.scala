@@ -344,10 +344,10 @@ private[spark] object Utils extends Logging {
    */
   def copyStreamUpTo(
       in: InputStream,
-      out: ChunkedByteBufferOutputStream,
       maxSize: Long,
       closeStreams: Boolean = false): (Boolean, InputStream) = {
     var count = 0L
+    val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
     val streamCopied = tryWithSafeFinally {
       val bufSize = Math.min(8192L, maxSize)
       val buf = new Array[Byte](bufSize.toInt)

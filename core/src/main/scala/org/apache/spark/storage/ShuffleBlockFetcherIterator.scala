@@ -474,14 +474,13 @@ final class ShuffleBlockFetcherIterator(
             streamCompressedOrEncrypted = !input.eq(in)
             if (streamCompressedOrEncrypted && detectCorruptUseExtraMemory) {
               isStreamCopied = true
-              val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
               // Decompress the block upto maxBytesInFlight/3 at once to detect any corruption which
               // could increase the memory usage and potentially increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              val (completeStreamCopied: Boolean, newStream: InputStream) = Utils.copyStreamUpTo(
-                input, out, maxBytesInFlight / 3, closeStreams = true)
-              isStreamCopied = completeStreamCopied
-              input = newStream
+              val (fullyCopied: Boolean, mergedStream: InputStream) = Utils.copyStreamUpTo(
+                input, maxBytesInFlight / 3, closeStreams = true)
+              isStreamCopied = fullyCopied
+              input = mergedStream
             }
           } catch {
             case e: IOException =>
