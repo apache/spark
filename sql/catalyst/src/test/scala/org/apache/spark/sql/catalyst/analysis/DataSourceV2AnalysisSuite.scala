@@ -82,7 +82,7 @@ class V2OverwriteByExpressionAnalysisSuite extends DataSourceV2AnalysisSuite {
     assertResolved(expectedPlan)
   }
 
-  test("delete expression cannot be resolved using query fields") {
+  test("delete expression is not resolved using query fields") {
     val xRequiredTable = TestRelation(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
       StructField("y", DoubleType))).toAttributes)
