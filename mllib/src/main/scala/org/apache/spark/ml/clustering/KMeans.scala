@@ -144,6 +144,22 @@ class KMeansModel private[ml] (
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
   /**
+   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
+   * model on the given data.
+   *
+   * @deprecated This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator
+   *             instead. You can also get the cost on the training dataset in the summary.
+   */
+  @deprecated("This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator " +
+    "instead. You can also get the cost on the training dataset in the summary.", "2.4.0")
+  @Since("2.0.0")
+  def computeCost(dataset: Dataset[_]): Double = {
+    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
+    val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
+    parentModel.computeCost(data)
+  }
+
+  /**
    * Returns a [[org.apache.spark.ml.util.GeneralMLWriter]] instance for this ML instance.
    *
    * For [[KMeansModel]], this does NOT currently save the training [[summary]].

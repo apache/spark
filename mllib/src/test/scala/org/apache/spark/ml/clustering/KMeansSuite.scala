@@ -117,6 +117,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       assert(clusters === Set(0, 1, 2, 3, 4))
     }
 
+    assert(model.computeCost(dataset) < 0.1)
     assert(model.hasParent)
 
     // Check validity of model summary
@@ -131,6 +132,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     }
     assert(summary.cluster.columns === Array(predictionColName))
     assert(summary.trainingCost < 0.1)
+    assert(model.computeCost(dataset) == summary.trainingCost)
     val clusterSizes = summary.clusterSizes
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
@@ -199,15 +201,15 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
   }
 
   test("KMean with Array input") {
-    def trainAndGetCost(dataset: Dataset[_]): Double = {
+    def trainAndComputeCost(dataset: Dataset[_]): Double = {
       val model = new KMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
-      model.summary.trainingCost
+      model.computeCost(dataset)
     }
 
     val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
-    val trueCost = trainAndGetCost(newDataset)
-    val doubleArrayCost = trainAndGetCost(newDatasetD)
-    val floatArrayCost = trainAndGetCost(newDatasetF)
+    val trueCost = trainAndComputeCost(newDataset)
+    val doubleArrayCost = trainAndComputeCost(newDatasetD)
+    val floatArrayCost = trainAndComputeCost(newDatasetF)
 
     // checking the cost is fine enough as a sanity check
     assert(trueCost ~== doubleArrayCost absTol 1e-6)
