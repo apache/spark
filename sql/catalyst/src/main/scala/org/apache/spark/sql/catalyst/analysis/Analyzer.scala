@@ -1630,7 +1630,7 @@ class Analyzer(
           }
           val namedExpressionsOrdering =
             unresolvedSortOrders.map(_.child match {
-              case ne: NamedExpression => ne
+              case a: Attribute => a
               case o => Alias(o, "aggOrder")()
             })
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = namedExpressionsOrdering)
@@ -1694,7 +1694,9 @@ class Analyzer(
     }
 
     def containsAggregate(condition: Expression): Boolean = {
-      condition.find(_.isInstanceOf[AggregateExpression]).isDefined
+      condition.find(e =>
+        e.isInstanceOf[AggregateExpression] ||
+          e.isInstanceOf[GroupingID] || e.isInstanceOf[Grouping]).isDefined
     }
 
     private def pushDownMissingAttrs(
