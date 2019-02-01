@@ -23,7 +23,7 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
@@ -32,6 +32,7 @@ import org.apache.spark.util.{Clock, Utils}
 
 private[spark] class ExecutorPodsAllocator(
     conf: SparkConf,
+    secMgr: SecurityManager,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -51,6 +52,8 @@ private[spark] class ExecutorPodsAllocator(
 
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
+
+  private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   private val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
@@ -95,6 +98,7 @@ private[spark] class ExecutorPodsAllocator(
         safeLogWarning("Executor was not detected in the Kubernetes" +
           " cluster after timeout despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
+<<<<<<< HEAD
           " deleted but the application missed the deletion event.",
           SafeArg.of("executorId", execId),
           SafeArg.of("podCreationTimeoutMs", podCreationTimeout))
@@ -103,6 +107,19 @@ private[spark] class ExecutorPodsAllocator(
             .pods()
             .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
             .delete()
+=======
+          " deleted but the application missed the deletion event.")
+
+        if (shouldDeleteExecutors) {
+          Utils.tryLogNonFatalError {
+            kubernetesClient
+              .pods()
+              .withLabel(SPARK_APP_ID_LABEL, applicationId)
+              .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+              .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
+              .delete()
+          }
+>>>>>>> master
         }
         newlyCreatedExecutors -= execId
       } else {
@@ -116,6 +133,7 @@ private[spark] class ExecutorPodsAllocator(
     if (snapshots.nonEmpty) {
       // Only need to examine the cluster as of the latest snapshot, the "current" state, to see if
       // we need to allocate more executors or not.
+<<<<<<< HEAD
       latestSnapshot = Some(snapshots.last)
       requestExecutorsIfNecessary(applicationId, snapshots.last)
     }
@@ -162,6 +180,55 @@ private[spark] class ExecutorPodsAllocator(
         newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
         safeLogDebug("Requested executor from Kubernetes.",
           SafeArg.of("newExecutorId", newExecutorId))
+=======
+      val latestSnapshot = snapshots.last
+      val currentRunningExecutors = latestSnapshot.executorPods.values.count {
+        case PodRunning(_) => true
+        case _ => false
+      }
+      val currentPendingExecutors = latestSnapshot.executorPods.values.count {
+        case PodPending(_) => true
+        case _ => false
+      }
+      val currentTotalExpectedExecutors = totalExpectedExecutors.get
+      logDebug(s"Currently have $currentRunningExecutors running executors and" +
+        s" $currentPendingExecutors pending executors. $newlyCreatedExecutors executors" +
+        s" have been requested but are pending appearance in the cluster.")
+      if (newlyCreatedExecutors.isEmpty
+        && currentPendingExecutors == 0
+        && currentRunningExecutors < currentTotalExpectedExecutors) {
+        val numExecutorsToAllocate = math.min(
+          currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
+        logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
+        for ( _ <- 0 until numExecutorsToAllocate) {
+          val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
+          val executorConf = KubernetesConf.createExecutorConf(
+            conf,
+            newExecutorId.toString,
+            applicationId,
+            driverPod)
+          val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr,
+            kubernetesClient)
+          val podWithAttachedContainer = new PodBuilder(executorPod.pod)
+            .editOrNewSpec()
+            .addToContainers(executorPod.container)
+            .endSpec()
+            .build()
+          kubernetesClient.pods().create(podWithAttachedContainer)
+          newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
+          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        }
+      } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
+        // TODO handle edge cases if we end up with more running executors than expected.
+        logDebug("Current number of running executors is equal to the number of requested" +
+          " executors. Not scaling up further.")
+      } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
+        logDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
+          s" executors to begin running before requesting for more executors. # of executors in" +
+          s" pending status in the cluster: $currentPendingExecutors. # of executors that we have" +
+          s" created but we have not observed as being present in the cluster yet:" +
+          s" ${newlyCreatedExecutors.size}.")
+>>>>>>> master
       }
     } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
       // TODO handle edge cases if we end up with more running executors than expected.

@@ -31,13 +31,13 @@ import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType, TestUDT}
 import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
@@ -103,7 +103,7 @@ abstract class OrcQueryTest extends OrcTest {
 
   test("Read/write UserDefinedType") {
     withTempPath { path =>
-      val data = Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
+      val data = Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
       val udtDF = data.toDF("id", "vectors")
       udtDF.write.orc(path.getAbsolutePath)
       val readBack = spark.read.schema(udtDF.schema).orc(path.getAbsolutePath)
@@ -270,10 +270,16 @@ abstract class OrcQueryTest extends OrcTest {
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
-    withOrcTable(data, "t") {
-      sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+
+    withOrcFile(data) { file =>
+      withTempView("t") {
+        spark.read.orc(file).createOrReplaceTempView("t")
+        checkAnswer(spark.table("t"), data.map(Row.fromTuple))
+        sql("INSERT INTO TABLE t SELECT * FROM tmp")
+        checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+      }
     }
+
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tmp"),
       ignoreIfNotExists = true,
@@ -574,7 +580,7 @@ abstract class OrcQueryTest extends OrcTest {
       val m1 = intercept[AnalysisException] {
         testAllCorruptFiles()
       }.getMessage
-      assert(m1.contains("Unable to infer schema for ORC"))
+      assert(m1.contains("Unable to infer schema"))
       testAllCorruptFilesWithoutSchemaInfer()
     }
 
@@ -680,4 +686,9 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
       }
     }
   }
+}
+
+class OrcV1QuerySuite extends OrcQuerySuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
 }

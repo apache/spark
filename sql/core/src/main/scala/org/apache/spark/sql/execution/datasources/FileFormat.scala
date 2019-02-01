@@ -169,7 +169,7 @@ trait FileFormat {
    * Returns whether this format supports the given [[DataType]] in read/write path.
    * By default all data types are supported.
    */
-  def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
+  def supportDataType(dataType: DataType): Boolean = true
 }
 
 /**

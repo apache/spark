@@ -59,12 +59,15 @@ object JSONBenchmark extends SqlBasedBenchmark {
         .json(path.getAbsolutePath)
 
       benchmark.addCase("No encoding", numIters) { _ =>
-        spark.read.json(path.getAbsolutePath)
+        spark.read
+          .option("inferTimestamp", false)
+          .json(path.getAbsolutePath)
       }
 
       benchmark.addCase("UTF-8 is set", numIters) { _ =>
         spark.read
           .option("encoding", "UTF-8")
+          .option("inferTimestamp", false)
           .json(path.getAbsolutePath)
       }
 
@@ -121,6 +124,18 @@ object JSONBenchmark extends SqlBasedBenchmark {
       .add("z", StringType)
   }
 
+  def writeWideRow(path: String, rowsNum: Int): StructType = {
+    val colsNum = 1000
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
+    val schema = StructType(fields)
+
+    spark.range(rowsNum)
+      .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
+      .write.json(path)
+
+    schema
+  }
+
   def countWideColumn(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("count a wide column", rowsNum, output = output)
 
@@ -140,6 +155,36 @@ object JSONBenchmark extends SqlBasedBenchmark {
           .option("encoding", "UTF-8")
           .schema(schema)
           .json(path.getAbsolutePath)
+          .count()
+      }
+
+      benchmark.run()
+    }
+  }
+
+  def countWideRow(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("select wide row", rowsNum, output = output)
+
+    withTempPath { path =>
+      prepareDataInfo(benchmark)
+      val schema = writeWideRow(path.getAbsolutePath, rowsNum)
+
+      benchmark.addCase("No encoding", numIters) { _ =>
+        spark.read
+          .schema(schema)
+          .json(path.getAbsolutePath)
+          .select("*")
+          .filter((row: Row) => true)
+          .count()
+      }
+
+      benchmark.addCase("UTF-8 is set", numIters) { _ =>
+        spark.read
+          .option("encoding", "UTF-8")
+          .schema(schema)
+          .json(path.getAbsolutePath)
+          .select("*")
+          .filter((row: Row) => true)
           .count()
       }
 
@@ -171,9 +216,6 @@ object JSONBenchmark extends SqlBasedBenchmark {
       }
       benchmark.addCase(s"Select 1 column + count()", numIters) { _ =>
         ds.select($"col1").filter((_: Row) => true).count()
-      }
-      benchmark.addCase(s"count()", numIters) { _ =>
-        ds.count()
       }
 
       benchmark.run()
@@ -236,6 +278,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
       schemaInferring(100 * 1000 * 1000, numIters)
       countShortColumn(100 * 1000 * 1000, numIters)
       countWideColumn(10 * 1000 * 1000, numIters)
+      countWideRow(500 * 1000, numIters)
       selectSubsetOfColumns(10 * 1000 * 1000, numIters)
       jsonParserCreation(10 * 1000 * 1000, numIters)
     }

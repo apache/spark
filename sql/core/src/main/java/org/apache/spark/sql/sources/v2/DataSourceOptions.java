@@ -164,6 +164,11 @@ public class DataSourceOptions {
   public static final String DATABASE_KEY = "database";
 
   /**
+   * The option key for whether to check existence of files for a table.
+   */
+  public static final String CHECK_FILES_EXIST_KEY = "check_files_exist";
+
+  /**
    * Returns all the paths specified by both the singular path option and the multiple
    * paths option.
    */
@@ -196,5 +201,10 @@ public class DataSourceOptions {
    */
   public Optional<String> databaseName() {
     return get(DATABASE_KEY);
+  }
+
+  public Boolean checkFilesExist() {
+    Optional<String> result = get(CHECK_FILES_EXIST_KEY);
+    return result.isPresent() && result.get().equals("true");
   }
 }

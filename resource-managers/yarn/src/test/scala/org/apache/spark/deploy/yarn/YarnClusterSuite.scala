@@ -27,7 +27,10 @@ import scala.io.Source
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.HadoopIllegalArgumentException
+import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -35,11 +38,13 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.tags.ExtendedYarnTest
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 
 /**
  * Integration tests for YARN; these tests use a mini Yarn cluster to run Spark-on-YARN
@@ -120,6 +125,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("run Spark in yarn-cluster mode") {
     testBasicYarnApp(false)
+  }
+
+  test("run Spark in yarn-client mode with unmanaged am") {
+    testBasicYarnApp(true, Map(YARN_UNMANAGED_AM.key -> "true"))
   }
 
   test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
@@ -256,7 +265,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val propsFile = createConfFile()
     val handle = new SparkLauncher(env)
       .setSparkHome(sys.props("spark.test.home"))
-      .setConf("spark.ui.enabled", "false")
+      .setConf(UI_ENABLED.key, "false")
       .setPropertiesFile(propsFile)
       .setMaster("yarn")
       .setDeployMode("client")
@@ -439,6 +448,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
   var driverLogs: Option[collection.Map[String, String]] = None
+  var driverAttributes: Option[collection.Map[String, String]] = None
 
   override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
@@ -446,6 +456,7 @@ private[spark] class SaveExecutorInfo extends SparkListener {
 
   override def onApplicationStart(appStart: SparkListenerApplicationStart): Unit = {
     driverLogs = appStart.driverLogs
+    driverAttributes = appStart.driverAttributes
   }
 }
 
@@ -550,11 +561,12 @@ private object YarnClusterDriver extends Logging with Matchers {
             s"Executor logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
           )
         }
+        assert(info.attributes.nonEmpty)
       }
 
       // If we are running in yarn-cluster mode, verify that driver logs links and present and are
       // in the expected format.
-      if (conf.get("spark.submit.deployMode") == "cluster") {
+      if (conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
         assert(listener.driverLogs.nonEmpty)
         val driverLogs = listener.driverLogs.get
         assert(driverLogs.size === 2)
@@ -568,9 +580,24 @@ private object YarnClusterDriver extends Logging with Matchers {
             s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
           )
         }
-        val containerId = YarnSparkHadoopUtil.getContainerId
+
+        val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
+        val containerId = YarnContainerInfoHelper.getContainerId(container = None)
         val user = Utils.getCurrentUserName()
+
         assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
+
+        assert(listener.driverAttributes.nonEmpty)
+        val driverAttributes = listener.driverAttributes.get
+        val expectationAttributes = Map(
+          "HTTP_SCHEME" -> YarnContainerInfoHelper.getYarnHttpScheme(yarnConf),
+          "NM_HTTP_ADDRESS" -> YarnContainerInfoHelper.getNodeManagerHttpAddress(container = None),
+          "CLUSTER_ID" -> YarnContainerInfoHelper.getClusterId(yarnConf).getOrElse(""),
+          "CONTAINER_ID" -> ConverterUtils.toString(containerId),
+          "USER" -> user,
+          "LOG_FILES" -> "stderr,stdout")
+
+        assert(driverAttributes === expectationAttributes)
       }
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)

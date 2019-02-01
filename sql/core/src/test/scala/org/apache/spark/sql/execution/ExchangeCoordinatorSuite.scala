@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageInput
 import org.apache.spark.sql.execution.exchange.ExchangeCoordinator
@@ -263,9 +264,14 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       new SparkConf(false)
         .setMaster("local[*]")
         .setAppName("test")
+<<<<<<< HEAD
         .set("spark.ui.enabled", "false")
         .set("spark.driver.allowMultipleContexts", "true")
         .set(SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key, "5")
+=======
+        .set(UI_ENABLED, false)
+        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+>>>>>>> master
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         .set(

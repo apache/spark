@@ -63,7 +63,8 @@ private[spark] object CoarseGrainedClusterMessages {
       executorRef: RpcEndpointRef,
       hostname: String,
       cores: Int,
-      logUrls: Map[String, String])
+      logUrls: Map[String, String],
+      attributes: Map[String, String])
     extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
@@ -103,6 +104,9 @@ private[spark] object CoarseGrainedClusterMessages {
   // In Yarn mode, these are exchanged between the driver and the AM
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
+
+  // Used by YARN's client mode AM to retrieve the current set of delegation tokens.
+  object RetrieveDelegationTokens extends CoarseGrainedClusterMessage
 
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running

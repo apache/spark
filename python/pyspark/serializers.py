@@ -185,6 +185,39 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
+class ArrowCollectSerializer(Serializer):
+    """
+    Deserialize a stream of batches followed by batch order information. Used in
+    DataFrame._collectAsArrow() after invoking Dataset.collectAsArrowToPython() in the JVM.
+    """
+
+    def __init__(self):
+        self.serializer = ArrowStreamSerializer()
+
+    def dump_stream(self, iterator, stream):
+        return self.serializer.dump_stream(iterator, stream)
+
+    def load_stream(self, stream):
+        """
+        Load a stream of un-ordered Arrow RecordBatches, where the last iteration yields
+        a list of indices that can be used to put the RecordBatches in the correct order.
+        """
+        # load the batches
+        for batch in self.serializer.load_stream(stream):
+            yield batch
+
+        # load the batch order indices
+        num = read_int(stream)
+        batch_order = []
+        for i in xrange(num):
+            index = read_int(stream)
+            batch_order.append(index)
+        yield batch_order
+
+    def __repr__(self):
+        return "ArrowCollectSerializer(%s)" % self.serializer
+
+
 class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
@@ -204,7 +237,7 @@ class ArrowStreamSerializer(Serializer):
 
     def load_stream(self, stream):
         import pyarrow as pa
-        reader = pa.open_stream(stream)
+        reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
 
@@ -212,7 +245,7 @@ class ArrowStreamSerializer(Serializer):
         return "ArrowStreamSerializer"
 
 
-def _create_batch(series, timezone):
+def _create_batch(series, timezone, safecheck):
     """
     Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
 
@@ -248,7 +281,20 @@ def _create_batch(series, timezone):
             # TODO: see ARROW-2432. Remove when the minimum PyArrow version becomes 0.10.0.
             return pa.Array.from_pandas(s.apply(
                 lambda v: decimal.Decimal('NaN') if v is None else v), mask=mask, type=t)
-        return pa.Array.from_pandas(s, mask=mask, type=t)
+        elif LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+            # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
+            return pa.Array.from_pandas(s, mask=mask, type=t)
+
+        try:
+            array = pa.Array.from_pandas(s, mask=mask, type=t, safe=safecheck)
+        except pa.ArrowException as e:
+            error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
+                        "Array (%s). It can be caused by overflows or other unsafe " + \
+                        "conversions warned by Arrow. Arrow safe type check can be " + \
+                        "disabled by using SQL config " + \
+                        "`spark.sql.execution.pandas.arrowSafeTypeConversion`."
+            raise RuntimeError(error_msg % (s.dtype, t), e)
+        return array
 
     arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
@@ -259,9 +305,10 @@ class ArrowStreamPandasSerializer(Serializer):
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
-    def __init__(self, timezone):
+    def __init__(self, timezone, safecheck):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
+        self._safecheck = safecheck
 
     def arrow_to_pandas(self, arrow_column):
         from pyspark.sql.types import from_arrow_type, \
@@ -281,7 +328,7 @@ class ArrowStreamPandasSerializer(Serializer):
         writer = None
         try:
             for series in iterator:
-                batch = _create_batch(series, self._timezone)
+                batch = _create_batch(series, self._timezone, self._safecheck)
                 if writer is None:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
@@ -295,7 +342,7 @@ class ArrowStreamPandasSerializer(Serializer):
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
         import pyarrow as pa
-        reader = pa.open_stream(stream)
+        reader = pa.ipc.open_stream(stream)
 
         for batch in reader:
             yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
@@ -780,6 +827,15 @@ class ChunkedStream(object):
         # -1 length indicates to the receiving end that we're done.
         write_int(-1, self.wrapped)
         self.wrapped.close()
+
+    @property
+    def closed(self):
+        """
+        Return True if the `wrapped` object has been closed.
+        NOTE: this property is required by pyarrow to be used as a file-like object in
+        pyarrow.RecordBatchStreamWriter from ArrowStreamSerializer
+        """
+        return self.wrapped.closed
 
 
 if __name__ == '__main__':

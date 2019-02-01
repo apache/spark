@@ -18,8 +18,11 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+<<<<<<< HEAD
 import java.net.URI
 import java.sql.{Date, Timestamp}
+=======
+>>>>>>> master
 
 import com.google.common.collect.{HashMultiset, Multiset}
 import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
@@ -189,12 +192,12 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
       sql("insert into ts values (2, null)")
       sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
-      checkAnswer(
-        sql("select * from ts"),
-        Seq(
-          Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123456")),
-          Row(2, null),
-          Row(3, Timestamp.valueOf("1965-01-01 10:11:12.123456"))))
+      val expected = Seq(
+        (1, "2016-01-01 10:11:12.123456"),
+        (2, null),
+        (3, "1965-01-01 10:11:12.123456"))
+        .toDS().select('_1, $"_2".cast("timestamp"))
+      checkAnswer(sql("select * from ts"), expected)
     }
 
     // The microsecond portion is truncated when written as TIMESTAMP_MILLIS.
@@ -208,30 +211,30 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
         sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
         sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
-        checkAnswer(
-          sql("select * from ts"),
-          Seq(
-            Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
-            Row(2, null),
-            Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-            Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-            Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
-            Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
-            Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+        val expected = Seq(
+          (1, "2016-01-01 10:11:12.123"),
+          (2, null),
+          (3, "1965-01-01 10:11:12.125"),
+          (4, "1965-01-01 10:11:12.125"),
+          (5, "1965-01-01 10:11:12.1"),
+          (6, "1965-01-01 10:11:12.123"),
+          (7, "0001-01-01 00:00:00.000"))
+          .toDS().select('_1, $"_2".cast("timestamp"))
+        checkAnswer(sql("select * from ts"), expected)
 
         // Read timestamps that were encoded as TIMESTAMP_MILLIS annotated as INT64
         // with PARQUET_INT64_AS_TIMESTAMP_MILLIS set to false.
         withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "false") {
-          checkAnswer(
-            sql("select * from ts"),
-            Seq(
-              Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
-              Row(2, null),
-              Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-              Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-              Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
-              Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
-              Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+          val expected = Seq(
+            (1, "2016-01-01 10:11:12.123"),
+            (2, null),
+            (3, "1965-01-01 10:11:12.125"),
+            (4, "1965-01-01 10:11:12.125"),
+            (5, "1965-01-01 10:11:12.1"),
+            (6, "1965-01-01 10:11:12.123"),
+            (7, "0001-01-01 00:00:00.000"))
+            .toDS().select('_1, $"_2".cast("timestamp"))
+          checkAnswer(sql("select * from ts"), expected)
         }
       }
     }

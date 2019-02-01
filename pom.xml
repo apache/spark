@@ -39,7 +39,7 @@
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:apache/spark.git</connection>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
+    <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
@@ -101,6 +101,7 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
+    <module>external/kafka-0-10-token-provider</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
@@ -130,13 +131,20 @@
     <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
+    <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
+    <kafka.version>2.1.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
+<<<<<<< HEAD
     <parquet.version>1.12.0-palantir.1</parquet.version>
     <okhttp3.version>3.11.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.15.0</okio.version>
     <jetty.version>9.4.12.v20180830</jetty.version>
     <orc.version>1.5.3</orc.version>
+=======
+    <parquet.version>1.10.0</parquet.version>
+    <orc.version>1.5.4</orc.version>
+>>>>>>> master
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.12.v20180830</jetty.version>
@@ -164,8 +172,11 @@
     <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.7</scala.version>
+    <scala.version>2.12.8</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
+    <scalafmt.parameters>--diff --test</scalafmt.parameters>
+    <!-- for now, not running scalafmt as part of default verify pipeline -->
+    <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.9.7</fasterxml.jackson.version>
     <snappy.version>1.1.7.2</snappy.version>
@@ -180,11 +191,17 @@
     <commons-compress.version>1.18</commons-compress.version>
     <commons-pool.version>1.6</commons-pool.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
+<<<<<<< HEAD
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.6</objenesis.version>
     <janino.version>3.0.10</janino.version>
     <jersey.version>2.25.1</jersey.version>
     <joda.version>2.10</joda.version>
+=======
+    <janino.version>3.0.11</janino.version>
+    <jersey.version>2.22.2</jersey.version>
+    <joda.version>2.9.3</joda.version>
+>>>>>>> master
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.2</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
@@ -202,7 +219,7 @@
     If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
     ./python/run-tests.py and ./python/setup.py too.
     -->
-    <arrow.version>0.10.0</arrow.version>
+    <arrow.version>0.12.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -926,7 +943,7 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>1.10.19</version>
+        <version>2.23.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2023,6 +2040,10 @@
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
           </exclusion>
@@ -2232,6 +2253,7 @@
         <groupId>com.thoughtworks.paranamer</groupId>
         <artifactId>paranamer</artifactId>
         <version>${paranamer.version}</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
@@ -2343,6 +2365,8 @@
           </executions>
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
+            <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
+            <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
             <useZincServer>true</useZincServer>
             <args>
@@ -2386,7 +2410,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M1</version>
+          <version>3.0.0-M2</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2396,7 +2420,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2446,7 +2470,11 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
+<<<<<<< HEAD
             <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraScalaTestArgs}</argLine>
+=======
+            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+>>>>>>> master
             <stderr/>
             <environmentVariables>
               <!--
@@ -2889,6 +2917,24 @@
                 <exclude>log4j.properties</exclude>
               </excludes>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.antipathy</groupId>
+        <artifactId>mvn-scalafmt_2.12</artifactId>
+        <version>0.9_1.5.1</version>
+        <configuration>
+          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
+          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config locataion -->
+        </configuration>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>

@@ -631,7 +631,7 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 #' @rdname union
 setGeneric("union", function(x, y) { standardGeneric("union") })
 
-#' @rdname union
+#' @rdname unionAll
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
@@ -1080,11 +1080,19 @@ setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("map_concat", function(x, ...) { standardGeneric("map_concat") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("map_entries", function(x) { standardGeneric("map_entries") })
 
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("map_from_arrays", function(x, y) { standardGeneric("map_from_arrays") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("map_from_entries", function(x) { standardGeneric("map_from_entries") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1113,7 +1121,7 @@ setGeneric("month", function(x) { standardGeneric("month") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
-setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
+setGeneric("months_between", function(y, x, ...) { standardGeneric("months_between") })
 
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
@@ -1205,6 +1213,14 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("rtrim", function(x, trimString) { standardGeneric("rtrim") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_csv", function(x, ...) { standardGeneric("schema_of_csv") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
@@ -1470,6 +1486,10 @@ setGeneric("spark.associationRules", function(object) { standardGeneric("spark.a
 #' @rdname spark.prefixSpan
 setGeneric("spark.findFrequentSequentialPatterns",
             function(data, ...) { standardGeneric("spark.findFrequentSequentialPatterns") })
+
+#' @rdname spark.powerIterationClustering
+setGeneric("spark.assignClusters",
+            function(data, ...) { standardGeneric("spark.assignClusters") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

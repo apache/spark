@@ -44,14 +44,14 @@ import org.apache.spark.internal.Logging
  * post-shuffle partition to be greater than the target size.
  *
  * For example, we have two stages with the following pre-shuffle partition size statistics:
- * stage 1: [100 MB, 20 MB, 100 MB, 10MB, 30 MB]
- * stage 2: [10 MB,  10 MB, 70 MB,  5 MB, 5 MB]
- * assuming the target input size is 128 MB, we will have four post-shuffle partitions,
+ * stage 1: [100 MiB, 20 MiB, 100 MiB, 10MiB, 30 MiB]
+ * stage 2: [10 MiB,  10 MiB, 70 MiB,  5 MiB, 5 MiB]
+ * assuming the target input size is 128 MiB, we will have four post-shuffle partitions,
  * which are:
- *  - post-shuffle partition 0: pre-shuffle partition 0 (size 110 MB)
- *  - post-shuffle partition 1: pre-shuffle partition 1 (size 30 MB)
- *  - post-shuffle partition 2: pre-shuffle partition 2 (size 170 MB)
- *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MB)
+ *  - post-shuffle partition 0: pre-shuffle partition 0 (size 110 MiB)
+ *  - post-shuffle partition 1: pre-shuffle partition 1 (size 30 MiB)
+ *  - post-shuffle partition 2: pre-shuffle partition 2 (size 170 MiB)
+ *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MiB)
  */
 class ExchangeCoordinator(
     advisoryTargetPostShuffleInputSize: Long,

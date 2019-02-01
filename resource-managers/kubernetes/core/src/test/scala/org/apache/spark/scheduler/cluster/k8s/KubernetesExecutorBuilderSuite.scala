@@ -16,16 +16,13 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.{Config => _, _}
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.mockito.Mockito.{mock, never, verify}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.submit.PodBuilderSuiteUtils
+import org.apache.spark.internal.config.ConfigEntry
 
+<<<<<<< HEAD
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
   private val SECRETS_STEP_TYPE = "mount-secrets"
@@ -260,4 +257,19 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       .buildFromFeatures(kubernetesConf)
     PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(sparkPod)
   }
+=======
+class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
+
+  override protected def templateFileConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE
+  }
+
+  override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
+    sparkConf.set("spark.driver.host", "https://driver.host.com")
+    val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+    val secMgr = new SecurityManager(sparkConf)
+    new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client)
+  }
+
+>>>>>>> master
 }

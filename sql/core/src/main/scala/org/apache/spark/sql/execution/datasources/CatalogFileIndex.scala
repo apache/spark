@@ -55,6 +55,7 @@ trait CatalogFileIndexFactory {
 
 object CatalogFileIndexFactory {
 
+<<<<<<< HEAD
   def reflect[T <: CatalogFileIndexFactory](conf: SparkConf): T = {
     val className = fileIndexClassName(conf)
     try {
@@ -63,6 +64,33 @@ object CatalogFileIndexFactory {
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
+=======
+  /**
+   * Returns a [[InMemoryFileIndex]] for this table restricted to the subset of partitions
+   * specified by the given partition-pruning filters.
+   *
+   * @param filters partition-pruning filters
+   */
+  def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
+    if (table.partitionColumnNames.nonEmpty) {
+      val startTime = System.nanoTime()
+      val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
+        table.identifier, filters)
+      val partitions = selectedPartitions.map { p =>
+        val path = new Path(p.location)
+        val fs = path.getFileSystem(hadoopConf)
+        PartitionPath(
+          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+          path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+      }
+      val partitionSpec = PartitionSpec(partitionSchema, partitions)
+      val timeNs = System.nanoTime() - startTime
+      new PrunedInMemoryFileIndex(
+        sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec, Option(timeNs))
+    } else {
+      new InMemoryFileIndex(sparkSession, rootPaths, table.storage.properties,
+        userSpecifiedSchema = None, fileStatusCache = fileStatusCache)
+>>>>>>> master
     }
   }
 

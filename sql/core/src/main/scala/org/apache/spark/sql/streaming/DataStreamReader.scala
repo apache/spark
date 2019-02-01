@@ -29,10 +29,8 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, MicroBatchReadSupportProvider}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -173,60 +171,27 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case _ => None
     }
     ds match {
-      case s: MicroBatchReadSupportProvider =>
+      case provider: TableProvider =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = s, conf = sparkSession.sessionState.conf)
+          ds = provider, conf = sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
-        val dataSourceOptions = new DataSourceOptions(options.asJava)
-        var tempReadSupport: MicroBatchReadSupport = null
-        val schema = try {
-          val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
-          tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.createMicroBatchReadSupport(
-              userSpecifiedSchema.get, tmpCheckpointPath, dataSourceOptions)
-          } else {
-            s.createMicroBatchReadSupport(tmpCheckpointPath, dataSourceOptions)
-          }
-          tempReadSupport.fullSchema()
-        } finally {
-          // Stop tempReader to avoid side-effect thing
-          if (tempReadSupport != null) {
-            tempReadSupport.stop()
-            tempReadSupport = null
-          }
+        val dsOptions = new DataSourceOptions(options.asJava)
+        val table = userSpecifiedSchema match {
+          case Some(schema) => provider.getTable(dsOptions, schema)
+          case _ => provider.getTable(dsOptions)
         }
-        Dataset.ofRows(
-          sparkSession,
-          StreamingRelationV2(
-            s, source, options,
-            schema.toAttributes, v1Relation)(sparkSession))
-      case s: ContinuousReadSupportProvider =>
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = s, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
-        val dataSourceOptions = new DataSourceOptions(options.asJava)
-        var tempReadSupport: ContinuousReadSupport = null
-        val schema = try {
-          val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
-          tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.createContinuousReadSupport(
-              userSpecifiedSchema.get, tmpCheckpointPath, dataSourceOptions)
-          } else {
-            s.createContinuousReadSupport(tmpCheckpointPath, dataSourceOptions)
-          }
-          tempReadSupport.fullSchema()
-        } finally {
-          // Stop tempReader to avoid side-effect thing
-          if (tempReadSupport != null) {
-            tempReadSupport.stop()
-            tempReadSupport = null
-          }
+        table match {
+          case _: SupportsMicroBatchRead | _: SupportsContinuousRead =>
+            Dataset.ofRows(
+              sparkSession,
+              StreamingRelationV2(
+                provider, source, table, options, table.schema.toAttributes, v1Relation)(
+                sparkSession))
+
+          // fallback to v1
+          case _ => Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
         }
-        Dataset.ofRows(
-          sparkSession,
-          StreamingRelationV2(
-            s, source, options,
-            schema.toAttributes, v1Relation)(sparkSession))
+
       case _ =>
         // Code path for data source v1.
         Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
@@ -273,7 +238,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`. To
    *     keep corrupt records, an user can set a string type field named
    *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have the
    *     field, it drops corrupt records during parsing. When inferring a schema, it implicitly
@@ -286,11 +251,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
@@ -347,11 +312,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
@@ -360,13 +325,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
-   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
-   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. A record with less/more tokens than schema is not a corrupted record to
-   *     CSV. When it meets a record having fewer tokens than the length of the schema, sets
-   *     `null` to extra fields. When the record has more tokens than the length of the schema,
-   *     it drops extra tokens.</li>
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`.
+   *     To keep corrupt records, an user can set a string type field named
+   *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have
+   *     the field, it drops corrupt records during parsing. A record with less/more tokens
+   *     than schema is not a corrupted record to CSV. When it meets a record having fewer
+   *     tokens than the length of the schema, sets `null` to extra fields. When the record
+   *     has more tokens than the length of the schema, it drops extra tokens.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>

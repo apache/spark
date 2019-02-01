@@ -16,17 +16,20 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.mockito.Mockito._
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
+<<<<<<< HEAD
 import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE}
 import org.apache.spark.deploy.k8s.features._
+=======
+import org.apache.spark.internal.config.ConfigEntry
+>>>>>>> master
 
-class KubernetesDriverBuilderSuite extends SparkFunSuite {
+class KubernetesDriverBuilderSuite extends PodBuilderSuite {
 
+<<<<<<< HEAD
   private val BASIC_STEP_TYPE = "basic"
   private val CREDENTIALS_STEP_TYPE = "credentials"
   private val SERVICE_STEP_TYPE = "service"
@@ -414,4 +417,15 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     }
     assert(exception.getMessage.contains("Could not load pod from template file."))
   }
+=======
+  override protected def templateFileConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
+  }
+
+  override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    new KubernetesDriverBuilder().buildFromFeatures(conf, client).pod
+  }
+
+>>>>>>> master
 }

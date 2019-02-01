@@ -34,6 +34,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
@@ -290,7 +291,7 @@ private[spark] abstract class MockBackend(
   // Periodically revive offers to allow delay scheduling to work
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
-  private val reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "10ms")
+  private val reviveIntervalMs = conf.get(SCHEDULER_REVIVE_INTERVAL).getOrElse(10L)
 
   /**
    * Test backends should call this to get a task that has been assigned to them by the scheduler.

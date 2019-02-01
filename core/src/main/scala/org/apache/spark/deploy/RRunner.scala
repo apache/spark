@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
+<<<<<<< HEAD
 import org.apache.spark.SparkException
 import org.apache.spark.SparkUserAppException
 import org.apache.spark.api.conda.CondaEnvironment
@@ -33,6 +34,11 @@ import org.apache.spark.api.r.RUtils
 import org.apache.spark.api.r.SparkRDefaults
 import org.apache.spark.deploy.Common.Provenance
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.{SparkException, SparkUserAppException}
+import org.apache.spark.api.r.{RBackend, RUtils}
+import org.apache.spark.internal.config.R._
+>>>>>>> master
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -56,9 +62,18 @@ object RRunner extends CondaRunner with Logging {
       }
       // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
       // but kept here for backward compatibility.
+<<<<<<< HEAD
       driverPreset
         .orElse(Provenance.fromConf("spark.r.command"))
         .orElse(Provenance.fromConf("spark.sparkr.r.command"))
+=======
+      var cmd = sys.props.getOrElse(SPARKR_COMMAND.key, SPARKR_COMMAND.defaultValue.get)
+      cmd = sys.props.getOrElse(R_COMMAND.key, cmd)
+      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
+        cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
+      }
+      cmd
+>>>>>>> master
     }
 
     val rCommand: String = maybeConda.map { conda =>
@@ -71,7 +86,7 @@ object RRunner extends CondaRunner with Logging {
 
     //  Connection timeout set by R process on its connection to RBackend in seconds.
     val backendConnectionTimeout = sys.props.getOrElse(
-      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT.toString)
+      R_BACKEND_CONNECTION_TIMEOUT.key, R_BACKEND_CONNECTION_TIMEOUT.defaultValue.get.toString)
 
     // Check if the file path exists.
     // If not, change directory to current working directory for YARN cluster mode

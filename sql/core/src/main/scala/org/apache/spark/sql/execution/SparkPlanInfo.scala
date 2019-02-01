@@ -21,6 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.execution.adaptive.QueryStageInput
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * :: DeveloperApi ::
@@ -64,7 +65,10 @@ private[execution] object SparkPlanInfo {
       case fileScan: FileSourceScanExec => fileScan.metadata
       case _ => Map[String, String]()
     }
-    new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),
+    new SparkPlanInfo(
+      plan.nodeName,
+      plan.simpleString(SQLConf.get.maxToStringFields),
+      children.map(fromSparkPlan),
       metadata, metrics)
   }
 }

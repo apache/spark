@@ -30,6 +30,8 @@ import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.Common.Provenance
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.internal.config.R._
 import org.apache.spark.util.Utils
 
 /**
@@ -127,7 +129,8 @@ private[spark] class RRunner[U](
       partitionIndex: Int): Unit = {
     val env = SparkEnv.get
     val taskContext = TaskContext.get()
-    val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+    val bufferSize = System.getProperty(BUFFER_SIZE.key,
+      BUFFER_SIZE.defaultValueString).toInt
     val stream = new BufferedOutputStream(output, bufferSize)
 
     new Thread("writer for R") {
@@ -346,6 +349,7 @@ private[r] object RRunner {
     // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
     // but kept here for backward compatibility.
     val sparkConf = SparkEnv.get.conf
+<<<<<<< HEAD
     val requestedRCommand = Provenance.fromConf("spark.r.command")
       .orElse(Provenance.fromConf("spark.sparkr.r.command"))
     val condaEnv = condaSetupInstructions.map(CondaEnvironmentManager.getOrCreateCondaEnvironment)
@@ -356,9 +360,12 @@ private[r] object RRunner {
       conda.condaEnvDir + "/bin/Rscript"
     }.orElse(requestedRCommand.map(_.value))
      .getOrElse("Rscript")
+=======
+    var rCommand = sparkConf.get(SPARKR_COMMAND)
+    rCommand = sparkConf.get(R_COMMAND).orElse(Some(rCommand)).get
+>>>>>>> master
 
-    val rConnectionTimeout = sparkConf.getInt(
-      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
+    val rConnectionTimeout = sparkConf.get(R_BACKEND_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"
     val rLibDir = condaEnv.map(conda =>
       RUtils.sparkRPackagePath(isDriver = false) :+ (conda.condaEnvDir + "/lib/R/library"))

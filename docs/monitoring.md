@@ -248,6 +248,30 @@ Security options for the Spark History Server are covered more detail in the
         written to disk will be re-used in the event of a history server restart.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.custom.executor.log.url</td>
+    <td>(none)</td>
+    <td>
+        Specifies custom spark executor log URL for supporting external log service instead of using cluster
+        managers' application log URLs in the history server. Spark will support some path variables via patterns
+        which can vary on cluster manager. Please check the documentation for your cluster manager to
+        see which patterns are supported, if any. This configuration has no effect on a live application, it only
+        affects the history server.
+        <p/>
+        For now, only YARN mode supports this configuration
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.custom.executor.log.url.applyIncompleteApplication</td>
+    <td>false</td>
+    <td>
+        Specifies whether to apply custom spark executor log URL to incomplete applications as well.
+        If executor logs for running applications should be provided as origin log URLs, set this to `false`.
+        Please note that incomplete applications may include applications which didn't shutdown gracefully.
+        Even this is set to `true`, this configuration has no effect on a live application, it only affects the history server.
+    </td>
+  </tr>
+
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -635,6 +659,7 @@ set of sinks to which metrics are reported. The following instances are currentl
 * `driver`: The Spark driver process (the process in which your SparkContext is created).
 * `shuffleService`: The Spark shuffle service.
 * `applicationMaster`: The Spark ApplicationMaster when running on YARN.
+* `mesos_cluster`: The Spark cluster scheduler when running on Mesos.
 
 Each instance can report to zero or more _sinks_. Sinks are contained in the
 `org.apache.spark.metrics.sink` package:

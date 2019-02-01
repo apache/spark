@@ -34,6 +34,10 @@
   <url>http://spark.apache.org/</url>
   <dependencies>
     <dependency>
+      <groupId>com.thoughtworks.paranamer</groupId>
+      <artifactId>paranamer</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
     </dependency>
@@ -389,6 +393,7 @@
       <artifactId>commons-crypto</artifactId>
     </dependency>
 
+<<<<<<< HEAD
     <!--
      The following dependencies are depended upon in HiveCredentialProvider, but are only executed if Hive is enabled in
      the user's Hadoop configuration.  So in order to prevent spark-core from depending on Hive, these deps have been
@@ -422,6 +427,8 @@
       <version>1.5.1</version>
     </dependency>
 
+=======
+>>>>>>> master
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

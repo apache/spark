@@ -26,10 +26,8 @@ from py4j.protocol import Py4JJavaError
 from pyspark.mllib.fpm import FPGrowth
 from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.testing.mllibutils import make_serializer, MLlibTestCase
-
-
-ser = make_serializer()
+from pyspark.serializers import PickleSerializer
+from pyspark.testing.mllibutils import MLlibTestCase
 
 
 class ListTests(MLlibTestCase):
@@ -265,6 +263,7 @@ class ListTests(MLlibTestCase):
 class ALSTests(MLlibTestCase):
 
     def test_als_ratings_serialize(self):
+        ser = PickleSerializer()
         r = Rating(7, 1123, 3.14)
         jr = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(r)))
         nr = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jr)))
@@ -273,6 +272,7 @@ class ALSTests(MLlibTestCase):
         self.assertAlmostEqual(r.rating, nr.rating, 2)
 
     def test_als_ratings_id_long_error(self):
+        ser = PickleSerializer()
         r = Rating(1205640308657491975, 50233468418, 1.0)
         # rating user id exceeds max int value, should fail when pickled
         self.assertRaises(Py4JJavaError, self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads,

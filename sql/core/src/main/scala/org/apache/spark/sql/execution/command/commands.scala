@@ -110,6 +110,9 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   override def nodeName: String = "Execute " + cmd.nodeName
 
+  // override the default one, otherwise the `cmd.nodeName` will appear twice from simpleString
+  override def argString(maxFields: Int): String = cmd.argString(maxFields)
+
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
   override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
@@ -154,7 +157,7 @@ case class ExplainCommand(
         // output mode does not matter since there is no `Sink`.
         new IncrementalExecution(
           sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
-          UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+          UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
       } else {
         sparkSession.sessionState.executePlan(logicalPlan)
       }

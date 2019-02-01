@@ -224,21 +224,25 @@ package object config {
 
   /* Driver configuration. */
 
-  private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
-    .intConf
-    .createWithDefault(1)
+  private[spark] val DRIVER_APP_UI_ADDRESS = ConfigBuilder("spark.driver.appUIAddress")
+    .stringConf
+    .createOptional
 
   /* Executor configuration. */
-
-  private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
-    .intConf
-    .createWithDefault(1)
 
   private[spark] val EXECUTOR_NODE_LABEL_EXPRESSION =
     ConfigBuilder("spark.yarn.executor.nodeLabelExpression")
       .doc("Node label expression for executors.")
       .stringConf
       .createOptional
+
+  /* Unmanaged AM configuration. */
+
+  private[spark] val YARN_UNMANAGED_AM = ConfigBuilder("spark.yarn.unmanagedAM.enabled")
+    .doc("In client mode, whether to launch the Application Master service as part of the client " +
+      "using unmanaged am.")
+    .booleanConf
+    .createWithDefault(false)
 
   /* Security configuration. */
 
@@ -324,16 +328,6 @@ package object config {
     .internal()
     .stringConf
     .createOptional
-
-  // The list of cache-related config entries. This is used by Client and the AM to clean
-  // up the environment so that these settings do not appear on the web UI.
-  private[yarn] val CACHE_CONFIGS = Seq(
-    CACHED_FILES,
-    CACHED_FILES_SIZES,
-    CACHED_FILES_TIMESTAMPS,
-    CACHED_FILES_VISIBILITIES,
-    CACHED_FILES_TYPES,
-    CACHED_CONF_ARCHIVE)
 
   /* YARN allocator-level blacklisting related config entries. */
   private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =

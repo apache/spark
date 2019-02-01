@@ -107,7 +107,7 @@ object TextInputJsonDataSource extends JsonDataSource {
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
     SQLExecution.withSQLConfPropagated(json.sparkSession) {
-      JsonInferSchema.infer(rdd, parsedOptions, rowParser)
+      new JsonInferSchema(parsedOptions).infer(rdd, rowParser)
     }
   }
 
@@ -140,8 +140,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       input => parser.parse(input, textParser, textToUTF8String),
       parser.options.parseMode,
       schema,
-      parser.options.columnNameOfCorruptRecord,
-      parser.options.multiLine)
+      parser.options.columnNameOfCorruptRecord)
     linesReader.flatMap(safeParser.parse)
   }
 
@@ -166,7 +165,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      JsonInferSchema.infer[PortableDataStream](sampled, parsedOptions, parser)
+      new JsonInferSchema(parsedOptions).infer[PortableDataStream](sampled, parser)
     }
   }
 
@@ -225,8 +224,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       input => parser.parse[InputStream](input, streamParser, partitionedFileString),
       parser.options.parseMode,
       schema,
-      parser.options.columnNameOfCorruptRecord,
-      parser.options.multiLine)
+      parser.options.columnNameOfCorruptRecord)
 
     safeParser.parse(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))

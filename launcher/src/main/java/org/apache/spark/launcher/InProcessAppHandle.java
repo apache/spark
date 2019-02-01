@@ -17,13 +17,14 @@
 
 package org.apache.spark.launcher;
 
-import org.slf4j.MDC;
-
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.slf4j.MDC;
 
 class InProcessAppHandle extends AbstractAppHandle {
 
@@ -33,6 +34,8 @@ class InProcessAppHandle extends AbstractAppHandle {
 
   // Avoid really long thread names.
   private static final int MAX_APP_NAME_LEN = 16;
+
+  private volatile Throwable error;
 
   private Thread app;
 
@@ -54,6 +57,11 @@ class InProcessAppHandle extends AbstractAppHandle {
     }
   }
 
+  @Override
+  public Optional<Throwable> getError() {
+    return Optional.ofNullable(error);
+  }
+
   synchronized void start(String appName, Method main, String[] args) {
     CommandBuilderUtils.checkState(app == null, "Handle already started.");
 
@@ -69,7 +77,11 @@ class InProcessAppHandle extends AbstractAppHandle {
       try {
         main.invoke(null, (Object) args);
       } catch (Throwable t) {
+        if (t instanceof InvocationTargetException) {
+          t = t.getCause();
+        }
         LOG.log(Level.WARNING, "Application failed with exception.", t);
+        error = t;
         setState(State.FAILED);
       }
 
