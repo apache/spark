@@ -1623,10 +1623,8 @@ class Analyzer(
         try {
           // If a sort order is unresolved, containing references not in aggregate, or containing
           // `AggregateExpression`, we need to push down it to the underlying aggregate operator.
-          val maybeResolvedSortOrders =
-            sortOrder.map(resolveExpressionBottomUp(_, child).asInstanceOf[SortOrder])
-          val unresolvedSortOrders = maybeResolvedSortOrders.filter { s =>
-            !s.resolved || containsAggregate(s)
+          val unresolvedSortOrders = sortOrder.filter { s =>
+            !s.resolved || !s.references.subsetOf(child.outputSet) || containsAggregate(s)
           }
           val namedExpressionsOrdering =
             unresolvedSortOrders.map(_.child match {
@@ -1677,12 +1675,12 @@ class Analyzer(
 
           // Since we don't rely on sort.resolved as the stop condition for this rule,
           // we need to check this and prevent applying this rule multiple times
-          if (sortOrder == finalSortOrders) {
+          if (sortOrder == finalSortOrders && needsPushDown.isEmpty) {
             sort
           } else if (needsPushDown.isEmpty) {
             Sort(finalSortOrders, global, child)
           } else {
-            Project(child.output,
+            Project(sort.output,
               Sort(finalSortOrders, global,
                 pushDownMissingAttrs(needsPushDown, child)))
           }
