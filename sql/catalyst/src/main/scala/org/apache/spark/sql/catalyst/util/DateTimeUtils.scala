@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, Month, ZonedDateTime}
+import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
@@ -327,14 +327,14 @@ object DateTimeUtils {
       segments(6) /= 10
       digitsMilli -= 1
     }
-
-    val zoneId = if (tz.isEmpty) {
-      timeZone.toZoneId
-    } else {
-      getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d").toZoneId
-    }
-    val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
     try {
+      val zoneId = if (tz.isEmpty) {
+        timeZone.toZoneId
+      } else {
+        val sign = if (tz.get.toChar == '-') -1 else 1
+        ZoneId.ofOffset("GMT", ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8)))
+      }
+      val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
       val localDate = if (justTime) {
         LocalDate.now(zoneId)
