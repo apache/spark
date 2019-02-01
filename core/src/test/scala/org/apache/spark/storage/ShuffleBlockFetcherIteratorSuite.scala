@@ -490,7 +490,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // Only one block should be returned which has corruption after maxBytesInFlight/3
     val (id, st) = iterator.next()
     assert(id === ShuffleBlockId(0, 1, 0))
-    intercept[FetchFailedException] { iterator.next(); iterator.next() }
+    intercept[FetchFailedException] { iterator.next() }
     // Following will succeed as it reads the first part of the stream which is not corrupt
     st.read(new Array[Byte](8 * 1024), 0, 8 * 1024)
     // Following will fail as it reads the remaining part of the stream which is corrupt

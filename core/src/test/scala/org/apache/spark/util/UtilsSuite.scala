@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
   FileOutputStream, InputStream, PrintStream, SequenceInputStream}
 import java.lang.{Double => JDouble, Float => JFloat}
+import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
@@ -29,7 +30,6 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
-import scala.reflect.runtime.universe
 import scala.util.Random
 
 import com.google.common.io.Files
@@ -220,10 +220,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     val limit = 1000
     // testing for inputLength less than, equal to and greater than limit
-    List(900, 1000, 1100).foreach { inputLength =>
+    List(998, 999, 1000, 1001, 1002).foreach { inputLength =>
       val in = new ByteArrayInputStream(bytes.take(inputLength))
       val (fullyCopied: Boolean, mergedStream: InputStream) = Utils.copyStreamUpTo(in, limit, true)
       try {
+        // Get a handle on the buffered data, to make sure memory gets freed once we read past the
+        // end of it. Need to use reflection to get handle on inner structures for this check
         val byteBufferInputStream = if (mergedStream.isInstanceOf[ChunkedByteBufferInputStream]) {
           mergedStream.asInstanceOf[ChunkedByteBufferInputStream]
         } else {
@@ -249,11 +251,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
-    val mirror = universe.runtimeMirror(obj.getClass().getClassLoader())
-    val field = mirror.classSymbol(obj.getClass()).info.decl(universe.TermName(fieldName)).asTerm
-    val instanceMirror = mirror.reflect(obj)
-    val fieldMirror = instanceMirror.reflectField(field)
-    fieldMirror.get
+    val field: Field = obj.getClass().getDeclaredField(fieldName)
+    if (field.isAccessible()) {
+      field.get(obj)
+    } else {
+      field.setAccessible(true)
+      val result = field.get(obj)
+      field.setAccessible(false)
+      result
+    }
   }
 
   test("memoryStringToMb") {
