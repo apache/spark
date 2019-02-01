@@ -638,8 +638,7 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
         "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
       DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
-      DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
-      DeprecatedConfig("spark.yarn.access.namenodes", "3.0.0", "Not used anymore.")
+      DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -716,7 +715,8 @@ private[spark] object SparkConf extends Logging {
     KERBEROS_RELOGIN_PERIOD.key -> Seq(
       AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0")),
     KERBEROS_FILESYSTEMS_TO_ACCESS.key -> Seq(
-      AlternateConfig(YARN_FILESYSTEMS_TO_ACCESS.key, "3.0"))
+      AlternateConfig("spark.yarn.access.namenodes", "2.2"),
+      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0"))
   )
 
   /**

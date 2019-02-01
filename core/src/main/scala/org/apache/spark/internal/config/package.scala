@@ -364,19 +364,13 @@ package object config {
       .checkValues(Set("keytab", "ccache"))
       .createWithDefault("keytab")
 
-  private[spark] val YARN_FILESYSTEMS_TO_ACCESS =
-    ConfigBuilder("spark.yarn.access.hadoopFileSystems")
+  private[spark] val KERBEROS_FILESYSTEMS_TO_ACCESS =
+    ConfigBuilder("spark.kerberos.access.hadoopFileSystems")
     .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
       "that hosts fs.defaultFS does not need to be listed here.")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
-
-  private[spark] val KERBEROS_FILESYSTEMS_TO_ACCESS =
-    ConfigBuilder("spark.kerberos.access.hadoopFileSystems")
-    .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
-      "that hosts fs.defaultFS does not need to be listed here.")
-    .fallbackConf(YARN_FILESYSTEMS_TO_ACCESS)
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
