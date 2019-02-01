@@ -27,6 +27,6 @@ object AssertChildStagesMaterialized extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transform {
     case q: QueryStage if !q.materialize().isCompleted =>
       throw new IllegalArgumentException(
-        s"The input stages should all be materialize, but ${q.id} is not.")
+        s"The input stages should all be materialized, but the below one is not.\n ${q.plan}")
   }
 }

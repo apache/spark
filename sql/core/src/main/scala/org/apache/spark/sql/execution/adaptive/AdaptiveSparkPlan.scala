@@ -46,8 +46,8 @@ case class AdaptiveSparkPlan(initialPlan: SparkPlan, session: SparkSession)
   // by calling `readyLock.getCount()`.
   private val readyLock = new CountDownLatch(1)
 
-  private def createCallback(executionId: Option[Long]): QueryStageTriggerCallback = {
-    new QueryStageTriggerCallback {
+  private def createCallback(executionId: Option[Long]): QueryStageCreatorCallback = {
+    new QueryStageCreatorCallback {
       override def onPlanUpdate(updatedPlan: SparkPlan): Unit = {
         updateCurrentPlan(updatedPlan, executionId)
         if (updatedPlan.isInstanceOf[ResultQueryStage]) readyLock.countDown()

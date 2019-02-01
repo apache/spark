@@ -61,7 +61,7 @@ import org.apache.spark.util.{EventLoop, ThreadUtils}
 class QueryStageCreator(
     initialPlan: SparkPlan,
     session: SparkSession,
-    callback: QueryStageTriggerCallback)
+    callback: QueryStageCreatorCallback)
   extends EventLoop[QueryStageCreatorEvent]("QueryStageCreator") {
 
   private def conf = session.sessionState.conf
@@ -90,14 +90,17 @@ class QueryStageCreator(
 
   private var currentPlan = initialPlan
 
+  private val localProperties = session.sparkContext.getLocalProperties
+
   private implicit def executionContext: ExecutionContextExecutorService = {
     QueryStageCreator.executionContext
   }
 
   override protected def onReceive(event: QueryStageCreatorEvent): Unit = event match {
     case StartCreation =>
-      // set active session for the event loop thread.
+      // set active session and local properties for the event loop thread.
       SparkSession.setActiveSession(session)
+      session.sparkContext.setLocalProperties(localProperties)
       currentPlan = createQueryStages(initialPlan)
 
     case MaterializeStage(stage) =>
@@ -240,7 +243,7 @@ object QueryStageCreator {
     ThreadUtils.newDaemonCachedThreadPool("QueryStageCreator", 16))
 }
 
-trait QueryStageTriggerCallback {
+trait QueryStageCreatorCallback {
   def onPlanUpdate(updatedPlan: SparkPlan): Unit
   def onStageMaterializingFailed(stage: QueryStage, e: Throwable): Unit
   def onError(e: Throwable): Unit

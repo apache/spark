@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.ShuffleQueryStage
+import org.apache.spark.sql.execution.adaptive.{QueryStage, ShuffleQueryStage}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -61,11 +61,9 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
         ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
     }
 
-    val leafNodes = plan.collect {
-      case s: SparkPlan if s.children.isEmpty => s
-    }
+    val allStageLeaves = plan.collectLeaves().forall(_.isInstanceOf[QueryStage])
 
-    if (shuffleMetrics.length == leafNodes.length) {
+    if (allStageLeaves) {
       // ShuffleQueryStage gives null mapOutputStatistics when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleMetrics.filter(_ != null)
@@ -83,7 +81,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
         plan
       }
     } else {
-      // If not all leaf nodes are shuffle query stages, it's not safe to reduce the number of
+      // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
       plan
