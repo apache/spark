@@ -67,8 +67,7 @@ case class SortAggregateExec(
   }
 
   override def outputPartitioning: Partitioning = {
-    Partitioning.updatePartitioningWithNewOutput(
-      child.outputPartitioning, resultExpressions, outputSet)
+    child.outputPartitioning.updatePartitioningWithNewOutput(resultExpressions, outputSet)
   }
 
   override def outputOrdering: Seq[SortOrder] = {

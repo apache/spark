@@ -185,18 +185,19 @@ trait Partitioning {
     case AllTuples => numPartitions == 1
     case _ => false
   }
-}
 
-object Partitioning {
   /**
-   * Gets as input the `Partitioning` of an expressions and returns the valid `Partitioning`s for
-   * the node w.r.t its output and its expressions.
+   * Returns a version of this [[Partitioning]] amended by the invalid [[Attribute]].
    */
-  def updatePartitioningWithNewOutput(
-      inputPartitioning: Partitioning,
+  protected def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = this
+
+  /**
+   * Returns the valid `Partitioning`s for the node w.r.t its output and its expressions.
+   */
+  final def updatePartitioningWithNewOutput(
       expressions: Seq[NamedExpression],
       outputSet: AttributeSet): Partitioning = {
-    inputPartitioning match {
+    this match {
       case partitioning: Expression =>
         val exprToEquiv = partitioning.references.map { attr =>
           attr -> expressions.filter(e =>
@@ -211,18 +212,7 @@ object Partitioning {
         val validPartitionings = exprToEquiv.foldLeft(initValue) {
           case (partitionings, (toReplace, equivalents)) =>
             if (equivalents.isEmpty) {
-              partitionings.map {
-                case hp: HashPartitioning if hp.references.contains(toReplace) =>
-                  UnknownPartitioning(hp.numPartitions)
-                case rp: RangePartitioning if rp.references.contains(toReplace) =>
-                  val validExprs = rp.children.takeWhile(!_.references.contains(toReplace))
-                  if (validExprs.isEmpty) {
-                    UnknownPartitioning(rp.numPartitions)
-                  } else {
-                    RangePartitioning(validExprs, rp.numPartitions)
-                  }
-                case other => other
-              }
+              partitionings.map(_.pruneInvalidAttribute(toReplace))
             } else {
               partitionings.flatMap {
                 case p: Expression if p.references.contains(toReplace) =>
@@ -299,6 +289,14 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
    * than numPartitions) based on hashing expressions.
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+
+  override protected def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
+    if (this.references.contains(invalidAttr)) {
+      UnknownPartitioning(numPartitions)
+    } else {
+      this
+    }
+  }
 }
 
 /**
@@ -346,6 +344,19 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
         case _ => false
       }
+    }
+  }
+
+  override protected def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
+    if (this.references.contains(invalidAttr)) {
+      val validExprs = this.children.takeWhile(!_.references.contains(invalidAttr))
+      if (validExprs.isEmpty) {
+        UnknownPartitioning(numPartitions)
+      } else {
+        RangePartitioning(validExprs, numPartitions)
+      }
+    } else {
+      this
     }
   }
 }

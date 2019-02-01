@@ -96,8 +96,7 @@ case class ObjectHashAggregateExec(
   }
 
   override def outputPartitioning: Partitioning = {
-    Partitioning.updatePartitioningWithNewOutput(
-      child.outputPartitioning, resultExpressions, outputSet)
+    child.outputPartitioning.updatePartitioningWithNewOutput(resultExpressions, outputSet)
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
