@@ -226,6 +226,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
           .schema(schema)
           .option("inferSchema", false)
           .option("header", false)
+          .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSS")
           .option("delimiter", ";").csv(expectedPath).collect
         val timestamps = textValues.map(
           row => (row.getLong(0),
