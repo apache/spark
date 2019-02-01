@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -58,8 +59,13 @@ object PhysicalOperation extends PredicateHelper {
     plan match {
       case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-        (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
+        if (hasOversizedRepeatedAliases(fields, aliases)) {
+          // Skip substitution if it could overly increase the overall tree size and risk OOMs
+          (None, Nil, plan, Map.empty)
+        } else {
+          val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
+          (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
+        }
 
       case Filter(condition, child) if condition.deterministic =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
@@ -76,6 +82,26 @@ object PhysicalOperation extends PredicateHelper {
   private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
     case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
+
+  private def hasOversizedRepeatedAliases(fields: Seq[Expression],
+                                          aliases: Map[Attribute, Expression]): Boolean = {
+    // Count how many times each alias is used in the fields.
+    // If an alias is only used once, we can safely substitute it without increasing the overall
+    // tree size
+    val referenceCounts = AttributeMap(
+      fields
+        .flatMap(_.collect { case a: Attribute => a })
+        .groupBy(identity)
+        .mapValues(_.size).toSeq
+    )
+
+    // Check for any aliases that are used more than once, and are larger than the configured
+    // maximum size
+    aliases.exists({ case (attribute, expression) =>
+      referenceCounts.getOrElse(attribute, 0) > 1 &&
+        expression.treeSize > SQLConf.get.maxRepeatedAliasSize
+    })
+  }
 
   private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {

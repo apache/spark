@@ -649,7 +649,8 @@ object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, p2: Project) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList) ||
+          hasOversizedRepeatedAliases(p1.projectList, p2.projectList)) {
         p1
       } else {
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
@@ -680,6 +681,28 @@ object CollapseProject extends Rule[LogicalPlan] {
     upper.exists(_.collect {
       case a: Attribute if aliases.contains(a) => aliases(a).child
     }.exists(!_.deterministic))
+  }
+
+  private def hasOversizedRepeatedAliases(
+      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
+    val aliases = collectAliases(lower)
+
+    // Count how many times each alias is used in the upper Project.
+    // If an alias is only used once, we can safely substitute it without increasing the overall
+    // tree size
+    val referenceCounts = AttributeMap(
+      upper
+        .flatMap(_.collect { case a: Attribute => a })
+        .groupBy(identity)
+        .mapValues(_.size).toSeq
+    )
+
+    // Check for any aliases that are used more than once, and are larger than the configured
+    // maximum size
+    aliases.exists({ case (attribute, expression) =>
+      referenceCounts.getOrElse(attribute, 0) > 1 &&
+        expression.treeSize > SQLConf.get.maxRepeatedAliasSize
+    })
   }
 
   private def buildCleanedProjectList(

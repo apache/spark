@@ -89,6 +89,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
 
+  lazy val treeSize: Long = children.map(_.treeSize).sum + 1
+
   private lazy val _hashCode: Int = scala.util.hashing.MurmurHash3.productHash(this)
   override def hashCode(): Int = _hashCode
 

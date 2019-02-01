@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.execution.adaptive.PlanQueryStage
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
@@ -96,7 +97,11 @@ class QueryExecution(
    * row format conversions as needed.
    */
   protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
-    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+      adaptivePreparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp)}
+    } else {
+      preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp)}
+    }
   }
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
@@ -106,6 +111,15 @@ class QueryExecution(
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
+
+  protected def adaptivePreparations: Seq[Rule[SparkPlan]] = Seq(
+    PlanSubqueries(sparkSession),
+    EnsureRequirements(sparkSession.sessionState.conf),
+    ReuseSubquery(sparkSession.sessionState.conf),
+    // PlanQueryStage needs to be the last rule because it divides the plan into multiple sub-trees
+    // by inserting leaf node QueryStageInput. Transforming the plan after applying this rule will
+    // only transform node in a sub-tree.
+    PlanQueryStage(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: AnalysisException => e.toString }

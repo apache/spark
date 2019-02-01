@@ -96,6 +96,18 @@ object SparkPlanGraph {
       case "InputAdapter" =>
         buildSparkPlanGraphNode(
           planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case "QueryStage" | "BroadcastQueryStage" | "ResultQueryStage" | "ShuffleQueryStage" =>
+        if (exchanges.contains(planInfo.children.head)) {
+          // Point to the re-used exchange
+          val node = exchanges(planInfo.children.head)
+          edges += SparkPlanGraphEdge(node.id, parent.id)
+        } else {
+          buildSparkPlanGraphNode(
+            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+        }
+      case "QueryStageInput" | "ShuffleQueryStageInput" | "BroadcastQueryStageInput" =>
+        buildSparkPlanGraphNode(
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
