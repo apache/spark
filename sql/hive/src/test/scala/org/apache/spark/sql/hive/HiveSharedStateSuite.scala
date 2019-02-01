@@ -29,13 +29,12 @@ class HiveSharedStateSuite extends SparkFunSuite {
       val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
       sc = new SparkContext(conf)
       val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
-      assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName ===
-        "org.apache.spark.sql.hive.HiveExternalCatalog", "The catalog should be hive ")
+      assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName
+        .contains("HiveExternalCatalog"), "The catalog should be hive ")
 
       val ss2 = SparkSession.builder().getOrCreate()
-      assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName ===
-        "org.apache.spark.sql.hive.HiveExternalCatalog",
-        "The catalog should be shared across sessions")
+      assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName
+        .contains("HiveExternalCatalog"), "The catalog should be shared across sessions")
     } finally {
       if (sc != null && !sc.isStopped) {
         sc.stop()

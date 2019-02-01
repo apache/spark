@@ -48,17 +48,24 @@ private[sql] class SharedState(
     initialConfigs: scala.collection.Map[String, String])
   extends Logging {
 
+  // This variable should be lazy, because in the first place we need to load hive-site.xml into
+  // hadoopConf and determine the warehouse path which will be set into both spark conf and hadoop
+  // conf avoiding be affected by any SparkSession level options
   private lazy val (conf, hadoopConf) = {
     val confClone = sparkContext.conf.clone()
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
     // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
     // `SharedState` instance. This will be done only once then shared across `SparkSession`s
-    for((k, v) <- initialConfigs
-        if k != "hive.metastore.warehouse.dir" || k != WAREHOUSE_PATH.key) {
-      logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
-      confClone.set(k, v)
-      hadoopConfClone.set(k, v)
+    initialConfigs.foreach {
+      case (k, _)  if k == "hive.metastore.warehouse.dir" || k == WAREHOUSE_PATH.key =>
+        logWarning(s"Not allowing to set ${WAREHOUSE_PATH.key} or hive.metastore.warehouse.dir " +
+          s"in SparkSession's options, it should be set statically for cross-session usages")
+      case (k, v) =>
+        logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
+        confClone.set(k, v)
+        hadoopConfClone.set(k, v)
+
     }
     (confClone, hadoopConfClone)
   }
