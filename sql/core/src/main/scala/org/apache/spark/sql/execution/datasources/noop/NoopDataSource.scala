@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -31,10 +33,16 @@ import org.apache.spark.sql.types.StructType
 class NoopDataSource
   extends DataSourceV2
   with TableProvider
-  with DataSourceRegister {
+  with DataSourceRegister
+  with StreamingWriteSupportProvider {
 
   override def shortName(): String = "noop"
   override def getTable(options: DataSourceOptions): Table = NoopTable
+  override def createStreamingWriteSupport(
+      queryId: String,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamingWriteSupport = NoopStreamingWriteSupport
 }
 
 private[noop] object NoopTable extends Table with SupportsBatchWrite {
@@ -62,5 +70,19 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
   override def write(record: InternalRow): Unit = {}
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = {}
+}
+
+private[noop] object NoopStreamingWriteSupport extends StreamingWriteSupport {
+  override def createStreamingWriterFactory(): StreamingDataWriterFactory =
+    NoopStreamingDataWriterFactory
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+}
+
+private[noop] object NoopStreamingDataWriterFactory extends StreamingDataWriterFactory {
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = NoopWriter
 }
 

@@ -15,26 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.sql.sources.v2.reader.{ScanConfig, ScanConfigBuilder}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.reader.Scan;
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 
 /**
- * A very simple [[ScanConfigBuilder]] implementation that creates a simple [[ScanConfig]] to
- * carry schema and offsets for streaming data sources.
+ * An empty mix-in interface for {@link Table}, to indicate this table supports streaming scan with
+ * continuous mode.
+ * <p>
+ * If a {@link Table} implements this interface, the
+ * {@link SupportsRead#newScanBuilder(DataSourceOptions)} must return a {@link ScanBuilder} that
+ * builds {@link Scan} with {@link Scan#toContinuousStream(String)} implemented.
+ * </p>
  */
-class SimpleStreamingScanConfigBuilder(
-    schema: StructType,
-    start: Offset,
-    end: Option[Offset] = None)
-  extends ScanConfigBuilder {
-
-  override def build(): ScanConfig = SimpleStreamingScanConfig(schema, start, end)
-}
-
-case class SimpleStreamingScanConfig(
-    readSchema: StructType,
-    start: Offset,
-    end: Option[Offset])
-  extends ScanConfig
+@Evolving
+public interface SupportsContinuousRead extends SupportsRead { }

@@ -34,6 +34,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
@@ -494,7 +495,7 @@ class StreamSuite extends StreamTest {
       // `extended = false` only displays the physical plan.
       assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2".r
+      assert("BatchScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
@@ -504,7 +505,7 @@ class StreamSuite extends StreamTest {
       // plan.
       assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2".r
+      assert("BatchScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
@@ -547,17 +548,17 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
 
       // `extended = false` only displays the physical plan.
-      assert("Streaming RelationV2 ContinuousMemoryStream".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2 ContinuousMemoryStream".r
+      assert("ContinuousScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
 
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("Streaming RelationV2 ContinuousMemoryStream".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2 ContinuousMemoryStream".r
+      assert("ContinuousScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
     } finally {
       q.stop()
@@ -1078,6 +1079,47 @@ class StreamSuite extends StreamTest {
       query.stop()
       assert(query.exception.isEmpty)
     }
+  }
+
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
+    " to Dataset - use v2 sink") {
+    testCurrentTimestampOnStreamingQuery(useV2Sink = true)
+  }
+
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
+    " to Dataset - use v1 sink") {
+    testCurrentTimestampOnStreamingQuery(useV2Sink = false)
+  }
+
+  private def testCurrentTimestampOnStreamingQuery(useV2Sink: Boolean): Unit = {
+    val input = MemoryStream[Int]
+    val df = input.toDS().withColumn("cur_timestamp", lit(current_timestamp()))
+
+    def assertBatchOutputAndUpdateLastTimestamp(
+        rows: Seq[Row],
+        curTimestamp: Long,
+        curDate: Int,
+        expectedValue: Int): Long = {
+      assert(rows.size === 1)
+      val row = rows.head
+      assert(row.getInt(0) === expectedValue)
+      assert(row.getTimestamp(1).getTime >= curTimestamp)
+      row.getTimestamp(1).getTime
+    }
+
+    var lastTimestamp = System.currentTimeMillis()
+    val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
+    testStream(df, useV2Sink = useV2Sink) (
+      AddData(input, 1),
+      CheckLastBatch { rows: Seq[Row] =>
+        lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 1)
+      },
+      Execute { _ => Thread.sleep(1000) },
+      AddData(input, 2),
+      CheckLastBatch { rows: Seq[Row] =>
+        lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 2)
+      }
+    )
   }
 }
 

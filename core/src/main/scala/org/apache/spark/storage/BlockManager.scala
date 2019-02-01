@@ -196,7 +196,7 @@ private[spark] class BlockManager(
 
   // Max number of failures before this block manager refreshes the block locations from the driver
   private val maxFailuresBeforeLocationRefresh =
-    conf.getInt("spark.block.failures.beforeLocationRefresh", 5)
+    conf.get(config.BLOCK_FAILURES_BEFORE_LOCATION_REFRESH)
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,

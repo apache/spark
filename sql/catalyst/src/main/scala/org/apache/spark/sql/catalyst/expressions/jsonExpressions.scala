@@ -582,8 +582,7 @@ case class JsonToStructs(
       input => rawParser.parse(input, createParser, identity[UTF8String]),
       mode,
       parserSchema,
-      parsedOptions.columnNameOfCorruptRecord,
-      parsedOptions.multiLine)
+      parsedOptions.columnNameOfCorruptRecord)
   }
 
   override def dataType: DataType = nullableSchema

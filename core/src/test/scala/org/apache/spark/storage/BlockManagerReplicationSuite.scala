@@ -89,7 +89,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set(DRIVER_PORT, rpcEnv.address.port)
     conf.set(IS_TESTING, true)
     conf.set(MEMORY_FRACTION, 1.0)
-    conf.set(MEMORY_STORAGE_FRACTION, 1.0)
+    conf.set(MEMORY_STORAGE_FRACTION, 0.999)
     conf.set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
     // to make a replication attempt to inactive store fail fast

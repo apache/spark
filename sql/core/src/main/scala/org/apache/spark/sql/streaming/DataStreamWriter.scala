@@ -330,7 +330,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         options,
         sink,
         outputMode,
-        useTempCheckpointLocation = source == "console",
+        useTempCheckpointLocation = source == "console" || source == "noop",
         recoverFromCheckpointLocation = true,
         trigger = trigger)
     }

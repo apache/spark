@@ -33,9 +33,9 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsMicroBatchRead, Table, TableProvider}
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -68,7 +68,15 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
 
   def fullSchema(): StructType = encoder.schema
 
-  protected def logicalPlan: LogicalPlan
+  protected val logicalPlan: LogicalPlan = {
+    StreamingRelationV2(
+      MemoryStreamTableProvider,
+      "memory",
+      new MemoryStreamTable(this),
+      Map.empty,
+      attributes,
+      None)(sqlContext.sparkSession)
+  }
 
   def addData(data: TraversableOnce[A]): Offset
 }
@@ -81,7 +89,8 @@ object MemoryStreamTableProvider extends TableProvider {
   }
 }
 
-class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table with SupportsMicroBatchRead {
+class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table
+  with SupportsMicroBatchRead with SupportsContinuousRead {
 
   override def name(): String = "MemoryStreamDataSource"
 
@@ -101,7 +110,11 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
   override def readSchema(): StructType = stream.fullSchema()
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-    stream.asInstanceOf[MemoryStream[_]]
+    stream.asInstanceOf[MicroBatchStream]
+  }
+
+  override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+    stream.asInstanceOf[ContinuousStream]
   }
 }
 
@@ -112,16 +125,6 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
-
-  protected val logicalPlan: LogicalPlan = {
-    StreamingRelationV2(
-      MemoryStreamTableProvider,
-      "memory",
-      new MemoryStreamTable(this),
-      Map.empty,
-      attributes,
-      None)(sqlContext.sparkSession)
-  }
 
   protected val output = logicalPlan.output
 

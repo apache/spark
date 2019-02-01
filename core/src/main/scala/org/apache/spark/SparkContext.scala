@@ -434,7 +434,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _statusTracker = new SparkStatusTracker(this, _statusStore)
 
     _progressBar =
-      if (_conf.get(UI_SHOW_CONSOLE_PROGRESS) && !log.isInfoEnabled) {
+      if (_conf.get(UI_SHOW_CONSOLE_PROGRESS)) {
         Some(new ConsoleProgressBar(this))
       } else {
         None
@@ -2355,7 +2355,8 @@ class SparkContext(config: SparkConf) extends Logging {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls))
+      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls,
+      schedulerBackend.getDriverAttributes))
     _driverLogger.foreach(_.startSync(_hadoopConfiguration))
   }
 

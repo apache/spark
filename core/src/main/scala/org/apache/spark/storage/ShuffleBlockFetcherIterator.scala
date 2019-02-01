@@ -31,7 +31,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
@@ -141,7 +141,14 @@ final class ShuffleBlockFetcherIterator(
 
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
-   * longer place fetched blocks into [[results]].
+   * longer place fetched blocks into [[results]] and the iterator is marked as fully consumed.
+   *
+   * When the iterator is inactive, [[hasNext]] and [[next]] calls will honor that as there are
+   * cases the iterator is still being consumed. For example, ShuffledRDD + PipedRDD if the
+   * subprocess command is failed. The task will be marked as failed, then the iterator will be
+   * cleaned up at task completion, the [[next]] call (called in the stdin writer thread of
+   * PipedRDD if not exited yet) may hang at [[results.take]]. The defensive check in [[hasNext]]
+   * and [[next]] reduces the possibility of such race conditions.
    */
   @GuardedBy("this")
   private[this] var isZombie = false
@@ -152,6 +159,8 @@ final class ShuffleBlockFetcherIterator(
    */
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
+
+  private[this] val onCompleteCallback = new ShuffleFetchCompletionListener(this)
 
   initialize()
 
@@ -185,7 +194,7 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
    */
-  private[this] def cleanup() {
+  private[storage] def cleanup() {
     synchronized {
       isZombie = true
     }
@@ -357,7 +366,7 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    context.addTaskCompletionListener[Unit](_ => cleanup())
+    context.addTaskCompletionListener(onCompleteCallback)
 
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()
@@ -378,7 +387,7 @@ final class ShuffleBlockFetcherIterator(
     logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime))
   }
 
-  override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
+  override def hasNext: Boolean = !isZombie && (numBlocksProcessed < numBlocksToFetch)
 
   /**
    * Fetches the next (BlockId, InputStream). If a task fails, the ManagedBuffers
@@ -390,7 +399,7 @@ final class ShuffleBlockFetcherIterator(
    */
   override def next(): (BlockId, InputStream) = {
     if (!hasNext) {
-      throw new NoSuchElementException
+      throw new NoSuchElementException()
     }
 
     numBlocksProcessed += 1
@@ -401,7 +410,7 @@ final class ShuffleBlockFetcherIterator(
     // then fetch it one more time if it's corrupt, throw FailureFetchResult if the second fetch
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
-    while (result == null) {
+    while (!isZombie && result == null) {
       val startFetchWait = System.currentTimeMillis()
       result = results.take()
       val stopFetchWait = System.currentTimeMillis()
@@ -495,8 +504,16 @@ final class ShuffleBlockFetcherIterator(
       fetchUpToMaxBytes()
     }
 
+    if (result == null) { // the iterator is already closed/cleaned up.
+      throw new NoSuchElementException()
+    }
     currentResult = result.asInstanceOf[SuccessFetchResult]
     (currentResult.blockId, new BufferReleasingInputStream(input, this))
+  }
+
+  def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
+    CompletionIterator[(BlockId, InputStream), this.type](this,
+      onCompleteCallback.onComplete(context))
   }
 
   private def fetchUpToMaxBytes(): Unit = {
@@ -597,6 +614,27 @@ private class BufferReleasingInputStream(
   override def read(b: Array[Byte], off: Int, len: Int): Int = delegate.read(b, off, len)
 
   override def reset(): Unit = delegate.reset()
+}
+
+/**
+ * A listener to be called at the completion of the ShuffleBlockFetcherIterator
+ * @param data the ShuffleBlockFetcherIterator to process
+ */
+private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterator)
+  extends TaskCompletionListener {
+
+  override def onTaskCompletion(context: TaskContext): Unit = {
+    if (data != null) {
+      data.cleanup()
+      // Null out the referent here to make sure we don't keep a reference to this
+      // ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
+      // collected during GC. Otherwise we can hold metadata on block locations(blocksByAddress)
+      data = null
+    }
+  }
+
+  // Just an alias for onTaskCompletion to avoid confusing
+  def onComplete(context: TaskContext): Unit = this.onTaskCompletion(context)
 }
 
 private[storage]

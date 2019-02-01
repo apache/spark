@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, Pa
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
+import org.apache.spark.sql.sources.v2.writer.WriteBuilder
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -46,9 +47,30 @@ class DummyReadOnlyFileTable extends Table with SupportsBatchRead {
   }
 }
 
-class FileDataSourceV2FallBackSuite extends QueryTest with ParquetTest with SharedSQLContext {
+class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
+
+  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
+
+  override def shortName(): String = "parquet"
+
+  override def getTable(options: DataSourceOptions): Table = {
+    new DummyWriteOnlyFileTable
+  }
+}
+
+class DummyWriteOnlyFileTable extends Table with SupportsBatchWrite {
+  override def name(): String = "dummy"
+
+  override def schema(): StructType = StructType(Nil)
+
+  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder =
+    throw new AnalysisException("Dummy file writer")
+}
+
+class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
 
   private val dummyParquetReaderV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
+  private val dummyParquetWriterV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
 
   test("Fall back to v1 when writing to file with read only FileDataSourceV2") {
     val df = spark.range(10).toDF()
@@ -91,6 +113,49 @@ class FileDataSourceV2FallBackSuite extends QueryTest with ParquetTest with Shar
           spark.read.format(dummyParquetReaderV2).load(path).collect()
         }
         assert(exception.message.equals("Dummy file reader"))
+      }
+    }
+  }
+
+  test("Fall back to v1 when reading file with write only FileDataSourceV2") {
+    val df = spark.range(10).toDF()
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      // Dummy File writer should fail as expected.
+      val exception = intercept[AnalysisException] {
+        df.write.format(dummyParquetWriterV2).save(path)
+      }
+      assert(exception.message.equals("Dummy file writer"))
+      df.write.parquet(path)
+      // Fallback reads to V1
+      checkAnswer(spark.read.format(dummyParquetWriterV2).load(path), df)
+    }
+  }
+
+  test("Fall back write path to v1 with configuration USE_V1_SOURCE_WRITER_LIST") {
+    val df = spark.range(10).toDF()
+    Seq(
+      "foo,parquet,bar",
+      "ParQuet,bar,foo",
+      s"foobar,$dummyParquetWriterV2"
+    ).foreach { fallbackWriters =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> fallbackWriters) {
+        withTempPath { file =>
+          val path = file.getCanonicalPath
+          // Writes should fall back to v1 and succeed.
+          df.write.format(dummyParquetWriterV2).save(path)
+          checkAnswer(spark.read.parquet(path), df)
+        }
+      }
+    }
+    withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "foo,bar") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        // Dummy File reader should fail as USE_V1_SOURCE_READER_LIST doesn't include it.
+        val exception = intercept[AnalysisException] {
+          df.write.format(dummyParquetWriterV2).save(path)
+        }
+        assert(exception.message.equals("Dummy file writer"))
       }
     }
   }

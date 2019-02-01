@@ -19,12 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.sources.v2.reader.SupportsReportPartitioning
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
 
 /**
@@ -32,14 +28,10 @@ import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offse
  */
 case class MicroBatchScanExec(
     output: Seq[Attribute],
-    scanDesc: String,
+    @transient scan: Scan,
     @transient stream: MicroBatchStream,
     @transient start: Offset,
-    @transient end: Offset) extends LeafExecNode with ColumnarBatchScan {
-
-  override def simpleString(maxFields: Int): String = {
-    s"ScanV2${truncatedString(output, "[", ", ", "]", maxFields)} $scanDesc"
-  }
+    @transient end: Offset) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -49,44 +41,11 @@ case class MicroBatchScanExec(
 
   override def hashCode(): Int = stream.hashCode()
 
-  private lazy val partitions = stream.planInputPartitions(start, end)
+  override lazy val partitions: Seq[InputPartition] = stream.planInputPartitions(start, end)
 
-  private lazy val readerFactory = stream.createReaderFactory()
+  override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 
-  override def outputPartitioning: physical.Partitioning = stream match {
-    case _ if partitions.length == 1 =>
-      SinglePartition
-
-    case s: SupportsReportPartitioning =>
-      new DataSourcePartitioning(
-        s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
-
-    case _ => super.outputPartitioning
-  }
-
-  override def supportsBatch: Boolean = {
-    require(partitions.forall(readerFactory.supportColumnarReads) ||
-      !partitions.exists(readerFactory.supportColumnarReads),
-      "Cannot mix row-based and columnar input partitions.")
-
-    partitions.exists(readerFactory.supportColumnarReads)
-  }
-
-  private lazy val inputRDD: RDD[InternalRow] = {
+  override lazy val inputRDD: RDD[InternalRow] = {
     new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
-  }
-
-  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    if (supportsBatch) {
-      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
-    } else {
-      val numOutputRows = longMetric("numOutputRows")
-      inputRDD.map { r =>
-        numOutputRows += 1
-        r
-      }
-    }
   }
 }

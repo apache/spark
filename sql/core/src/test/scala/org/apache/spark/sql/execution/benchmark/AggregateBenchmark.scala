@@ -476,7 +476,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
             new UnifiedMemoryManager(
               new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
               Long.MaxValue,
-              Long.MaxValue,
+              Long.MaxValue / 2,
               1),
             0)
           val map = new LongToUnsafeRowMap(taskMemoryManager, 64)
@@ -508,7 +508,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
               new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, s"${heap == "off"}")
                 .set(MEMORY_OFFHEAP_SIZE.key, "102400000"),
               Long.MaxValue,
-              Long.MaxValue,
+              Long.MaxValue / 2,
               1),
             0)
           val map = new BytesToBytesMap(taskMemoryManager, 1024, 64L << 20)

@@ -15,20 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.security
+package org.apache.spark.kafka010
 
 import scala.language.existentials
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.security.HadoopDelegationTokenProvider
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Kafka
 
-private[security] class KafkaDelegationTokenProvider
+private[spark] class KafkaDelegationTokenProvider
   extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "kafka"
@@ -36,6 +38,7 @@ private[security] class KafkaDelegationTokenProvider
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
       sparkConf: SparkConf,
+      fileSystems: Set[FileSystem],
       creds: Credentials): Option[Long] = {
     try {
       logDebug("Attempting to fetch Kafka security token.")

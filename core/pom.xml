@@ -385,46 +385,6 @@
       <artifactId>commons-crypto</artifactId>
     </dependency>
 
-    <!--
-     The following dependencies are depended upon in HiveCredentialProvider, but are only executed if Hive is enabled in
-     the user's Hadoop configuration.  So in order to prevent spark-core from depending on Hive, these deps have been
-     placed in the "provided" scope, rather than the "compile" scope, and NoClassDefFoundError exceptions are handled
-     when the user has not explicitly compiled with the Hive module.
-    -->
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-exec</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-metastore</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libthrift</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libfb303</artifactId>
-      <scope>provided</scope>
-    </dependency>
-
-    <!--
-     The following kafka dependency used to obtain delegation token.
-     In order to prevent spark-core from depending on kafka, these deps have been placed in the
-     "provided" scope, rather than the "compile" scope, and NoClassDefFoundError exceptions are
-     handled when the user explicitly use neither spark-streaming-kafka nor spark-sql-kafka modules.
-    -->
-    <dependency>
-      <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka-clients</artifactId>
-      <version>${kafka.version}</version>
-      <scope>provided</scope>
-    </dependency>
-
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
