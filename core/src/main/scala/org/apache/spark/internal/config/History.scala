@@ -143,4 +143,16 @@ private[spark] object History {
         "not running spark applications.")
       .booleanConf
       .createWithDefault(true)
+
+  val LIVE_EXECUTOR_LOG_URL_REGEX =
+    ConfigBuilder("spark.history.executor.log.url.regex")
+      .doc("Regex to extract node and container information from log urls")
+      .stringConf
+      .createOptional
+
+  val LIVE_EXECUTOR_LOR_URL_CAPTURING_GROUPS =
+    ConfigBuilder("spark.history.executor.log.url.regex.groups")
+      .doc("CSV of group names that can later be used to build post runtime URL")
+      .stringConf
+      .createOptional
 }

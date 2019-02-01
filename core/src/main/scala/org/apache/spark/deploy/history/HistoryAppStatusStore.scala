@@ -63,8 +63,25 @@ private[spark] class HistoryAppStatusStore(
     }
   }
 
+  val STDOUT_URL_GROUPS = conf.get(LIVE_EXECUTOR_LOR_URL_CAPTURING_GROUPS)
+    .map(_.split(","))
+    .getOrElse(Array.empty[String])
+
+  val STDOUT_URL_REGEX = conf.get(LIVE_EXECUTOR_LOG_URL_REGEX)
+    .map(r => new Regex(r, STDOUT_URL_GROUPS: _*))
+
   private def replaceLogUrls(exec: v1.ExecutorSummary, urlPattern: String): v1.ExecutorSummary = {
-    val attributes = exec.attributes
+    val attributes = STDOUT_URL_REGEX.flatMap { regEx =>
+      exec.executorLogs
+        .get("stdout")
+        .flatMap(regEx.findFirstMatchIn)
+        .map { urlMatch =>
+          STDOUT_URL_GROUPS.foldLeft(exec.attributes) { (attribs, groupName) =>
+            attribs.updated(groupName, urlMatch.group(groupName))
+          }
+        }
+      }
+      .getOrElse(exec.attributes)
 
     // Relation between pattern {{FILE_NAME}} and attribute {{LOG_FILES}}
     // Given that HistoryAppStatusStore don't know which types of log files can be provided
