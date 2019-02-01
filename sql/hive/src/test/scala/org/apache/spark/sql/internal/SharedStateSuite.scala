@@ -28,10 +28,10 @@ class SharedStateSuite extends SparkFunSuite {
     val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
     assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName ===
       "org.apache.spark.sql.hive.HiveExternalCatalog", "The catalog should be hive ")
+
     val ss2 = SparkSession.builder().getOrCreate()
-
     assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName ===
-      "org.apache.spark.sql.hive.HiveExternalCatalog", "The catalog should shared across sessions")
+      "org.apache.spark.sql.hive.HiveExternalCatalog",
+      "The catalog should be shared across sessions")
   }
-
 }
