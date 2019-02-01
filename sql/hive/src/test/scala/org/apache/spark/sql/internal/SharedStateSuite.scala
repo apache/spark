@@ -24,7 +24,7 @@ class SharedStateSuite extends SparkFunSuite {
 
   test("the catalog should be determined at the very first") {
     val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
-    val sc = new SparkContext(conf)
+    val sc = SparkContext.getOrCreate(conf)
     val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
     assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName ===
       "org.apache.spark.sql.hive.HiveExternalCatalog", "The catalog should be hive ")

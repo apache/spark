@@ -20,7 +20,6 @@ package org.apache.spark.sql.internal
 import java.net.URL
 import java.util.Locale
 
-import scala.collection.Map
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -41,7 +40,9 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
  */
-private[sql] class SharedState(val sparkContext: SparkContext, initConfig: Map[String, String])
+private[sql] class SharedState(
+    val sparkContext: SparkContext,
+    initConfig: scala.collection.Map[String, String])
   extends Logging {
   private val conf = sparkContext.conf.clone()
   private val hadoopConf = new Configuration(sparkContext.hadoopConfiguration)
@@ -121,7 +122,7 @@ private[sql] class SharedState(val sparkContext: SparkContext, initConfig: Map[S
       SessionCatalog.DEFAULT_DATABASE,
       "default database",
       CatalogUtils.stringToURI(warehousePath),
-      Map.empty[String, String])
+      Map())
     // Create default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we
