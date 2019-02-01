@@ -248,7 +248,7 @@
     <repository>
       <id>parquet-1.11.0</id>
       <!-- Temporal repository to test 1.11.0 Parquet release, should be removed when RC release -->
-      <name>Parquet 1.11.1 RC3</name>
+      <name>Parquet 1.11.0 RC3</name>
       <url>https://repository.apache.org/content/repositories/orgapacheparquet-1020/</url>
       <releases>
         <enabled>true</enabled>
