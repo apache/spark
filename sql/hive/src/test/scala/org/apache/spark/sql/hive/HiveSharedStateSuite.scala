@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.hive
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 
-class SharedStateSuite extends SparkFunSuite {
+class HiveSharedStateSuite extends SparkFunSuite {
 
   test("the catalog should be determined at the very first") {
     val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
