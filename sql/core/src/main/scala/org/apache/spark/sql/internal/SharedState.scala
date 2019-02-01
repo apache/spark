@@ -42,7 +42,7 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  */
 private[sql] class SharedState(
     val sparkContext: SparkContext,
-    initConfig: scala.collection.Map[String, String])
+    initialConfigs: scala.collection.Map[String, String])
   extends Logging {
   private val conf = sparkContext.conf.clone()
   private val hadoopConf = new Configuration(sparkContext.hadoopConfiguration)
@@ -50,7 +50,7 @@ private[sql] class SharedState(
   // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
   // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
   // `SharedState` instance. This will be done only once then shared across `SparkSession`s
-  initConfig.foreach { case (k, v) =>
+  initialConfigs.foreach { case (k, v) =>
     logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
     conf.set(k, v)
     hadoopConf.set(k, v)
