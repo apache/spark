@@ -369,55 +369,46 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-<<<<<<< HEAD
+    logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val session = fsRelation.sparkSession
-    val partitionFiles = selectedPartitions.flatMap { partition =>
-      partition.files.map((_, partition.values))
-    }
     val format = fsRelation.fileFormat
     val splitter =
       format.buildSplitter(session, fsRelation.location,
         dataFilters.flatMap(DataSourceStrategy.translateFilter), schema,
         session.sessionState.newHadoopConf())
-
-    val bucketed = partitionFiles.flatMap { case (file, values) =>
-      val blockLocations = getBlockLocations(file)
-      val filePath = file.getPath.toUri.toString
-      if (format.isSplitable(session, fsRelation.options, file.getPath)) {
-        val validSplits = splitter(file)
-        validSplits.map { split =>
-          val hosts = getBlockHosts(blockLocations, split.getStart, split.getLength)
-          PartitionedFile(values, filePath, split.getStart, split.getLength, hosts)
-=======
-    logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.filter(_.getLen > 0).map { f =>
-          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values)
->>>>>>> master
+        p.files.filter(_.getLen > 0).flatMap { f =>
+          val path = f.getPath
+          if (format.isSplitable(session, fsRelation.options, path)) {
+            splitter(f).map { split =>
+              PartitionedFileUtil.getPartitionedFile(
+                f, split.getStart, split.getLength, f.getPath, p.values)
+            }
+          } else {
+            Seq(PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values))
+          }
         }
-      } else {
-        val hosts = getBlockHosts(blockLocations, 0, file.getLen)
-        Seq(PartitionedFile(values, filePath, 0, file.getLen, hosts))
+      }.groupBy { f =>
+        BucketingUtils
+          .getBucketId(new Path(f.filePath).getName)
+          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
       }
-    }.groupBy { f =>
-      BucketingUtils
-        .getBucketId(new Path(f.filePath).getName)
-        .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
-    }.filter { case (bucket, _) =>
-      if (optionalBucketSet.isDefined) {
-        val bucketSet = optionalBucketSet.get
-        bucketSet.get(bucket)
-      } else {
-        true
+
+    val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
+      val bucketSet = optionalBucketSet.get
+      filesGroupedToBuckets.filter {
+        f => bucketSet.get(f._1)
       }
+    } else {
+      filesGroupedToBuckets
     }
 
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
+      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Nil))
     }
 
-    new FileScanRDD(session, readFile, filePartitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
   }
 
   /**
@@ -432,54 +423,17 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-<<<<<<< HEAD
     val session = fsRelation.sparkSession
-    val defaultMaxSplitBytes = session.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = session.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = session.sparkContext.defaultParallelism
-    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-    val bytesPerCore = totalBytes / defaultParallelism
-
-    val maxSplitBytes = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
-    logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
-      s"open cost is considered as scanning $openCostInBytes bytes.")
-
-    val partitionFiles = selectedPartitions.flatMap { partition =>
-      partition.files.map((_, partition.values))
-    }
     val format = fsRelation.fileFormat
-    val splitter =
-      format.buildSplitter(session, fsRelation.location,
-        dataFilters.flatMap(DataSourceStrategy.translateFilter), schema,
-        session.sessionState.newHadoopConf())
-
-    val splitFiles = partitionFiles.flatMap { case (file, values) =>
-      val blockLocations = getBlockLocations(file)
-      val filePath = file.getPath.toUri.toString
-
-      // If the format is splittable, attempt to split and filter the file.
-      if (format.isSplitable(session, fsRelation.options, file.getPath)) {
-        val validSplits = splitter(file)
-        validSplits.flatMap { split =>
-          val splitOffset = split.getStart
-          val end = splitOffset + split.getLength
-          (splitOffset until end by maxSplitBytes).map { offset =>
-            val remaining = end - offset
-            val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-            val hosts = getBlockHosts(blockLocations, offset, size)
-            PartitionedFile(values, filePath, offset, size, hosts)
-          }
-        }
-      } else {
-        // Take the entire file as one partition.
-        val hosts = getBlockHosts(blockLocations, 0, file.getLen)
-        Seq(PartitionedFile(values, filePath, 0, file.getLen, hosts))
-=======
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
       FilePartition.maxSplitBytes(fsRelation.sparkSession, selectedPartitions)
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
+    val splitter =
+      format.buildSplitter(session, fsRelation.location,
+        dataFilters.flatMap(DataSourceStrategy.translateFilter), schema,
+        session.sessionState.newHadoopConf())
 
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.filter(_.getLen > 0).flatMap { file =>
@@ -493,16 +447,16 @@ case class FileSourceScanExec(
           filePath = filePath,
           isSplitable = isSplitable,
           maxSplitBytes = maxSplitBytes,
-          partitionValues = partition.values
+          partitionValues = partition.values,
+          splitter = splitter
         )
->>>>>>> master
       }
     }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
     val partitions =
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
-    new FileScanRDD(session, readFile, partitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }
 
   override def doCanonicalize(): FileSourceScanExec = {

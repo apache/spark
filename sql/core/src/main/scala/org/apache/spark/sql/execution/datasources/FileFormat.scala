@@ -95,7 +95,7 @@ trait FileFormat {
       fileIndex: FileIndex,
       filters: Seq[Filter],
       schema: StructType,
-      hadoopConf: Configuration): (FileStatus => Seq[FileSplit]) = {
+      hadoopConf: Configuration): FileStatus => Seq[FileSplit] = {
     stat => Seq(new FileSplit(stat.getPath, 0, stat.getLen, Array.empty))
   }
 

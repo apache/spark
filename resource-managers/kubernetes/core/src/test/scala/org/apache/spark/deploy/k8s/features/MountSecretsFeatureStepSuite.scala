@@ -30,25 +30,8 @@ class MountSecretsFeatureStepSuite extends SparkFunSuite {
     val secretNamesToMountPaths = Map(
       SECRET_FOO -> SECRET_MOUNT_PATH,
       SECRET_BAR -> SECRET_MOUNT_PATH)
-<<<<<<< HEAD
-    val sparkConf = new SparkConf(false)
-    val kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesExecutorSpecificConf("1", Some(new PodBuilder().build())),
-      "resource-name-prefix",
-      "app-id",
-      None,
-      Map.empty,
-      Map.empty,
-      secretNamesToMountPaths,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-=======
     val kubernetesConf = KubernetesTestConf.createExecutorConf(
       secretNamesToMountPaths = secretNamesToMountPaths)
->>>>>>> master
 
     val step = new MountSecretsFeatureStep(kubernetesConf)
     val driverPodWithSecretsMounted = step.configurePod(baseDriverPod).pod

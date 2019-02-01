@@ -1662,7 +1662,6 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
-<<<<<<< HEAD
   val MAX_REPEATED_ALIAS_SIZE =
     buildConf("spark.sql.maxRepeatedAliasSize")
       .internal()
@@ -1671,7 +1670,7 @@ object SQLConf {
         "Used by the CollapseProject optimizer, and PhysicalOperation.")
       .intConf
       .createWithDefault(100)
-=======
+
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
@@ -1679,7 +1678,6 @@ object SQLConf {
         "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
->>>>>>> master
 }
 
 /**
@@ -2121,12 +2119,10 @@ class SQLConf extends Serializable with Logging {
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
-<<<<<<< HEAD
   def maxRepeatedAliasSize: Int = getConf(SQLConf.MAX_REPEATED_ALIAS_SIZE)
-=======
+
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
->>>>>>> master
 
   /** ********************** SQLConf functionality methods ************ */
 

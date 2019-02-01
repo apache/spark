@@ -126,27 +126,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     MockitoAnnotations.initMocks(this)
-<<<<<<< HEAD
-    sparkConf = new SparkConf(false)
-    kubernetesConf = KubernetesConf[KubernetesDriverSpecificConf](
-      sparkConf,
-      KubernetesDriverSpecificConf(JavaMainAppResource(None), MAIN_CLASS, APP_NAME, APP_ARGS),
-      KUBERNETES_RESOURCE_PREFIX,
-      APP_ID,
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-    when(driverBuilder.buildFromFeatures(kubernetesConf)).thenReturn(BUILT_KUBERNETES_SPEC)
-=======
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
     when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
->>>>>>> master
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(POD_NAME)).thenReturn(namedPods)
 

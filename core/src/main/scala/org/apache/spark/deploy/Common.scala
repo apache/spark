@@ -30,8 +30,12 @@ object Common {
       sys.props.get(sysPropName).map(Provenance(s"Spark config $sysPropName", _))
     }
 
-    def fromConf(sparkConf: SparkConf, conf: ConfigEntry[Option[String]]): Option[Provenance] = {
+    def fromConfOpt(sparkConf: SparkConf, conf: ConfigEntry[Option[String]]): Option[Provenance] = {
       sparkConf.get(conf).map(Provenance(s"Spark config ${conf.key}", _))
+    }
+
+    def fromConf(sparkConf: SparkConf, conf: ConfigEntry[String]): Provenance = {
+      Provenance(s"Spark config ${conf.key}", sparkConf.get(conf))
     }
 
     def fromConf(sparkConf: SparkConf, key: String): Option[Provenance] = {

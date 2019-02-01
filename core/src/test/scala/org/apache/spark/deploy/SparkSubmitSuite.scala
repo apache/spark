@@ -481,12 +481,14 @@ class SparkSubmitSuite
     conf1.get(UI_SHOW_CONSOLE_PROGRESS) should be (true)
     var sc1: SparkContext = null
     try {
+      Utils.setLogLevel(org.apache.log4j.Level.WARN)
       sc1 = new SparkContext(conf1)
       assert(sc1.progressBar.isDefined)
     } finally {
       if (sc1 != null) {
         sc1.stop()
       }
+      Utils.setLogLevel(org.apache.log4j.Level.INFO)
     }
 
     val clArgs2 = Seq("--class", "org.SomeClass", "thejar.jar")

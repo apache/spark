@@ -26,31 +26,6 @@ import org.apache.spark.deploy.k8s._
 
 class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
-<<<<<<< HEAD
-  before {
-    sparkConf = Mockito.mock(classOf[SparkConf])
-    kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "app-name",
-        "main",
-        Seq.empty),
-      "resource",
-      "app-id",
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Option.empty)
-    templateFile = Files.createTempFile("pod-template", "yml").toFile
-    templateFile.deleteOnExit()
-    Mockito.doReturn(Option(templateFile.getAbsolutePath)).when(sparkConf)
-      .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
-=======
   test("Do nothing when executor template is not specified") {
     val conf = KubernetesTestConf.createDriverConf()
     val step = new PodTemplateConfigMapStep(conf)
@@ -61,7 +36,6 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
     assert(step.getAdditionalKubernetesResources().isEmpty)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
->>>>>>> master
   }
 
   test("Mounts executor template volume if config specified") {

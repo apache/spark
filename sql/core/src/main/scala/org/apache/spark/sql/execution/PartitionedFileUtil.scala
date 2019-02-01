@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,13 +31,20 @@ object PartitionedFileUtil {
       filePath: Path,
       isSplitable: Boolean,
       maxSplitBytes: Long,
-      partitionValues: InternalRow): Seq[PartitionedFile] = {
+      partitionValues: InternalRow,
+      splitter: FileStatus => Seq[FileSplit] =
+        stat => Seq(new FileSplit(stat.getPath, 0, stat.getLen, Array.empty)))
+      : Seq[PartitionedFile] = {
     if (isSplitable) {
-      (0L until file.getLen by maxSplitBytes).map { offset =>
-        val remaining = file.getLen - offset
-        val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-        val hosts = getBlockHosts(getBlockLocations(file), offset, size)
-        PartitionedFile(partitionValues, filePath.toUri.toString, offset, size, hosts)
+      splitter(file).flatMap { split =>
+        val splitOffset = split.getStart
+        val end = splitOffset + split.getLength
+        (splitOffset until end by maxSplitBytes).map { offset =>
+          val remaining = end - offset
+          val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
+          val hosts = getBlockHosts(getBlockLocations(file), offset, size)
+          PartitionedFile(partitionValues, filePath.toUri.toString, offset, size, hosts)
+        }
       }
     } else {
       Seq(getPartitionedFile(file, filePath, partitionValues))
@@ -47,8 +55,17 @@ object PartitionedFileUtil {
       file: FileStatus,
       filePath: Path,
       partitionValues: InternalRow): PartitionedFile = {
-    val hosts = getBlockHosts(getBlockLocations(file), 0, file.getLen)
-    PartitionedFile(partitionValues, filePath.toUri.toString, 0, file.getLen, hosts)
+    getPartitionedFile(file, 0, file.getLen, filePath, partitionValues)
+  }
+
+  def getPartitionedFile(
+      file: FileStatus,
+      start: Long,
+      length: Long,
+      filePath: Path,
+      partitionValues: InternalRow): PartitionedFile = {
+    val hosts = getBlockHosts(getBlockLocations(file), start, length)
+    PartitionedFile(partitionValues, filePath.toUri.toString, start, length, hosts)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {

@@ -18,16 +18,15 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
-import java.util.concurrent.atomic.{AtomicBoolean}
-import javax.servlet.DispatcherType
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import com.palantir.logsafe.UnsafeArg
-import org.apache.hadoop.security.UserGroupInformation
+import com.palantir.logsafe.{SafeArg, UnsafeArg}
+import javax.servlet.DispatcherType
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping}
 
@@ -40,7 +39,6 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -177,18 +175,12 @@ private[spark] abstract class YarnSchedulerBackend(
       filterName != null && filterName.nonEmpty &&
       filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
-<<<<<<< HEAD
-      safeLogInfo("Add WebUI Filter.",
-        UnsafeArg.of("filterName", filterName),
-        UnsafeArg.of("filterParams", filterParams),
-        UnsafeArg.of("proxyBase", proxyBase))
-      conf.set("spark.ui.filters", filterName)
-      filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
-      scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
-=======
       // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
       val allFilters = Seq(filterName) ++ conf.get(UI_FILTERS)
-      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
+      safeLogInfo("Add WebUI Filter",
+        SafeArg.of("filterName", filterName),
+        UnsafeArg.of("filterParams", filterParams),
+        UnsafeArg.of("proxyBase", proxyBase))
 
       // For already installed handlers, prepend the filter.
       scheduler.sc.ui.foreach { ui =>
@@ -216,7 +208,6 @@ private[spark] abstract class YarnSchedulerBackend(
           }
         }
       }
->>>>>>> master
     }
   }
 

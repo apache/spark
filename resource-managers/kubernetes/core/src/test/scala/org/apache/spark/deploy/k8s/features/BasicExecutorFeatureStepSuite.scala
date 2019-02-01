@@ -90,24 +90,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("basic executor pod has reasonable defaults") {
-<<<<<<< HEAD
-    val step = new BasicExecutorFeatureStep(
-      KubernetesConf(
-        baseConf,
-        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
-        RESOURCE_NAME_PREFIX,
-        APP_ID,
-        None,
-        LABELS,
-        ANNOTATIONS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        hadoopConfSpec = None))
-=======
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
->>>>>>> master
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
@@ -136,54 +119,16 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test("executor pod hostnames get truncated to 63 characters") {
     val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
 
-<<<<<<< HEAD
-    val step = new BasicExecutorFeatureStep(
-      KubernetesConf(
-        conf,
-        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
-        longPodNamePrefix,
-        APP_ID,
-        None,
-        LABELS,
-        ANNOTATIONS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        hadoopConfSpec = None))
-=======
     baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, longPodNamePrefix)
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
->>>>>>> master
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
 
   test("classpath and extra java options get translated into environment variables") {
-<<<<<<< HEAD
-    val conf = baseConf.clone()
-    conf.set(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
-    conf.set(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH, "bar=baz")
-
-    val step = new BasicExecutorFeatureStep(
-      KubernetesConf(
-        conf,
-        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
-        RESOURCE_NAME_PREFIX,
-        APP_ID,
-        None,
-        LABELS,
-        ANNOTATIONS,
-        Map.empty,
-        Map.empty,
-        Map("qux" -> "quux"),
-        Nil,
-        hadoopConfSpec = None))
-=======
     baseConf.set(config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
     baseConf.set(config.EXECUTOR_CLASS_PATH, "bar=baz")
     val kconf = newExecutorConf(environment = Map("qux" -> "quux"))
     val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(baseConf))
->>>>>>> master
     val executor = step.configurePod(SparkPod.initialPod())
 
     checkEnv(executor, baseConf,
@@ -194,31 +139,10 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test executor pyspark memory") {
-<<<<<<< HEAD
-    val conf = baseConf.clone()
-    conf.set("spark.kubernetes.resource.type", "python")
-    conf.set(org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY, 42L)
-
-    val step = new BasicExecutorFeatureStep(
-      KubernetesConf(
-        conf,
-        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
-        RESOURCE_NAME_PREFIX,
-        APP_ID,
-        None,
-        LABELS,
-        ANNOTATIONS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        hadoopConfSpec = None))
-=======
     baseConf.set("spark.kubernetes.resource.type", "python")
     baseConf.set(PYSPARK_EXECUTOR_MEMORY, 42L)
 
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
->>>>>>> master
     val executor = step.configurePod(SparkPod.initialPod())
     // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
     assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")

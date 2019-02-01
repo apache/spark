@@ -25,20 +25,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-<<<<<<< HEAD
-import org.apache.spark.SparkException
-import org.apache.spark.SparkUserAppException
+import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.api.conda.CondaEnvironment
-import org.apache.spark.api.r.RBackend
-import org.apache.spark.api.r.RUtils
-import org.apache.spark.api.r.SparkRDefaults
+import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.deploy.Common.Provenance
 import org.apache.spark.internal.Logging
-=======
-import org.apache.spark.{SparkException, SparkUserAppException}
-import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.internal.config.R._
->>>>>>> master
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -62,27 +54,19 @@ object RRunner extends CondaRunner with Logging {
       }
       // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
       // but kept here for backward compatibility.
-<<<<<<< HEAD
       driverPreset
-        .orElse(Provenance.fromConf("spark.r.command"))
-        .orElse(Provenance.fromConf("spark.sparkr.r.command"))
-=======
-      var cmd = sys.props.getOrElse(SPARKR_COMMAND.key, SPARKR_COMMAND.defaultValue.get)
-      cmd = sys.props.getOrElse(R_COMMAND.key, cmd)
-      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
-        cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
-      }
-      cmd
->>>>>>> master
+        .orElse(Provenance.fromConf(R_COMMAND.key))
+        .orElse(Provenance.fromConf(SPARKR_COMMAND.key))
+        .getOrElse(Provenance(SPARKR_COMMAND.key, SPARKR_COMMAND.defaultValue.get))
     }
 
-    val rCommand: String = maybeConda.map { conda =>
-      presetRCommand.foreach { exec =>
-        sys.error(s"It's forbidden to configure the r command when using conda, but found: $exec")
+    val rCommand = maybeConda.map { conda =>
+      if (presetRCommand.value != SPARKR_COMMAND.defaultValueString) {
+        sys.error(s"It's forbidden to set the r executable " +
+          s"when using conda, but found: ${presetRCommand.value}")
       }
       conda.condaEnvDir + "/bin/Rscript"
-    }.orElse(presetRCommand.map(_.value))
-     .getOrElse("Rscript")
+    }.getOrElse(presetRCommand.value)
 
     //  Connection timeout set by R process on its connection to RBackend in seconds.
     val backendConnectionTimeout = sys.props.getOrElse(

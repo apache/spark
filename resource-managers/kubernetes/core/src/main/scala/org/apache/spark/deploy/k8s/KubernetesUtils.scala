@@ -77,17 +77,6 @@ private[spark] object KubernetesUtils extends Logging {
     }
   }
 
-  def submitterLocalFiles(fileUris: Iterable[String]): Iterable[String] = {
-    fileUris
-      .map(Utils.resolveURI)
-      .filter { file =>
-        Option(file.getScheme).getOrElse("file") == "file"
-      }
-      .map(_.getPath)
-      .map(new File(_))
-      .map(_.getAbsolutePath)
-  }
-
   def resolveFileUri(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")

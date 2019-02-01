@@ -34,25 +34,8 @@ class EnvSecretsFeatureStepSuite extends SparkFunSuite {
     val envVarsToKeys = Map(
       ENV_NAME_BAR -> s"${KEY_REF_NAME_BAR}:${KEY_REF_KEY_BAR}",
       ENV_NAME_FOO -> s"${KEY_REF_NAME_FOO}:${KEY_REF_KEY_FOO}")
-<<<<<<< HEAD
-    val sparkConf = new SparkConf(false)
-    val kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesExecutorSpecificConf("1", Some(new PodBuilder().build())),
-      "resource-name-prefix",
-      "app-id",
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      envVarsToKeys,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-=======
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       secretEnvNamesToKeyRefs = envVarsToKeys)
->>>>>>> master
 
     val step = new EnvSecretsFeatureStep(kubernetesConf)
     val container = step.configurePod(baseDriverPod).container

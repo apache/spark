@@ -52,29 +52,12 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(DRIVER_MEMORY.key, "256M")
       .set(DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
-<<<<<<< HEAD
-      .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
-    val kubernetesConf = KubernetesConf(
-      sparkConf,
-      emptyDriverSpecificConf,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      DRIVER_LABELS,
-      DRIVER_ANNOTATIONS,
-      Map.empty,
-      Map.empty,
-      DRIVER_ENVS,
-      Nil,
-      hadoopConfSpec = None)
-=======
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       labels = DRIVER_LABELS,
       environment = DRIVER_ENVS,
       annotations = DRIVER_ANNOTATIONS)
->>>>>>> master
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -141,48 +124,10 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val pythonSparkConf = new SparkConf()
       .set(DRIVER_MEMORY.key, "4g")
       .set(CONTAINER_IMAGE, "spark-driver-py:latest")
-<<<<<<< HEAD
-    val javaKubernetesConf = KubernetesConf(
-      javaSparkConf,
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        APP_NAME,
-        PY_MAIN_CLASS,
-        APP_ARGS),
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      DRIVER_LABELS,
-      DRIVER_ANNOTATIONS,
-      Map.empty,
-      Map.empty,
-      DRIVER_ENVS,
-      Nil,
-      hadoopConfSpec = None)
-
-    val pythonKubernetesConf = KubernetesConf(
-      pythonSparkConf,
-      KubernetesDriverSpecificConf(
-        PythonMainAppResource(""),
-        APP_NAME,
-        PY_MAIN_CLASS,
-        APP_ARGS),
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      DRIVER_LABELS,
-      DRIVER_ANNOTATIONS,
-      Map.empty,
-      Map.empty,
-      DRIVER_ENVS,
-      Nil,
-      hadoopConfSpec = None)
-=======
     val javaKubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = javaSparkConf)
     val pythonKubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = pythonSparkConf,
       mainAppResource = PythonMainAppResource(""))
->>>>>>> master
     val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
     val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -200,23 +145,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .setJars(allJars)
       .set(FILES, allFiles)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
-<<<<<<< HEAD
-    val kubernetesConf = KubernetesConf(
-      sparkConf,
-      emptyDriverSpecificConf,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      DRIVER_LABELS,
-      DRIVER_ANNOTATIONS,
-      Map.empty,
-      Map.empty,
-      DRIVER_ENVS,
-      Nil,
-      hadoopConfSpec = None)
-=======
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
->>>>>>> master
 
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()
@@ -248,26 +177,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
         .set(CONTAINER_IMAGE, "spark-driver:latest")
         .set(DRIVER_MEMORY.key, s"${driverMem.toInt}m")
       factor.foreach { value => sparkConf.set(MEMORY_OVERHEAD_FACTOR, value) }
-<<<<<<< HEAD
-      val driverConf = emptyDriverSpecificConf.copy(mainAppResource = resource)
-      val conf = KubernetesConf(
-        sparkConf,
-        driverConf,
-        RESOURCE_NAME_PREFIX,
-        APP_ID,
-        None,
-        DRIVER_LABELS,
-        DRIVER_ANNOTATIONS,
-        Map.empty,
-        Map.empty,
-        DRIVER_ENVS,
-        Nil,
-        hadoopConfSpec = None)
-=======
       val conf = KubernetesTestConf.createDriverConf(
         sparkConf = sparkConf,
         mainAppResource = resource)
->>>>>>> master
       val step = new BasicDriverFeatureStep(conf)
       val pod = step.configurePod(SparkPod.initialPod())
       val mem = pod.container.getResources.getRequests.get("memory").getAmount()

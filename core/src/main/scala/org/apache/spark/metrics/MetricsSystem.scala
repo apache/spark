@@ -98,16 +98,11 @@ private[spark] class MetricsSystem private (
   def start(registerStaticSources: Boolean = true) {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
-<<<<<<< HEAD
-    StaticSources.allSources.foreach(registerSource)
-    registerSources()
-    SharedMetricRegistries.getDefault.addListener(defaultListener)
-=======
     if (registerStaticSources) {
       StaticSources.allSources.foreach(registerSource)
       registerSources()
     }
->>>>>>> master
+    SharedMetricRegistries.getDefault.addListener(defaultListener)
     registerSinks()
     sinks.foreach(_.start())
   }

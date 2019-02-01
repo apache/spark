@@ -93,12 +93,8 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-<<<<<<< HEAD
   lazy val fileIndexFactory: CatalogFileIndexFactory =
     CatalogFileIndexFactory.reflect(sparkSession.sparkContext.conf)
-  lazy val providingClass: Class[_] =
-    DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
-=======
   lazy val providingClass: Class[_] = {
     val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
     // `providingClass` is used for resolving data source relation for catalog tables.
@@ -112,7 +108,6 @@ case class DataSource(
       case _ => cls
     }
   }
->>>>>>> master
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver

@@ -29,13 +29,8 @@ import com.google.common.io.ByteStreams
 import com.palantir.logsafe.SafeArg
 
 import org.apache.spark.{SparkConf, TaskContext}
-<<<<<<< HEAD
-import org.apache.spark.internal.{Logging, SafeLogging}
-import org.apache.spark.internal.config.{UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
-=======
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.SafeLogging
 import org.apache.spark.internal.config.{STORAGE_UNROLL_MEMORY_THRESHOLD, UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
->>>>>>> master
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage._

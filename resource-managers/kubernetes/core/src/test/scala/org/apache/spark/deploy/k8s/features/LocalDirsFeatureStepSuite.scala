@@ -26,33 +26,6 @@ import org.apache.spark.util.SparkConfWithEnv
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite {
   private val defaultLocalDir = "/var/data/default-local-dir"
-<<<<<<< HEAD
-  private var sparkConf: SparkConf = _
-  private var kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf] = _
-
-  before {
-    val realSparkConf = new SparkConf(false)
-    sparkConf = Mockito.spy(realSparkConf)
-    kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "app-name",
-        "main",
-        Seq.empty),
-      "resource",
-      "app-id",
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-  }
-=======
->>>>>>> master
 
   test("Resolve to default local dir if neither env nor configuration are set") {
     val stepUnderTest = new LocalDirsFeatureStep(KubernetesTestConf.createDriverConf(),

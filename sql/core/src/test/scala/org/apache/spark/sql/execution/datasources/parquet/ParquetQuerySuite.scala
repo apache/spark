@@ -18,11 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
-<<<<<<< HEAD
 import java.net.URI
 import java.sql.{Date, Timestamp}
-=======
->>>>>>> master
 
 import com.google.common.collect.{HashMultiset, Multiset}
 import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}

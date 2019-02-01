@@ -36,23 +36,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
   private val BASE_DRIVER_POD = SparkPod.initialPod()
 
   test("Don't set any credentials") {
-<<<<<<< HEAD
-    val kubernetesConf = KubernetesConf(
-      new SparkConf(false),
-      driverSpecificConf,
-      KUBERNETES_RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-=======
     val kubernetesConf = KubernetesTestConf.createDriverConf()
->>>>>>> master
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     assert(kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD) === BASE_DRIVER_POD)
     assert(kubernetesCredentialsStep.getAdditionalPodSystemProperties().isEmpty)
@@ -73,24 +57,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
       .set(
         s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
         "/mnt/secrets/my-ca.pem")
-<<<<<<< HEAD
-    val kubernetesConf = KubernetesConf(
-      submissionSparkConf,
-      driverSpecificConf,
-      KUBERNETES_RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-
-=======
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
->>>>>>> master
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     assert(kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD) === BASE_DRIVER_POD)
     assert(kubernetesCredentialsStep.getAdditionalKubernetesResources().isEmpty)
@@ -117,23 +84,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
       .set(
         s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
         caCertFile.getAbsolutePath)
-<<<<<<< HEAD
-    val kubernetesConf = KubernetesConf(
-      submissionSparkConf,
-      driverSpecificConf,
-      KUBERNETES_RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-=======
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
->>>>>>> master
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     val resolvedProperties = kubernetesCredentialsStep.getAdditionalPodSystemProperties()
     val expectedSparkConf = Map(

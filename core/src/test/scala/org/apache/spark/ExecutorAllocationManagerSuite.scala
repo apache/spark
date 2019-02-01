@@ -1226,15 +1226,10 @@ class ExecutorAllocationManagerSuite
         s"${schedulerBacklogTimeout.toString}s")
       .set(config.DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key,
         s"${sustainedSchedulerBacklogTimeout.toString}s")
-<<<<<<< HEAD
-      .set("spark.dynamicAllocation.executorIdleTimeout", s"${executorIdleTimeout.toString}s")
-      .set("spark.dynamicAllocation.cachedExecutorIdleTimeout",
-          s"${cachedExecutorIdleTimeout.toString}s")
-      .set("spark.dynamicAllocation.testing", "true")
-=======
       .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout.toString}s")
       .set(config.DYN_ALLOCATION_TESTING, true)
->>>>>>> master
+      .set(config.DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key,
+          s"${cachedExecutorIdleTimeout.toString}s")
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 10000L)

@@ -415,11 +415,7 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-<<<<<<< HEAD:dev/test_functions.py
-def run_python_tests(test_modules, parallelism, python_executables=None):
-=======
-def run_python_tests(test_modules, parallelism, with_coverage=False):
->>>>>>> master:dev/run-tests.py
+def run_python_tests(test_modules, parallelism, python_executables=None, with_coverage=False):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
     if with_coverage:
@@ -645,18 +641,13 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
-<<<<<<< HEAD:dev/test_functions.py
         print("[info] skipping python tests... palantir/spark")
-        # run_python_tests(modules_with_python_tests, opts.parallelism)
-        # run_python_packaging_tests()
-=======
         # We only run PySpark tests with coverage report in one specific job with
         # Spark master with SBT in Jenkins.
-        is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
-        run_python_tests(
-            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
-        run_python_packaging_tests()
->>>>>>> master:dev/run-tests.py
+        # is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
+        # run_python_tests(
+        #     modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
+        # run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 

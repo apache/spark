@@ -16,11 +16,8 @@
  */
 package org.apache.spark.deploy.k8s
 
-<<<<<<< HEAD
-=======
 import java.util.Locale
 
->>>>>>> master
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
 import org.apache.spark.SparkConf
@@ -33,23 +30,7 @@ import org.apache.spark.util.Utils
 /**
  * Structure containing metadata for Kubernetes logic to build Spark pods.
  */
-<<<<<<< HEAD
-private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
-    sparkConf: SparkConf,
-    roleSpecificConf: T,
-    appResourceNamePrefix: String,
-    appId: String,
-    mountLocalFilesSecretName: Option[String],
-    roleLabels: Map[String, String],
-    roleAnnotations: Map[String, String],
-    roleSecretNamesToMountPaths: Map[String, String],
-    roleSecretEnvNamesToKeyRefs: Map[String, String],
-    roleEnvs: Map[String, String],
-    roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
-    hadoopConfSpec: Option[HadoopConfSpec]) {
-=======
 private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
->>>>>>> master
 
   val resourceNamePrefix: String
   def labels: Map[String, String]
@@ -199,26 +180,9 @@ private[spark] object KubernetesConf {
     // Parse executor volumes in order to verify configuration before the driver pod is created.
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
 
-<<<<<<< HEAD
-
-    KubernetesConf(
-      sparkConf.clone(),
-      KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs, pyFiles),
-      appResourceNamePrefix,
-      appId,
-      Some(s"$appResourceNamePrefix-submitted-local-files"),
-      driverLabels,
-      driverAnnotations,
-      driverSecretNamesToMountPaths,
-      driverSecretEnvNamesToKeyRefs,
-      driverEnvs,
-      driverVolumes,
-      hadoopConfSpec)
-=======
     val pyFiles = maybePyFiles.map(Utils.stringToSeq).getOrElse(Nil)
     new KubernetesDriverConf(sparkConf.clone(), appId, mainAppResource, mainClass, appArgs,
       pyFiles)
->>>>>>> master
   }
 
   def createExecutorConf(
@@ -229,21 +193,6 @@ private[spark] object KubernetesConf {
     new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod)
   }
 
-<<<<<<< HEAD
-    KubernetesConf(
-      sparkConf.clone(),
-      KubernetesExecutorSpecificConf(executorId, driverPod),
-      appResourceNamePrefix,
-      appId,
-      sparkConf.get(EXECUTOR_SUBMITTED_SMALL_FILES_SECRET),
-      executorLabels,
-      executorAnnotations,
-      executorMountSecrets,
-      executorEnvSecrets,
-      executorEnv,
-      executorVolumes,
-      None)
-=======
   def getResourceNamePrefix(appName: String): String = {
     val launchTime = System.currentTimeMillis()
     s"$appName-$launchTime"
@@ -253,6 +202,5 @@ private[spark] object KubernetesConf {
       .replaceAll("\\.", "-")
       .replaceAll("[^a-z0-9\\-]", "")
       .replaceAll("-+", "-")
->>>>>>> master
   }
 }

@@ -349,21 +349,17 @@ private[r] object RRunner {
     // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
     // but kept here for backward compatibility.
     val sparkConf = SparkEnv.get.conf
-<<<<<<< HEAD
-    val requestedRCommand = Provenance.fromConf("spark.r.command")
-      .orElse(Provenance.fromConf("spark.sparkr.r.command"))
+    val requestedRCommand = Provenance.fromConfOpt(sparkConf, R_COMMAND)
+      .getOrElse(Provenance.fromConf(sparkConf, SPARKR_COMMAND))
     val condaEnv = condaSetupInstructions.map(CondaEnvironmentManager.getOrCreateCondaEnvironment)
     val rCommand = condaEnv.map { conda =>
-      requestedRCommand.foreach(exec => sys.error(s"It's forbidden to set the r executable " +
-        s"when using conda, but found: $exec"))
+      if (requestedRCommand.value != SPARKR_COMMAND.defaultValue.get) {
+        sys.error(s"It's forbidden to set the r executable " +
+          s"when using conda, but found: ${requestedRCommand.value}")
+      }
 
       conda.condaEnvDir + "/bin/Rscript"
-    }.orElse(requestedRCommand.map(_.value))
-     .getOrElse("Rscript")
-=======
-    var rCommand = sparkConf.get(SPARKR_COMMAND)
-    rCommand = sparkConf.get(R_COMMAND).orElse(Some(rCommand)).get
->>>>>>> master
+    }.getOrElse(requestedRCommand.value)
 
     val rConnectionTimeout = sparkConf.get(R_BACKEND_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"

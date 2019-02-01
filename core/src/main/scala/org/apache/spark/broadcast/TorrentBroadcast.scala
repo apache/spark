@@ -29,11 +29,8 @@ import scala.util.Random
 import com.palantir.logsafe.SafeArg
 
 import org.apache.spark._
-<<<<<<< HEAD
 import org.apache.spark.internal.SafeLogging
-=======
-import org.apache.spark.internal.{config, Logging}
->>>>>>> master
+import org.apache.spark.internal.config
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
@@ -244,14 +241,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
               throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
             }
           case None =>
-<<<<<<< HEAD
-            safeLogInfo("Started reading broadcast variable",
-              SafeArg.of("id", id))
-=======
             val estimatedTotalSize = Utils.bytesToString(numBlocks * blockSize)
-            logInfo(s"Started reading broadcast variable $id with $numBlocks pieces " +
-              s"(estimated total size $estimatedTotalSize)")
->>>>>>> master
+            safeLogInfo("Started reading broadcast variable",
+              SafeArg.of("id", id),
+              SafeArg.of("numBlocks", numBlocks),
+              SafeArg.of("estimatedTotalSize", estimatedTotalSize))
             val startTimeMs = System.currentTimeMillis()
             val blocks = readBlocks()
             safeLogInfo("Reading broadcast variable finished",

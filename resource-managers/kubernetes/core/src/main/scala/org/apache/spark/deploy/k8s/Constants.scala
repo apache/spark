@@ -59,14 +59,9 @@ private[spark] object Constants {
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
-  val ENV_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY"
-  val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
-  val ENV_MOUNTED_FILES_FROM_SECRET_DIR = "SPARK_MOUNTED_FILES_FROM_SECRET_DIR"
-
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
   val ENV_SPARK_USER = "SPARK_USER"
   // Spark app configs for containers
-  val MOUNTED_FILES_SECRET_DIR = "/var/data/spark-submitted-files"
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
   val SPARK_CONF_FILE_NAME = "spark.properties"

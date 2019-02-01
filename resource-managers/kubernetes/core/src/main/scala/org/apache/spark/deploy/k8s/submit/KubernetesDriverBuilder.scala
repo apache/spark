@@ -22,49 +22,8 @@ import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.util.Utils
 
-<<<<<<< HEAD
-private[spark] class KubernetesDriverBuilder(
-    provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
-      new BasicDriverFeatureStep(_),
-    provideCredentialsStep: (KubernetesConf[KubernetesDriverSpecificConf])
-      => DriverKubernetesCredentialsFeatureStep =
-      new DriverKubernetesCredentialsFeatureStep(_),
-    provideServiceStep: (KubernetesConf[KubernetesDriverSpecificConf]) => DriverServiceFeatureStep =
-      new DriverServiceFeatureStep(_),
-    provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => MountSecretsFeatureStep) =
-      new MountSecretsFeatureStep(_),
-    provideEnvSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => EnvSecretsFeatureStep) =
-      new EnvSecretsFeatureStep(_),
-    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
-      => LocalDirsFeatureStep =
-      new LocalDirsFeatureStep(_),
-    provideMountLocalFilesStep: (KubernetesConf[KubernetesDriverSpecificConf]
-      => MountLocalDriverFilesFeatureStep) =
-      new MountLocalDriverFilesFeatureStep(_),
-    provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => MountVolumesFeatureStep) =
-      new MountVolumesFeatureStep(_),
-    provideDriverCommandStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-      => DriverCommandFeatureStep) =
-      new DriverCommandFeatureStep(_),
-    provideHadoopGlobalStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => KerberosConfDriverFeatureStep) =
-    new KerberosConfDriverFeatureStep(_),
-    providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => PodTemplateConfigMapStep) =
-    new PodTemplateConfigMapStep(_),
-    provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
-=======
 private[spark] class KubernetesDriverBuilder {
->>>>>>> master
-
-  import KubernetesDriverBuilder._
 
   def buildFromFeatures(
       conf: KubernetesDriverConf,
@@ -78,28 +37,6 @@ private[spark] class KubernetesDriverBuilder {
       }
       .getOrElse(SparkPod.initialPod())
 
-<<<<<<< HEAD
-    val localFilesFeature = provideMountLocalFilesStep(kubernetesConf)
-    val localFiles = KubernetesUtils.submitterLocalFiles(localFilesFeature.allFiles)
-        .map(new File(_))
-    require(localFiles.forall(_.isFile), s"All submitted local files must be present and not" +
-      s" directories, Got: ${localFiles.map(_.getAbsolutePath).mkString(",")}")
-
-    val totalFileSize = localFiles.map(_.length()).sum
-    val totalSizeBytesString = Utils.bytesToString(totalFileSize)
-    require(totalFileSize < MAX_SECRET_BUNDLE_SIZE_BYTES,
-      s"Total size of all files submitted must be less than $MAX_SECRET_BUNDLE_SIZE_BYTES_STRING." +
-        s" Total size for files ended up being $totalSizeBytesString")
-    val providedLocalFilesFeature = if (localFiles.nonEmpty) {
-      Seq(localFilesFeature)
-    } else Nil
-
-    val allFeatures: Seq[KubernetesFeatureConfigStep] =
-      baseFeatures ++ Seq(driverCommandStep) ++
-        secretFeature ++ envSecretFeature ++ volumesFeature ++
-        maybeHadoopConfigStep.toSeq ++ podTemplateFeature ++
-        providedLocalFilesFeature
-=======
     val features = Seq(
       new BasicDriverFeatureStep(conf),
       new DriverKubernetesCredentialsFeatureStep(conf),
@@ -112,7 +49,6 @@ private[spark] class KubernetesDriverBuilder {
       new HadoopConfDriverFeatureStep(conf),
       new KerberosConfDriverFeatureStep(conf),
       new PodTemplateConfigMapStep(conf))
->>>>>>> master
 
     val spec = KubernetesDriverSpec(
       initialPod,
@@ -130,23 +66,4 @@ private[spark] class KubernetesDriverBuilder {
     }
   }
 
-<<<<<<< HEAD
-private[spark] object KubernetesDriverBuilder {
-  val MAX_SECRET_BUNDLE_SIZE_BYTES = 20480
-  val MAX_SECRET_BUNDLE_SIZE_BYTES_STRING =
-    Utils.bytesToString(MAX_SECRET_BUNDLE_SIZE_BYTES)
-
-  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
-    conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
-      .map(new File(_))
-      .map(file => new KubernetesDriverBuilder(provideInitialPod = () =>
-        KubernetesUtils.loadPodFromTemplate(
-          kubernetesClient,
-          file,
-          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME))
-      ))
-      .getOrElse(new KubernetesDriverBuilder())
-  }
-=======
->>>>>>> master
 }

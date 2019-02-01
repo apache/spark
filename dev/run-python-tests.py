@@ -47,7 +47,7 @@ if __name__ == '__main__':
 
     modules_with_python_tests = [m for m in mtt.test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, 8, python_executables_for_run)
+        run_python_tests(modules_with_python_tests, 8, python_executables_for_run, False)
 
         # Packaging tests create a conda environment for each python version
         # We'd like to use the same version that our executables above use

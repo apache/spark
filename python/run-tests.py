@@ -33,11 +33,7 @@ if sys.version < '3':
     import Queue
 else:
     import queue as Queue
-<<<<<<< HEAD
 from collections import deque
-from distutils.version import LooseVersion
-=======
->>>>>>> master
 from multiprocessing import Manager
 
 
@@ -103,7 +99,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, failed_tes
     # This line must come before the try block, file shouldn't be closed before 'worker' is done
     per_test_output = tempfile.TemporaryFile()
     try:
-<<<<<<< HEAD
         process = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
             # bufsize must be 0 (unbuffered), 1 (line buffered) doesn't seem to work
@@ -118,12 +113,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, failed_tes
         worker = Thread(target=consume_log, args=(per_test_output,))
         worker.start()  # This is essential as we need to consume the stdout pipe
         retcode = process.wait()
-=======
-        per_test_output = tempfile.TemporaryFile()
-        retcode = subprocess.Popen(
-            [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
-            stderr=per_test_output, stdout=per_test_output, env=env).wait()
->>>>>>> master
         shutil.rmtree(tmp_dir, ignore_errors=True)
     except:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
@@ -182,7 +171,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, failed_tes
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.7", "python3.4", "pypy"] if which(x)]
+    python_execs = [x for x in ["python2.7", "python3.6", "pypy"] if which(x)]
     if "python2.7" not in python_execs:
         LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
                        " back to `python` instead")

@@ -119,29 +119,11 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       conf: SparkConf = new SparkConf(false),
       appArgs: Array[String] = Array(),
       pyFiles: Seq[String] = Nil): KubernetesDriverSpec = {
-<<<<<<< HEAD
-    val driverConf = new KubernetesDriverSpecificConf(
-      resource, MAIN_CLASS, "appName", appArgs, pyFiles = pyFiles)
-    val kubernetesConf = KubernetesConf(
-      conf,
-      driverConf,
-      "resource-prefix",
-      "appId",
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-=======
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = conf,
       mainAppResource = resource,
       appArgs = appArgs,
       pyFiles = pyFiles)
->>>>>>> master
     val step = new DriverCommandFeatureStep(kubernetesConf)
     val pod = step.configurePod(SparkPod.initialPod())
     val props = step.getAdditionalPodSystemProperties()

@@ -440,11 +440,7 @@ class SparkContext(config: SparkConf) extends SafeLogging {
     _statusTracker = new SparkStatusTracker(this, _statusStore)
 
     _progressBar =
-<<<<<<< HEAD
       if (_conf.get(UI_SHOW_CONSOLE_PROGRESS) && !safeLogIsInfoEnabled) {
-=======
-      if (_conf.get(UI_SHOW_CONSOLE_PROGRESS)) {
->>>>>>> master
         Some(new ConsoleProgressBar(this))
       } else {
         None
@@ -2488,16 +2484,7 @@ object SparkContext extends SafeLogging {
       Option(activeContext.get()).filter(_ ne sc).foreach { ctx =>
           val errMsg = "Only one SparkContext should be running in this JVM (see SPARK-2243)." +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
-<<<<<<< HEAD
-          val exception = new SparkException(errMsg)
-          if (allowMultipleContexts) {
-            safeLogWarning("Multiple running SparkContexts detected in the same JVM!", exception)
-          } else {
-            throw exception
-          }
-=======
           throw new SparkException(errMsg)
->>>>>>> master
         }
 
       contextBeingConstructed.filter(_ ne sc).foreach { otherContext =>
@@ -2505,18 +2492,10 @@ object SparkContext extends SafeLogging {
         // its creationSite field being null:
         val otherContextCreationSite =
           Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
-<<<<<<< HEAD
         safeLogWarning("Another SparkContext is being constructed (or threw an exception in its" +
           " constructor).  This may indicate an error, since only one SparkContext may be" +
           " running in this JVM (see SPARK-2243).",
           UnsafeArg.of("otherContextCreationSite", otherContextCreationSite))
-=======
-        val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
-          " constructor). This may indicate an error, since only one SparkContext should be" +
-          " running in this JVM (see SPARK-2243)." +
-          s" The other SparkContext was created at:\n$otherContextCreationSite"
-        logWarning(warnMsg)
->>>>>>> master
       }
     }
   }

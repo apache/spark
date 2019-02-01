@@ -10,9 +10,9 @@ apacheds-kerberos-codec-2.0.0-M15.jar
 api-asn1-api-1.0.0-M20.jar
 api-util-1.0.0-M20.jar
 arpack_combined_all-0.1.jar
-arrow-format-0.10.0.jar
-arrow-memory-0.10.0.jar
-arrow-vector-0.10.0.jar
+arrow-format-0.12.0.jar
+arrow-memory-0.12.0.jar
+arrow-vector-0.12.0.jar
 audience-annotations-0.7.0.jar
 automaton-1.11-8.jar
 avro-1.8.2.jar
@@ -31,7 +31,7 @@ commons-beanutils-core-1.8.0.jar
 commons-cli-1.2.jar
 commons-codec-1.11.jar
 commons-collections-3.2.2.jar
-commons-compiler-3.0.10.jar
+commons-compiler-3.0.11.jar
 commons-compress-1.18.jar
 commons-configuration-1.6.jar
 commons-crypto-1.0.0.jar
@@ -55,7 +55,7 @@ dropwizard-metrics-influxdb-1.2.2.jar
 dropwizard-util-1.0.0.jar
 dropwizard-validation-1.0.0.jar
 ehcache-3.3.1.jar
-flatbuffers-1.2.0-3f79e055.jar
+flatbuffers-java-1.9.0.jar
 generex-1.0.1.jar
 geronimo-jcache_1.0_spec-1.0-alpha-1.jar
 gson-2.2.4.jar
@@ -107,7 +107,7 @@ jackson-module-jaxb-annotations-2.9.7.jar
 jackson-module-paranamer-2.9.7.jar
 jackson-module-scala_2.12-2.9.7.jar
 jackson-xc-1.9.13.jar
-janino-3.0.10.jar
+janino-3.0.11.jar
 javassist-3.20.0-GA.jar
 javax.annotation-api-1.2.jar
 javax.el-3.0.0.jar
@@ -140,7 +140,7 @@ jsp-api-2.1.jar
 jsr305-3.0.2.jar
 jtransforms-2.4.0.jar
 jul-to-slf4j-1.7.25.jar
-kafka-clients-0.11.0.0.jar
+kafka-clients-2.1.0.jar
 kryo-shaded-4.0.2.jar
 kubernetes-client-4.1.0.jar
 kubernetes-model-4.1.0.jar
@@ -165,9 +165,9 @@ okhttp-2.7.5.jar
 okhttp-3.11.0.jar
 okio-1.15.0.jar
 opencsv-2.3.jar
-orc-core-1.5.3-nohive.jar
-orc-mapreduce-1.5.3-nohive.jar
-orc-shims-1.5.3.jar
+orc-core-1.5.4-nohive.jar
+orc-mapreduce-1.5.4-nohive.jar
+orc-shims-1.5.4.jar
 oro-2.0.8.jar
 osgi-resource-locator-1.0.1.jar
 paranamer-2.8.jar
@@ -181,10 +181,10 @@ protobuf-java-2.5.0.jar
 py4j-0.10.8.1.jar
 pyrolite-4.13.jar
 safe-logging-1.5.1.jar
-scala-compiler-2.12.7.jar
-scala-library-2.12.7.jar
+scala-compiler-2.12.8.jar
+scala-library-2.12.8.jar
 scala-parser-combinators_2.12-1.1.0.jar
-scala-reflect-2.12.7.jar
+scala-reflect-2.12.8.jar
 scala-xml_2.12-1.0.5.jar
 shapeless_2.12-2.3.2.jar
 slf4j-api-1.7.25.jar
