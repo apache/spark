@@ -116,9 +116,8 @@ private[spark] class DiskBlockManager(conf: SparkConf,
               dirToBlacklistExpiryTime.put(localDirs(dirId), now + blacklistTimeout)
               mostRecentFailure = e
           }
-          Option(newDir).getOrElse(throw mostRecentFailure)
         }
-        newDir
+        Option(newDir).getOrElse(throw mostRecentFailure)
       }
     }
     new File(subDir, filename)

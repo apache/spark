@@ -18,11 +18,10 @@
 package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
-import java.util.UUID
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
-import org.apache.spark.{SparkConf, SparkFunSuite}
 
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.util.{ManualClock, Utils}
 
