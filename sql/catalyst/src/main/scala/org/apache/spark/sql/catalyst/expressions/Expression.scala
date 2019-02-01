@@ -231,6 +231,10 @@ abstract class Expression extends TreeNode[Expression] {
   def semanticEquals(other: Expression): Boolean =
     deterministic && other.deterministic && canonicalized == other.canonicalized
 
+  def resolveEquals(other: Expression): Boolean = {
+    semanticEquals(other)
+  }
+
   /**
    * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard
    * `hashCode`, an attempt has been made to eliminate cosmetic differences.

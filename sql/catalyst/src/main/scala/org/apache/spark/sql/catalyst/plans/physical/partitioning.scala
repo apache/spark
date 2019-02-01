@@ -221,7 +221,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       required match {
         case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l, r) => l.semanticEquals(r)
+            case (l, r) => l.resolveEquals(r)
           }
         case ClusteredDistribution(requiredClustering, _) =>
           expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
