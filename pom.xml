@@ -133,7 +133,7 @@
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.2.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
-    <parquet.version>1.10.1</parquet.version>
+    <parquet.version>1.11.0</parquet.version>
     <orc.version>1.5.5</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
@@ -238,6 +238,18 @@
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>parquet-1.11.0</id>
+      <!-- Temporal repository to test 1.11.0 Parquet release, should be removed when RC release -->
+      <name>Parquet 1.11.1 RC3</name>
+      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1020/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
