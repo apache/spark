@@ -291,7 +291,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     override def run() {
       while (true) {
         self.synchronized {
-          if (lastActivity + IDLE_WORKER_TIMEOUT_NS < System.nanoTime()) {
+          if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivity) {
             cleanupIdleWorkers()
             lastActivity = System.nanoTime()
           }
@@ -358,7 +358,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   def releaseWorker(worker: Socket) {
     if (useDaemon) {
       self.synchronized {
-        lastActivity = System.currentTimeMillis()
+        lastActivity = System.nanoTime()
         idleWorkers.enqueue(worker)
       }
     } else {
