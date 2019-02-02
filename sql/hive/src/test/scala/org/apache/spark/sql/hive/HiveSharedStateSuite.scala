@@ -62,7 +62,6 @@ class HiveSharedStateSuite extends SparkFunSuite {
 
     assert(!state.sparkContext.conf.contains("spark.foo"),
       "static spark conf should not be affected by session")
-    assert(state.sparkContext.conf.get(CATALOG_IMPLEMENTATION) === "in-memory")
     assert(state.globalTempViewManager.database === tmpDb)
     assert(state.externalCatalog.unwrapped.isInstanceOf[HiveExternalCatalog],
       "Initial SparkSession options can determine the catalog")
