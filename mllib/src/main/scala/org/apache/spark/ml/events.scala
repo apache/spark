@@ -35,7 +35,11 @@ import org.apache.spark.sql.{DataFrame, Dataset}
  *   understand what `Unstable` means.
  */
 @Unstable
-sealed trait MLEvent extends SparkListenerEvent
+sealed trait MLEvent extends SparkListenerEvent {
+  // Do not log ML events in event log. It should be revisited to see
+  // how it works with history server.
+  protected[spark] override def logEvent: Boolean = false
+}
 
 /**
  * Event fired before `Transformer.transform`.
