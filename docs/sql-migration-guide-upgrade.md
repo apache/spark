@@ -42,7 +42,7 @@ displayTitle: Spark SQL Upgrading Guide
   - Since Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Set JSON option `inferTimestamp` to `false` to disable such type inferring.
 
   - In PySpark, when Arrow optimization is enabled, if Arrow version is higher than 0.11.0, Arrow can perform safe type conversion when converting Pandas.Series to Arrow array during serialization. Arrow will raise errors when detecting unsafe type conversion like overflow. Setting `spark.sql.execution.pandas.arrowSafeTypeConversion` to true can enable it. The default setting is false. PySpark's behavior for Arrow versions is illustrated in the table below:
-  <table class="table">
+    <table class="table">
         <tr>
           <th>
             <b>PyArrow version</b>
@@ -55,39 +55,39 @@ displayTitle: Spark SQL Upgrading Guide
           </th>
         </tr>
         <tr>
-          <th>
-            <b>version < 0.11.0</b>
-          </th>
-          <th>
-            <b>Raise error</b>
-          </th>
-          <th>
-            <b>Silently allows</b>
-          </th>
+          <td>
+            version < 0.11.0
+          </td>
+          <td>
+            Raise error
+          </td>
+          <td>
+            Silently allows
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>version > 0.11.0, arrowSafeTypeConversion=false</b>
-          </th>
-          <th>
-            <b>Silent overflow</b>
-          </th>
-          <th>
-            <b>Silently allows</b>
-          </th>
+          <td>
+            version > 0.11.0, arrowSafeTypeConversion=false
+          </td>
+          <td>
+            Silent overflow
+          </td>
+          <td>
+            Silently allows
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>version > 0.11.0, arrowSafeTypeConversion=true</b>
-          </th>
-          <th>
-            <b>Raise error</b>
-          </th>
-          <th>
-            <b>Raise error</b>
-          </th>
+          <td>
+            version > 0.11.0, arrowSafeTypeConversion=true
+          </td>
+          <td>
+            Raise error
+          </td>
+          <td>
+            Raise error
+          </td>
         </tr>
-  </table>
+    </table>
 
   - In Spark version 2.4 and earlier, if `org.apache.spark.sql.functions.udf(Any, DataType)` gets a Scala closure with primitive-type argument, the returned UDF will return null if the input values is null. Since Spark 3.0, the UDF will return the default value of the Java type if the input value is null. For example, `val f = udf((x: Int) => x, IntegerType)`, `f($"x")` will return null in Spark 2.4 and earlier if column `x` is null, and return 0 in Spark 3.0. This behavior change is introduced because Spark 3.0 is built with Scala 2.12 by default.
 
@@ -100,64 +100,64 @@ displayTitle: Spark SQL Upgrading Guide
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
-  <table class="table">
+    <table class="table">
         <tr>
           <th>
             <b>Query</b>
           </th>
           <th>
-            <b>Result Spark 2.3 or Prior</b>
+            <b>Spark 2.3 or Prior</b>
           </th>
           <th>
-            <b>Result Spark 2.4</b>
+            <b>Spark 2.4</b>
           </th>
           <th>
             <b>Remarks</b>
           </th>
         </tr>
         <tr>
-          <th>
-            <b>SELECT <br> array_contains(array(1), 1.34D);</b>
-          </th>
-          <th>
-            <b>true</b>
-          </th>
-          <th>
-            <b>false</b>
-          </th>
-          <th>
-            <b>In Spark 2.4, left and right parameters are  promoted to array(double) and double type respectively.</b>
-          </th>
+          <td>
+            <code>SELECT array_contains(array(1), 1.34D);</code>
+          </td>
+          <td>
+            <code>true</code>
+          </td>
+          <td>
+            <code>false</code>
+          </td>
+          <td>
+            In Spark 2.4, left and right parameters are promoted to array type of double type and double type respectively.
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>SELECT <br> array_contains(array(1), '1');</b>
-          </th>
-          <th>
-            <b>true</b>
-          </th>
-          <th>
-            <b>AnalysisException is thrown since integer type can not be promoted to string type in a loss-less manner.</b>
-          </th>
-          <th>
-            <b>Users can use explicit cast</b>
-          </th>
+          <td>
+            <code>SELECT array_contains(array(1), '1');</code>
+          </td>
+          <td>
+            <code>true</code>
+          </td>
+          <td>
+            <code>AnalysisException</code> is thrown.
+          </td>
+          <td>
+            Explicit cast can be used in arguments to avoid the exception. In Spark 2.4, <code>AnalysisException</code> is thrown since integer type can not be promoted to string type in a loss-less manner.
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>SELECT <br> array_contains(array(1), 'anystring');</b>
-          </th>
-          <th>
-            <b>null</b>
-          </th>
-          <th>
-            <b>AnalysisException is thrown since integer type can not be promoted to string type in a loss-less manner.</b>
-          </th>
-          <th>
-            <b>Users can use explicit cast</b>
-          </th>
+          <td>
+            <code>SELECT <br> array_contains(array(1), 'anystring');</code>
+          </td>
+          <td>
+            <code>null</code>
+          </td>
+          <td>
+            <code>AnalysisException</code> is thrown.
+          </td>
+          <td>
+            Explicit cast can be used in arguments to avoid the exception. In Spark 2.4, <code>AnalysisException</code> is thrown since integer type can not be promoted to string type in a loss-less manner.
+          </td>
         </tr>
-  </table>
+    </table>
 
   - Since Spark 2.4, when there is a struct field in front of the IN operator before a subquery, the inner query must contain a struct field as well. In previous versions, instead, the fields of the struct were compared to the output of the inner query. Eg. if `a` is a `struct(a string, b int)`, in Spark 2.4 `a in (select (1 as a, 'a' as b) from range(1))` is a valid query, while `a in (select 1, 'a' from range(1))` is not. In previous version it was the opposite.
 
