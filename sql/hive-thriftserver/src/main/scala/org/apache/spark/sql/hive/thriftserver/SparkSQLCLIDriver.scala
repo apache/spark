@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.util.{ArrayList => JArrayList, Locale}
 import java.util.concurrent.TimeUnit
-import java.util.{Locale, ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
 
