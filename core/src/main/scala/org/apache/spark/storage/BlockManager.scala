@@ -18,11 +18,11 @@
 package org.apache.spark.storage
 
 import java.io._
-import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
+import java.lang.ref.{WeakReference, ReferenceQueue => JReferenceQueue}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -31,9 +31,7 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
-
 import com.codahale.metrics.{MetricRegistry, MetricSet}
-
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
@@ -1340,11 +1338,14 @@ private[spark] class BlockManager(
    */
   private def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = {
     peerFetchLock.synchronized {
-      val cachedPeersTtl = conf.get(config.STORAGE_CACHED_PEERS_TTL) // milliseconds
-      val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
+      def timeout: Boolean = {
+        val cachedPeersTtl = conf.get(config.STORAGE_CACHED_PEERS_TTL) // milliseconds
+        val diff = System.nanoTime() - lastPeerFetchTime
+        diff > TimeUnit.MILLISECONDS.toNanos(cachedPeersTtl)
+      }
       if (cachedPeers == null || forceFetch || timeout) {
         cachedPeers = master.getPeers(blockManagerId).sortBy(_.hashCode)
-        lastPeerFetchTime = System.currentTimeMillis
+        lastPeerFetchTime = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
       cachedPeers
