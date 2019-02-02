@@ -19,8 +19,8 @@ package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
-import java.nio.charset.StandardCharsets
 import java.util.Arrays
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -291,9 +291,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     override def run() {
       while (true) {
         self.synchronized {
-          if (lastActivity + IDLE_WORKER_TIMEOUT_MS < System.currentTimeMillis()) {
+          if (lastActivity + IDLE_WORKER_TIMEOUT_NS < System.nanoTime()) {
             cleanupIdleWorkers()
-            lastActivity = System.currentTimeMillis()
+            lastActivity = System.nanoTime()
           }
         }
         Thread.sleep(10000)
@@ -375,5 +375,5 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
 private object PythonWorkerFactory {
   val PROCESS_WAIT_TIMEOUT_MS = 10000
-  val IDLE_WORKER_TIMEOUT_MS = 60000  // kill idle workers after 1 minute
+  val IDLE_WORKER_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(1)  // kill idle workers after 1 minute
 }

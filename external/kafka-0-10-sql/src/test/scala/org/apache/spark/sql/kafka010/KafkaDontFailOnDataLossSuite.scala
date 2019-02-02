@@ -23,7 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.util.Random
+
 import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter}
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
