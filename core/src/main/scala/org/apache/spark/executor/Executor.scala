@@ -671,14 +671,16 @@ private[spark] class Executor(
 
     private[this] val killPollingIntervalMs: Long = conf.get(TASK_REAPER_POLLING_INTERVAL)
 
-    private[this] val killTimeoutMs: Long = conf.get(TASK_REAPER_KILL_TIMEOUT)
+    private[this] val killTimeoutNs: Long = {
+      TimeUnit.MILLISECONDS.toNanos(conf.get(TASK_REAPER_KILL_TIMEOUT))
+    }
 
     private[this] val takeThreadDump: Boolean = conf.get(TASK_REAPER_THREAD_DUMP)
 
     override def run(): Unit = {
-      val startTimeMs = System.currentTimeMillis()
-      def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
-      def timeoutExceeded(): Boolean = killTimeoutMs > 0 && elapsedTimeMs > killTimeoutMs
+      val startTimeNs = System.nanoTime()
+      def elapsedTimeNs = System.nanoTime() - startTimeNs
+      def timeoutExceeded(): Boolean = killTimeoutNs > 0 && elapsedTimeNs > killTimeoutNs
       try {
         // Only attempt to kill the task once. If interruptThread = false then a second kill
         // attempt would be a no-op and if interruptThread = true then it may not be safe or
@@ -703,7 +705,7 @@ private[spark] class Executor(
           if (taskRunner.isFinished) {
             finished = true
           } else {
-            logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
+            logWarning(s"Killed task $taskId is still running after $elapsedTimeNs ns")
             if (takeThreadDump) {
               try {
                 Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
@@ -721,14 +723,14 @@ private[spark] class Executor(
 
         if (!taskRunner.isFinished && timeoutExceeded()) {
           if (isLocal) {
-            logError(s"Killed task $taskId could not be stopped within $killTimeoutMs ms; " +
+            logError(s"Killed task $taskId could not be stopped within $killTimeoutNs ns; " +
               "not killing JVM because we are running in local mode.")
           } else {
             // In non-local-mode, the exception thrown here will bubble up to the uncaught exception
             // handler and cause the executor JVM to exit.
             throw new SparkException(
               s"Killing executor JVM because killed task $taskId could not be stopped within " +
-                s"$killTimeoutMs ms.")
+                s"$killTimeoutNs ns.")
           }
         }
       } finally {
