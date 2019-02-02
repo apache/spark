@@ -632,7 +632,7 @@ private[spark] class BlockManager(
    */
   def getLocalBytes(blockId: BlockId): Option[BlockData] = {
     logDebug(s"Getting local block $blockId as bytes")
-    assert(!blockId.isShuffle, "Unexpected ShuffleBlockId -- cf. SPARK-26768")
+    assert(!blockId.isShuffle, s"Unexpected ShuffleBlockId $blockId")
     blockInfoManager.lockForReading(blockId).map { info => doGetLocalBytes(blockId, info) }
   }
 
