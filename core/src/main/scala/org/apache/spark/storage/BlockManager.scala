@@ -560,7 +560,7 @@ private[spark] class BlockManager(
   private def getLocationBlockIds(blockIds: Array[BlockId]): Array[Seq[BlockManagerId]] = {
     val startTime = System.nanoTime()
     val locations = master.getLocations(blockIds).toArray
-    logDebug("Got multiple block location in %s".format(Utils.getUsedTimeMs(startTime)))
+    logDebug("Got multiple block location in %s".format(Utils.getUsedTimeNs(startTime)))
     locations
   }
 
@@ -1048,7 +1048,7 @@ private[spark] class BlockManager(
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
       }
-      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTime)))
+      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeNs(startTime)))
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
         try {
@@ -1137,10 +1137,10 @@ private[spark] class BlockManager(
     }
     if (level.replication > 1) {
       logDebug("Putting block %s with replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTime)))
+        .format(blockId, Utils.getUsedTimeNs(startTime)))
     } else {
       logDebug("Putting block %s without replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTime)))
+        .format(blockId, Utils.getUsedTimeNs(startTime)))
     }
     result
   }
@@ -1225,7 +1225,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, putBlockStatus)
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
-        logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTime)))
+        logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeNs(startTime)))
         if (level.replication > 1) {
           val remoteStartTime = System.nanoTime()
           val bytesToReplicate = doGetLocalBytes(blockId, info)
@@ -1243,7 +1243,7 @@ private[spark] class BlockManager(
             bytesToReplicate.dispose()
           }
           logDebug("Put block %s remotely took %s"
-            .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
+            .format(blockId, Utils.getUsedTimeNs(remoteStartTime)))
         }
       }
       assert(blockWasSuccessfullyStored == iteratorFromFailedMemoryStorePut.isEmpty)
