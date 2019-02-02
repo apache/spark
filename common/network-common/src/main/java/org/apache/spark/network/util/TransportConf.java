@@ -43,6 +43,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
   private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
+  private final String SPARK_NETWORK_IO_CONSOLIDATEBUFS_THRESHOLD_KEY;
 
   private final ConfigProvider conf;
 
@@ -66,6 +67,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
     SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
+    SPARK_NETWORK_IO_CONSOLIDATEBUFS_THRESHOLD_KEY = getConfKey("io.consolidateBufsThreshold");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -92,6 +94,12 @@ public class TransportConf {
   /** If true, we will prefer allocating off-heap byte buffers within Netty. */
   public boolean preferDirectBufs() {
     return conf.getBoolean(SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY, true);
+  }
+
+  public long consolidateBufsThreshold() {
+    long defaultConsolidateBufsThreshold = (long)(JavaUtils.byteStringAsBytes(
+        conf.get("spark.executor.memory", "1g")) * 0.1);
+    return conf.getLong(SPARK_NETWORK_IO_CONSOLIDATEBUFS_THRESHOLD_KEY, defaultConsolidateBufsThreshold);
   }
 
   /** Connect timeout in milliseconds. Default 120 secs. */

@@ -56,6 +56,18 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
   private long nextFrameSize = UNKNOWN_FRAME_SIZE;
   private volatile Interceptor interceptor;
 
+  private long consolidateBufsThreshold = Long.MAX_VALUE;
+  long consolidatedCount = 0L;
+  long consolidatedTotalTime = 0L;
+
+  public TransportFrameDecoder() {}
+
+  public TransportFrameDecoder(long consolidateBufsThreshold) {
+    if (consolidateBufsThreshold > 0) {
+      this.consolidateBufsThreshold = consolidateBufsThreshold;
+    }
+  }
+
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
     ByteBuf in = (ByteBuf) data;
@@ -141,21 +153,23 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
     // Otherwise, create a composite buffer.
     CompositeByteBuf frame = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
+    long lastConsolidatedCapacity = 0L;
     while (remaining > 0) {
       ByteBuf next = nextBufferForFrame(remaining);
       remaining -= next.readableBytes();
       frame.addComponent(next).writerIndex(frame.writerIndex() + next.readableBytes());
-    }
-    // Because the bytebuf created is far less than it's capacity in most cases,
-    // we can reduce memory consumption by consolidation
-    ByteBuf retained = null;
-    if (frameSize >= 1024 * 1024) {
-      retained = frame.consolidate();
-    } else {
-      retained = frame;
+      if (frame.capacity() - lastConsolidatedCapacity >= consolidateBufsThreshold) {
+        // Because the bytebuf created is far less than it's capacity in most cases,
+        // we can reduce memory consumption by consolidation
+        long start = System.currentTimeMillis();
+        frame.consolidate();
+        consolidatedCount += 1;
+        consolidatedTotalTime += System.currentTimeMillis() - start;
+        lastConsolidatedCapacity = frame.capacity();
+      }
     }
     assert remaining == 0;
-    return retained;
+    return frame;
   }
 
   /**

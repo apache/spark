@@ -191,9 +191,10 @@ public class TransportContext {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       ChunkFetchRequestHandler chunkFetchHandler =
         createChunkFetchHandler(channelHandler, channelRpcHandler);
+
       ChannelPipeline pipeline = channel.pipeline()
         .addLast("encoder", ENCODER)
-        .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
+        .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder(conf.consolidateBufsThreshold()))
         .addLast("decoder", DECODER)
         .addLast("idleStateHandler",
           new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))

@@ -77,6 +77,38 @@ public class TransportFrameDecoderSuite {
   }
 
   @Test
+  public void testConsolidationPerf() {
+    TransportFrameDecoder decoder = new TransportFrameDecoder(300 * 1024 * 1024);
+    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    List<ByteBuf> retained = new ArrayList<>();
+    when(ctx.fireChannelRead(any())).thenAnswer(in -> {
+      ByteBuf buf = (ByteBuf) in.getArguments()[0];
+      retained.add(buf);
+      return null;
+    });
+
+    ByteBuf buf = Unpooled.buffer(8);
+    try {
+      buf.writeLong(8 + 1024 * 1024 * 1000);
+      decoder.channelRead(ctx, buf);
+      for (int i = 0; i < 1000; i++) {
+        buf = Unpooled.buffer(1024 * 1024 * 2);
+        ByteBuf writtenBuf = Unpooled.buffer(1024 * 1024).writerIndex(1024 * 1024);
+        buf.writeBytes(writtenBuf);
+        writtenBuf.release();
+        decoder.channelRead(ctx, buf);
+      }
+      assertEquals(1, retained.size());
+      assertEquals(1024 * 1024 * 1000, retained.get(0).capacity());
+      System.out.println("consolidated " + decoder.consolidatedCount + " times cost " + decoder.consolidatedTotalTime + " milis");
+    } catch (Exception e) {
+      if (buf != null) {
+        release(buf);
+      }
+    }
+  }
+
+  @Test
   public void testInterception() throws Exception {
     int interceptedReads = 3;
     TransportFrameDecoder decoder = new TransportFrameDecoder();

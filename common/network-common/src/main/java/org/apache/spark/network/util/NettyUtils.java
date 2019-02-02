@@ -100,7 +100,11 @@ public class NettyUtils {
    * This is used before all decoders.
    */
   public static TransportFrameDecoder createFrameDecoder() {
-    return new TransportFrameDecoder();
+    return new TransportFrameDecoder(-1L);
+  }
+
+  public static TransportFrameDecoder createFrameDecoder(long consolidateBufsThreshold) {
+    return new TransportFrameDecoder(consolidateBufsThreshold);
   }
 
   /** Returns the remote address on the channel or "&lt;unknown remote&gt;" if none exists. */
