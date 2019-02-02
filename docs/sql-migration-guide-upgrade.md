@@ -145,7 +145,7 @@ displayTitle: Spark SQL Upgrading Guide
         </tr>
         <tr>
           <td>
-            <code>SELECT <br> array_contains(array(1), 'anystring');</code>
+            <code>SELECT array_contains(array(1), 'anystring');</code>
           </td>
           <td>
             <code>null</code>
