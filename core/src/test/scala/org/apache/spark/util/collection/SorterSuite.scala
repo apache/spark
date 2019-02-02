@@ -87,11 +87,11 @@ class SorterSuite extends SparkFunSuite with Logging {
     while (i < 10) {
       val time = org.apache.spark.util.Utils.timeIt(1)(f, Some(prepare))
       next10 += time
-      logInfo(s"$name: Took $time ms")
+      logInfo(s"$name: Took $time ns")
       i += 1
     }
 
-    logInfo(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
+    logInfo(s"$name: ($firstTry ns first try, ${next10 / 10} ns average)")
   }
 
   /**

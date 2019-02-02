@@ -632,7 +632,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
     val time = Utils.timeIt(2)({}, Some(prepare))
     require(cnt === 2, "prepare should be called twice")
-    require(time < 500, "preparation time should not count")
+    require(time < TimeUnit.MILLISECONDS.toNanos(500), "preparation time should not count")
   }
 
   test("fetch hcfs dir") {
