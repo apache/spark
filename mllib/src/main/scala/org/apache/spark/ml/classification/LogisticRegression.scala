@@ -815,7 +815,7 @@ class LogisticRegression @Since("1.2.0") (
           state = states.next()
           arrayBuilder += state.adjustedValue
         }
-        bcFeaturesStd.destroy(blocking = false)
+        bcFeaturesStd.destroy()
 
         if (state == null) {
           val msg = s"${optimizer.getClass.getName} failed."

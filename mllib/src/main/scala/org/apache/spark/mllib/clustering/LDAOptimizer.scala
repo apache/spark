@@ -505,7 +505,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
         elementWiseSum, elementWiseSum
       )
 
-    expElogbetaBc.destroy(false)
+    expElogbetaBc.destroy()
 
     if (nonEmptyDocsN == 0) {
       logWarning("No non-empty documents were submitted in the batch.")
