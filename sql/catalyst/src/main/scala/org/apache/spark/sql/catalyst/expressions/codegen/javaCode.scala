@@ -192,8 +192,9 @@ trait Block extends TreeNode[Block] with JavaCode {
   }
 
   // Concatenates this block with other block.
-  def + (other: Block): Block = other match {
-    case EmptyBlock => this
+  def + (other: Block): Block = (this, other) match {
+    case (EmptyBlock, o) => o
+    case (o, EmptyBlock) => o
     case _ => code"$this\n$other"
   }
 
