@@ -558,9 +558,9 @@ private[spark] class BlockManager(
    * Get locations of an array of blocks.
    */
   private def getLocationBlockIds(blockIds: Array[BlockId]): Array[Seq[BlockManagerId]] = {
-    val startTimeMs = System.currentTimeMillis
+    val startTime = System.nanoTime()
     val locations = master.getLocations(blockIds).toArray
-    logDebug("Got multiple block location in %s".format(Utils.getUsedTimeMs(startTimeMs)))
+    logDebug("Got multiple block location in %s".format(Utils.getUsedTimeMs(startTime)))
     locations
   }
 
@@ -988,7 +988,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       keepReadLock: Boolean = false): Boolean = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
-      val startTimeMs = System.currentTimeMillis
+      val startTime = System.nanoTime()
       // Since we're storing bytes, initiate the replication before storing them locally.
       // This is faster as data is already serialized and ready to send.
       val replicationFuture = if (level.replication > 1) {
@@ -1048,7 +1048,7 @@ private[spark] class BlockManager(
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
       }
-      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTime)))
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
         try {
@@ -1096,7 +1096,7 @@ private[spark] class BlockManager(
       }
     }
 
-    val startTimeMs = System.currentTimeMillis
+    val startTime = System.nanoTime()
     var exceptionWasThrown: Boolean = true
     val result: Option[T] = try {
       val res = putBody(putBlockInfo)
@@ -1137,10 +1137,10 @@ private[spark] class BlockManager(
     }
     if (level.replication > 1) {
       logDebug("Putting block %s with replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+        .format(blockId, Utils.getUsedTimeMs(startTime)))
     } else {
       logDebug("Putting block %s without replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+        .format(blockId, Utils.getUsedTimeMs(startTime)))
     }
     result
   }
@@ -1165,7 +1165,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
-      val startTimeMs = System.currentTimeMillis
+      val startTime = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
       // Size of the block in bytes
       var size = 0L
@@ -1225,9 +1225,9 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, putBlockStatus)
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
-        logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+        logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTime)))
         if (level.replication > 1) {
-          val remoteStartTime = System.currentTimeMillis
+          val remoteStartTime = System.nanoTime()
           val bytesToReplicate = doGetLocalBytes(blockId, info)
           // [SPARK-16550] Erase the typed classTag when using default serialization, since
           // NettyBlockRpcServer crashes when deserializing repl-defined classes.

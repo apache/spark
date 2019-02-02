@@ -92,7 +92,7 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] var numBlocksProcessed = 0
 
-  private[this] val startTime = System.currentTimeMillis
+  private[this] val startTime = System.nanoTime()
 
   /** Local blocks to fetch, excluding zero-sized blocks. */
   private[this] val localBlocks = scala.collection.mutable.LinkedHashSet[BlockId]()
