@@ -18,13 +18,12 @@
 package org.apache.spark.sql.kafka010
 
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.util.Random
-
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter}
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
@@ -221,13 +220,13 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
       .as[(String, String)]
     val query = startStream(kafka.map(kv => kv._2.toInt))
 
-    val testTime = 20.seconds
-    val startTime = System.currentTimeMillis()
+    val testTime = TimeUnit.SECONDS.toNanos(20)
+    val startTime = System.nanoTime()
     // Track the current existing topics
     val topics = mutable.ArrayBuffer[String]()
     // Track topics that have been deleted
     val deletedTopics = mutable.Set[String]()
-    while (System.currentTimeMillis() - testTime.toMillis < startTime) {
+    while (System.nanoTime() - testTime < startTime) {
       Random.nextInt(10) match {
         case 0 => // Create a new topic
           val topic = newTopic()
