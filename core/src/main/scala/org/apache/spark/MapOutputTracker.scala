@@ -706,7 +706,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
-      val startTime = System.currentTimeMillis
+      val startTime = System.nanoTime()
       var fetchedStatuses: Array[MapStatus] = null
       fetching.synchronized {
         // Someone else is fetching it; wait for them to be done
@@ -744,7 +744,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         }
       }
       logDebug(s"Fetching map output statuses for shuffle $shuffleId took " +
-        s"${System.currentTimeMillis - startTime} ms")
+        s"${System.nanoTime() - startTime} ns")
 
       if (fetchedStatuses != null) {
         fetchedStatuses
