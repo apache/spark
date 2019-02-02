@@ -338,7 +338,7 @@ class LocalLDAModel private[spark] (
 
         docBound
       }.sum()
-    ElogbetaBc.destroy(blocking = false)
+    ElogbetaBc.destroy()
 
     // Bound component for prob(topic-term distributions):
     //   E[log p(beta | eta) - log q(beta | lambda)]

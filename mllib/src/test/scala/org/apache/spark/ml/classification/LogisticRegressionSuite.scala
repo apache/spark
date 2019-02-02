@@ -549,9 +549,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       }
     }
     assert(thrown.getMessage.contains("coefficients only supports dense"))
-    bcCoefficientsBinary.destroy(blocking = false)
-    bcFeaturesStd.destroy(blocking = false)
-    bcCoefficientsMulti.destroy(blocking = false)
+    bcCoefficientsBinary.destroy()
+    bcFeaturesStd.destroy()
+    bcCoefficientsMulti.destroy()
   }
 
   test("overflow prediction for multiclass") {

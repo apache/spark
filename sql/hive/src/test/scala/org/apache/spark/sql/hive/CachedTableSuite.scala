@@ -123,7 +123,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       // no error will be reported in the following three ways to uncache a table.
       spark.catalog.uncacheTable(tableName)
       sql("UNCACHE TABLE newTable")
-      sparkSession.table(tableName).unpersist()
+      sparkSession.table(tableName).unpersist(blocking = true)
     }
   }
 
