@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{File, IOException}
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -101,9 +102,7 @@ private[spark] class DiskBlockManager(conf: SparkConf,
               throw new IOException("No good disk directories available")
             }
             newDir = new File(localDirs(goodDirId), "%02x".format(subDirId))
-            if (!newDir.exists() && !newDir.mkdir()) {
-              throw new IOException(s"Failed to create local dir in $newDir.")
-            }
+            Files.createDirectories(newDir.toPath)
             subDirs(goodDirId)(subDirId) = newDir
             if (goodDirId != dirId) {
               migratedDirIdIndex.put(hash, goodDirId)
@@ -111,7 +110,7 @@ private[spark] class DiskBlockManager(conf: SparkConf,
             succeed = true
           } catch {
             case e: IOException =>
-              logError(s"Failed to looking up file $filename in attempt $attempt", e)
+              logError(s"Failed to look up file $filename in attempt $attempt", e)
               badDirs += localDirs(dirId)
               dirToBlacklistExpiryTime.put(localDirs(dirId), now + blacklistTimeout)
               mostRecentFailure = e
