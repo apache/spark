@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Repartition, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -779,6 +779,13 @@ class PlannerSuite extends SharedSQLContext {
         Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m"),
         classOf[PartitioningCollection])
     }
+  }
+
+  test("SPARK-26812: wrong nullability for complex datatypes in union") {
+    val testRelation1 = LocalRelation('a.map(MapType(StringType, StringType, true)))
+    val testRelation2 = LocalRelation('a.map(MapType(StringType, StringType, false)))
+    val query = Union(testRelation2, testRelation1)
+    assert(query.output.head.dataType == MapType(StringType, StringType, true))
   }
 }
 

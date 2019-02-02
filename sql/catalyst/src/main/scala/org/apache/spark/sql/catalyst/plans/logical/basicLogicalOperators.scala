@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
@@ -230,9 +231,23 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   }
 
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val outAttr = if (attrs.exists(_.isInstanceOf[UnresolvedAttribute])) {
+        firstAttr
+      } else {
+        try {
+          firstAttr.withDataType(attrs.map(_.dataType).reduce(StructType.merge))
+        } catch {
+          // If the data types are not compatible (eg. Decimals with different precision/scale)
+          // return the first type
+          case _: SparkException => firstAttr
+        }
+      }
+      outAttr.withNullability(attrs.exists(_.nullable))
+    }
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
