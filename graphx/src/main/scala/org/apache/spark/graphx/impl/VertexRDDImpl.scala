@@ -58,7 +58,7 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
-  override def unpersist(blocking: Boolean = true): this.type = {
+  override def unpersist(blocking: Boolean = false): this.type = {
     partitionsRDD.unpersist(blocking)
     this
   }

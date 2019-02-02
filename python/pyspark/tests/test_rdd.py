@@ -324,7 +324,7 @@ class RDDTests(ReusedPySparkTestCase):
         bdata.unpersist()
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEqual(N, m)
-        bdata.destroy()
+        bdata.destroy(blocking=True)
         try:
             self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         except Exception as e:

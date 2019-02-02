@@ -296,7 +296,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
       // Using this variable on the executors crashes them, which hangs the test.
       // Instead, crash the driver by directly accessing the broadcast value.
       intercept[SparkException] { broadcast.value }
-      intercept[SparkException] { broadcast.unpersist() }
+      intercept[SparkException] { broadcast.unpersist(blocking = true) }
       intercept[SparkException] { broadcast.destroy(blocking = true) }
     } else {
       val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
@@ -309,7 +309,7 @@ package object testPackage extends Assertions {
 
   def runCallSiteTest(sc: SparkContext) {
     val broadcast = sc.broadcast(Array(1, 2, 3, 4))
-    broadcast.destroy()
+    broadcast.destroy(blocking = true)
     val thrown = intercept[SparkException] { broadcast.value }
     assert(thrown.getMessage.contains("BroadcastSuite.scala"))
   }
