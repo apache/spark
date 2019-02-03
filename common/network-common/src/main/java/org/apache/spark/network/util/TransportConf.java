@@ -96,9 +96,20 @@ public class TransportConf {
     return conf.getBoolean(SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY, true);
   }
 
+  /** The threshold for consolidation, it is derived upon the memoryOverhead in yarn mode. */
   public long consolidateBufsThreshold() {
-    long defaultConsolidateBufsThreshold = (long)(JavaUtils.byteStringAsBytes(
-        conf.get("spark.executor.memory", "1g")) * 0.1);
+    boolean isDriver = conf.get("spark.executor.id").equals("driver");
+    final long MEMORY_OVERHEAD_MIN = 384L;
+    final double MEMORY_OVERHEAD_FACTOR = 0.1;
+    final double SHUFFLE_MEMORY_OVERHEAD_FACTOR = MEMORY_OVERHEAD_FACTOR * 0.6;
+    final double SHUFFLE_MEMORY_OVERHEAD_SAFE_FACTOR = SHUFFLE_MEMORY_OVERHEAD_FACTOR * 0.5;
+    long memory;
+    if (isDriver) {
+      memory = Math.max(JavaUtils.byteStringAsBytes(conf.get("spark.driver.memory")), MEMORY_OVERHEAD_MIN);
+    } else {
+      memory = Math.max(JavaUtils.byteStringAsBytes(conf.get("spark.executor.memory")), MEMORY_OVERHEAD_MIN);
+    }
+    long defaultConsolidateBufsThreshold = (long)(memory * SHUFFLE_MEMORY_OVERHEAD_SAFE_FACTOR);
     return conf.getLong(SPARK_NETWORK_IO_CONSOLIDATEBUFS_THRESHOLD_KEY, defaultConsolidateBufsThreshold);
   }
 
