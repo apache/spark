@@ -2114,7 +2114,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-26572: fix aggregate codegen result evaluation") {
     val baseTable = Seq((1), (1)).toDF("idx")
     val distinctWithId =
-        baseTable.distinct.withColumn("id", functions.monotonically_increasing_id())
+      baseTable.distinct.withColumn("id", functions.monotonically_increasing_id())
     val res = baseTable.join(distinctWithId, "idx")
       .groupBy("id").count().as("count")
       .select("count")
