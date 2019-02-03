@@ -18,12 +18,14 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, Month, ZonedDateTime}
+import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.{Function => JFunction}
+
+import scala.util.control.NonFatal
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -60,7 +62,6 @@ object DateTimeUtils {
   final val toYearZero = to2001 + 7304850
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
-  final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   val TIMEZONE_OPTION = "timeZone"
 
@@ -326,34 +327,27 @@ object DateTimeUtils {
       segments(6) /= 10
       digitsMilli -= 1
     }
-
-    if (!justTime && isInvalidDate(segments(0), segments(1), segments(2))) {
-      return None
+    try {
+      val zoneId = if (tz.isEmpty) {
+        timeZone.toZoneId
+      } else {
+        val sign = if (tz.get.toChar == '-') -1 else 1
+        ZoneId.ofOffset("GMT", ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8)))
+      }
+      val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      val localDate = if (justTime) {
+        LocalDate.now(zoneId)
+      } else {
+        LocalDate.of(segments(0), segments(1), segments(2))
+      }
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+      val instant = Instant.from(zonedDateTime)
+      Some(instantToMicros(instant))
+    } catch {
+      case NonFatal(_) => None
     }
-
-    if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
-        segments(5) < 0 || segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 ||
-        segments(7) < 0 || segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
-      return None
-    }
-
-    val zoneId = if (tz.isEmpty) {
-      timeZone.toZoneId
-    } else {
-      getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d").toZoneId
-    }
-    val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
-    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-    val localDate = if (justTime) {
-      LocalDate.now(zoneId)
-    } else {
-      LocalDate.of(segments(0), segments(1), segments(2))
-    }
-    val localDateTime = LocalDateTime.of(localDate, localTime)
-    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-    val instant = Instant.from(zonedDateTime)
-
-    Some(instantToMicros(instant))
   }
 
   def instantToMicros(instant: Instant): Long = {
@@ -414,32 +408,13 @@ object DateTimeUtils {
       return None
     }
     segments(i) = currentSegmentValue
-    if (isInvalidDate(segments(0), segments(1), segments(2))) {
-      return None
+    try {
+      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
+      Some(instantToDays(instant))
+    } catch {
+      case NonFatal(_) => None
     }
-
-    val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-    val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
-    Some(instantToDays(instant))
-  }
-
-  /**
-   * Return true if the date is invalid.
-   */
-  private def isInvalidDate(year: Int, month: Int, day: Int): Boolean = {
-    if (year < 0 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
-      return true
-    }
-    if (month == 2) {
-      if (isLeap(year) && day > 29) {
-        return true
-      } else if (!isLeap(year) && day > 28) {
-        return true
-      }
-    } else if (!MonthOf31Days.contains(month) && day > 30) {
-      return true
-    }
-    false
   }
 
   /**
