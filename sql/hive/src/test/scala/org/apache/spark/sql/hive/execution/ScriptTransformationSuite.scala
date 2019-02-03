@@ -22,7 +22,6 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -69,7 +68,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton wit
 
   override protected def afterEach(): Unit = {
     super.afterEach()
-    uncaughtExceptionHandler.cleanStatus
+    uncaughtExceptionHandler.cleanStatus()
   }
 
   test("cat without SerDe") {
@@ -200,17 +199,4 @@ private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExe
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
-}
-
-private class TestUncaughtExceptionHandler extends Thread.UncaughtExceptionHandler {
-
-  @volatile private var _exception: Throwable = _
-
-  def exception: Option[Throwable] = Option(_exception)
-
-  def cleanStatus: Unit = _exception = null
-
-  override def uncaughtException(t: Thread, e: Throwable): Unit = {
-    _exception = e
-  }
 }
