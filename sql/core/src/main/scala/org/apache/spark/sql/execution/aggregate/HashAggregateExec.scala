@@ -466,10 +466,12 @@ case class HashAggregateExec(
       val resultVars = bindReferences[Expression](
         resultExpressions,
         inputAttrs).map(_.genCode(ctx))
+      val evaluateResultVars = evaluateVariables(resultVars)
       s"""
        $evaluateKeyVars
        $evaluateBufferVars
        $evaluateAggResults
+       $evaluateResultVars
        ${consume(ctx, resultVars)}
        """
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
@@ -497,19 +499,25 @@ case class HashAggregateExec(
       val resultVars = bindReferences[Expression](
         resultExpressions,
         inputAttrs).map(_.genCode(ctx))
+      val evaluateResultVars = evaluateVariables(resultVars)
       s"""
        $evaluateKeyVars
        $evaluateResultBufferVars
+       $evaluateResultVars
        ${consume(ctx, resultVars)}
        """
     } else {
       // generate result based on grouping key
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
-      val eval = bindReferences[Expression](
+      val resultVars = bindReferences[Expression](
         resultExpressions,
         groupingAttributes).map(_.genCode(ctx))
-      consume(ctx, eval)
+      val evaluateResultVars = evaluateVariables(resultVars)
+      s"""
+       $evaluateResultVars
+       ${consume(ctx, resultVars)}
+       """
     }
     ctx.addNewFunction(funcName,
       s"""

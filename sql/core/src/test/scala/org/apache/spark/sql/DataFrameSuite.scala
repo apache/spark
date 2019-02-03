@@ -2110,4 +2110,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(res, Row("1-1", 6, 6))
     }
   }
+
+  test("SPARK-26572: fix aggregate codegen result evaluation") {
+    val baseTable = Seq((1), (1)).toDF("idx")
+    val distinctWithId =
+        baseTable.distinct.withColumn("id", functions.monotonically_increasing_id())
+    val res = baseTable.join(distinctWithId, "idx")
+      .groupBy("id").count().as("count")
+      .select("count")
+    checkAnswer(res, Row(2))
+  }
 }
