@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.streaming.continuous
 
+import org.mockito.ArgumentMatchers.{any, eq => eqTo}
 import org.mockito.InOrder
-import org.mockito.Matchers.{any, eq => eqTo}
-import org.mockito.Mockito._
+import org.mockito.Mockito.{inOrder, never, verify}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar
 
@@ -27,9 +27,9 @@ import org.apache.spark._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.test.TestSparkSession
 
 class EpochCoordinatorSuite
@@ -40,20 +40,20 @@ class EpochCoordinatorSuite
 
   private var epochCoordinator: RpcEndpointRef = _
 
-  private var writer: StreamWriter = _
+  private var writeSupport: StreamingWriteSupport = _
   private var query: ContinuousExecution = _
   private var orderVerifier: InOrder = _
 
   override def beforeEach(): Unit = {
-    val reader = mock[ContinuousReader]
-    writer = mock[StreamWriter]
+    val stream = mock[ContinuousStream]
+    writeSupport = mock[StreamingWriteSupport]
     query = mock[ContinuousExecution]
-    orderVerifier = inOrder(writer, query)
+    orderVerifier = inOrder(writeSupport, query)
 
     spark = new TestSparkSession()
 
     epochCoordinator
-      = EpochCoordinatorRef.create(writer, reader, query, "test", 1, spark, SparkEnv.get)
+      = EpochCoordinatorRef.create(writeSupport, stream, query, "test", 1, spark, SparkEnv.get)
   }
 
   test("single epoch") {
@@ -209,12 +209,12 @@ class EpochCoordinatorSuite
   }
 
   private def verifyCommit(epoch: Long): Unit = {
-    orderVerifier.verify(writer).commit(eqTo(epoch), any())
+    orderVerifier.verify(writeSupport).commit(eqTo(epoch), any())
     orderVerifier.verify(query).commit(epoch)
   }
 
   private def verifyNoCommitFor(epoch: Long): Unit = {
-    verify(writer, never()).commit(eqTo(epoch), any())
+    verify(writeSupport, never()).commit(eqTo(epoch), any())
     verify(query, never()).commit(epoch)
   }
 

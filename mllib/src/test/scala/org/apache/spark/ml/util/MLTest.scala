@@ -21,12 +21,14 @@ import java.io.File
 
 import org.scalatest.Suite
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkContext}
+import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.ml.{PredictionModel, Transformer}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.util.Utils
@@ -35,6 +37,13 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
 
   @transient var sc: SparkContext = _
   @transient var checkpointDir: String = _
+
+  protected override def sparkConf = {
+    new SparkConf()
+      .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
+      .set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
+      .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+  }
 
   protected override def createSparkSession: TestSparkSession = {
     new TestSparkSession(new SparkContext("local[2]", "MLlibUnitTest", sparkConf))

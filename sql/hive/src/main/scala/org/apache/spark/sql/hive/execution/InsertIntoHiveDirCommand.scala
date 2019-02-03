@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Command for writing the results of `query` to file system.
@@ -57,16 +58,20 @@ case class InsertIntoHiveDirCommand(
     storage: CatalogStorageFormat,
     query: LogicalPlan,
     overwrite: Boolean,
-    outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
+    outputColumnNames: Seq[String]) extends SaveAsHiveFile {
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(storage.locationUri.nonEmpty)
+    SchemaUtils.checkColumnNameDuplication(
+      outputColumnNames,
+      s"when inserting into ${storage.locationUri.get}",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
       identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),
       tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.VIEW,
       storage = storage,
-      schema = query.schema
+      schema = outputColumns.toStructType
     ))
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
@@ -104,8 +109,7 @@ case class InsertIntoHiveDirCommand(
         plan = child,
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
-        outputLocation = tmpPath.toString,
-        allColumns = outputColumns)
+        outputLocation = tmpPath.toString)
 
       val fs = writeToPath.getFileSystem(hadoopConf)
       if (overwrite && fs.exists(writeToPath)) {

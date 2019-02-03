@@ -51,7 +51,16 @@ select exists(ys, y -> y > 30) as v from nested;
 
 -- Check for element existence in a null array
 select exists(cast(null as array<int>), y -> y > 30) as v;
-                                                                         
+
+-- Zip with array
+select zip_with(ys, zs, (a, b) -> a + size(b)) as v from nested;
+
+-- Zip with array with concat
+select zip_with(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y)) as v;
+
+-- Zip with array coalesce
+select zip_with(array('a'), array('d', null, 'f'), (x, y) -> coalesce(x, y)) as v;
+
 create or replace temporary view nested as values
   (1, map(1, 1, 2, 2, 3, 3)),
   (2, map(4, 4, 5, 5, 6, 6))
@@ -65,3 +74,12 @@ select transform_keys(ys, (k, v) -> k + 1) as v from nested;
 
 -- Transform Keys in a map using values
 select transform_keys(ys, (k, v) -> k + v) as v from nested;
+
+-- Identity Transform values in a map
+select transform_values(ys, (k, v) -> v) as v from nested;
+
+-- Transform values in a map by adding constant
+select transform_values(ys, (k, v) -> v + 1) as v from nested;
+
+-- Transform values in a map using values
+select transform_values(ys, (k, v) -> k + v) as v from nested;

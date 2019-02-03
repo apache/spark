@@ -17,14 +17,15 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{eq => meq}
+import org.mockito.Mockito.{never, reset, times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -332,8 +333,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
     val confWithBothDynamicAllocationEnabled = new SparkConf()
       .set("spark.streaming.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
     require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled) === true)
     withStreamingContext(confWithBothDynamicAllocationEnabled) { ssc =>
       intercept[IllegalArgumentException] {

@@ -79,7 +79,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
           addIntercept = true, nPoints, seed)
 
-      sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
+      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
+      df.cache()
+      df
     }
 
     multinomialDataset = {
@@ -547,9 +549,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       }
     }
     assert(thrown.getMessage.contains("coefficients only supports dense"))
-    bcCoefficientsBinary.destroy(blocking = false)
-    bcFeaturesStd.destroy(blocking = false)
-    bcCoefficientsMulti.destroy(blocking = false)
+    bcCoefficientsBinary.destroy()
+    bcFeaturesStd.destroy()
+    bcCoefficientsMulti.destroy()
   }
 
   test("overflow prediction for multiclass") {
@@ -1130,9 +1132,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("binary logistic regression with intercept with ElasticNet regularization") {
-    val trainer1 = (new LogisticRegression).setFitIntercept(true).setMaxIter(200)
+    val trainer1 = (new LogisticRegression).setFitIntercept(true).setMaxIter(120)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setWeightCol("weight")
-    val trainer2 = (new LogisticRegression).setFitIntercept(true)
+    val trainer2 = (new LogisticRegression).setFitIntercept(true).setMaxIter(30)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
@@ -1174,7 +1176,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val coefficientsR = Vectors.dense(0.0, 0.0, -0.1846038, -0.0559614)
     val interceptR = 0.5024256
 
-    assert(model1.intercept ~== interceptRStd relTol 6E-3)
+    assert(model1.intercept ~== interceptRStd relTol 6E-2)
     assert(model1.coefficients ~== coefficientsRStd absTol 5E-3)
     assert(model2.intercept ~== interceptR relTol 6E-3)
     assert(model2.coefficients ~= coefficientsR absTol 1E-3)
@@ -1677,10 +1679,10 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     // use tighter constraints because OWL-QN solver takes longer to converge
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.05).setStandardization(true)
-      .setMaxIter(300).setTol(1e-10).setWeightCol("weight")
+      .setMaxIter(160).setTol(1e-10).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.05).setStandardization(false)
-      .setMaxIter(300).setTol(1e-10).setWeightCol("weight")
+      .setMaxIter(110).setTol(1e-10).setWeightCol("weight")
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
@@ -1767,7 +1769,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
     val interceptsR = Vectors.dense(-0.44215290, 0.76308326, -0.3209304)
 
-    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.02)
+    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.05)
     assert(model1.interceptVector ~== interceptsRStd relTol 0.1)
     assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficientMatrix ~== coefficientsR absTol 0.02)
@@ -2145,10 +2147,10 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   test("multinomial logistic regression with intercept with elasticnet regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(0.5).setRegParam(0.1).setStandardization(true)
-      .setMaxIter(300).setTol(1e-10)
+      .setMaxIter(220).setTol(1e-10)
     val trainer2 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(0.5).setRegParam(0.1).setStandardization(false)
-      .setMaxIter(300).setTol(1e-10)
+      .setMaxIter(90).setTol(1e-10)
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
@@ -2234,8 +2236,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
     val interceptsR = Vectors.dense(-0.38857157, 0.62492165, -0.2363501)
 
-    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.01)
-    assert(model1.interceptVector ~== interceptsRStd absTol 0.01)
+    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.05)
+    assert(model1.interceptVector ~== interceptsRStd absTol 0.1)
     assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficientMatrix ~== coefficientsR absTol 0.01)
     assert(model2.interceptVector ~== interceptsR absTol 0.01)
@@ -2245,10 +2247,10 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   test("multinomial logistic regression without intercept with elasticnet regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false).setWeightCol("weight")
       .setElasticNetParam(0.5).setRegParam(0.1).setStandardization(true)
-      .setMaxIter(300).setTol(1e-10)
+      .setMaxIter(75).setTol(1e-10)
     val trainer2 = (new LogisticRegression).setFitIntercept(false).setWeightCol("weight")
       .setElasticNetParam(0.5).setRegParam(0.1).setStandardization(false)
-      .setMaxIter(300).setTol(1e-10)
+      .setMaxIter(50).setTol(1e-10)
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)

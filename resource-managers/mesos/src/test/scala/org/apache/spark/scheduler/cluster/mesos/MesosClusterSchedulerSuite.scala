@@ -21,10 +21,11 @@ import java.util.{Collection, Collections, Date}
 
 import scala.collection.JavaConverters._
 
-import org.apache.mesos.Protos.{Environment, Secret, TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
 import org.apache.mesos.SchedulerDriver
-import org.mockito.{ArgumentCaptor, Matchers}
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 
@@ -133,7 +134,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     when(
       driver.launchTasks(
-        Matchers.eq(Collections.singleton(offer.getId)),
+        meq(Collections.singleton(offer.getId)),
         capture.capture())
     ).thenReturn(Status.valueOf(1))
 
@@ -146,17 +147,17 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(scheduler.getResource(resources, "cpus") == 1.5)
     assert(scheduler.getResource(resources, "mem") == 1200)
     val resourcesSeq: Seq[Resource] = resources.asScala
-    val cpus = resourcesSeq.filter(_.getName.equals("cpus")).toList
+    val cpus = resourcesSeq.filter(_.getName == "cpus").toList
     assert(cpus.size == 2)
-    assert(cpus.exists(_.getRole().equals("role2")))
-    assert(cpus.exists(_.getRole().equals("*")))
-    val mem = resourcesSeq.filter(_.getName.equals("mem")).toList
+    assert(cpus.exists(_.getRole() == "role2"))
+    assert(cpus.exists(_.getRole() == "*"))
+    val mem = resourcesSeq.filter(_.getName == "mem").toList
     assert(mem.size == 2)
-    assert(mem.exists(_.getRole().equals("role2")))
-    assert(mem.exists(_.getRole().equals("*")))
+    assert(mem.exists(_.getRole() == "role2"))
+    assert(mem.exists(_.getRole() == "*"))
 
     verify(driver, times(1)).launchTasks(
-      Matchers.eq(Collections.singleton(offer.getId)),
+      meq(Collections.singleton(offer.getId)),
       capture.capture()
     )
   }

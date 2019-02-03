@@ -330,7 +330,9 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
+  // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
+  // scalastyle:on caselocale
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
@@ -349,7 +351,9 @@ case class Upper(child: Expression)
   """)
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
+  // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
+  // scalastyle:on caselocale
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
@@ -1389,7 +1393,9 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
   override def dataType: DataType = StringType
 
   override def nullSafeEval(string: Any): Any = {
+    // scalastyle:off caselocale
     string.asInstanceOf[UTF8String].toLowerCase.toTitleCase
+    // scalastyle:on caselocale
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
@@ -1554,10 +1560,9 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
  * A function that returns the char length of the given string expression or
  * number of bytes of the given binary expression.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of " +
-    "binary data. The length of string data includes the trailing spaces. The length of binary " +
-    "data includes binary zeros.",
+  usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of binary data. The length of string data includes the trailing spaces. The length of binary data includes binary zeros.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL ');
@@ -1567,6 +1572,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
       > SELECT CHARACTER_LENGTH('Spark SQL ');
        10
   """)
+// scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))

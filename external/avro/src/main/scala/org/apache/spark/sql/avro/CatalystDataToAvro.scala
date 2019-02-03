@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.avro
 
 import java.io.ByteArrayOutputStream
 
 import org.apache.avro.generic.GenericDatumWriter
 import org.apache.avro.io.{BinaryEncoder, EncoderFactory}
 
-import org.apache.spark.sql.avro.{AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
 case class CatalystDataToAvro(child: Expression) extends UnaryExpression {
@@ -53,13 +52,7 @@ case class CatalystDataToAvro(child: Expression) extends UnaryExpression {
     out.toByteArray
   }
 
-  override def simpleString: String = {
-    s"to_avro(${child.sql}, ${child.dataType.simpleString})"
-  }
-
-  override def sql: String = {
-    s"to_avro(${child.sql}, ${child.dataType.catalogString})"
-  }
+  override def prettyName: String = "to_avro"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)

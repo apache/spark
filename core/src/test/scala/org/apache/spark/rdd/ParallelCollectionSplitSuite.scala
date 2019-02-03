@@ -215,7 +215,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   }
 
   test("exclusive ranges of doubles") {
-    val data = 1.0 until 100.0 by 1.0
+    val data = Range.BigDecimal(1, 100, 1)
     val slices = ParallelCollectionRDD.slice(data, 3)
     assert(slices.size === 3)
     assert(slices.map(_.size).sum === 99)
@@ -223,7 +223,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   }
 
   test("inclusive ranges of doubles") {
-    val data = 1.0 to 100.0 by 1.0
+    val data = Range.BigDecimal.inclusive(1, 100, 1)
     val slices = ParallelCollectionRDD.slice(data, 3)
     assert(slices.size === 3)
     assert(slices.map(_.size).sum === 100)

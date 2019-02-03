@@ -33,9 +33,9 @@ from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
-from pyspark.java_gateway import launch_gateway
+from pyspark.java_gateway import launch_gateway, local_connect_and_auth
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, AutoBatchedSerializer, NoOpSerializer
+    PairDeserializer, AutoBatchedSerializer, NoOpSerializer, ChunkedStream
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
@@ -63,6 +63,13 @@ class SparkContext(object):
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD} and
     broadcast variables on that cluster.
+
+    .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
+        the active :class:`SparkContext` before creating a new one.
+
+    .. note:: :class:`SparkContext` instance is not supported to share across multiple
+        processes out of the box, and PySpark does not guarantee multi-processing execution.
+        Use threads instead for concurrent processing purpose.
     """
 
     _gateway = None
@@ -112,6 +119,11 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
+        if gateway is not None and gateway.gateway_parameters.auth_token is None:
+            raise ValueError(
+                "You are trying to pass an insecure Py4j gateway to Spark. This"
+                " is not allowed as it is a security risk.")
+
         SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
@@ -188,6 +200,11 @@ class SparkContext(object):
         (host, port) = self._accumulatorServer.server_address
         self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
+
+        # If encryption is enabled, we need to setup a server in the jvm to read broadcast
+        # data via a socket.
+        # scala's mangled names w/ $ in them require special treatment.
+        self._encryption_enabled = self._jvm.PythonUtils.getEncryptionEnabled(self._jsc)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
@@ -422,7 +439,6 @@ class SparkContext(object):
                     ' been killed or may also be in a zombie state.',
                     RuntimeWarning
                 )
-                pass
             finally:
                 self._jsc = None
         if getattr(self, "_accumulatorServer", None):
@@ -485,6 +501,14 @@ class SparkContext(object):
                 return start0 + int((split * size / numSlices)) * step
 
             def f(split, iterator):
+                # it's an empty iterator here but we need this line for triggering the
+                # logic of signal handling in FramedSerializer.load_stream, for instance,
+                # SpecialLengths.END_OF_DATA_SECTION in _read_with_length. Since
+                # FramedSerializer.load_stream produces a generator, the control should
+                # at least be in that function once. Here we do it by explicitly converting
+                # the empty iterator to a list, thus make sure worker reuse takes effect.
+                # See more details in SPARK-26549.
+                assert len(list(iterator)) == 0
                 return xrange(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
@@ -494,24 +518,52 @@ class SparkContext(object):
             c = list(c)    # Make it a list so we can compute its length
         batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
-        jrdd = self._serialize_to_jvm(c, numSlices, serializer)
+
+        def reader_func(temp_filename):
+            return self._jvm.PythonRDD.readRDDFromFile(self._jsc, temp_filename, numSlices)
+
+        def createRDDServer():
+            return self._jvm.PythonParallelizeServer(self._jsc.sc(), numSlices)
+
+        jrdd = self._serialize_to_jvm(c, serializer, reader_func, createRDDServer)
         return RDD(jrdd, self, serializer)
 
-    def _serialize_to_jvm(self, data, parallelism, serializer):
+    def _serialize_to_jvm(self, data, serializer, reader_func, createRDDServer):
         """
-        Calling the Java parallelize() method with an ArrayList is too slow,
-        because it sends O(n) Py4J commands.  As an alternative, serialized
-        objects are written to a file and loaded through textFile().
+        Using py4j to send a large dataset to the jvm is really slow, so we use either a file
+        or a socket if we have encryption enabled.
+        :param data:
+        :param serializer:
+        :param reader_func:  A function which takes a filename and reads in the data in the jvm and
+                returns a JavaRDD. Only used when encryption is disabled.
+        :param createRDDServer:  A function which creates a PythonRDDServer in the jvm to
+               accept the serialized data, for use when encryption is enabled.
+        :return:
         """
-        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        try:
-            serializer.dump_stream(data, tempFile)
-            tempFile.close()
-            readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-            return readRDDFromFile(self._jsc, tempFile.name, parallelism)
-        finally:
-            # readRDDFromFile eagerily reads the file so we can delete right after.
-            os.unlink(tempFile.name)
+        if self._encryption_enabled:
+            # with encryption, we open a server in java and send the data directly
+            server = createRDDServer()
+            (sock_file, _) = local_connect_and_auth(server.port(), server.secret())
+            chunked_out = ChunkedStream(sock_file, 8192)
+            serializer.dump_stream(data, chunked_out)
+            chunked_out.close()
+            # this call will block until the server has read all the data and processed it (or
+            # throws an exception)
+            r = server.getResult()
+            return r
+        else:
+            # without encryption, we serialize to a file, and we read the file in java and
+            # parallelize from there.
+            tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
+            try:
+                try:
+                    serializer.dump_stream(data, tempFile)
+                finally:
+                    tempFile.close()
+                return reader_func(tempFile.name)
+            finally:
+                # we eagerily reads the file so we can delete right after.
+                os.unlink(tempFile.name)
 
     def pickleFile(self, name, minPartitions=None):
         """
@@ -801,9 +853,11 @@ class SparkContext(object):
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
             rdds = [x._reserialize() for x in rdds]
-        first = rdds[0]._jrdd
-        rest = [x._jrdd for x in rdds[1:]]
-        return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
+        cls = SparkContext._jvm.org.apache.spark.api.java.JavaRDD
+        jrdds = SparkContext._gateway.new_array(cls, len(rdds))
+        for i in range(0, len(rdds)):
+            jrdds[i] = rdds[i]._jrdd
+        return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
         """

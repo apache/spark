@@ -33,25 +33,18 @@ import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
-
-  test("truncatedString") {
-    assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
-    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
-  }
 
   test("timeConversion") {
     // Test -1
@@ -141,7 +134,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
-    // This demonstrates that we can have e.g 1024^3 PB without overflowing.
+    // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
     assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))
     assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
 
@@ -157,7 +150,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     // Test overflow exception
     intercept[IllegalArgumentException] {
-      // This value exceeds Long.MAX when converted to TB
+      // This value exceeds Long.MAX when converted to TiB
       ByteUnit.PiB.toTiB(9223372036854775807L)
     }
 
@@ -197,13 +190,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")
-    assert(Utils.bytesToString(2000000) === "1953.1 KB")
-    assert(Utils.bytesToString(2097152) === "2.0 MB")
-    assert(Utils.bytesToString(2306867) === "2.2 MB")
-    assert(Utils.bytesToString(5368709120L) === "5.0 GB")
-    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TB")
-    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PB")
-    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EB")
+    assert(Utils.bytesToString(2000000) === "1953.1 KiB")
+    assert(Utils.bytesToString(2097152) === "2.0 MiB")
+    assert(Utils.bytesToString(2306867) === "2.2 MiB")
+    assert(Utils.bytesToString(5368709120L) === "5.0 GiB")
+    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TiB")
+    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PiB")
+    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EiB")
     assert(Utils.bytesToString(BigInt(1L << 11) * (1L << 60)) === "2.36E+21 B")
   }
 
@@ -303,31 +296,30 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   private val workerConf = new SparkConf()
 
   def testOffsetBytes(isCompressed: Boolean): Unit = {
-    val tmpDir2 = Utils.createTempDir()
-    val suffix = getSuffix(isCompressed)
-    val f1Path = tmpDir2 + "/f1" + suffix
-    writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
-    val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
+    withTempDir { tmpDir2 =>
+      val suffix = getSuffix(isCompressed)
+      val f1Path = tmpDir2 + "/f1" + suffix
+      writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
+      val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
-    // Read first few bytes
-    assert(Utils.offsetBytes(f1Path, f1Length, 0, 5) === "1\n2\n3")
+      // Read first few bytes
+      assert(Utils.offsetBytes(f1Path, f1Length, 0, 5) === "1\n2\n3")
 
-    // Read some middle bytes
-    assert(Utils.offsetBytes(f1Path, f1Length, 4, 11) === "3\n4\n5\n6")
+      // Read some middle bytes
+      assert(Utils.offsetBytes(f1Path, f1Length, 4, 11) === "3\n4\n5\n6")
 
-    // Read last few bytes
-    assert(Utils.offsetBytes(f1Path, f1Length, 12, 18) === "7\n8\n9\n")
+      // Read last few bytes
+      assert(Utils.offsetBytes(f1Path, f1Length, 12, 18) === "7\n8\n9\n")
 
-    // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(f1Path, f1Length, -5, 5) === "1\n2\n3")
+      // Read some nonexistent bytes in the beginning
+      assert(Utils.offsetBytes(f1Path, f1Length, -5, 5) === "1\n2\n3")
 
-    // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(f1Path, f1Length, 12, 22) === "7\n8\n9\n")
+      // Read some nonexistent bytes at the end
+      assert(Utils.offsetBytes(f1Path, f1Length, 12, 22) === "7\n8\n9\n")
 
-    // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(f1Path, f1Length, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
-
-    Utils.deleteRecursively(tmpDir2)
+      // Read some nonexistent bytes on both ends
+      assert(Utils.offsetBytes(f1Path, f1Length, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+    }
   }
 
   test("reading offset bytes of a file") {
@@ -339,41 +331,41 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
-    val tmpDir = Utils.createTempDir()
-    val suffix = getSuffix(isCompressed)
-    val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
-    writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
-    writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
-    writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
-    writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
-    val fileLengths = files.map(Utils.getFileLength(_, workerConf))
+    withTempDir { tmpDir =>
+      val suffix = getSuffix(isCompressed)
+      val files = (1 to 3).map(i =>
+        new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
+      writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
+      writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
+      writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
+      writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
+      val fileLengths = files.map(Utils.getFileLength(_, workerConf))
 
-    // Read first few bytes in the 1st file
-    assert(Utils.offsetBytes(files, fileLengths, 0, 5) === "01234")
+      // Read first few bytes in the 1st file
+      assert(Utils.offsetBytes(files, fileLengths, 0, 5) === "01234")
 
-    // Read bytes within the 1st file
-    assert(Utils.offsetBytes(files, fileLengths, 5, 8) === "567")
+      // Read bytes within the 1st file
+      assert(Utils.offsetBytes(files, fileLengths, 5, 8) === "567")
 
-    // Read bytes across 1st and 2nd file
-    assert(Utils.offsetBytes(files, fileLengths, 8, 18) === "89abcdefgh")
+      // Read bytes across 1st and 2nd file
+      assert(Utils.offsetBytes(files, fileLengths, 8, 18) === "89abcdefgh")
 
-    // Read bytes across 1st, 2nd and 3rd file
-    assert(Utils.offsetBytes(files, fileLengths, 5, 24) === "56789abcdefghijABCD")
+      // Read bytes across 1st, 2nd and 3rd file
+      assert(Utils.offsetBytes(files, fileLengths, 5, 24) === "56789abcdefghijABCD")
 
-    // Read bytes across 3rd and 4th file
-    assert(Utils.offsetBytes(files, fileLengths, 25, 35) === "FGHIJ98765")
+      // Read bytes across 3rd and 4th file
+      assert(Utils.offsetBytes(files, fileLengths, 25, 35) === "FGHIJ98765")
 
-    // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(files, fileLengths, -5, 18) === "0123456789abcdefgh")
+      // Read some nonexistent bytes in the beginning
+      assert(Utils.offsetBytes(files, fileLengths, -5, 18) === "0123456789abcdefgh")
 
-    // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(files, fileLengths, 18, 45) === "ijABCDEFGHIJ9876543210")
+      // Read some nonexistent bytes at the end
+      assert(Utils.offsetBytes(files, fileLengths, 18, 45) === "ijABCDEFGHIJ9876543210")
 
-    // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(files, fileLengths, -5, 45) ===
-      "0123456789abcdefghijABCDEFGHIJ9876543210")
-
-    Utils.deleteRecursively(tmpDir)
+      // Read some nonexistent bytes on both ends
+      assert(Utils.offsetBytes(files, fileLengths, -5, 45) ===
+        "0123456789abcdefghijABCDEFGHIJ9876543210")
+    }
   }
 
   test("reading offset bytes across multiple files") {
@@ -435,27 +427,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("doesDirectoryContainFilesNewerThan") {
     // create some temporary directories and files
-    val parent: File = Utils.createTempDir()
-    // The parent directory has two child directories
-    val child1: File = Utils.createTempDir(parent.getCanonicalPath)
-    val child2: File = Utils.createTempDir(parent.getCanonicalPath)
-    val child3: File = Utils.createTempDir(child1.getCanonicalPath)
-    // set the last modified time of child1 to 30 secs old
-    child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
+    withTempDir { parent =>
+      // The parent directory has two child directories
+      val child1: File = Utils.createTempDir(parent.getCanonicalPath)
+      val child2: File = Utils.createTempDir(parent.getCanonicalPath)
+      val child3: File = Utils.createTempDir(child1.getCanonicalPath)
+      // set the last modified time of child1 to 30 secs old
+      child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
-    // although child1 is old, child2 is still new so return true
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
+      // although child1 is old, child2 is still new so return true
+      assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
-    child2.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
+      child2.setLastModified(System.currentTimeMillis - (1000 * 30))
+      assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
-    parent.setLastModified(System.currentTimeMillis - (1000 * 30))
-    // although parent and its immediate children are new, child3 is still old
-    // we expect a full recursive search for new files.
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
+      parent.setLastModified(System.currentTimeMillis - (1000 * 30))
+      // although parent and its immediate children are new, child3 is still old
+      // we expect a full recursive search for new files.
+      assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
-    child3.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5))
+      child3.setLastModified(System.currentTimeMillis - (1000 * 30))
+      assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5))
+    }
   }
 
   test("resolveURI") {
@@ -616,9 +609,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("loading properties from file") {
-    val tmpDir = Utils.createTempDir()
-    val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
-    try {
+    withTempDir { tmpDir =>
+      val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
         "spark.test.fileNameLoadB 1\n", outFile, StandardCharsets.UTF_8)
@@ -629,8 +621,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val sparkConf = new SparkConf
       assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
-    } finally {
-      Utils.deleteRecursively(tmpDir)
     }
   }
 
@@ -646,52 +636,53 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("fetch hcfs dir") {
-    val tempDir = Utils.createTempDir()
-    val sourceDir = new File(tempDir, "source-dir")
-    sourceDir.mkdir()
-    val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
-    val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
-    val targetDir = new File(tempDir, "target-dir")
-    Files.write("some text", sourceFile, StandardCharsets.UTF_8)
+    withTempDir { tempDir =>
+      val sourceDir = new File(tempDir, "source-dir")
+      sourceDir.mkdir()
+      val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
+      val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
+      val targetDir = new File(tempDir, "target-dir")
+      Files.write("some text", sourceFile, StandardCharsets.UTF_8)
 
-    val path =
-      if (Utils.isWindows) {
-        new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
-      } else {
-        new Path("file://" + sourceDir.getAbsolutePath)
-      }
-    val conf = new Configuration()
-    val fs = Utils.getHadoopFileSystem(path.toString, conf)
+      val path =
+        if (Utils.isWindows) {
+          new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
+        } else {
+          new Path("file://" + sourceDir.getAbsolutePath)
+        }
+      val conf = new Configuration()
+      val fs = Utils.getHadoopFileSystem(path.toString, conf)
 
-    assert(!targetDir.isDirectory())
-    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
-    assert(targetDir.isDirectory())
+      assert(!targetDir.isDirectory())
+      Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+      assert(targetDir.isDirectory())
 
-    // Copy again to make sure it doesn't error if the dir already exists.
-    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+      // Copy again to make sure it doesn't error if the dir already exists.
+      Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
 
-    val destDir = new File(targetDir, sourceDir.getName())
-    assert(destDir.isDirectory())
+      val destDir = new File(targetDir, sourceDir.getName())
+      assert(destDir.isDirectory())
 
-    val destInnerDir = new File(destDir, innerSourceDir.getName)
-    assert(destInnerDir.isDirectory())
+      val destInnerDir = new File(destDir, innerSourceDir.getName)
+      assert(destInnerDir.isDirectory())
 
-    val destInnerFile = new File(destInnerDir, sourceFile.getName)
-    assert(destInnerFile.isFile())
+      val destInnerFile = new File(destInnerDir, sourceFile.getName)
+      assert(destInnerFile.isFile())
 
-    val filePath =
-      if (Utils.isWindows) {
-        new Path("file:/" + sourceFile.getAbsolutePath.replace("\\", "/"))
-      } else {
-        new Path("file://" + sourceFile.getAbsolutePath)
-      }
-    val testFileDir = new File(tempDir, "test-filename")
-    val testFileName = "testFName"
-    val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
-    Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
-                        conf, false, Some(testFileName))
-    val newFileName = new File(testFileDir, testFileName)
-    assert(newFileName.isFile())
+      val filePath =
+        if (Utils.isWindows) {
+          new Path("file:/" + sourceFile.getAbsolutePath.replace("\\", "/"))
+        } else {
+          new Path("file://" + sourceFile.getAbsolutePath)
+        }
+      val testFileDir = new File(tempDir, "test-filename")
+      val testFileName = "testFName"
+      val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
+      Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
+        conf, false, Some(testFileName))
+      val newFileName = new File(testFileDir, testFileName)
+      assert(newFileName.isFile())
+    }
   }
 
   test("shutdown hook manager") {
@@ -839,35 +830,35 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
     conf.set("spark.master", "yarn")
-    conf.set("spark.submit.deployMode", "client")
+    conf.set(SUBMIT_DEPLOY_MODE, "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "false")) === false)
+      conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "true")) === true)
+      conf.set(DYN_ALLOCATION_ENABLED, true)) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "1")) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "0")) === true)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
-    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
+    assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }
 
   test("getDynamicAllocationInitialExecutors") {
     val conf = new SparkConf()
     assert(Utils.getDynamicAllocationInitialExecutors(conf) === 0)
     assert(Utils.getDynamicAllocationInitialExecutors(
-      conf.set("spark.dynamicAllocation.minExecutors", "3")) === 3)
+      conf.set(DYN_ALLOCATION_MIN_EXECUTORS, 3)) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
       conf.set("spark.executor.instances", "2")) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
       conf.set("spark.executor.instances", "4")) === 4)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
-      conf.set("spark.dynamicAllocation.initialExecutors", "3")) === 4)
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)) === 4)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
-      conf.set("spark.dynamicAllocation.initialExecutors", "5")) === 5)
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 5)) === 5)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
-      conf.set("spark.dynamicAllocation.initialExecutors", "2")
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 2)
         .set("spark.executor.instances", "1")) === 3)
   }
 
@@ -932,10 +923,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         signal(pid, "SIGKILL")
       }
 
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var majorVersion = versionParts(0).toInt
-      if (majorVersion == 1) majorVersion = versionParts(1).toInt
-      if (majorVersion >= 8) {
+      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8)) {
         // We'll make sure that forcibly terminating a process works by
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
@@ -1169,20 +1157,53 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
-  object MalformedClassObject {
-    class MalformedClass
+  test("stringHalfWidth") {
+    // scalastyle:off nonascii
+    assert(Utils.stringHalfWidth(null) == 0)
+    assert(Utils.stringHalfWidth("") == 0)
+    assert(Utils.stringHalfWidth("ab c") == 4)
+    assert(Utils.stringHalfWidth("1098") == 4)
+    assert(Utils.stringHalfWidth("mø") == 2)
+    assert(Utils.stringHalfWidth("γύρ") == 3)
+    assert(Utils.stringHalfWidth("pê") == 2)
+    assert(Utils.stringHalfWidth("ー") == 2)
+    assert(Utils.stringHalfWidth("测") == 2)
+    assert(Utils.stringHalfWidth("か") == 2)
+    assert(Utils.stringHalfWidth("걸") == 2)
+    assert(Utils.stringHalfWidth("à") == 1)
+    assert(Utils.stringHalfWidth("焼") == 2)
+    assert(Utils.stringHalfWidth("羍む") == 4)
+    assert(Utils.stringHalfWidth("뺭ᾘ") == 3)
+    assert(Utils.stringHalfWidth("\u0967\u0968\u0969") == 3)
+    // scalastyle:on nonascii
   }
 
-  test("Safe getSimpleName") {
-    // getSimpleName on class of MalformedClass will result in error: Malformed class name
-    // Utils.getSimpleName works
-    val err = intercept[java.lang.InternalError] {
-      classOf[MalformedClassObject.MalformedClass].getSimpleName
-    }
-    assert(err.getMessage === "Malformed class name")
+  test("trimExceptCRLF standalone") {
+    val crlfSet = Set("\r", "\n")
+    val nonPrintableButCRLF = (0 to 32).map(_.toChar.toString).toSet -- crlfSet
 
-    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
-      "UtilsSuite$MalformedClassObject$MalformedClass")
+    // identity for CRLF
+    crlfSet.foreach { s => Utils.trimExceptCRLF(s) === s }
+
+    // empty for other non-printables
+    nonPrintableButCRLF.foreach { s => assert(Utils.trimExceptCRLF(s) === "") }
+
+    // identity for a printable string
+    assert(Utils.trimExceptCRLF("a") === "a")
+
+    // identity for strings with CRLF
+    crlfSet.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === s"${s}a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === s"a${s}")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
+
+    // trim nonPrintableButCRLF except when inside a string
+    nonPrintableButCRLF.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === "a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === "a")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
   }
 }
 

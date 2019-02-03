@@ -29,7 +29,7 @@ import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.hash.Murmur3_x86_32.{hashInt, hashLong, hashUnsafeBytes2Block}
+import org.apache.spark.unsafe.hash.Murmur3_x86_32.{hashInt, hashLong, hashUnsafeBytes2}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
@@ -244,7 +244,8 @@ object FeatureHasher extends DefaultParamsReadable[FeatureHasher] {
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case s: String =>
-        hashUnsafeBytes2Block(UTF8String.fromString(s).getMemoryBlock, seed)
+        val utf8 = UTF8String.fromString(s)
+        hashUnsafeBytes2(utf8.getBaseObject, utf8.getBaseOffset, utf8.numBytes(), seed)
       case _ => throw new SparkException("FeatureHasher with murmur3 algorithm does not " +
         s"support type ${term.getClass.getCanonicalName} of input data.")
     }

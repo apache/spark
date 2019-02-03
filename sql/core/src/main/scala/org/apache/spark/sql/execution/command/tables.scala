@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.net.URI
+import java.net.{URI, URISyntaxException}
 import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -214,7 +215,7 @@ case class AlterTableAddColumnsCommand(
   /**
    * ALTER TABLE ADD COLUMNS command does not support temporary view/table,
    * view, or datasource table with text, orc formats or external provider.
-   * For datasource table, it currently only supports parquet, json, csv.
+   * For datasource table, it currently only supports parquet, json, csv, orc.
    */
   private def verifyAlterTableAddColumn(
       conf: SQLConf,
@@ -231,12 +232,13 @@ case class AlterTableAddColumnsCommand(
     }
 
     if (DDLUtils.isDatasourceTable(catalogTable)) {
-      DataSource.lookupDataSource(catalogTable.provider.get, conf).newInstance() match {
+      DataSource.lookupDataSource(catalogTable.provider.get, conf).
+        getConstructor().newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
-        case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
+        case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat | _: OrcDataSourceV2 =>
         case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
         case s =>
           throw new AnalysisException(
@@ -303,94 +305,45 @@ case class LoadDataCommand(
           s"partitioned, but a partition spec was provided.")
       }
     }
-
-    val loadPath =
+    val loadPath = {
       if (isLocal) {
-        val uri = Utils.resolveURI(path)
-        val file = new File(uri.getPath)
-        val exists = if (file.getAbsolutePath.contains("*")) {
-          val fileSystem = FileSystems.getDefault
-          val dir = file.getParentFile.getAbsolutePath
-          if (dir.contains("*")) {
-            throw new AnalysisException(
-              s"LOAD DATA input path allows only filename wildcard: $path")
-          }
-
-          // Note that special characters such as "*" on Windows are not allowed as a path.
-          // Calling `WindowsFileSystem.getPath` throws an exception if there are in the path.
-          val dirPath = fileSystem.getPath(dir)
-          val pathPattern = new File(dirPath.toAbsolutePath.toString, file.getName).toURI.getPath
-          val safePathPattern = if (Utils.isWindows) {
-            // On Windows, the pattern should not start with slashes for absolute file paths.
-            pathPattern.stripPrefix("/")
-          } else {
-            pathPattern
-          }
-          val files = new File(dir).listFiles()
-          if (files == null) {
-            false
-          } else {
-            val matcher = fileSystem.getPathMatcher("glob:" + safePathPattern)
-            files.exists(f => matcher.matches(fileSystem.getPath(f.getAbsolutePath)))
-          }
-        } else {
-          new File(file.getAbsolutePath).exists()
-        }
-        if (!exists) {
-          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
-        }
-        uri
+        val localFS = FileContext.getLocalFSFileContext()
+        LoadDataCommand.makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(),
+          new Path(path))
       } else {
-        val uri = new URI(path)
-        val hdfsUri = if (uri.getScheme() != null && uri.getAuthority() != null) {
-          uri
-        } else {
-          // Follow Hive's behavior:
-          // If no schema or authority is provided with non-local inpath,
-          // we will use hadoop configuration "fs.defaultFS".
-          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
-          val defaultFS = if (defaultFSConf == null) {
-            new URI("")
-          } else {
-            new URI(defaultFSConf)
-          }
-
-          val scheme = if (uri.getScheme() != null) {
-            uri.getScheme()
-          } else {
-            defaultFS.getScheme()
-          }
-          val authority = if (uri.getAuthority() != null) {
-            uri.getAuthority()
-          } else {
-            defaultFS.getAuthority()
-          }
-
-          if (scheme == null) {
-            throw new AnalysisException(
-              s"LOAD DATA: URI scheme is required for non-local input paths: '$path'")
-          }
-
-          // Follow Hive's behavior:
-          // If LOCAL is not specified, and the path is relative,
-          // then the path is interpreted relative to "/user/<username>"
-          val uriPath = uri.getPath()
-          val absolutePath = if (uriPath != null && uriPath.startsWith("/")) {
-            uriPath
-          } else {
-            s"/user/${System.getProperty("user.name")}/$uriPath"
-          }
-          new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
-        }
-        val hadoopConf = sparkSession.sessionState.newHadoopConf()
-        val srcPath = new Path(hdfsUri)
-        val fs = srcPath.getFileSystem(hadoopConf)
-        if (!fs.exists(srcPath)) {
-          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
-        }
-        hdfsUri
+        val loadPath = new Path(path)
+        // Follow Hive's behavior:
+        // If no schema or authority is provided with non-local inpath,
+        // we will use hadoop configuration "fs.defaultFS".
+        val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
+        val defaultFS = if (defaultFSConf == null) new URI("") else new URI(defaultFSConf)
+        // Follow Hive's behavior:
+        // If LOCAL is not specified, and the path is relative,
+        // then the path is interpreted relative to "/user/<username>"
+        val uriPath = new Path(s"/user/${System.getProperty("user.name")}/")
+        // makeQualified() will ignore the query parameter part while creating a path, so the
+        // entire  string will be considered while making a Path instance,this is mainly done
+        // by considering the wild card scenario in mind.as per old logic query param  is
+        // been considered while creating URI instance and if path contains wild card char '?'
+        // the remaining charecters after '?' will be removed while forming URI instance
+        LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
-
+    }
+    val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    // This handling is because while resolving the invalid URLs starting with file:///
+    // system throws IllegalArgumentException from globStatus API,so in order to handle
+    // such scenarios this code is added in try catch block and after catching the
+    // runtime exception a generic error will be displayed to the user.
+    try {
+      val fileStatus = fs.globStatus(loadPath)
+      if (fileStatus == null || fileStatus.isEmpty) {
+        throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+      }
+    } catch {
+      case e: IllegalArgumentException =>
+        log.warn(s"Exception while validating the load path $path ", e)
+        throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+    }
     if (partition.nonEmpty) {
       catalog.loadPartition(
         targetTable.identifier,
@@ -412,6 +365,39 @@ case class LoadDataCommand(
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
+  }
+}
+
+object LoadDataCommand {
+  /**
+   * Returns a qualified path object. Method ported from org.apache.hadoop.fs.Path class.
+   *
+   * @param defaultUri default uri corresponding to the filesystem provided.
+   * @param workingDir the working directory for the particular child path wd-relative names.
+   * @param path       Path instance based on the path string specified by the user.
+   * @return qualified path object
+   */
+  private[sql] def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
+    val newPath = new Path(workingDir, path)
+    val pathUri = if (path.isAbsolute()) path.toUri() else newPath.toUri()
+    if (pathUri.getScheme == null || pathUri.getAuthority == null &&
+        defaultUri.getAuthority != null) {
+      val scheme = if (pathUri.getScheme == null) defaultUri.getScheme else pathUri.getScheme
+      val authority = if (pathUri.getAuthority == null) {
+        if (defaultUri.getAuthority == null) "" else defaultUri.getAuthority
+      } else {
+        pathUri.getAuthority
+      }
+      try {
+        val newUri = new URI(scheme, authority, pathUri.getPath, null, pathUri.getFragment)
+        new Path(newUri)
+      } catch {
+        case e: URISyntaxException =>
+          throw new IllegalArgumentException(e)
+      }
+    } else {
+      newPath
+    }
   }
 }
 
@@ -974,9 +960,11 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       builder ++= metadata.viewText.mkString(" AS\n", "", "\n")
     } else {
       showHiveTableHeader(metadata, builder)
+      showTableComment(metadata, builder)
       showHiveTableNonDataColumns(metadata, builder)
       showHiveTableStorageInfo(metadata, builder)
-      showHiveTableProperties(metadata, builder)
+      showTableLocation(metadata, builder)
+      showTableProperties(metadata, builder)
     }
 
     builder.toString()
@@ -990,13 +978,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     if (columns.nonEmpty) {
       builder ++= columns.mkString("(", ", ", ")\n")
     }
-
-    metadata
-      .comment
-      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(builder.append)
   }
-
 
   private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.partitionColumnNames.nonEmpty) {
@@ -1040,15 +1022,24 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
     }
+  }
 
+  private def showTableLocation(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.tableType == EXTERNAL) {
-      storage.locationUri.foreach { uri =>
-        builder ++= s"LOCATION '$uri'\n"
+      metadata.storage.locationUri.foreach { location =>
+        builder ++= s"LOCATION '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'\n"
       }
     }
   }
 
-  private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showTableComment(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    metadata
+      .comment
+      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
+      .foreach(builder.append)
+  }
+
+  private def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
       val props = metadata.properties.map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
@@ -1065,6 +1056,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     showDataSourceTableDataColumns(metadata, builder)
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
+    showTableComment(metadata, builder)
+    showTableLocation(metadata, builder)
+    showTableProperties(metadata, builder)
 
     builder.toString()
   }
@@ -1080,14 +1074,6 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     val dataSourceOptions = metadata.storage.properties.map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
-    } ++ metadata.storage.locationUri.flatMap { location =>
-      if (metadata.tableType == MANAGED) {
-        // If it's a managed table, omit PATH option. Spark SQL always creates external table
-        // when the table creation DDL contains the PATH option.
-        None
-      } else {
-        Some(s"path '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'")
-      }
     }
 
     if (dataSourceOptions.nonEmpty) {

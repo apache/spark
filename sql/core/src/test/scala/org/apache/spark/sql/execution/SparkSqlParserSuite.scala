@@ -323,12 +323,22 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
 
     assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
 
     // Partition specified - should be ignored
     assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
       "COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
+      "COMPUTE STATISTICS FOR ALL COLUMNS",
+      AnalyzeColumnCommand(TableIdentifier("t"), None, allColumns = true))
+
+    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL COLUMNS key, value",
+      "mismatched input 'key' expecting <EOF>")
+    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL",
+      "missing 'COLUMNS' at '<EOF>'")
   }
 
   test("query organization") {

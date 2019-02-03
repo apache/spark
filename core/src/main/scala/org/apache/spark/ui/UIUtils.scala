@@ -27,8 +27,6 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
-import org.apache.commons.lang3.StringEscapeUtils
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
@@ -37,8 +35,6 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
-
-  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -204,6 +200,8 @@ private[spark] object UIUtils extends Logging {
           href={prependBaseUri(request, "/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.4.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
@@ -218,7 +216,6 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None,
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
       useDataTables: Boolean = false): Seq[Node] = {
@@ -366,7 +363,8 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val ratio = if (total == 0) 100.0 else (completed.toDouble/total)*100
+    val completeWidth = "width: %s%%".format(ratio)
     // started + completed can be > total when there are speculative tasks
     val boundedStarted = math.min(started, total - completed)
     val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
@@ -548,23 +546,6 @@ private[spark] object UIUtils extends Logging {
       s"/proxy/$id"
     } else {
       origHref
-    }
-  }
-
-  /**
-   * Remove suspicious characters of user input to prevent Cross-Site scripting (XSS) attacks
-   *
-   * For more information about XSS testing:
-   * https://www.owasp.org/index.php/XSS_Filter_Evasion_Cheat_Sheet and
-   * https://www.owasp.org/index.php/Testing_for_Reflected_Cross_site_scripting_(OTG-INPVAL-001)
-   */
-  def stripXSS(requestParameter: String): String = {
-    if (requestParameter == null) {
-      null
-    } else {
-      // Remove new lines and single quotes, followed by escaping HTML version 4.0
-      StringEscapeUtils.escapeHtml4(
-        NEWLINE_AND_SINGLE_QUOTE_REGEX.replaceAllIn(requestParameter, ""))
     }
   }
 

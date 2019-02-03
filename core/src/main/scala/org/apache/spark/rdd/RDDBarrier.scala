@@ -22,15 +22,23 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{Experimental, Since}
 
-/** Represents an RDD barrier, which forces Spark to launch tasks of this stage together. */
-class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
+/**
+ * :: Experimental ::
+ * Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
+ * [[org.apache.spark.rdd.RDDBarrier]] instances are created by
+ * [[org.apache.spark.rdd.RDD#barrier]].
+ */
+@Experimental
+@Since("2.4.0")
+class RDDBarrier[T: ClassTag] private[spark] (rdd: RDD[T]) {
 
   /**
    * :: Experimental ::
-   * Generate a new barrier RDD by applying a function to each partitions of the prev RDD.
-   *
-   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
-   * should be `false` unless `rdd` is a pair RDD and the input function doesn't modify the keys.
+   * Returns a new RDD by applying a function to each partition of the wrapped RDD,
+   * where tasks are launched together in a barrier stage.
+   * The interface is the same as [[org.apache.spark.rdd.RDD#mapPartitions]].
+   * Please see the API doc there.
+   * @see [[org.apache.spark.BarrierTaskContext]]
    */
   @Experimental
   @Since("2.4.0")
@@ -46,5 +54,5 @@ class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
     )
   }
 
-  /** TODO extra conf(e.g. timeout) */
+  // TODO: [SPARK-25247] add extra conf to RDDBarrier, e.g., timeout.
 }

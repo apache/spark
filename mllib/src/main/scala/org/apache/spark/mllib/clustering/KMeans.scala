@@ -299,7 +299,7 @@ class KMeans private (
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
-      val newCenters = data.mapPartitions { points =>
+      val collected = data.mapPartitions { points =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
@@ -317,11 +317,17 @@ class KMeans private (
       }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
         axpy(1.0, sum2, sum1)
         (sum1, count1 + count2)
-      }.collectAsMap().mapValues { case (sum, count) =>
+      }.collectAsMap()
+
+      if (iteration == 0) {
+        instr.foreach(_.logNumExamples(collected.values.map(_._2).sum))
+      }
+
+      val newCenters = collected.mapValues { case (sum, count) =>
         distanceMeasureInstance.centroid(sum, count)
       }
 
-      bcCenters.destroy(blocking = false)
+      bcCenters.destroy()
 
       // Update the cluster centers and costs
       converged = true
@@ -399,8 +405,8 @@ class KMeans private (
       }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs.sum()
 
-      bcNewCenters.unpersist(blocking = false)
-      preCosts.unpersist(blocking = false)
+      bcNewCenters.unpersist()
+      preCosts.unpersist()
 
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
@@ -411,8 +417,8 @@ class KMeans private (
       step += 1
     }
 
-    costs.unpersist(blocking = false)
-    bcNewCentersList.foreach(_.destroy(false))
+    costs.unpersist()
+    bcNewCentersList.foreach(_.destroy())
 
     val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_))
 
@@ -427,7 +433,7 @@ class KMeans private (
         .map(distanceMeasureInstance.findClosest(bcCenters.value, _)._1)
         .countByValue()
 
-      bcCenters.destroy(blocking = false)
+      bcCenters.destroy()
 
       val myWeights = distinctCenters.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
       LocalKMeans.kMeansPlusPlus(0, distinctCenters.toArray, myWeights, k, 30)

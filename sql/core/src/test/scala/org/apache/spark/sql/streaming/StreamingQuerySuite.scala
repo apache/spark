@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
-import java.{util => ju}
-import java.util.Optional
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.json4s.NoTypeHints
-import org.json4s.jackson.JsonMethods._
-import org.json4s.jackson.Serialization
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -35,8 +30,8 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
@@ -218,25 +213,17 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       private def dataAdded: Boolean = currentOffset.offset != -1
 
-      // setOffsetRange should take 50 ms the first time it is called after data is added
-      override def setOffsetRange(start: Optional[OffsetV2], end: Optional[OffsetV2]): Unit = {
-        synchronized {
-          if (dataAdded) clock.waitTillTime(1050)
-          super.setOffsetRange(start, end)
-        }
-      }
-
-      // getEndOffset should take 100 ms the first time it is called after data is added
-      override def getEndOffset(): OffsetV2 = synchronized {
-        if (dataAdded) clock.waitTillTime(1150)
-        super.getEndOffset()
+      // latestOffset should take 50 ms the first time it is called after data is added
+      override def latestOffset(): OffsetV2 = synchronized {
+        if (dataAdded) clock.waitTillTime(1050)
+        super.latestOffset()
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
+      override def planInputPartitions(start: OffsetV2, end: OffsetV2): Array[InputPartition] = {
         synchronized {
-          clock.waitTillTime(1350)
-          super.planInputPartitions()
+          clock.waitTillTime(1150)
+          super.planInputPartitions(start, end)
         }
       }
     }
@@ -270,41 +257,33 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     var lastProgressBeforeStop: StreamingQueryProgress = null
 
     testStream(mapped, OutputMode.Complete)(
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AssertStreamExecThreadIsWaitingForTime(1000),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      // Test status and progress when setOffsetRange is being called
+      // Test status and progress when `latestOffset` is being called
       AddData(inputData, 1, 2),
-      AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on setOffsetRange
+      AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on `latestOffset`
       AssertStreamExecThreadIsWaitingForTime(1050),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      AdvanceManualClock(50), // time = 1050 to unblock setOffsetRange
+      AdvanceManualClock(50), // time = 1050 to unblock `latestOffset`
       AssertClockTime(1050),
-      AssertStreamExecThreadIsWaitingForTime(1150), // will block on getEndOffset that needs 1150
-      AssertOnQuery(_.status.isDataAvailable === false),
-      AssertOnQuery(_.status.isTriggerActive === true),
-      AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
-      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
-
-      AdvanceManualClock(100), // time = 1150 to unblock getEndOffset
-      AssertClockTime(1150),
-      // will block on planInputPartitions that needs 1350
-      AssertStreamExecThreadIsWaitingForTime(1350),
+      // will block on `planInputPartitions` that needs 1350
+      AssertStreamExecThreadIsWaitingForTime(1150),
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      AdvanceManualClock(200), // time = 1350 to unblock planInputPartitions
-      AssertClockTime(1350),
+      AdvanceManualClock(100), // time = 1150 to unblock `planInputPartitions`
+      AssertClockTime(1150),
       AssertStreamExecThreadIsWaitingForTime(1500), // will block on map task that needs 1500
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
@@ -312,7 +291,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status and progress while batch processing has completed
-      AdvanceManualClock(150), // time = 1500 to unblock map task
+      AdvanceManualClock(350), // time = 1500 to unblock map task
       AssertClockTime(1500),
       CheckAnswer(2),
       AssertStreamExecThreadIsWaitingForTime(2000),  // will block until the next trigger
@@ -332,11 +311,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(progress.numInputRows === 2)
         assert(progress.processedRowsPerSecond === 4.0)
 
-        assert(progress.durationMs.get("setOffsetRange") === 50)
-        assert(progress.durationMs.get("getEndOffset") === 100)
-        assert(progress.durationMs.get("queryPlanning") === 200)
+        assert(progress.durationMs.get("latestOffset") === 50)
+        assert(progress.durationMs.get("queryPlanning") === 100)
         assert(progress.durationMs.get("walCommit") === 0)
-        assert(progress.durationMs.get("addBatch") === 150)
+        assert(progress.durationMs.get("addBatch") === 350)
         assert(progress.durationMs.get("triggerExecution") === 500)
 
         assert(progress.sources.length === 1)
@@ -392,7 +370,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.message === "Stopped"),
 
       // Test status and progress after query terminated with error
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AdvanceManualClock(1000), // ensure initial trigger completes before AddData
       AddData(inputData, 0),
       AdvanceManualClock(1000), // allow another trigger
@@ -478,31 +456,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("Check if custom metrics are reported") {
-    val streamInput = MemoryStream[Int]
-    implicit val formats = Serialization.formats(NoTypeHints)
-    testStream(streamInput.toDF(), useV2Sink = true)(
-      AddData(streamInput, 1, 2, 3),
-      CheckAnswer(1, 2, 3),
-      AssertOnQuery { q =>
-        val lastProgress = getLastProgressWithData(q)
-        assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 3)
-        assert(lastProgress.get.sink.customMetrics == "{\"numRows\":3}")
-        true
-      },
-      AddData(streamInput, 4, 5, 6, 7),
-      CheckAnswer(1, 2, 3, 4, 5, 6, 7),
-      AssertOnQuery { q =>
-        val lastProgress = getLastProgressWithData(q)
-        assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 4)
-        assert(lastProgress.get.sink.customMetrics == "{\"numRows\":7}")
-        true
-      }
-    )
-  }
-
   test("input row calculation with same V1 source used twice in self-join") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
@@ -548,29 +501,52 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery { q =>
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 6)
         assert(lastProgress.get.sources.length == 1)
-        assert(lastProgress.get.sources(0).numInputRows == 6)
+        // The source is scanned twice because of self-union
+        assert(lastProgress.get.numInputRows == 6)
         true
       }
     )
   }
 
   test("input row calculation with same V2 source used twice in self-join") {
-    val streamInput = MemoryStream[Int]
-    val df = streamInput.toDF()
-    testStream(df.join(df, "value"), useV2Sink = true)(
-      AddData(streamInput, 1, 2, 3),
-      CheckAnswer(1, 2, 3),
-      AssertOnQuery { q =>
+    def checkQuery(check: AssertOnQuery): Unit = {
+      val memoryStream = MemoryStream[Int]
+      // TODO: currently the streaming framework always add a dummy Project above streaming source
+      // relation, which breaks exchange reuse, as the optimizer will remove Project from one side.
+      // Here we manually add a useful Project, to trigger exchange reuse.
+      val streamDF = memoryStream.toDF().select('value + 0 as "v")
+      testStream(streamDF.join(streamDF, "v"), useV2Sink = true)(
+        AddData(memoryStream, 1, 2, 3),
+        CheckAnswer(1, 2, 3),
+        check
+      )
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      checkQuery(AssertOnQuery { q =>
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 6)
         assert(lastProgress.get.sources.length == 1)
-        assert(lastProgress.get.sources(0).numInputRows == 6)
+        // The source is scanned twice because of self-join
+        assert(lastProgress.get.numInputRows == 6)
         true
-      }
-    )
+      })
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      checkQuery(AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.sources.length == 1)
+        assert(q.lastExecution.executedPlan.collect {
+          case r: ReusedExchangeExec => r
+        }.length == 1)
+        // The source is scanned only once because of exchange reuse
+        assert(lastProgress.get.numInputRows == 3)
+        true
+      })
+    }
   }
 
   test("input row calculation with trigger having data for only one of two V2 sources") {
@@ -930,12 +906,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(df.logicalPlan.toJSON.contains("StreamingRelationV2"))
 
     testStream(df)(
-      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingExecutionRelation"))
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
 
     testStream(df, useV2Sink = true)(
       StartStream(trigger = Trigger.Continuous(100)),
-      AssertOnQuery(_.logicalPlan.toJSON.contains("ContinuousExecutionRelation"))
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
   }
 

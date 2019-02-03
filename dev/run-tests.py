@@ -25,11 +25,13 @@ import random
 import re
 import sys
 import subprocess
+import glob
+import shutil
 from collections import namedtuple
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
-from sparktestsupport.toposort import toposort_flatten, toposort
+from sparktestsupport.toposort import toposort_flatten
 import sparktestsupport.modules as modules
 
 
@@ -153,30 +155,6 @@ def determine_java_executable():
     return java_exe if java_exe else which("java")
 
 
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
-
-
-def determine_java_version(java_exe):
-    """Given a valid java executable will return its version in named tuple format
-    with accessors '.major', '.minor', '.patch', '.update'"""
-
-    raw_output = subprocess.check_output([java_exe, "-version"],
-                                         stderr=subprocess.STDOUT,
-                                         universal_newlines=True)
-
-    raw_output_lines = raw_output.split('\n')
-
-    # find raw version string, eg 'java version "1.8.0_25"'
-    raw_version_str = next(x for x in raw_output_lines if " version " in x)
-
-    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
-
-    major = int(match.group(1))
-    minor = int(match.group(2))
-    patch = int(match.group(3))
-
-    return JavaVersion(major, minor, patch)
-
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
 # -------------------------------------------------------------------------------------------------
@@ -249,15 +227,6 @@ def get_zinc_port():
     return random.randrange(3030, 4030)
 
 
-def kill_zinc_on_port(zinc_port):
-    """
-    Kill the Zinc process running on the given port, if one exists.
-    """
-    cmd = "%s -P |grep %s | grep LISTEN | awk '{ print $2; }' | xargs kill"
-    lsof_exe = which("lsof")
-    subprocess.check_call(cmd % (lsof_exe if lsof_exe else "/usr/sbin/lsof", zinc_port), shell=True)
-
-
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
@@ -267,7 +236,6 @@ def exec_maven(mvn_args=()):
     zinc_flag = "-DzincPort=%s" % zinc_port
     flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
     run_cmd(flags + mvn_args)
-    kill_zinc_on_port(zinc_port)
 
 
 def exec_sbt(sbt_args=()):
@@ -305,7 +273,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.6": ["-Phadoop-2.6"],
         "hadoop2.7": ["-Phadoop-2.7"],
     }
 
@@ -333,8 +300,6 @@ def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["test:package",  # Build test jars as some tests depend on them
-                 "streaming-kafka-0-8-assembly/assembly",
-                 "streaming-flume-assembly/assembly",
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
@@ -369,15 +334,7 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     if checkstyle:
         run_java_style_checks()
 
-    # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
-    # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
-    # documentation build fails on a specific machine & environment in Jenkins but it was unable
-    # to reproduce. Please see SPARK-20343. This is a band-aid fix that should be removed in
-    # the future.
-    is_hadoop_version_2_6 = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE") == "hadoop2.6"
-    if not is_hadoop_version_2_6:
-        # Make sure that Java and Scala API documentation can be generated
-        build_spark_unidoc_sbt(hadoop_version)
+    build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):
@@ -445,14 +402,65 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules, parallelism):
+def run_python_tests(test_modules, parallelism, with_coverage=False):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
-    command = [os.path.join(SPARK_HOME, "python", "run-tests")]
+    if with_coverage:
+        # Coverage makes the PySpark tests flaky due to heavy parallelism.
+        # When we run PySpark tests with coverage, it uses 4 for now as
+        # workaround.
+        parallelism = 4
+        script = "run-tests-with-coverage"
+    else:
+        script = "run-tests"
+    command = [os.path.join(SPARK_HOME, "python", script)]
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
+
+    if with_coverage:
+        post_python_tests_results()
+
+
+def post_python_tests_results():
+    if "SPARK_TEST_KEY" not in os.environ:
+        print("[error] 'SPARK_TEST_KEY' environment variable was not set. Unable to post "
+              "PySpark coverage results.")
+        sys.exit(1)
+    spark_test_key = os.environ.get("SPARK_TEST_KEY")
+    # The steps below upload HTMLs to 'github.com/spark-test/pyspark-coverage-site'.
+    # 1. Clone PySpark coverage site.
+    run_cmd([
+        "git",
+        "clone",
+        "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key])
+    # 2. Remove existing HTMLs.
+    run_cmd(["rm", "-fr"] + glob.glob("pyspark-coverage-site/*"))
+    # 3. Copy generated coverage HTMLs.
+    for f in glob.glob("%s/python/test_coverage/htmlcov/*" % SPARK_HOME):
+        shutil.copy(f, "pyspark-coverage-site/")
+    os.chdir("pyspark-coverage-site")
+    try:
+        # 4. Check out to a temporary branch.
+        run_cmd(["git", "symbolic-ref", "HEAD", "refs/heads/latest_branch"])
+        # 5. Add all the files.
+        run_cmd(["git", "add", "-A"])
+        # 6. Commit current HTMLs.
+        run_cmd([
+            "git",
+            "commit",
+            "-am",
+            "Coverage report at latest commit in Apache Spark",
+            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
+        # 7. Delete the old branch.
+        run_cmd(["git", "branch", "-D", "gh-pages"])
+        # 8. Rename the temporary branch to master.
+        run_cmd(["git", "branch", "-m", "gh-pages"])
+        # 9. Finally, force update to our repository.
+        run_cmd(["git", "push", "-f", "origin", "gh-pages"])
+    finally:
+        os.chdir("..")
 
 
 def run_python_packaging_tests():
@@ -464,7 +472,6 @@ def run_python_packaging_tests():
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
-    pass
 
 
 def run_sparkr_tests():
@@ -481,7 +488,7 @@ def parse_opts():
         prog="run-tests"
     )
     parser.add_option(
-        "-p", "--parallelism", type="int", default=4,
+        "-p", "--parallelism", type="int", default=8,
         help="The number of suites to test in parallel (default %default)"
     )
 
@@ -516,8 +523,6 @@ def main():
               " install one and retry.")
         sys.exit(2)
 
-    java_version = determine_java_version(java_exe)
-
     # install SparkR
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
@@ -528,14 +533,14 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.6")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.6")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
@@ -615,7 +620,11 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, opts.parallelism)
+        # We only run PySpark tests with coverage report in one specific job with
+        # Spark master with SBT in Jenkins.
+        is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
+        run_python_tests(
+            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()

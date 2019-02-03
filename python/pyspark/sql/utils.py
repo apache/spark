@@ -152,6 +152,25 @@ def require_minimum_pyarrow_version():
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
 
 
+def require_test_compiled():
+    """ Raise Exception if test classes are not compiled
+    """
+    import os
+    import glob
+    try:
+        spark_home = os.environ['SPARK_HOME']
+    except KeyError:
+        raise RuntimeError('SPARK_HOME is not defined in environment')
+
+    test_class_path = os.path.join(
+        spark_home, 'sql', 'core', 'target', '*', 'test-classes')
+    paths = glob.glob(test_class_path)
+
+    if len(paths) == 0:
+        raise RuntimeError(
+            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path)
+
+
 class ForeachBatchFunction(object):
     """
     This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps

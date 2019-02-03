@@ -21,11 +21,14 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -38,12 +41,28 @@ import org.apache.spark.util.Utils
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
  * arguments are all Expressions types. See [[Substring]] for an example.
  *
- * There are a few important traits:
+ * There are a few important traits or abstract classes:
  *
  * - [[Nondeterministic]]: an expression that is not deterministic.
+ * - [[Stateful]]: an expression that contains mutable state. For example, MonotonicallyIncreasingID
+ *                 and Rand. A stateful expression is always non-deterministic.
  * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
+ * - [[NullIntolerant]]: an expression that is null intolerant (i.e. any null input will result in
+ *                       null output).
+ * - [[NonSQLExpression]]: a common base trait for the expressions that do not have SQL
+ *                         expressions like representation. For example, `ScalaUDF`, `ScalaUDAF`,
+ *                         and object `MapObjects` and `Invoke`.
+ * - [[UserDefinedExpression]]: a common base trait for user-defined functions, including
+ *                              UDF/UDAF/UDTF.
+ * - [[HigherOrderFunction]]: a common base trait for higher order functions that take one or more
+ *                            (lambda) functions and applies these to some objects. The function
+ *                            produces a number of variables which can be consumed by some lambda
+ *                            functions.
+ * - [[NamedExpression]]: An [[Expression]] that is named.
+ * - [[TimeZoneAwareExpression]]: A common base trait for time zone aware expressions.
+ * - [[SubqueryExpression]]: A base interface for expressions that contain a [[LogicalPlan]].
  *
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
@@ -52,12 +71,20 @@ import org.apache.spark.util.Utils
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
  *                       the same output data type.
  *
+ * A few important traits used for type coercion rules:
+ * - [[ExpectsInputTypes]]: an expression that has the expected input types. This trait is typically
+ *                          used by operator expressions (e.g. [[Add]], [[Subtract]]) to define
+ *                          expected input types without any implicit casting.
+ * - [[ImplicitCastInputTypes]]: an expression that has the expected input types, which can be
+ *                               implicitly castable using [[TypeCoercion.ImplicitTypeCasts]].
+ * - [[ComplexTypeMergingExpression]]: to resolve output types of the complex expressions
+ *                                     (e.g., [[CaseWhen]]).
  */
 abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
-   * executed.
+   * executed. A typical use case: [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]]
    *
    * The following conditions are used to determine suitability for constant folding:
    *  - A [[Coalesce]] is foldable if all of its children are foldable
@@ -70,7 +97,8 @@ abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns true when the current expression always return the same result for fixed inputs from
-   * children.
+   * children. The non-deterministic expressions should not change in number and order. They should
+   * not be evaluated during the query planning.
    *
    * Note that this means that an expression should be considered as non-deterministic if:
    * - it relies on some mutable internal state, or
@@ -85,7 +113,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   def nullable: Boolean
 
-  def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
+  def references: AttributeSet = AttributeSet.fromAttributeSets(children.map(_.references))
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: InternalRow = null): Any
@@ -120,7 +148,8 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
-    if (eval.code.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+    val splitThreshold = SQLConf.get.methodSplitThreshold
+    if (eval.code.length > splitThreshold && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
@@ -230,12 +259,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
   // overridden by concrete classes.
-  final override def verboseString: String = simpleString
+  final override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
-  override def simpleString: String = toString
+  override def simpleString(maxFields: Int): String = toString
 
-  override def toString: String = prettyName + Utils.truncatedString(
-    flatArguments.toSeq, "(", ", ", ")")
+  override def toString: String = prettyName + truncatedString(
+    flatArguments.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
@@ -249,8 +278,9 @@ abstract class Expression extends TreeNode[Expression] {
 
 
 /**
- * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
- * time (e.g. Star). This trait is used by those expressions.
+ * An expression that cannot be evaluated. These expressions don't live past analysis or
+ * optimization time (e.g. Star) and should not be evaluated during query planning and
+ * execution.
  */
 trait Unevaluable extends Expression {
 
@@ -258,7 +288,7 @@ trait Unevaluable extends Expression {
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 }
 
 
@@ -282,6 +312,31 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override lazy val canonicalized: Expression = child.canonicalized
 }
 
+/**
+ * An aggregate expression that gets rewritten (currently by the optimizer) into a
+ * different aggregate expression for evaluation. This is mainly used to provide compatibility
+ * with other databases. For example, we use this to support every, any/some aggregates by rewriting
+ * them with Min and Max respectively.
+ */
+trait UnevaluableAggregate extends DeclarativeAggregate {
+
+  override def nullable: Boolean = true
+
+  override lazy val aggBufferAttributes =
+    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+
+  override lazy val initialValues: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+
+  override lazy val updateExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+
+  override lazy val evaluateExpression: Expression =
+    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+}
 
 /**
  * Expressions that don't have SQL representation should extend this trait.  Examples are
@@ -696,9 +751,10 @@ abstract class TernaryExpression extends Expression {
 }
 
 /**
- * A trait resolving nullable, containsNull, valueContainsNull flags of the output date type.
- * This logic is usually utilized by expressions combining data from multiple child expressions
- * of non-primitive types (e.g. [[CaseWhen]]).
+ * A trait used for resolving nullable flags, including `nullable`, `containsNull` of [[ArrayType]]
+ * and `valueContainsNull` of [[MapType]], containsNull, valueContainsNull flags of the output date
+ * type. This is usually utilized by the expressions (e.g. [[CaseWhen]]) that combine data from
+ * multiple child expressions of non-primitive types.
  */
 trait ComplexTypeMergingExpression extends Expression {
 

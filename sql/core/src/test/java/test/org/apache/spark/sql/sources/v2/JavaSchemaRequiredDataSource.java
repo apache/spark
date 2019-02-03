@@ -17,22 +17,19 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
-import java.util.List;
-
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.ReadSupport;
-import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
-import org.apache.spark.sql.sources.v2.reader.InputPartition;
+import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.TableProvider;
+import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupport {
+public class JavaSchemaRequiredDataSource implements TableProvider {
 
-  class Reader implements DataSourceReader {
-    private final StructType schema;
+  class MyScanBuilder extends JavaSimpleScanBuilder {
 
-    Reader(StructType schema) {
+    private StructType schema;
+
+    MyScanBuilder(StructType schema) {
       this.schema = schema;
     }
 
@@ -42,18 +39,29 @@ public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<InputPartition<InternalRow>> planInputPartitions() {
-      return java.util.Collections.emptyList();
+    public InputPartition[] planInputPartitions() {
+      return new InputPartition[0];
     }
   }
 
   @Override
-  public DataSourceReader createReader(DataSourceOptions options) {
-    throw new IllegalArgumentException("requires a user-supplied schema");
+  public Table getTable(DataSourceOptions options, StructType schema) {
+    return new JavaSimpleBatchTable() {
+
+      @Override
+      public StructType schema() {
+        return schema;
+      }
+
+      @Override
+      public ScanBuilder newScanBuilder(DataSourceOptions options) {
+        return new MyScanBuilder(schema);
+      }
+    };
   }
 
   @Override
-  public DataSourceReader createReader(StructType schema, DataSourceOptions options) {
-    return new Reader(schema);
+  public Table getTable(DataSourceOptions options) {
+    throw new IllegalArgumentException("requires a user-supplied schema");
   }
 }

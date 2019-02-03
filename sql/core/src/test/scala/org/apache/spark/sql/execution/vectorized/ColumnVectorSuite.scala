@@ -58,9 +58,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, BooleanType) === (i % 2 == 0))
+      assert(arrayCopy.get(i, BooleanType) === (i % 2 == 0))
     }
   }
 
@@ -70,9 +72,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, ByteType) === i.toByte)
+      assert(arrayCopy.get(i, ByteType) === i.toByte)
     }
   }
 
@@ -82,9 +86,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, ShortType) === i.toShort)
+      assert(arrayCopy.get(i, ShortType) === i.toShort)
     }
   }
 
@@ -94,9 +100,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, IntegerType) === i)
+      assert(arrayCopy.get(i, IntegerType) === i)
     }
   }
 
@@ -106,9 +114,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, LongType) === i)
+      assert(arrayCopy.get(i, LongType) === i)
     }
   }
 
@@ -118,9 +128,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, FloatType) === i.toFloat)
+      assert(arrayCopy.get(i, FloatType) === i.toFloat)
     }
   }
 
@@ -130,9 +142,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, DoubleType) === i.toDouble)
+      assert(arrayCopy.get(i, DoubleType) === i.toDouble)
     }
   }
 
@@ -143,9 +157,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, StringType) === UTF8String.fromString(s"str$i"))
+      assert(arrayCopy.get(i, StringType) === UTF8String.fromString(s"str$i"))
     }
   }
 
@@ -156,10 +172,12 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       val utf8 = s"str$i".getBytes("utf8")
       assert(array.get(i, BinaryType) === utf8)
+      assert(arrayCopy.get(i, BinaryType) === utf8)
     }
   }
 

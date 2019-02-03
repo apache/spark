@@ -23,23 +23,20 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.MicroBatchExecution
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
  * Deprecated logical plan for writing data into data source v2. This is being replaced by more
  * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
  */
 @deprecated("Use specific logical plans like AppendData instead", "2.4.0")
-case class WriteToDataSourceV2(writer: DataSourceWriter, query: LogicalPlan) extends LogicalPlan {
+case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
+  extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 }
@@ -47,46 +44,61 @@ case class WriteToDataSourceV2(writer: DataSourceWriter, query: LogicalPlan) ext
 /**
  * The physical plan for writing data into data source v2.
  */
-case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) extends SparkPlan {
-  override def children: Seq[SparkPlan] = Seq(query)
+case class WriteToDataSourceV2Exec(batchWrite: BatchWrite, query: SparkPlan)
+  extends UnaryExecNode {
+
+  var commitProgress: Option[StreamWriterCommitProgress] = None
+
+  override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writeTask = writer.createWriterFactory()
-    val useCommitCoordinator = writer.useCommitCoordinator
+    val writerFactory = batchWrite.createBatchWriterFactory()
+    val useCommitCoordinator = batchWrite.useCommitCoordinator
     val rdd = query.execute()
-    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
+    // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
+    // partition rdd to make sure we at least set up one write task to write the metadata.
+    val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
+      sparkContext.parallelize(Array.empty[InternalRow], 1)
+    } else {
+      rdd
+    }
+    val messages = new Array[WriterCommitMessage](rddWithNonEmptyPartitions.partitions.length)
+    val totalNumRowsAccumulator = new LongAccumulator()
 
-    logInfo(s"Start processing data source writer: $writer. " +
+    logInfo(s"Start processing data source write support: $batchWrite. " +
       s"The input RDD has ${messages.length} partitions.")
 
     try {
       sparkContext.runJob(
-        rdd,
+        rddWithNonEmptyPartitions,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
-          DataWritingSparkTask.run(writeTask, context, iter, useCommitCoordinator),
-        rdd.partitions.indices,
-        (index, message: WriterCommitMessage) => {
-          messages(index) = message
-          writer.onDataWriterCommit(message)
+          DataWritingSparkTask.run(writerFactory, context, iter, useCommitCoordinator),
+        rddWithNonEmptyPartitions.partitions.indices,
+        (index, result: DataWritingSparkTaskResult) => {
+          val commitMessage = result.writerCommitMessage
+          messages(index) = commitMessage
+          totalNumRowsAccumulator.add(result.numRows)
+          batchWrite.onDataWriterCommit(commitMessage)
         }
       )
 
-      logInfo(s"Data source writer $writer is committing.")
-      writer.commit(messages)
-      logInfo(s"Data source writer $writer committed.")
+      logInfo(s"Data source write support $batchWrite is committing.")
+      batchWrite.commit(messages)
+      logInfo(s"Data source write support $batchWrite committed.")
+      commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
       case cause: Throwable =>
-        logError(s"Data source writer $writer is aborting.")
+        logError(s"Data source write support $batchWrite is aborting.")
         try {
-          writer.abort(messages)
+          batchWrite.abort(messages)
         } catch {
           case t: Throwable =>
-            logError(s"Data source writer $writer failed to abort.")
+            logError(s"Data source write support $batchWrite failed to abort.")
             cause.addSuppressed(t)
             throw new SparkException("Writing job failed.", cause)
         }
-        logError(s"Data source writer $writer aborted.")
+        logError(s"Data source write support $batchWrite aborted.")
         cause match {
           // Only wrap non fatal exceptions.
           case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
@@ -100,21 +112,23 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
 
 object DataWritingSparkTask extends Logging {
   def run(
-      writeTask: DataWriterFactory[InternalRow],
+      writerFactory: DataWriterFactory,
       context: TaskContext,
       iter: Iterator[InternalRow],
-      useCommitCoordinator: Boolean): WriterCommitMessage = {
+      useCommitCoordinator: Boolean): DataWritingSparkTaskResult = {
     val stageId = context.stageId()
     val stageAttempt = context.stageAttemptNumber()
     val partId = context.partitionId()
     val taskId = context.taskAttemptId()
     val attemptId = context.attemptNumber()
-    val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
-    val dataWriter = writeTask.createDataWriter(partId, taskId, epochId.toLong)
+    val dataWriter = writerFactory.createWriter(partId, taskId)
 
+    var count = 0L
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       while (iter.hasNext) {
+        // Count is here.
+        count += 1
         dataWriter.write(iter.next())
       }
 
@@ -141,7 +155,7 @@ object DataWritingSparkTask extends Logging {
       logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId" +
         s"stage $stageId.$stageAttempt)")
 
-      msg
+      DataWritingSparkTaskResult(count, msg)
 
     })(catchBlock = {
       // If there is an error, abort this writer
@@ -153,3 +167,12 @@ object DataWritingSparkTask extends Logging {
     })
   }
 }
+
+private[v2] case class DataWritingSparkTaskResult(
+                                                   numRows: Long,
+                                                   writerCommitMessage: WriterCommitMessage)
+
+/**
+ * Sink progress information collected after commit.
+ */
+private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)

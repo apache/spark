@@ -24,33 +24,30 @@ import scala.language.postfixOps
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.util._
 
-/** A [[TaskContext]] with extra info and tooling for a barrier stage. */
-class BarrierTaskContext(
-    override val stageId: Int,
-    override val stageAttemptNumber: Int,
-    override val partitionId: Int,
-    override val taskAttemptId: Long,
-    override val attemptNumber: Int,
-    override val taskMemoryManager: TaskMemoryManager,
-    localProperties: Properties,
-    @transient private val metricsSystem: MetricsSystem,
-    // The default value is only used in tests.
-    override val taskMetrics: TaskMetrics = TaskMetrics.empty)
-  extends TaskContextImpl(stageId, stageAttemptNumber, partitionId, taskAttemptId, attemptNumber,
-      taskMemoryManager, localProperties, metricsSystem, taskMetrics) {
+/**
+ * :: Experimental ::
+ * A [[TaskContext]] with extra contextual info and tooling for tasks in a barrier stage.
+ * Use [[BarrierTaskContext#get]] to obtain the barrier context for a running barrier task.
+ */
+@Experimental
+@Since("2.4.0")
+class BarrierTaskContext private[spark] (
+    taskContext: TaskContext) extends TaskContext with Logging {
+
+  import BarrierTaskContext._
 
   // Find the driver side RPCEndpointRef of the coordinator that handles all the barrier() calls.
   private val barrierCoordinator: RpcEndpointRef = {
     val env = SparkEnv.get
     RpcUtils.makeDriverRef("barrierSync", env.conf, env.rpcEnv)
   }
-
-  private val timer = new Timer("Barrier task timer for barrier() calls.")
 
   // Local barrierEpoch that identify a barrier() call from current task, it shall be identical
   // with the driver side epoch.
@@ -68,7 +65,7 @@ class BarrierTaskContext(
    *
    * CAUTION! In a barrier stage, each task must have the same number of barrier() calls, in all
    * possible code branches. Otherwise, you may get the job hanging or a SparkException after
-   * timeout. Some examples of misuses listed below:
+   * timeout. Some examples of '''misuses''' are listed below:
    * 1. Only call barrier() function on a subset of all the tasks in the same barrier stage, it
    * shall lead to timeout of the function call.
    * {{{
@@ -140,25 +137,102 @@ class BarrierTaskContext(
         throw e
     } finally {
       timerTask.cancel()
+      timer.purge()
     }
   }
 
   /**
    * :: Experimental ::
-   * Returns the all task infos in this barrier stage, the task infos are ordered by partitionId.
+   * Returns [[BarrierTaskInfo]] for all tasks in this barrier stage, ordered by partition ID.
    */
   @Experimental
   @Since("2.4.0")
   def getTaskInfos(): Array[BarrierTaskInfo] = {
-    val addressesStr = localProperties.getProperty("addresses", "")
+    val addressesStr = Option(taskContext.getLocalProperty("addresses")).getOrElse("")
     addressesStr.split(",").map(_.trim()).map(new BarrierTaskInfo(_))
   }
+
+  // delegate methods
+
+  override def isCompleted(): Boolean = taskContext.isCompleted()
+
+  override def isInterrupted(): Boolean = taskContext.isInterrupted()
+
+  override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
+    taskContext.addTaskCompletionListener(listener)
+    this
+  }
+
+  override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
+    taskContext.addTaskFailureListener(listener)
+    this
+  }
+
+  override def stageId(): Int = taskContext.stageId()
+
+  override def stageAttemptNumber(): Int = taskContext.stageAttemptNumber()
+
+  override def partitionId(): Int = taskContext.partitionId()
+
+  override def attemptNumber(): Int = taskContext.attemptNumber()
+
+  override def taskAttemptId(): Long = taskContext.taskAttemptId()
+
+  override def getLocalProperty(key: String): String = taskContext.getLocalProperty(key)
+
+  override def taskMetrics(): TaskMetrics = taskContext.taskMetrics()
+
+  override def getMetricsSources(sourceName: String): Seq[Source] = {
+    taskContext.getMetricsSources(sourceName)
+  }
+
+  override private[spark] def killTaskIfInterrupted(): Unit = taskContext.killTaskIfInterrupted()
+
+  override private[spark] def getKillReason(): Option[String] = taskContext.getKillReason()
+
+  override private[spark] def taskMemoryManager(): TaskMemoryManager = {
+    taskContext.taskMemoryManager()
+  }
+
+  override private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
+    taskContext.registerAccumulator(a)
+  }
+
+  override private[spark] def setFetchFailed(fetchFailed: FetchFailedException): Unit = {
+    taskContext.setFetchFailed(fetchFailed)
+  }
+
+  override private[spark] def markInterrupted(reason: String): Unit = {
+    taskContext.markInterrupted(reason)
+  }
+
+  override private[spark] def markTaskFailed(error: Throwable): Unit = {
+    taskContext.markTaskFailed(error)
+  }
+
+  override private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = {
+    taskContext.markTaskCompleted(error)
+  }
+
+  override private[spark] def fetchFailed: Option[FetchFailedException] = {
+    taskContext.fetchFailed
+  }
+
+  override private[spark] def getLocalProperties: Properties = taskContext.getLocalProperties
 }
 
+@Experimental
+@Since("2.4.0")
 object BarrierTaskContext {
   /**
-   * Return the currently active BarrierTaskContext. This can be called inside of user functions to
+   * :: Experimental ::
+   * Returns the currently active BarrierTaskContext. This can be called inside of user functions to
    * access contextual information about running barrier tasks.
    */
+  @Experimental
+  @Since("2.4.0")
   def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
+
+  private val timer = new Timer("Barrier task timer for barrier() calls.")
+
 }

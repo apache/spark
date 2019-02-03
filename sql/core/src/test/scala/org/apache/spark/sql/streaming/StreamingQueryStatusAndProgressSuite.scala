@@ -58,7 +58,12 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |  "stateOperators" : [ {
         |    "numRowsTotal" : 0,
         |    "numRowsUpdated" : 1,
-        |    "memoryUsedBytes" : 2
+        |    "memoryUsedBytes" : 3,
+        |    "customMetrics" : {
+        |      "loadedMapCacheHitCount" : 1,
+        |      "loadedMapCacheMissCount" : 0,
+        |      "stateOnCurrentVersionSizeBytes" : 2
+        |    }
         |  } ],
         |  "sources" : [ {
         |    "description" : "source",
@@ -68,7 +73,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |    "inputRowsPerSecond" : 10.0
         |  } ],
         |  "sink" : {
-        |    "description" : "sink"
+        |    "description" : "sink",
+        |    "numOutputRows" : -1
         |  }
         |}
       """.stripMargin.trim)
@@ -100,7 +106,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |    "numInputRows" : 678
          |  } ],
          |  "sink" : {
-         |    "description" : "sink"
+         |    "description" : "sink",
+         |    "numOutputRows" : -1
          |  }
          |}
       """.stripMargin.trim)
@@ -230,7 +237,11 @@ object StreamingQueryStatusAndProgressSuite {
       "avg" -> "2016-12-05T20:54:20.827Z",
       "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
     stateOperators = Array(new StateOperatorProgress(
-      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2)),
+      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 3,
+      customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
+        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
+        .mapValues(long2Long).asJava)
+    )),
     sources = Array(
       new SourceProgress(
         description = "source",
@@ -241,7 +252,7 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
       )
     ),
-    sink = new SinkProgress("sink")
+    sink = SinkProgress("sink", None)
   )
 
   val testProgress2 = new StreamingQueryProgress(
@@ -265,7 +276,7 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.NegativeInfinity // should not be present in the json
       )
     ),
-    sink = new SinkProgress("sink")
+    sink = SinkProgress("sink", None)
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)

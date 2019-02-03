@@ -86,25 +86,6 @@ package object expressions  {
   }
 
   /**
-   * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
-   * column of the new row. If the schema of the input row is specified, then the given expression
-   * will be bound to that schema.
-   *
-   * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
-   * each time an input row is added.  This significantly reduces the cost of calculating the
-   * projection, but means that it is not safe to hold on to a reference to a [[InternalRow]] after
-   * `next()` has been called on the [[Iterator]] that produced it. Instead, the user must call
-   * `InternalRow.copy()` and hold on to the returned [[InternalRow]] before calling `next()`.
-   */
-  abstract class MutableProjection extends Projection {
-    def currentValue: InternalRow
-
-    /** Uses the given row to store the output of the projection. */
-    def target(row: InternalRow): MutableProjection
-  }
-
-
-  /**
    * Helper functions for working with `Seq[Attribute]`.
    */
   implicit class AttributeSeq(val attrs: Seq[Attribute]) extends Serializable {
@@ -113,7 +94,7 @@ package object expressions  {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
     }
 
-    // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
+    // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
     // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
     // to an array.
     @transient private lazy val attrsArray = attrs.toArray

@@ -105,6 +105,7 @@ private[hive] class HiveClientImpl(
     case hive.v2_1 => new Shim_v2_1()
     case hive.v2_2 => new Shim_v2_2()
     case hive.v2_3 => new Shim_v2_3()
+    case hive.v3_1 => new Shim_v3_1()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -467,9 +468,12 @@ private[hive] class HiveClientImpl(
         properties = filteredProperties,
         stats = readHiveStats(properties),
         comment = comment,
-        // In older versions of Spark(before 2.2.0), we expand the view original text and store
-        // that into `viewExpandedText`, and that should be used in view resolution. So we get
-        // `viewExpandedText` instead of `viewOriginalText` for viewText here.
+        // In older versions of Spark(before 2.2.0), we expand the view original text and
+        // store that into `viewExpandedText`, that should be used in view resolution.
+        // We get `viewExpandedText` as viewText, and also get `viewOriginalText` in order to
+        // display the original view text in `DESC [EXTENDED|FORMATTED] table` command for views
+        // that created by older versions of Spark.
+        viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures,
         ignoredProperties = ignoredProperties.toMap)
@@ -849,11 +853,17 @@ private[hive] class HiveClientImpl(
     client.getAllTables("default").asScala.foreach { t =>
       logDebug(s"Deleting table $t")
       val table = client.getTable("default", t)
-      client.getIndexes("default", t, 255).asScala.foreach { index =>
-        shim.dropIndex(client, "default", t, index.getIndexName)
-      }
-      if (!table.isIndexTable) {
-        client.dropTable("default", t)
+      try {
+        client.getIndexes("default", t, 255).asScala.foreach { index =>
+          shim.dropIndex(client, "default", t, index.getIndexName)
+        }
+        if (!table.isIndexTable) {
+          client.dropTable("default", t)
+        }
+      } catch {
+        case _: NoSuchMethodError =>
+          // HIVE-18448 Hive 3.0 remove index APIs
+          client.dropTable("default", t)
       }
     }
     client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>

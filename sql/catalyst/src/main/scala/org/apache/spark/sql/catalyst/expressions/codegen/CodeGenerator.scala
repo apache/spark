@@ -39,7 +39,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -747,73 +747,6 @@ class CodegenContext {
   }
 
   /**
-   * Generates code creating a [[UnsafeArrayData]].
-   *
-   * @param arrayName name of the array to create
-   * @param numElements code representing the number of elements the array should contain
-   * @param elementType data type of the elements in the array
-   * @param additionalErrorMessage string to include in the error message
-   */
-  def createUnsafeArray(
-      arrayName: String,
-      numElements: String,
-      elementType: DataType,
-      additionalErrorMessage: String): String = {
-    val arraySize = freshName("size")
-    val arrayBytes = freshName("arrayBytes")
-
-    s"""
-       |long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-       |  $numElements,
-       |  ${elementType.defaultSize});
-       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw new RuntimeException("Unsuccessful try create array with " + $arraySize +
-       |    " bytes of data due to exceeding the limit " +
-       |    "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} bytes for UnsafeArrayData." +
-       |    "$additionalErrorMessage");
-       |}
-       |byte[] $arrayBytes = new byte[(int)$arraySize];
-       |UnsafeArrayData $arrayName = new UnsafeArrayData();
-       |Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
-       |$arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
-      """.stripMargin
-  }
-
-  /**
-   * Generates code creating a [[UnsafeArrayData]]. The generated code executes
-   * a provided fallback when the size of backing array would exceed the array size limit.
-   * @param arrayName a name of the array to create
-   * @param numElements a piece of code representing the number of elements the array should contain
-   * @param elementSize a size of an element in bytes
-   * @param bodyCode a function generating code that fills up the [[UnsafeArrayData]]
-   *                 and getting the backing array as a parameter
-   * @param fallbackCode a piece of code executed when the array size limit is exceeded
-   */
-  def createUnsafeArrayWithFallback(
-      arrayName: String,
-      numElements: String,
-      elementSize: Int,
-      bodyCode: String => String,
-      fallbackCode: String): String = {
-    val arraySize = freshName("size")
-    val arrayBytes = freshName("arrayBytes")
-    s"""
-       |final long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-       |  $numElements,
-       |  $elementSize);
-       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  $fallbackCode
-       |} else {
-       |  final byte[] $arrayBytes = new byte[(int)$arraySize];
-       |  UnsafeArrayData $arrayName = new UnsafeArrayData();
-       |  Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
-       |  $arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
-       |  ${bodyCode(arrayBytes)}
-       |}
-     """.stripMargin
-  }
-
-  /**
    * Generates code to do null safe execution, i.e. only execute the code when the input is not
    * null by adding null check if necessary.
    *
@@ -977,12 +910,13 @@ class CodegenContext {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
+    val splitThreshold = SQLConf.get.methodSplitThreshold
     for (code <- expressions) {
       // We can't know how many bytecode will be generated, so use the length of source code
       // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
-      if (length > 1024) {
+      if (length > splitThreshold) {
         blocks += blockBuilder.toString()
         blockBuilder.clear()
         length = 0
@@ -1329,7 +1263,7 @@ object CodeGenerator extends Logging {
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
-    evaluator.setDefaultImports(Array(
+    evaluator.setDefaultImports(
       classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
@@ -1344,7 +1278,7 @@ object CodeGenerator extends Logging {
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName
-    ))
+    )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
     logDebug({
@@ -1371,7 +1305,7 @@ object CodeGenerator extends Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
-    (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
+    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
   }
 
   /**
@@ -1491,6 +1425,59 @@ object CodeGenerator extends Logging {
   }
 
   /**
+   * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
+   * given parameters.
+   *
+   * @param arrayName name of the array to create
+   * @param elementType data type of the elements in source array
+   * @param numElements code representing the number of elements the array should contain
+   * @param additionalErrorMessage string to include in the error message
+   *
+   * @return code representing the allocation of [[ArrayData]]
+   */
+  def createArrayData(
+      arrayName: String,
+      elementType: DataType,
+      numElements: String,
+      additionalErrorMessage: String): String = {
+    val elementSize = if (CodeGenerator.isPrimitiveType(elementType)) {
+      elementType.defaultSize
+    } else {
+      -1
+    }
+    s"""
+       |ArrayData $arrayName = ArrayData.allocateArrayData(
+       |  $elementSize, $numElements, "$additionalErrorMessage");
+     """.stripMargin
+  }
+
+  /**
+   * Generates assignment code for an [[ArrayData]]
+   *
+   * @param dstArray name of the array to be assigned
+   * @param elementType data type of the elements in destination and source arrays
+   * @param srcArray name of the array to be read
+   * @param needNullCheck value which shows whether a nullcheck is required for the returning
+   *                      assignment
+   * @param dstArrayIndex an index variable to access each element of destination array
+   * @param srcArrayIndex an index variable to access each element of source array
+   *
+   * @return code representing an assignment to each element of the [[ArrayData]], which requires
+   *         a pair of destination and source loop index variables
+   */
+  def createArrayAssignment(
+      dstArray: String,
+      elementType: DataType,
+      srcArray: String,
+      dstArrayIndex: String,
+      srcArrayIndex: String,
+      needNullCheck: Boolean): String = {
+    CodeGenerator.setArrayElement(dstArray, elementType, dstArrayIndex,
+      CodeGenerator.getValue(srcArray, elementType, srcArrayIndex),
+      if (needNullCheck) Some(s"$srcArray.isNullAt($srcArrayIndex)") else None)
+  }
+
+  /**
    * Returns the code to update a column in Row for a given DataType.
    */
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
@@ -1555,6 +1542,34 @@ object CodeGenerator extends Logging {
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Generates code of setter for an [[ArrayData]].
+   */
+  def setArrayElement(
+      array: String,
+      elementType: DataType,
+      i: String,
+      value: String,
+      isNull: Option[String] = None): String = {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+    if (isNull.isDefined && isPrimitiveType) {
+      s"""
+         |if (${isNull.get}) {
+         |  $array.setNullAt($i);
+         |} else {
+         |  $array.$setFunc($i, $value);
+         |}
+       """.stripMargin
+    } else {
+      s"$array.$setFunc($i, $value);"
     }
   }
 
