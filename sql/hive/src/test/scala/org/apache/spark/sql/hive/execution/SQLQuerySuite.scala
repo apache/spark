@@ -27,8 +27,8 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.exec.TextRecordWriter
 import org.apache.hadoop.io.Writable
-import org.apache.spark.{SparkException, TestUtils}
 
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
