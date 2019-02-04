@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType}
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
  * @param primitiveInputs Whether the inputs are of primitive types. Null values of Java primitive
- *                        types will be converted to the type's default value and lead to wrong
- *                        results, thus need special handling before calling the UDF.
+ *                        types will be converted to the type's default values. To avoid wrong
+ *                        results, the analyzer makes them NULL intolerant.
  * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
