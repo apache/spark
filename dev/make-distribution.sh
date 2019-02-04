@@ -153,7 +153,7 @@ fi
 echo "Spark version is $VERSION"
 VERSION_SET=$("$MVN" versions:set -DnewVersion=$VERSION | tail -n 1)
 if [ "$MAKE_TGZ" == "true" ]; then
-  echo "Making spark-dist_2.11-$NAME-$VERSION.tgz"
+  echo "Making spark-dist-$NAME-$VERSION.tgz"
 else
   echo "Making distribution for Spark $VERSION in '$DISTDIR'..."
 fi

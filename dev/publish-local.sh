@@ -16,7 +16,7 @@ make_dist() {
   build_flags="$1"
   shift 1
   hadoop_name="hadoop-palantir"
-  artifact_name="spark-dist_2.11-${hadoop_name}"
+  artifact_name="spark-dist_2.12-${hadoop_name}"
   file_name="spark-dist-${version}-${hadoop_name}.tgz"
   ./dev/make-distribution.sh --name "hadoop-palantir" --tgz "$@" $build_flags
   mkdir -p $MVN_LOCAL/org/apache/spark/${artifact_name}/${version} && \

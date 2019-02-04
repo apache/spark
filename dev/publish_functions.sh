@@ -29,7 +29,7 @@ make_dist() {
   shift 1
   version=$(get_version)
   hadoop_name="hadoop-palantir"
-  artifact_name="spark-dist_2.11-${hadoop_name}"
+  artifact_name="spark-dist_2.12-${hadoop_name}"
   file_name="spark-dist-${version}-${hadoop_name}.tgz"
   ./dev/make-distribution.sh --name "hadoop-palantir" --tgz "$@" $build_flags
   curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T "$file_name" "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/${artifact_name}/${version}/${artifact_name}-${version}.tgz"
