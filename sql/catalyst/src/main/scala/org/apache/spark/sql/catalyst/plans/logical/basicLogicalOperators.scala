@@ -237,8 +237,8 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
       val outAttr = try {
         firstAttr.withDataType(attrs.map(_.dataType).reduce(StructType.merge))
       } catch {
-        // If the data types are not compatible (eg. Decimals with different precision/scale)
-        // return the first type
+        // This should never happen, since `output` is called only when the plan is `resolved`, so
+        // all the data types have been checked to be the same.
         case _: SparkException => firstAttr
       }
       outAttr.withNullability(attrs.exists(_.nullable))
