@@ -44,7 +44,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          null,
+          TimeZone.getDefault,
+          conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
@@ -72,7 +74,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          null,
+          TimeZone.getDefault,
+          conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
@@ -104,7 +108,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          null,
+          TimeZone.getDefault,
+          conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null /* set columns to null to project all columns */)
         val column = reader.resultBatch().column(0)

@@ -26,8 +26,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, MessageType, Type}
-import org.apache.parquet.schema.LogicalTypeAnnotation._
+import org.apache.parquet.schema.{GroupType, LogicalTypeAnnotation, MessageType, Type}
+import org.apache.parquet.schema.LogicalTypeAnnotation.{TimeUnit, _}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.internal.Logging
@@ -210,6 +210,12 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
+  def isTimestampWithUnit(parquetType: Type, timeUnit: LogicalTypeAnnotation.TimeUnit): Boolean = {
+    val logicalType = parquetType.getLogicalTypeAnnotation
+    logicalType.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+      logicalType.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == timeUnit
+  }
+
   /**
    * Creates a converter for the given Parquet type `parquetType` and Spark SQL data type
    * `catalystType`. Converted values are handled by `updater`.
@@ -258,10 +264,7 @@ private[parquet] class ParquetRowConverter(
       case StringType =>
         new ParquetStringConverter(updater)
 
-      case TimestampType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit
-            == TimeUnit.MICROS =>
+      case TimestampType if isTimestampWithUnit(parquetType, TimeUnit.MICROS) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val utc = parquetType.getLogicalTypeAnnotation
@@ -271,10 +274,7 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
-      case TimestampType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit
-            == TimeUnit.MILLIS =>
+      case TimestampType if isTimestampWithUnit(parquetType, TimeUnit.MILLIS) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val utc = parquetType.getLogicalTypeAnnotation
@@ -316,8 +316,8 @@ private[parquet] class ParquetRowConverter(
       // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
       // annotated by `LIST` or `MAP` should be interpreted as a required list of required
       // elements where the element type is the type of the field.
-      case t: ArrayType
-        if !parquetType.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation] =>
+      case t: ArrayType if
+        !parquetType.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation] =>
         if (parquetType.isPrimitive) {
           new RepeatedPrimitiveConverter(parquetType, t.elementType, updater)
         } else {
@@ -332,7 +332,11 @@ private[parquet] class ParquetRowConverter(
 
       case t: StructType =>
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, sessionLocalTz,
+          schemaConverter,
+          parquetType.asGroupType(),
+          t,
+          convertTz,
+          sessionLocalTz,
           new ParentContainerUpdater {
             override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
           })

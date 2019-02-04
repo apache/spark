@@ -410,8 +410,10 @@ class ParquetFileFormat
       val taskContext = Option(TaskContext.get())
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull, sessionLocalTz,
-          enableOffHeapColumnVector && taskContext.isDefined, capacity)
+          convertTz.orNull,
+          sessionLocalTz,
+          enableOffHeapColumnVector && taskContext.isDefined,
+          capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion lister before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))

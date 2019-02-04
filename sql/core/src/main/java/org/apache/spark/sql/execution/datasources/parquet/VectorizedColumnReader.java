@@ -443,9 +443,7 @@ public class VectorizedColumnReader {
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
             long timestamp = dataColumn.readLong();
-            if (needsTimezoneAdjustment()) {
-              timestamp = DateTimeUtils.convertTz(timestamp, sessionLocalTz, UTC);
-            }
+            timestamp = DateTimeUtils.convertTz(timestamp, sessionLocalTz, UTC);
             column.putLong(rowId + i, timestamp);
           } else {
             column.putNull(rowId + i);
@@ -477,7 +475,9 @@ public class VectorizedColumnReader {
       !((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC();
   }
 
-  private boolean isTimestampWithUnit(LogicalTypeAnnotation logicalTypeAnnotation, LogicalTypeAnnotation.TimeUnit timeUnit) {
+  private boolean isTimestampWithUnit(
+    LogicalTypeAnnotation logicalTypeAnnotation,
+    LogicalTypeAnnotation.TimeUnit timeUnit) {
     return (logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation) &&
       ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == timeUnit;
   }
