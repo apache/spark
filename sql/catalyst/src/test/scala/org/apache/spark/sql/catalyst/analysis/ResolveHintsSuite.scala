@@ -161,28 +161,46 @@ class ResolveHintsSuite extends AnalysisTest {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"),
         table("table").join(table("table2"))),
-      Join(ResolvedHint(testRelation, HintInfo(broadcast = true)),
-        ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None),
+      Join(
+        ResolvedHint(testRelation, HintInfo(broadcast = true)),
+        ResolvedHint(testRelation2, HintInfo(broadcast = true)),
+        Inner,
+        None,
+        JoinHint(None, None)),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("TaBlE", "table2"),
         table("TaBlE").join(table("TaBlE2"))),
-      Join(ResolvedHint(testRelation, HintInfo(broadcast = true)), testRelation2, Inner, None),
+      Join(
+        ResolvedHint(testRelation, HintInfo(broadcast = true)),
+        testRelation2,
+        Inner,
+        None,
+        JoinHint(None, None)),
       caseSensitive = true)
 
     // global temp table
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("global_temp.table4", "GlOBal_TeMP.table5"),
         table("global_temp", "table4").join(table("global_temp", "table5"))),
-      Join(ResolvedHint(testRelation4, HintInfo(broadcast = true)),
-        ResolvedHint(testRelation5, HintInfo(broadcast = true)), Inner, None),
+      Join(
+        ResolvedHint(testRelation4, HintInfo(broadcast = true)),
+        ResolvedHint(testRelation5, HintInfo(broadcast = true)),
+        Inner,
+        None,
+        JoinHint(None, None)),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("global_temp.TaBlE4", "table5"),
         table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
-      Join(ResolvedHint(testRelation4, HintInfo(broadcast = true)), testRelation5, Inner, None),
+      Join(
+        ResolvedHint(testRelation4, HintInfo(broadcast = true)),
+        testRelation5,
+        Inner,
+        None,
+        JoinHint(None, None)),
       caseSensitive = true)
   }
 }
