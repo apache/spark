@@ -90,7 +90,7 @@ abstract class StreamExecution(
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     fs.mkdirs(checkpointPath)
-    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
+    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
   }
 
   def logicalPlan: LogicalPlan
@@ -225,7 +225,7 @@ abstract class StreamExecution(
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
   protected def checkpointFile(name: String): String =
-    new Path(new Path(resolvedCheckpointRoot), name).toUri.toString
+    new Path(new Path(resolvedCheckpointRoot), name).toString
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
