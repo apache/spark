@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable
@@ -913,6 +914,25 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       StartStream(trigger = Trigger.Continuous(100)),
       AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
+  }
+
+  test("special characters in checkpoint path") {
+    withTempDir { tempDir =>
+      val checkpointDir = new File(tempDir, "chk @#chk")
+      val inputData = MemoryStream[Int]
+      inputData.addData(1)
+      val q = inputData.toDF()
+        .writeStream
+        .format("noop")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .start()
+      try {
+        q.processAllAvailable()
+        assert(checkpointDir.listFiles().toList.nonEmpty)
+      } finally {
+        q.stop()
+      }
+    }
   }
 
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
