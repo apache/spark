@@ -1380,4 +1380,29 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       |}
     """.stripMargin)
   }
+
+  test("test reading/writing primitive types") {
+    withTempPath { tempDir =>
+      val tempSaveDir = s"$tempDir/save/"
+
+      def assertAndGetDFFromAvro(fileName: String): DataFrame = {
+        val df = spark.read.format("avro").load(testFile(fileName))
+        assert(df.count == 20)
+        assert(df.rdd.count == 20)
+        df.write.format("avro").save(tempSaveDir + fileName)
+        assert(spark.read.format("avro").load(tempSaveDir + fileName).count == 20)
+        df
+      }
+
+      assertAndGetDFFromAvro("randomBoolean.avro").head().getBoolean(0)
+      assertAndGetDFFromAvro("randomBytes.avro").head().getAs[Array[Byte]](0)
+      assertAndGetDFFromAvro("randomDouble.avro").head().getDouble(0)
+      assertAndGetDFFromAvro("randomFloat.avro").head().getFloat(0)
+      assertAndGetDFFromAvro("randomInt.avro").head().getInt(0)
+      assertAndGetDFFromAvro("randomLong.avro").head().getLong(0)
+      assertAndGetDFFromAvro("randomString.avro").head().getString(0)
+      assertAndGetDFFromAvro("randomLongMap.avro").head().getAs[Map[String, Long]](0)
+      assertAndGetDFFromAvro("randomStringArray.avro").head().getAs[Array[String]](0)
+    }
+  }
 }

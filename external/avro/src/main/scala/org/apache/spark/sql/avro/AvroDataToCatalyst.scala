@@ -55,7 +55,7 @@ case class AvroDataToCatalyst(
 
   @transient private lazy val reader = new GenericDatumReader[Any](avroSchema)
 
-  @transient private lazy val deserializer = new AvroDeserializer(avroSchema, dataType)
+  @transient private lazy val deserializer = new AvroDeserializer(avroSchema, dataType, true)
 
   @transient private var decoder: BinaryDecoder = _
 

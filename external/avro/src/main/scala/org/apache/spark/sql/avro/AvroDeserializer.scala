@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
-class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
+class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType, isSchemaARecord: Boolean) {
   private lazy val decimalConversions = new DecimalConversion()
 
   private val converter: Any => Any = rootCatalystType match {
@@ -48,13 +48,24 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       (data: Any) => InternalRow.empty
 
     case st: StructType =>
-      val resultRow = new SpecificInternalRow(st.map(_.dataType))
-      val fieldUpdater = new RowUpdater(resultRow)
-      val writer = getRecordWriter(rootAvroType, st, Nil)
-      (data: Any) => {
-        val record = data.asInstanceOf[GenericRecord]
-        writer(fieldUpdater, record)
-        resultRow
+      if (isSchemaARecord) {
+        val resultRow = new SpecificInternalRow(st.map(_.dataType))
+        val fieldUpdater = new RowUpdater(resultRow)
+        val writer = getRecordWriter(rootAvroType, st, Nil)
+        (data: Any) => {
+          val record = data.asInstanceOf[GenericRecord]
+          writer(fieldUpdater, record)
+          resultRow
+        }
+      } else { // We are trying to read an avro file of just primitive types
+        val primitiveDataType = st.fields(0).dataType
+        val writer = newWriter(rootAvroType, primitiveDataType, Nil)
+        val tmpRow = new SpecificInternalRow(Seq(primitiveDataType))
+        val fieldUpdater = new RowUpdater(tmpRow)
+        (data: Any) => {
+          writer(fieldUpdater, 0, data)
+          tmpRow
+        }
       }
 
     case _ =>
@@ -302,11 +313,19 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
     var i = 0
     while (i < length) {
       val sqlField = sqlType.fields(i)
-      val avroField = avroType.getField(sqlField.name)
-      if (avroField != null) {
-        validFieldIndexes += avroField.pos()
+      var avroField: Schema.Field = null
+      if (isSchemaARecord) {
+        avroField = avroType.getField(sqlField.name)
+        if (avroField != null) {
+          validFieldIndexes += avroField.pos()
+        }
+      } else {
+        validFieldIndexes += 0
+      }
 
-        val baseWriter = newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name)
+      if (avroField != null || !isSchemaARecord) {
+        val schema = if (isSchemaARecord) avroField.schema() else Schema.create(avroType.getType)
+        val baseWriter = newWriter(schema, sqlField.dataType, path :+ sqlField.name)
         val ordinal = i
         val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
           if (value == null) {

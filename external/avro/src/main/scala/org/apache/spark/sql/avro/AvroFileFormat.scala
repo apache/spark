@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.avro.Schema
 import org.apache.avro.file.DataFileConstants._
 import org.apache.avro.file.DataFileReader
-import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
@@ -67,13 +67,18 @@ private[avro] class AvroFileFormat extends FileFormat
           spark.sessionState.conf.ignoreCorruptFiles)
     }
 
-    SchemaConverters.toSqlType(avroSchema).dataType match {
+    val schemaType = SchemaConverters.toSqlType(avroSchema)
+
+    schemaType.dataType match {
       case t: StructType => Some(t)
-      case _ => throw new RuntimeException(
-        s"""Avro schema cannot be converted to a Spark SQL StructType:
-           |
-           |${avroSchema.toString(true)}
-           |""".stripMargin)
+      case _ => Some(StructType(Seq(StructField("value", schemaType.dataType, nullable = false))))
+    }
+  }
+
+  def isSchemaARecord(schema: Schema): Boolean = {
+    schema.getType match {
+      case Schema.Type.RECORD => true
+      case _ => false
     }
   }
 
@@ -190,7 +195,12 @@ private[avro] class AvroFileFormat extends FileFormat
           val in = new FsInput(new Path(new URI(file.filePath)), conf)
           try {
             val datumReader = userProvidedSchema match {
-              case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)
+              case Some(userSchema) =>
+                if (isSchemaARecord(userSchema)) {
+                  new GenericDatumReader[GenericRecord](userSchema)
+                } else {
+                  new GenericDatumReader[GenericData](userSchema)
+                }
               case _ => new GenericDatumReader[GenericRecord]()
             }
             DataFileReader.openReader(in, datumReader)
@@ -213,8 +223,9 @@ private[avro] class AvroFileFormat extends FileFormat
         reader.sync(file.start)
         val stop = file.start + file.length
 
+        val avroSchema = userProvidedSchema.getOrElse(reader.getSchema)
         val deserializer =
-          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
+          new AvroDeserializer(avroSchema, requiredSchema, isSchemaARecord(avroSchema))
 
         new Iterator[InternalRow] {
           private[this] var completed = false
