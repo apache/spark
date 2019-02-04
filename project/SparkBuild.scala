@@ -76,8 +76,7 @@ object BuildCommons {
 
   val testTempDir = s"$sparkHome/target/tmp"
 
-  val javacJVMVersion = settingKey[String]("source and target JVM version for javac")
-  val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
+  val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
 }
 
 object SparkBuild extends PomBuild {
@@ -240,23 +239,22 @@ object SparkBuild extends PomBuild {
       if (major >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
-    javacJVMVersion := "1.8",
-    scalacJVMVersion := "1.8",
+    javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
-      "-source", javacJVMVersion.value
+      "-source", javaVersion.value
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
     // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629
     // for additional discussion and explanation.
     javacOptions in (Compile, compile) ++= Seq(
-      "-target", javacJVMVersion.value,
+      "-target", javaVersion.value,
       "-Xlint:unchecked"
     ),
 
     scalacOptions in Compile ++= Seq(
-      s"-target:jvm-${scalacJVMVersion.value}",
+      s"-target:jvm-${javaVersion.value}",
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
