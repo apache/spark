@@ -2147,14 +2147,16 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, primitiveInputs, _, _, _, _)
-            if primitiveInputs.contains(true) =>
+        case udf @ ScalaUDF(_, _, inputs, inputPrimitives, _, _, _, _)
+            if inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
-          assert(primitiveInputs.length == inputs.length)
+          assert(inputPrimitives.length == inputs.length)
 
-          val inputNullCheck = primitiveInputs.zip(inputs).collect {
-            case (isPrimitive, input) if isPrimitive && input.nullable => IsNull(input)
+          val inputPrimitivesPair = inputPrimitives.zip(inputs)
+          val inputNullCheck = inputPrimitivesPair.collect {
+            case (isPrimitive, input) if isPrimitive && input.nullable =>
+              IsNull(input)
           }.reduceLeftOption[Expression](Or)
 
           if (inputNullCheck.isDefined) {
@@ -2162,7 +2164,7 @@ class Analyzer(
             // as null-safe (i.e., wrap with `KnownNotNull`), because the null-returning
             // branch of `If` will be called if any of these checked inputs is null. Thus we can
             // prevent this rule from being applied repeatedly.
-            val newInputs = primitiveInputs.zip(inputs).map {
+            val newInputs = inputPrimitivesPair.map {
               case (isPrimitive, input) =>
                 if (isPrimitive && input.nullable) {
                   KnownNotNull(input)
