@@ -80,7 +80,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
-  private def init(sparkConf: SparkConf): Unit =
+  private def init(sparkConf: SparkConf): Unit = {
     sparkConf
       .set("spark.app.id", "test")
       .set(IS_TESTING, true)
@@ -88,6 +88,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(MEMORY_STORAGE_FRACTION, 0.999)
       .set("spark.kryoserializer.buffer", "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+  }
 
   private def makeBlockManager(
       maxMem: Long,
@@ -923,34 +924,37 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockStatusOption = blockManager.getStatus(blockId)
     assert(!blockStatusOption.isEmpty)
     val blockStatus = blockStatusOption.get
-    assert((blockStatus.diskSize > 0) === storageLevel.useDisk)
+    assert((blockStatus.diskSize > 0) === !storageLevel.useMemory)
     assert((blockStatus.memSize > 0) === storageLevel.useMemory)
     assert(blockManager.getBlockData(blockId).nioByteBuffer().array() === ser)
   }
 
   Seq(
     "caching" -> StorageLevel.MEMORY_ONLY,
-    "caching on disk" -> StorageLevel.DISK_ONLY
+    "caching on disk" -> StorageLevel.DISK_ONLY,
+    "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
+    "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
+    "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
+    "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
+    "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (name, storageLevel) =>
-    encryptionTestHelper(name) { case (name, conf) =>
-      test(s"test putBlockDataAsStream with $name") {
-        init(conf)
-        val ioEncryptionKey =
-          if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None
-        val securityMgr = new SecurityManager(conf, ioEncryptionKey)
-        val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
-        val transfer =
-          new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-        val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
-        val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-          serializerManager, conf, memoryManager, mapOutputTracker,
-          shuffleManager, transfer, securityMgr, 0)
-        try {
-          blockManager.initialize("app-id")
-          testPutBlockDataAsStream(name, blockManager, storageLevel)
-        } finally {
-          blockManager.stop()
-        }
+    encryptionTest(s"test putBlockDataAsStream with $name") { conf =>
+      init(conf)
+      val ioEncryptionKey =
+        if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None
+      val securityMgr = new SecurityManager(conf, ioEncryptionKey)
+      val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
+      val transfer =
+        new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+      val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
+      val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+        serializerManager, conf, memoryManager, mapOutputTracker,
+        shuffleManager, transfer, securityMgr, 0)
+      try {
+        blockManager.initialize("app-id")
+        testPutBlockDataAsStream(name, blockManager, storageLevel)
+      } finally {
+        blockManager.stop()
       }
     }
   }
