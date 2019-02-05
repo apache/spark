@@ -466,12 +466,13 @@ case class HashAggregateExec(
       val resultVars = bindReferences[Expression](
         resultExpressions,
         inputAttrs).map(_.genCode(ctx))
-      val evaluateResultVars = evaluateVariables(resultVars)
+      val evaluateNondeterministicAggResults =
+        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
       s"""
        $evaluateKeyVars
        $evaluateBufferVars
        $evaluateAggResults
-       $evaluateResultVars
+       $evaluateNondeterministicAggResults
        ${consume(ctx, resultVars)}
        """
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
@@ -499,11 +500,9 @@ case class HashAggregateExec(
       val resultVars = bindReferences[Expression](
         resultExpressions,
         inputAttrs).map(_.genCode(ctx))
-      val evaluateResultVars = evaluateVariables(resultVars)
       s"""
        $evaluateKeyVars
        $evaluateResultBufferVars
-       $evaluateResultVars
        ${consume(ctx, resultVars)}
        """
     } else {
@@ -513,9 +512,10 @@ case class HashAggregateExec(
       val resultVars = bindReferences[Expression](
         resultExpressions,
         groupingAttributes).map(_.genCode(ctx))
-      val evaluateResultVars = evaluateVariables(resultVars)
+      val evaluateNondeterministicAggResults =
+        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
       s"""
-       $evaluateResultVars
+       $evaluateNondeterministicAggResults
        ${consume(ctx, resultVars)}
        """
     }
