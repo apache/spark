@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
 import scala.util.Random
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -1176,11 +1177,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df.select(array_allpositions(df("a"), null)),
-      Seq(Row(null), Row(null))
+      Seq(Row(Array()), Row(Array()))
     )
     checkAnswer(
       df.selectExpr("array_allpositions(a, null)"),
-      Seq(Row(null), Row(null))
+      Seq(Row(Array()), Row(Array()))
     )
 
     val e = intercept[AnalysisException] {
@@ -1331,68 +1332,65 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[Exception] {
       checkAnswer(
         df.select(array_select(df("a"), lit(Array(0)))),
-        Seq(Row(null), Row(null), Row(null), Row(null))
+        Seq(Row(Seq(null)), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
       )
     }.getMessage.contains("SQL array indices start at 1")
     intercept[Exception] {
       checkAnswer(
         df.select(array_select(df("a"), lit(Array(1.1)))),
-        Seq(Row(null), Row(null), Row(null), Row(null))
+        Seq(Row(Seq(null)), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
       )
     }
     intercept[Exception] {
       checkAnswer(
-        df.select(array_select(df("a"), lit(Array(5)))),
-        Seq(Row(null), Row(null), Row(null), Row(null))
+        df.select(array_select(df("a"), lit(Array(5)), false)),
+        Seq(Row(Seq(null)), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
       )
     }.getMessage.contains("Array selection failed:")
     intercept[Exception] {
       checkAnswer(
-        df.selectExpr("array_select(a, array(4))"),
-        Seq(Row(null), Row(null), Row(null), Row(null))
+        df.selectExpr("array_select(a, array(4), false)"),
+        Seq(Row(Seq(null)), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
       )
     }.getMessage.contains("Array selection failed:")
+    intercept[Exception] {
+      checkAnswer(
+        df.select(array_select(df("a"), lit(Array(-1)))),
+        Seq(Row("3"), Row("3"), Row(""), Row(Seq(null)))
+      )
+    }
+
     checkAnswer(
       df.select(array_select(df("a"), lit(Array(4)))),
-      Seq(Row(null), Row(null), Row(null), Row(null))
+      Seq(Row(Seq(null)), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
     )
     checkAnswer(
       df.selectExpr("array_select(a, array(4))"),
-      Seq(Row(null), Row(null), Row(null), Row(null))
+      Seq(Row(Seq(null)), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
     )
 
     checkAnswer(
       df.select(array_select(df("a"), df("b"))),
-      Seq(Row(Array("1", "3")), Row(null), Row(null), Row(null))
+      Seq(Row(Seq("1", "3")), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
     )
     checkAnswer(
       df.selectExpr("array_select(a, b)"),
-      Seq(Row(Array("1", "3")), Row(null), Row(null), Row(null))
+      Seq(Row(Seq("1", "3")), Row(Seq(null)), Row(Seq(null)), Row(Seq(null)))
     )
 
     checkAnswer(
       df.select(array_select(df("a"), lit(Array(1)))),
-      Seq(Row(Array("1")), Row(Array("1")), Row(null), Row(null))
+      Seq(Row(Seq("1")), Row(Seq("1")), Row(Seq(null)), Row(Seq(null)))
     )
     checkAnswer(
-      df.selectExpr("array_select(a, 1)"),
-      Seq(Row(Array("1")), Row(Array("1")), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(array_select(df("a"), lit(Array(-1)))),
-      Seq(Row("3"), Row("3"), Row(""), Row(null))
-    )
-
-    checkAnswer(
-      df.selectExpr("array_select(a, -1)"),
-      Seq(Row("3"), Row("3"), Row(""), Row(null))
+      df.selectExpr("array_select(a, array(1))"),
+      Seq(Row(Seq("1")), Row(Seq("1")), Row(Seq(null)), Row(Seq(null)))
     )
 
     val e = intercept[AnalysisException] {
       Seq(("a string element", 1)).toDF().selectExpr("array_select(_1, _2)")
     }
-    assert(e.message.contains(
-      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
+    assert(e.message.contains("however, '`_1`' is of string type"))
   }
 
   test("array_union functions") {

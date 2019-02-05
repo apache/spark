@@ -1831,12 +1831,10 @@ case class ArrayAllPositions(array: Expression, element: Expression)
       > SELECT _FUNC_(array('hello', null ,'world'), array(4), false);
        -- exception is thrown
   """, since = "3.0.0")
-case class ArraySelect(
-                        array: Expression,
-                        indexes: Expression,
-                        ignoreOutOfBounds: Boolean) extends Expression with ExpectsInputTypes {
+case class ArraySelect(array: Expression, indexes: Expression, ignoreOutOfBounds: Boolean = true)
+  extends Expression with ExpectsInputTypes {
 
-  def this(array: Expression, indexes: Expression) = this(array, indexes, false)
+  def this(array: Expression, indexes: Expression) = this(array, indexes, true)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType(IntegerType))
 
@@ -1868,7 +1866,7 @@ case class ArraySelect(
       if (id < arrln) {
         valueBuffer += arr.get(i, dt)
       } else if (!ignoreOutOfBounds) {
-        throw new RuntimeException(s"Array selection failed: index $i is larger " +
+        throw new RuntimeException(s"Array selection failed: index ${i + 1} is larger " +
           s"than array length $arrln.")
       } else {
 
@@ -1898,25 +1896,25 @@ case class ArraySelect(
     val i = ctx.freshName("i")
 
     val outOfBoundsCode = if (ignoreOutOfBounds) s"$arrayListName.add(null);"
-    else "throw new RuntimeException(\"Array selection failed: index \"+" + ind + "+\" is larger " +
-      "than array length \"+" + arval + ".numElements()+\".\");"
+    else "throw new RuntimeException(\"Array selection failed: index \"+(" + ind + "+1)+" +
+      "\" is larger than array length \"+" + arval + ".numElements()+\".\");"
 
     val c = code"""
-                  |${arCode.code}
-                  |${indCode.code}
-                  |${arrayListName}.clear();
-                  |int $ind = 0;
-                  |if(!${arCode.isNull} && !${indCode.isNull}) {
-                  |  for(int $i = 0; $i < $indval.numElements(); $i ++) {
-                  |    $ind = $indval.getInt($i) - 1;
-                  |    if ($arval.numElements() > $ind) {
-                  |      $arrayListName.add(${CodeGenerator.getValue(arval, elementType, ind)});
-                  |    } else {
-                  |      $outOfBoundsCode
-                  |    }
-                  |  }
-                  |}
-                  |final ArrayData $arrayName = new $genericArrayClass($arrayListName);
+      |${arCode.code}
+      |${indCode.code}
+      |${arrayListName}.clear();
+      |int $ind = 0;
+      |if(!${arCode.isNull} && !${indCode.isNull}) {
+      |  for(int $i = 0; $i < $indval.numElements(); $i ++) {
+      |    $ind = $indval.getInt($i) - 1;
+      |    if ($arval.numElements() > $ind) {
+      |      $arrayListName.add(${CodeGenerator.getValue(arval, elementType, ind)});
+      |    } else {
+      |      $outOfBoundsCode
+      |    }
+      |  }
+      |}
+      |final ArrayData $arrayName = new $genericArrayClass($arrayListName);
         """
 
     ev.copy(code = c,
