@@ -116,8 +116,7 @@ private[streaming] class ReceivedBlockTracker(
       // a few thousand elements.  So we explicitly allocate a collection for serialization which
       // we know doesn't have this issue.  (See SPARK-26734).
       val streamIdToBlocks = streamIds.map { streamId =>
-        (streamId,
-          mutable.ArrayBuffer(getReceivedBlockQueue(streamId).clone(): _*))
+        (streamId, mutable.ArrayBuffer(getReceivedBlockQueue(streamId).clone(): _*))
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {

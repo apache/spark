@@ -113,6 +113,8 @@ class ReceivedBlockTrackerSuite
       BatchAllocationEvent(1, AllocatedBlocks(Map(streamId -> blockInfos)))
     getWrittenLogData() shouldEqual expectedWrittenData1
     getWriteAheadLogFiles() should have size 1
+
+    receivedBlockTracker.stop()
   }
 
   test("recovery with write ahead logs should remove only allocated blocks from received queue") {
