@@ -22,7 +22,6 @@ import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
 import scala.util.Random
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -1341,13 +1340,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(Row(null), Row(null), Row(null), Row(null))
       )
     }
-    intercept[RuntimeException] {
+    intercept[Exception] {
       checkAnswer(
         df.select(array_select(df("a"), lit(Array(5)))),
         Seq(Row(null), Row(null), Row(null), Row(null))
       )
     }.getMessage.contains("Array selection failed:")
-    intercept[RuntimeException] {
+    intercept[Exception] {
       checkAnswer(
         df.selectExpr("array_select(a, array(4))"),
         Seq(Row(null), Row(null), Row(null), Row(null))
