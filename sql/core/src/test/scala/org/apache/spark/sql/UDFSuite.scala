@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import java.math.BigDecimal
 
 import org.apache.spark.sql.api.java._
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.expressions.ScalaUDF
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
@@ -149,6 +150,28 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   test("TwoArgument UDF") {
     spark.udf.register("strLenScala", (_: String).length + (_: Int))
     assert(sql("SELECT strLenScala('test', 1)").head().getInt(0) === 5)
+  }
+
+  test("Deterministic and literal UDF optimization") {
+    def udfNodesCount(plan: LogicalPlan): Int = {
+      plan.expressions.head.children.collect({
+        case f: ScalaUDF => f
+      }).length
+    }
+
+    // Non deterministic
+    val foo = udf(() => Math.random())
+    spark.udf.register("random0", foo.asNondeterministic())
+    val plan = sql("SELECT random0()").queryExecution.optimizedPlan
+    assert(udfNodesCount(plan) == 1)
+
+    // udf is deterministic and args are literal
+    val foo2 = udf((x: String, i: Int) => x.length + i)
+    spark.udf.register("mystrlen", foo2)
+    assert(foo2.deterministic)
+    assert(sql("SELECT mystrlen('abc', 1)").head().getInt(0) === 4)
+    val plan2 = sql("SELECT mystrlen('abc', 1)").queryExecution.optimizedPlan
+    assert(udfNodesCount(plan2) == 0)
   }
 
   test("UDF in a WHERE") {

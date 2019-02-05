@@ -399,7 +399,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
               .contains(errorMessage(format)))
 
             msg = intercept[AnalysisException] {
-              spark.udf.register("testType", () => new NullData())
+              spark.udf.register("testType", udf(() => new NullData()).asNondeterministic())
               sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
             }.getMessage
             assert(msg.toLowerCase(Locale.ROOT)

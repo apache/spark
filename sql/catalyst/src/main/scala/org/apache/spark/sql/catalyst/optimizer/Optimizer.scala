@@ -78,6 +78,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         CombineLimits,
         CombineUnions,
         // Constant folding and strength reduction
+        DeterministicLiteralUDF,
         TransposeWindow,
         NullPropagation,
         ConstantPropagation,
@@ -1719,5 +1720,19 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * If the UDF is deterministic and if the children are all literal, we can replace the udf
+ * with the output of the udf serialized
+ */
+object DeterministicLiteralUDF extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case udf@ScalaUDF(_, dataType, children, _, _, _, _, udfDeterministic)
+      if udf.deterministic && children.forall(_.isInstanceOf[Literal]) => {
+      val res = udf.eval(null)
+      Literal(res, dataType)
+    }
   }
 }
