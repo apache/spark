@@ -1789,17 +1789,17 @@ case class ArrayAllPositions(array: Expression, element: Expression)
     val getValue = CodeGenerator.getValue(arval, arrayElementType, i)
 
     val c = code"""
-                  |${arCode.code}
-                  |${elCode.code}
-                  |${arrayListName}.clear();
-                  |if(!${arCode.isNull}) {
-                  |  for(int $i = 0; $i < $arval.numElements(); $i ++) {
-                  |    if (!$arval.isNullAt($i) && ${ctx.genEqual(arrayElementType, elval, getValue)}) {
-                  |      $arrayListName.add($i+1);
-                  |    }
-                  |  }
-                  |}
-                  |final ArrayData $arrayName = new $genericArrayClass($arrayListName);
+        |${arCode.code}
+        |${elCode.code}
+        |${arrayListName}.clear();
+        |if(!${arCode.isNull}) {
+        |  for(int $i = 0; $i < $arval.numElements(); $i ++) {
+        |    if (!$arval.isNullAt($i) && ${ctx.genEqual(arrayElementType, elval, getValue)}) {
+        |      $arrayListName.add($i+1);
+        |    }
+        |  }
+        |}
+        |final ArrayData $arrayName = new $genericArrayClass($arrayListName);
       """
 
     ev.copy(
