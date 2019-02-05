@@ -1324,56 +1324,69 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("array_select function") {
     val df = Seq(
       (Seq[String]("1", "2", "3"), Seq(1, 3)),
-      (Seq[String](null, ""), Seq(-1)),
+      (Seq[String]("1", "2", "3"), Seq(4)),
+      (Seq[String](null, ""), Seq(1)),
       (Seq[String](), Seq(2))
     ).toDF("a", "b")
 
     intercept[Exception] {
       checkAnswer(
-        df.select(array_select(df("a"), 0)),
-        Seq(Row(null), Row(null), Row(null))
+        df.select(array_select(df("a"), lit(Array(0)))),
+        Seq(Row(null), Row(null), Row(null), Row(null))
       )
     }.getMessage.contains("SQL array indices start at 1")
     intercept[Exception] {
       checkAnswer(
-        df.select(array_select(df("a"), 1.1)),
-        Seq(Row(null), Row(null), Row(null))
+        df.select(array_select(df("a"), lit(Array(1.1)))),
+        Seq(Row(null), Row(null), Row(null), Row(null))
       )
     }
+    intercept[RuntimeException] {
+      checkAnswer(
+        df.select(array_select(df("a"), lit(Array(5)))),
+        Seq(Row(null), Row(null), Row(null), Row(null))
+      )
+    }.getMessage.contains("Array selection failed:")
+    intercept[RuntimeException] {
+      checkAnswer(
+        df.selectExpr("array_select(a, array(4))"),
+        Seq(Row(null), Row(null), Row(null), Row(null))
+      )
+    }.getMessage.contains("Array selection failed:")
     checkAnswer(
-      df.select(array_select(df("a"), 4)),
-      Seq(Row(null), Row(null), Row(null))
+      df.select(array_select(df("a"), lit(Array(4)))),
+      Seq(Row(null), Row(null), Row(null), Row(null))
     )
     checkAnswer(
+      df.selectExpr("array_select(a, array(4))"),
+      Seq(Row(null), Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
       df.select(array_select(df("a"), df("b"))),
-      Seq(Row("1"), Row(""), Row(null))
+      Seq(Row(Array("1", "3")), Row(null), Row(null), Row(null))
     )
     checkAnswer(
       df.selectExpr("array_select(a, b)"),
-      Seq(Row("1"), Row(""), Row(null))
+      Seq(Row(Array("1", "3")), Row(null), Row(null), Row(null))
     )
 
     checkAnswer(
-      df.select(array_select(df("a"), 1)),
-      Seq(Row("1"), Row(null), Row(null))
+      df.select(array_select(df("a"), lit(Array(1)))),
+      Seq(Row(Array("1")), Row(Array("1")), Row(null), Row(null))
     )
-    checkAnswer(
-      df.select(array_select(df("a"), -1)),
-      Seq(Row("3"), Row(""), Row(null))
-    )
-
-    checkAnswer(
-      df.selectExpr("array_select(a, 4)"),
-      Seq(Row(null), Row(null), Row(null))
-    )
-
     checkAnswer(
       df.selectExpr("array_select(a, 1)"),
-      Seq(Row("1"), Row(null), Row(null))
+      Seq(Row(Array("1")), Row(Array("1")), Row(null), Row(null))
     )
     checkAnswer(
+      df.select(array_select(df("a"), lit(Array(-1)))),
+      Seq(Row("3"), Row("3"), Row(""), Row(null))
+    )
+
+    checkAnswer(
       df.selectExpr("array_select(a, -1)"),
-      Seq(Row("3"), Row(""), Row(null))
+      Seq(Row("3"), Row("3"), Row(""), Row(null))
     )
 
     val e = intercept[AnalysisException] {
