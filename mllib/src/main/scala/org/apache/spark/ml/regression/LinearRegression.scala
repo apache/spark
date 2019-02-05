@@ -531,8 +531,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         throw new SparkException(msg)
       }
 
-      bcFeaturesMean.destroy(blocking = false)
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesMean.destroy()
+      bcFeaturesStd.destroy()
 
       val parameters = state.x.toArray.clone()
 
