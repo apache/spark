@@ -41,9 +41,9 @@ import org.apache.spark.sql.DataFrame
  *                partition boundaries.
  */
 @Since("1.0.0")
-class BinaryClassificationMetrics @Since("2.2.0") (
+class BinaryClassificationMetrics @Since("3.0.0") (
     val numBins: Int,
-    @Since("2.2.0") val scoreAndLabelsWithWeights: RDD[(Double, (Double, Double))])
+    @Since("3.0.0") val scoreAndLabelsWithWeights: RDD[(Double, (Double, Double))])
   extends Logging {
 
   require(numBins >= 0, "numBins must be nonnegative")

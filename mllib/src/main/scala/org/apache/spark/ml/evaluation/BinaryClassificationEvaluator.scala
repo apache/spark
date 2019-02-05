@@ -75,7 +75,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   setDefault(metricName -> "areaUnderROC")
