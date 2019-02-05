@@ -943,12 +943,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(pidExists(pid))
         try {
           signal(pid, "SIGSTOP")
-          val start = System.currentTimeMillis()
+          val start = System.nanoTime()
           val terminated = Utils.terminateProcess(process, 5000)
           assert(terminated.isDefined)
           process.waitFor(5, TimeUnit.SECONDS)
-          val duration = System.currentTimeMillis() - start
-          assert(duration < 6000) // add a little extra time to allow a force kill to finish
+          val duration = System.nanoTime() - start
+          // add a little extra time to allow a force kill to finish
+          assert(duration < TimeUnit.SECONDS.toNanos(6))
           assert(!pidExists(pid))
         } finally {
           signal(pid, "SIGKILL")
