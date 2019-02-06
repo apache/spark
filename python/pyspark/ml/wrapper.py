@@ -87,9 +87,19 @@ class JavaWrapper(object):
           - bool -> sc._gateway.jvm.java.lang.Boolean
         """
         sc = SparkContext._active_spark_context
-        java_array = sc._gateway.new_array(java_class, len(pylist))
-        for i in xrange(len(pylist)):
-            java_array[i] = pylist[i]
+        java_array = None
+        if len(pylist) > 0 and isinstance(pylist[0], list):
+            inner_array_length = 0
+            for i in xrange(len(pylist)):
+                inner_array_length = max(inner_array_length, len(pylist[i]))
+            java_array = sc._gateway.new_array(java_class, len(pylist), inner_array_length)
+            for i in xrange(len(pylist)):
+                for j in xrange(len(pylist[i])):
+                    java_array[i][j] = pylist[i][j]
+        else:
+            java_array = sc._gateway.new_array(java_class, len(pylist))
+            for i in xrange(len(pylist)):
+                java_array[i] = pylist[i]
         return java_array
 
 
