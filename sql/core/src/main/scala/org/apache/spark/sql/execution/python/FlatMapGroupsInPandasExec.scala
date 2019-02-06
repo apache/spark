@@ -145,7 +145,8 @@ case class FlatMapGroupsInPandasExec(
         sessionLocalTimeZone,
         pythonRunnerConf).compute(grouped, context.partitionId(), context)
 
-      columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
+      val outputProj = UnsafeProjection.create(output, output)
+      columnarBatchIter.flatMap(_.rowIterator.asScala).map(outputProj)
     }
   }
 }
