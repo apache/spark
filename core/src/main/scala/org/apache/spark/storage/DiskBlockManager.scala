@@ -58,8 +58,8 @@ private[spark] class DiskBlockManager(conf: SparkConf,
 
   private[spark] val badDirs = ArrayBuffer[File]()
   private[spark] val dirToBlacklistExpiryTime = new HashMap[File, Long]
-  // Filename hash to dirId, it should be small enough to put into memory
-  private[spark] val migratedDirIdIndex = new ConcurrentHashMap[Int, Int].asScala
+  // Filename to dirId, it should be small enough to put into memory
+  private[spark] val migratedDirIdIndex = new ConcurrentHashMap[String, Int].asScala
 
   private val shutdownHook = addShutdownHook()
 
@@ -70,32 +70,35 @@ private[spark] class DiskBlockManager(conf: SparkConf,
     var mostRecentFailure: Exception = null
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
-    val dirId = migratedDirIdIndex.getOrElse(hash, hash % localDirs.length)
+    val dirId = migratedDirIdIndex.getOrElse(filename, hash % localDirs.length)
     val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
 
     // Create the subdirectory if it doesn't already exist
     val subDir = subDirs(dirId).synchronized {
       // Update blacklist
       val now = clock.getTimeMillis()
-      val unblacklisted = badDirs.filter(now >= dirToBlacklistExpiryTime(_))
-      unblacklisted.foreach { dir =>
-        badDirs -= dir
-        dirToBlacklistExpiryTime.remove(dir)
+      badDirs.synchronized {
+        val unblacklisted = badDirs.filter(now >= dirToBlacklistExpiryTime(_))
+        unblacklisted.foreach { dir =>
+          badDirs -= dir
+          dirToBlacklistExpiryTime.remove(dir)
+        }
       }
 
       val old = subDirs(dirId)(subDirId)
       if (old != null) {
         old
       } else {
-        assert(!migratedDirIdIndex.contains(dirId))
-        var succeed = false
+        assert(!migratedDirIdIndex.contains(filename))
         var newDir: File = null
-        for (attempt <- 0 until maxRetries if !succeed) {
-          val isBlacklisted = badDirs.contains(localDirs(dirId))
-          val goodDirId = if (isBlacklisted) {
-            localDirs.indexWhere(!badDirs.contains(_))
-          } else {
-            dirId
+        for (attempt <- 0 until maxRetries if newDir == null) {
+          val goodDirId = badDirs.synchronized {
+            val isBlacklisted = badDirs.contains(localDirs(dirId))
+            if (isBlacklisted) {
+              localDirs.indexWhere(!badDirs.contains(_))
+            } else {
+              dirId
+            }
           }
           try {
             if (goodDirId < 0) {
@@ -105,15 +108,17 @@ private[spark] class DiskBlockManager(conf: SparkConf,
             Files.createDirectories(newDir.toPath)
             subDirs(goodDirId)(subDirId) = newDir
             if (goodDirId != dirId) {
-              migratedDirIdIndex.put(hash, goodDirId)
+              migratedDirIdIndex.put(filename, goodDirId)
             }
-            succeed = true
           } catch {
             case e: IOException =>
               logError(s"Failed to look up file $filename in attempt $attempt", e)
-              badDirs += localDirs(dirId)
-              dirToBlacklistExpiryTime.put(localDirs(dirId), now + blacklistTimeout)
+              badDirs.synchronized {
+                badDirs += localDirs(dirId)
+                dirToBlacklistExpiryTime.put(localDirs(dirId), now + blacklistTimeout)
+              }
               mostRecentFailure = e
+              newDir = null
           }
         }
         Option(newDir).getOrElse(throw mostRecentFailure)

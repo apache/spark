@@ -17,7 +17,8 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, FileWriter}
+import java.io.{File, FileWriter, IOException}
+import java.nio.file.Files
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -92,6 +93,24 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     writer.close()
   }
 
+  def setPermissionRecursively(root: File,
+    writable: Boolean, readable: Boolean, tailRecursion: Boolean): Unit = {
+    if (root.isDirectory) {
+      if (tailRecursion) {
+        root.setWritable(writable)
+        root.setReadable(readable)
+        root.listFiles().foreach(setPermissionRecursively(_, writable, readable, tailRecursion))
+      } else {
+        root.listFiles().foreach(setPermissionRecursively(_, writable, readable, tailRecursion))
+        root.setWritable(writable)
+        root.setReadable(readable)
+      }
+    } else {
+      root.setWritable(writable)
+      root.setReadable(readable)
+    }
+  }
+
   test(s"test blacklisting bad disk directory") {
     for ((badDiskDir, goodDiskDir) <- Seq((rootDir0, rootDir1), (rootDir1, rootDir0))) {
       val blockId1 = TestBlockId("1")
@@ -107,9 +126,12 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
       // Get file succeed when no disk turns bad
       val file1 = diskBlockManager.getFile(blockId1)
       assert(file1 != null)
+      writeToFile(file1, 10)
+      assert(Files.readAllBytes(file1.toPath).length === 10)
 
-      // Delete badDiskDir to simulate disk broken
-      Utils.deleteRecursively(badDiskDir)
+      // Change writable/readable of badDiskDir to simulate disk broken
+      diskBlockManager.localDirs.filter(_.getParentFile == badDiskDir)
+        .foreach(setPermissionRecursively(_, false, false, false))
 
       // Get new file succeed when single disk is broken
       try {
@@ -123,17 +145,23 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
           assert(diskBlockManager.dirToBlacklistExpiryTime.exists { case (f, expireTime) =>
             f.getParentFile === badDiskDir && expireTime === 20000
           })
+          // If migrated to new good directory, a new file would be provided
+          assert(!file2.exists())
         }
 
-        // Get file succeed after bad disk blacklisted
+        // Get file returns the same result after blacklisting.
+        // If file is in bad directory, then reading would fail, otherwise, reading returns
+        // exactly the same result as before.
         val file3 = diskBlockManager.getFile(blockId1)
-        assert(file1 === file3)
-
-        val file4 = diskBlockManager.getFile(blockId2)
-        val rootDirOfFile4 = file4.getParentFile.getParentFile.getParentFile
-        assert(file4 != null && file4.getParentFile.exists() && rootDirOfFile4 === goodDiskDir)
+        assert(file3 === file1)
+        if (file1.getParentFile.getParentFile.getParentFile === goodDiskDir) {
+          assert(Files.readAllBytes(file3.toPath).length === 10)
+        } else {
+          intercept[IOException](Files.readAllBytes(file3.toPath))
+        }
       } finally {
-        diskBlockManager.localDirs.foreach(_.mkdirs())
+        diskBlockManager.localDirs.filter(_.getParentFile == badDiskDir)
+          .foreach(setPermissionRecursively(_, true, true, true))
       }
 
       manualClock.advance(10000)
