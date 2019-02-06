@@ -36,10 +36,10 @@ object HdfsTest {
     val file = spark.read.text(args(0)).rdd
     val mapped = file.map(s => s.length).cache()
     for (iter <- 1 to 10) {
-      val start = System.currentTimeMillis()
+      val start = System.nanoTime()
       for (x <- mapped) { x + 2 }
-      val end = System.currentTimeMillis()
-      println(s"Iteration $iter took ${end-start} ms")
+      val end = System.nanoTime()
+      println(s"Iteration $iter took ${end-start} ns")
     }
     println(s"File contents: ${file.map(_.toString).take(1).mkString(",").slice(0, 10)}")
     println(s"Returned length(s) of: ${file.map(_.length).sum().toString}")
