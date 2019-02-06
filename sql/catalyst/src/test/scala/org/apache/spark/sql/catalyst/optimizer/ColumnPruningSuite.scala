@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class ColumnPruningSuite extends PlanTest {
 
@@ -36,6 +36,56 @@ class ColumnPruningSuite extends PlanTest {
       ColumnPruning,
       RemoveNoopOperators,
       CollapseProject) :: Nil
+  }
+
+  val contact: LocalRelation = {
+    val name = StructType(
+      StructField("first", StringType, nullable = true) ::
+        StructField("middle", StringType, nullable = true) ::
+        StructField("last", StringType, nullable = true) :: Nil)
+
+    val employer = StructType(
+      StructField("id", IntegerType, nullable = true) ::
+        StructField("company",
+          StructType(StructField("name", StringType, nullable = true) ::
+            StructField("address", StringType, nullable = true) :: Nil), nullable = true) :: Nil)
+
+    LocalRelation(
+      'id.int, 'name.struct(name), 'address.string, 'friends.array(name),
+      'relatives.map(StringType, name), 'employer.struct(employer))
+  }
+
+  test("Pushing Project on single complex field through various operators") {
+    val ops = Array(
+      (input: LogicalPlan) => input.limit(5),
+      (input: LogicalPlan) => input.repartition(1),
+      (input: LogicalPlan) => {
+        val x = input.subquery('x)
+        Sample(0.0, 0.6, false, 11L, x)
+      },
+      (input: LogicalPlan) => input.orderBy('id.asc)
+    )
+
+    val queries = ops.map { op =>
+      op(contact)
+        .select(GetStructField('name, 1, Some("middle")))
+        .analyze
+    }
+
+    val optimizedQueries = queries.map(Optimize.execute)
+
+    val correctAnswers = ops.map {
+      case op if op(contact).map(_.isInstanceOf[Sort]).exists(p => p) =>
+        op(contact.select(
+          'id, namedStruct(Literal("middle"), GetStructField('name, 1, Some("middle"))).as('name)))
+      case op =>
+        op(contact.select(
+          namedStruct(Literal("middle"), GetStructField('name, 1, Some("middle"))).as('name)))
+    }.map(_.select(GetStructField('name, 0, Some("middle"))).analyze)
+
+    optimizedQueries.zip(correctAnswers).foreach { case (optimized, correctAnswer) =>
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("Column pruning for Generate when Generate.unrequiredChildIndex = child.output") {
