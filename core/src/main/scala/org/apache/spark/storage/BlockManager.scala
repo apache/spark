@@ -221,6 +221,9 @@ private[spark] class BlockManager(
     new BlockManager.RemoteBlockDownloadFileManager(this)
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
+  /**
+   * @param blockSize the decrypted size of the block
+   */
   private abstract class BlockStoreUpdater[T](
       blockSize: Long,
       blockId: BlockId,

@@ -124,6 +124,10 @@ private[spark] class DiskStore(
     }
   }
 
+  /**
+   * @param blockSize if encryption is configured, the file is assumed to already be encrypted and
+   *                  blockSize should be the decrypted size
+   */
   def moveFileToBlock(sourceFile: File, blockSize: Long, targetBlockId: BlockId): Unit = {
     blockSizes.put(targetBlockId, blockSize)
     val targetFile = diskManager.getFile(targetBlockId.name)

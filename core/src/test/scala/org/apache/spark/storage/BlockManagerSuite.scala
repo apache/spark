@@ -910,13 +910,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  def testPutBlockDataAsStream(
-      name: String,
-      blockManager: BlockManager,
-      storageLevel: StorageLevel): Unit = {
+  def testPutBlockDataAsStream(blockManager: BlockManager, storageLevel: StorageLevel): Unit = {
     val message = "message"
     val ser = serializer.newInstance().serialize(message).array()
-    val blockId = new ShuffleDataBlockId(0, 0, 0)
+    val blockId = new RDDBlockId(0, 0)
     val streamCallbackWithId =
       blockManager.putBlockDataAsStream(blockId, storageLevel, ClassTag(message.getClass))
     streamCallbackWithId.onData("0", ByteBuffer.wrap(ser))
@@ -931,12 +928,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   Seq(
     "caching" -> StorageLevel.MEMORY_ONLY,
-    "caching on disk" -> StorageLevel.DISK_ONLY,
-    "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
-    "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
-    "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
-    "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
-    "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
+    "caching on disk" -> StorageLevel.DISK_ONLY
   ).foreach { case (name, storageLevel) =>
     encryptionTest(s"test putBlockDataAsStream with $name") { conf =>
       init(conf)
@@ -952,7 +944,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         shuffleManager, transfer, securityMgr, 0)
       try {
         blockManager.initialize("app-id")
-        testPutBlockDataAsStream(name, blockManager, storageLevel)
+        testPutBlockDataAsStream(blockManager, storageLevel)
       } finally {
         blockManager.stop()
       }
