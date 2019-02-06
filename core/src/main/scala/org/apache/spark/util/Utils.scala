@@ -340,12 +340,10 @@ private[spark] object Utils extends Logging {
 
   /**
    * Copy all data from an InputStream to an OutputStream upto maxSize and
-   * closes the input stream if closeStreams is true and all data is read.
+   * close the input stream if all data is read.
+    * @return A combined stream of read data and any remaining data
    */
-  def copyStreamUpTo(
-      in: InputStream,
-      maxSize: Long,
-      closeStreams: Boolean = false): (Boolean, InputStream) = {
+  def copyStreamUpTo(in: InputStream, maxSize: Long): (Boolean, InputStream) = {
     var count = 0L
     val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
     val streamCopied = tryWithSafeFinally {
@@ -361,14 +359,12 @@ private[spark] object Utils extends Logging {
       }
       count < maxSize
     } {
-      if (closeStreams) {
-        try {
-          if (count < maxSize) {
-            in.close()
-          }
-        } finally {
-          out.close()
+      try {
+        if (count < maxSize) {
+          in.close()
         }
+      } finally {
+        out.close()
       }
     }
     if (streamCopied) {

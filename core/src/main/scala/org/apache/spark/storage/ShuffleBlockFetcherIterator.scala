@@ -478,7 +478,7 @@ final class ShuffleBlockFetcherIterator(
               // could increase the memory usage and potentially increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
               val (fullyCopied: Boolean, mergedStream: InputStream) = Utils.copyStreamUpTo(
-                input, maxBytesInFlight / 3, closeStreams = true)
+                input, maxBytesInFlight / 3)
               isStreamCopied = fullyCopied
               input = mergedStream
             }
@@ -629,7 +629,14 @@ private class BufferReleasingInputStream(
 
   override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
 
-  override def skip(n: Long): Long = delegate.skip(n)
+  override def skip(n: Long): Long = {
+    try {
+      delegate.skip(n)
+    } catch {
+      case e: IOException if streamCompressedOrEncrypted =>
+        iterator.throwFetchFailedException(blockId, address, e)
+    }
+  }
 
   override def markSupported(): Boolean = delegate.markSupported()
 
