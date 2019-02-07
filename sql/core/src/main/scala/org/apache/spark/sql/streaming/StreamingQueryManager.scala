@@ -225,7 +225,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         val tempDir = Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
         logWarning("Temporary checkpoint location created which is deleted normally when" +
           s" the query didn't fail: $tempDir. If it's required to delete it under any" +
-          s" circumstances please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
+          s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
           s" true. Important to know deleting temp checkpoint folder is best effort.")
         tempDir
       } else {

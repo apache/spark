@@ -339,8 +339,8 @@ abstract class StreamExecution(
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
-          (sparkSession.sessionState.conf.getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) ||
-            exception.isEmpty)) {
+            (sparkSession.sessionState.conf
+              .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
             logInfo(s"Deleting checkpoint $checkpointPath.")
