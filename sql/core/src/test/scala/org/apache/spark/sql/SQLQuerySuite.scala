@@ -2967,6 +2967,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-26707: insertion of a single struct into a table should be allowed") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(col struct<i: Int>) USING PARQUET")
+      sql("INSERT INTO tbl values (struct(123))")
+      checkAnswer(sql("SELECT col FROM tbl"), Row(Row(123)))
+    }
+  }
+
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
     Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {

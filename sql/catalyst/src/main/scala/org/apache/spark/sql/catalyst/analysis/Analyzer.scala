@@ -2740,6 +2740,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
  */
 object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+    case UnresolvedRow(children) => CreateStruct(children)
     case e: CreateNamedStruct if !e.resolved =>
       val children = e.children.grouped(2).flatMap {
         case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>

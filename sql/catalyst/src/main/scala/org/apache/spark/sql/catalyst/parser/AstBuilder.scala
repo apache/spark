@@ -846,8 +846,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         // inline table comes in two styles:
         // style 1: values (1), (2), (3)  -- multiple columns are supported
         // style 2: values 1, 2, 3  -- only a single column is supported here
-        case struct: CreateNamedStruct => struct.valExprs // style 1
-        case child => Seq(child)                          // style 2
+        case UnresolvedRow(children) => children // style 1
+        case child => Seq(child)                 // style 2
       }
     }
 
@@ -1121,7 +1121,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     def getValueExpressions(e: Expression): Seq[Expression] = e match {
-      case c: CreateNamedStruct => c.valExprs
+      case UnresolvedRow(children) => children
       case other => Seq(other)
     }
 
@@ -1405,10 +1405,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[CreateStruct]] expression.
+   * Create an [[UnresolvedRow]] expression.
    */
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.namedExpression().asScala.map(expression))
+    UnresolvedRow(ctx.namedExpression().asScala.map(expression))
   }
 
   /**

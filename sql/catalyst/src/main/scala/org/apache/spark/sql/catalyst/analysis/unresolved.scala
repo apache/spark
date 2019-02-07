@@ -69,6 +69,17 @@ case class UnresolvedInlineTable(
 }
 
 /**
+ * Represents a row of an unresolved inline table.
+ * @param children cells of a given row
+ */
+case class UnresolvedRow(children: Seq[Expression]) extends Unevaluable {
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+}
+
+/**
  * A table-valued function, e.g.
  * {{{
  *   select id from range(10);
