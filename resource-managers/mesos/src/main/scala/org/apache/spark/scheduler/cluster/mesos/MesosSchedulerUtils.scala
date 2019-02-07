@@ -554,8 +554,8 @@ trait MesosSchedulerUtils extends Logging {
    * framework ID, the driver calls this method after the first registration.
    */
   def unsetFrameworkID(sc: SparkContext) {
-    sc.conf.remove("spark.mesos.driver.frameworkId")
-    System.clearProperty("spark.mesos.driver.frameworkId")
+    sc.conf.remove(mesosConfig.DRIVER_FRAMEWORK_ID)
+    System.clearProperty(mesosConfig.DRIVER_FRAMEWORK_ID.key)
   }
 
   def mesosToTaskState(state: MesosTaskState): TaskState.TaskState = state match {

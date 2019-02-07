@@ -390,7 +390,7 @@ private[spark] class MesosClusterScheduler(
   private def getDriverEnvironment(desc: MesosDriverDescription): Environment = {
     // TODO(mgummelt): Don't do this here.  This should be passed as a --conf
     val commandEnv = adjust(desc.command.environment, "SPARK_SUBMIT_OPTS", "")(
-      v => s"$v -Dspark.mesos.driver.frameworkId=${getDriverFrameworkID(desc)}"
+      v => s"$v -D${config.DRIVER_FRAMEWORK_ID.key}=${getDriverFrameworkID(desc)}"
     )
 
     val env = desc.conf.getAllWithPrefix(config.DRIVER_ENV_PREFIX) ++ commandEnv
@@ -423,7 +423,7 @@ private[spark] class MesosClusterScheduler(
       case "container" => true
       case "host" => false
       case other =>
-        logWarning(s"Unknown spark.mesos.appJar.local.resolution.mode $other, using host.")
+        logWarning(s"Unknown ${config.APPLICATION_JAR_LOCAL_RESOLUTION_MODE} $other, using host.")
         false
       }
     isLocalJar && isContainerLocal
