@@ -2970,7 +2970,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-26707: insertion of a single struct into a table should be allowed") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(col struct<i: Int>) USING PARQUET")
-      sql("INSERT INTO tbl values (struct(123))")
+      sql("INSERT INTO tbl VALUES (struct(123))")
       checkAnswer(sql("SELECT col FROM tbl"), Row(Row(123)))
     }
   }
