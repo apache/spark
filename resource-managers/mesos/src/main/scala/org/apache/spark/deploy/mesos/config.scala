@@ -56,6 +56,26 @@ package object config {
         .createOptional
   }
 
+  private[spark] val CREDENTIAL_PRINCIPAL =
+    ConfigBuilder("spark.mesos.principal")
+      .stringConf
+      .createOptional
+
+  private[spark] val CREDENTIAL_PRINCIPAL_FILE =
+    ConfigBuilder("spark.mesos.principal.file")
+      .stringConf
+      .createOptional
+
+  private[spark] val CREDENTIAL_SECRET =
+    ConfigBuilder("spark.mesos.secret")
+      .stringConf
+      .createOptional
+
+  private[spark] val CREDENTIAL_SECRET_FILE =
+    ConfigBuilder("spark.mesos.secret.file")
+      .stringConf
+      .createOptional
+
   /* Common app configuration. */
 
   private[spark] val SHUFFLE_CLEANER_INTERVAL_S =
@@ -82,6 +102,11 @@ package object config {
       .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs. Key-value " +
         "pairs should be separated by a colon, and commas used to list more than one." +
         "Ex. key:value,key2:value2")
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_WEBUI_URL =
+    ConfigBuilder("spark.mesos.driver.webui.url")
       .stringConf
       .createOptional
 
@@ -118,6 +143,140 @@ package object config {
       .stringConf
       .createWithDefault("")
 
+  private[spark] val DRIVER_FRAMEWORK_ID =
+    ConfigBuilder("spark.mesos.driver.frameworkId")
+      .stringConf
+      .createOptional
+
   private[spark] val EXECUTOR_URI =
     ConfigBuilder("spark.executor.uri").stringConf.createOptional
+
+  private[spark] val PROXY_BASE_URL =
+    ConfigBuilder("spark.mesos.proxy.baseURL").stringConf.createOptional
+
+  private[spark] val COARSE_MODE =
+    ConfigBuilder("spark.mesos.coarse").booleanConf.createWithDefault(true)
+
+  private[spark] val COARSE_SHUTDOWN_TIMEOUT =
+    ConfigBuilder("spark.mesos.coarse.shutdownTimeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10s")
+
+  private[spark] val MAX_DRIVERS =
+    ConfigBuilder("spark.mesos.maxDrivers").intConf.createWithDefault(200)
+
+  private[spark] val RETAINED_DRIVERS =
+    ConfigBuilder("spark.mesos.retainedDrivers").intConf.createWithDefault(200)
+
+  private[spark] val CLUSTER_RETRY_WAIT_MAX_SECONDS =
+    ConfigBuilder("spark.mesos.cluster.retry.wait.max")
+      .intConf
+      .createWithDefault(60) // 1 minute
+
+  private[spark] val ENABLE_FETCHER_CACHE =
+    ConfigBuilder("spark.mesos.fetcherCache.enable")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val APPLICATION_JAR_LOCAL_RESOLUTION_MODE =
+    ConfigBuilder("spark.mesos.appJar.local.resolution.mode")
+      .stringConf
+      .createOptional
+
+  private[spark] val REJECT_OFFER_DURATION =
+    ConfigBuilder("spark.mesos.rejectOfferDuration")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("120s")
+
+  private[spark] val REJECT_OFFER_DURATION_FOR_UNMET_CONSTRAINTS =
+    ConfigBuilder("spark.mesos.rejectOfferDurationForUnmetConstraints")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  private[spark] val REJECT_OFFER_DURATION_FOR_REACHED_MAX_CORES =
+    ConfigBuilder("spark.mesos.rejectOfferDurationForReachedMaxCores")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  private[spark] val URIS_TO_DOWNLOAD =
+    ConfigBuilder("spark.mesos.uris")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val EXECUTOR_HOME =
+    ConfigBuilder("spark.mesos.executor.home")
+      .stringConf
+      .createOptional
+
+  private[spark] val EXECUTOR_CORES =
+    ConfigBuilder("spark.mesos.mesosExecutor.cores")
+      .doubleConf
+      .createWithDefault(1)
+
+  private[spark] val EXTRA_CORES_PER_EXECUTOR =
+    ConfigBuilder("spark.mesos.extra.cores")
+      .intConf
+      .createWithDefault(0)
+
+  private[spark] val EXECUTOR_MEMORY_OVERHEAD =
+    ConfigBuilder("spark.mesos.executor.memoryOverhead")
+      .intConf
+      .createOptional
+
+  private[spark] val EXECUTOR_DOCKER_IMAGE =
+    ConfigBuilder("spark.mesos.executor.docker.image")
+      .stringConf
+      .createOptional
+
+  private[spark] val EXECUTOR_DOCKER_FORCE_PULL_IMAGE =
+    ConfigBuilder("spark.mesos.executor.docker.forcePullImage")
+      .booleanConf
+      .createOptional
+
+  private[spark] val EXECUTOR_DOCKER_PORT_MAPS =
+    ConfigBuilder("spark.mesos.executor.docker.portmaps")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val EXECUTOR_DOCKER_PARAMETERS =
+    ConfigBuilder("spark.mesos.executor.docker.parameters")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val EXECUTOR_DOCKER_VOLUMES =
+    ConfigBuilder("spark.mesos.executor.docker.volumes")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val MAX_GPUS =
+    ConfigBuilder("spark.mesos.gpus.max")
+      .intConf
+      .createWithDefault(0)
+
+  private[spark] val TASK_LABELS =
+    ConfigBuilder("spark.mesos.task.labels")
+      .stringConf
+      .createWithDefault("")
+
+  private[spark] val SLAVE_OFFER_CONSTRAINTS =
+    ConfigBuilder("spark.mesos.constraints")
+      .stringConf
+      .createWithDefault("")
+
+  private[spark] val CONTAINERIZER =
+    ConfigBuilder("spark.mesos.containerizer")
+      .stringConf
+      .createWithDefault("docker")
+
+  private[spark] val ROLE =
+    ConfigBuilder("spark.mesos.role")
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_ENV_PREFIX = "spark.mesos.driverEnv."
+  private[spark] val DISPATCHER_DRIVER_DEFAULT_PREFIX = "spark.mesos.dispatcher.driverDefault."
 }
