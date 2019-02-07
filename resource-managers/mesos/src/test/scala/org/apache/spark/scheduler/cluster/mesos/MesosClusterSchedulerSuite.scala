@@ -256,7 +256,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   }
 
   test("supports setting fetcher cache") {
-    setScheduler(Map("spark.mesos.fetcherCache.enable" -> "true"))
+    setScheduler(Map(config.ENABLE_FETCHER_CACHE.key -> "true"))
 
     val mem = 1000
     val cpu = 1
@@ -264,7 +264,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val response = scheduler.submitDriver(
       new MesosDriverDescription("d1", "jar", mem, cpu, true,
         command,
-        Map("spark.mesos.executor.home" -> "test",
+        Map(config.EXECUTOR_HOME.key -> "test",
           "spark.app.name" -> "test"),
         "s1",
         new Date()))
@@ -280,7 +280,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   }
 
   test("supports disabling fetcher cache") {
-    setScheduler(Map("spark.mesos.fetcherCache.enable" -> "false"))
+    setScheduler(Map(config.ENABLE_FETCHER_CACHE.key -> "false"))
 
     val mem = 1000
     val cpu = 1
@@ -288,7 +288,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val response = scheduler.submitDriver(
       new MesosDriverDescription("d1", "jar", mem, cpu, true,
         command,
-        Map("spark.mesos.executor.home" -> "test",
+        Map(config.EXECUTOR_HOME.key -> "test",
           "spark.app.name" -> "test"),
         "s1",
         new Date()))
