@@ -92,7 +92,7 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] var numBlocksProcessed = 0
 
-  private[this] val startTime = System.nanoTime()
+  private[this] val startTimeNs = System.nanoTime()
 
   /** Local blocks to fetch, excluding zero-sized blocks. */
   private[this] val localBlocks = scala.collection.mutable.LinkedHashSet[BlockId]()
@@ -250,7 +250,7 @@ final class ShuffleBlockFetcherIterator(
             logDebug("remainingBlocks: " + remainingBlocks)
           }
         }
-        logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeNs(startTime))
+        logTrace(s"Got remote block $blockId after ${Utils.getUsedTimeMs(startTimeNs)}")
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
@@ -380,11 +380,11 @@ final class ShuffleBlockFetcherIterator(
     fetchUpToMaxBytes()
 
     val numFetches = remoteRequests.size - fetchRequests.size
-    logInfo("Started " + numFetches + " remote fetches in" + Utils.getUsedTimeNs(startTime))
+    logInfo("Started " + numFetches + " remote fetches in" + Utils.getUsedTimeMs(startTimeNs))
 
     // Get Local Blocks
     fetchLocalBlocks()
-    logDebug("Got local blocks in " + Utils.getUsedTimeNs(startTime))
+    logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTimeNs))
   }
 
   override def hasNext: Boolean = !isZombie && (numBlocksProcessed < numBlocksToFetch)

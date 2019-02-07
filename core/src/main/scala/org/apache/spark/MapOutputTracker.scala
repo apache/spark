@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io._
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
@@ -744,7 +744,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         }
       }
       logDebug(s"Fetching map output statuses for shuffle $shuffleId took " +
-        s"${System.nanoTime() - startTime} ns")
+        s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime)} ms")
 
       if (fetchedStatuses != null) {
         fetchedStatuses
