@@ -235,10 +235,10 @@ object MasterFailureTest extends Logging {
         System.clearProperty("spark.streaming.clock")
         System.clearProperty("spark.driver.port")
         ssc.start()
-        val startTime = System.nanoTime()
+        val startTimeNs = System.nanoTime()
         while (!killed && !isLastOutputGenerated && !isTimedOut) {
           Thread.sleep(100)
-          timeRan = System.nanoTime() - startTime
+          timeRan = System.nanoTime() - startTimeNs
           isLastOutputGenerated = (output.nonEmpty && output.last == lastExpectedOutput)
           isTimedOut = (timeRan + totalTimeRan > TimeUnit.MILLISECONDS.toNanos(maxTimeToRun))
         }

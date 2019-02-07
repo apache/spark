@@ -344,10 +344,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
-      val start = System.nanoTime()
+      val startTimeNs = System.nanoTime()
       super.processCmd(cmd)
-      val end = System.nanoTime()
-      val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(end - start) / 1000.0
+      val endTimeNs = System.nanoTime()
+      val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(endTimeNs - startTimeNs) / 1000.0
       console.printInfo(s"Time taken: $timeTaken seconds")
       0
     } else {
@@ -365,13 +365,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           driver.init()
           val out = sessionState.out
           val err = sessionState.err
-          val start: Long = System.nanoTime()
+          val startTimeNs: Long = System.nanoTime()
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
           val rc = driver.run(cmd)
-          val end = System.nanoTime()
-          val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(end - start) / 1000.0
+          val endTimeNs = System.nanoTime()
+          val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(endTimeNs - startTimeNs) / 1000.0
 
           ret = rc.getResponseCode
           if (ret != 0) {

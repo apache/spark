@@ -265,14 +265,14 @@ private[kafka010] class KafkaTestUtils extends Logging {
       }
     }
 
-    val startTime = System.nanoTime()
+    val startTimeNs = System.nanoTime()
     @tailrec
     def tryAgain(attempt: Int): T = {
       makeAttempt() match {
         case Right(result) => result
         case Left(e) =>
-          val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime)
-          if (duration < timeout.milliseconds) {
+          val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
+          if (durationMs < timeout.milliseconds) {
             Thread.sleep(interval.milliseconds)
           } else {
             throw new TimeoutException(e.getMessage)

@@ -587,7 +587,7 @@ private[spark] class ApplicationMaster(
           }
           try {
             val numPendingAllocate = allocator.getPendingAllocate.size
-            var sleepStart = 0L
+            var sleepStartNs = 0L
             var sleepInterval = 200L // ms
             allocatorLock.synchronized {
               sleepInterval =
@@ -600,10 +600,10 @@ private[spark] class ApplicationMaster(
                   nextAllocationInterval = initialAllocationInterval
                   heartbeatInterval
                 }
-              sleepStart = System.nanoTime()
+              sleepStartNs = System.nanoTime()
               allocatorLock.wait(sleepInterval)
             }
-            val sleepDuration = System.nanoTime() - sleepStart
+            val sleepDuration = System.nanoTime() - sleepStartNs
             if (sleepDuration < TimeUnit.MILLISECONDS.toNanos(sleepInterval)) {
               // log when sleep is interrupted
               logDebug(s"Number of pending allocations is $numPendingAllocate. " +

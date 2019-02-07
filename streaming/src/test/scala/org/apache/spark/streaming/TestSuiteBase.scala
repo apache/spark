@@ -423,13 +423,13 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       logInfo("Manual clock after advancing = " + clock.getTimeMillis())
 
       // Wait until expected number of output items have been generated
-      val startTime = System.nanoTime()
+      val startTimeNs = System.nanoTime()
       while (output.size < numExpectedOutput &&
-        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime) < maxWaitTimeMillis) {
+        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs) < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
         ssc.awaitTerminationOrTimeout(50)
       }
-      val timeTaken = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime)
+      val timeTaken = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
       logInfo("Output generated in " + timeTaken + " milliseconds")
       output.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")

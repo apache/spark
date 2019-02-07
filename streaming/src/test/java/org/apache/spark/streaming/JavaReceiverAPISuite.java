@@ -72,7 +72,7 @@ public class JavaReceiverAPISuite implements Serializable {
       });
 
       ssc.start();
-      long startTime = System.nanoTime();
+      long startTimeNs = System.nanoTime();
       long timeout = TimeUnit.SECONDS.toNanos(10);
 
       Thread.sleep(200);
@@ -80,7 +80,7 @@ public class JavaReceiverAPISuite implements Serializable {
         server.send(i + "\n"); // \n to make sure these are separate lines
         Thread.sleep(100);
       }
-      while (dataCounter.get() == 0 && System.nanoTime() - startTime < timeout) {
+      while (dataCounter.get() == 0 && System.nanoTime() - startTimeNs < timeout) {
         Thread.sleep(100);
       }
       ssc.stop();

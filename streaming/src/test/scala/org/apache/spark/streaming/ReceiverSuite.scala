@@ -147,10 +147,10 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks
-    val startTime = System.nanoTime()
+    val startTimeNs = System.nanoTime()
     blockGenerator.start()
     var count = 0
-    while(System.nanoTime() - startTime < TimeUnit.MILLISECONDS.toNanos(waitTime)) {
+    while(System.nanoTime() - startTimeNs < TimeUnit.MILLISECONDS.toNanos(waitTime)) {
       blockGenerator.addData(count)
       generatedData += count
       count += 1
