@@ -84,7 +84,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   @GuardedBy("self")
   private val idleWorkers = new mutable.Queue[Socket]()
   @GuardedBy("self")
-  private var lastActivity = 0L
+  private var lastActivityNs = 0L
   new MonitorThread().start()
 
   @GuardedBy("self")
@@ -291,9 +291,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     override def run() {
       while (true) {
         self.synchronized {
-          if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivity) {
+          if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
             cleanupIdleWorkers()
-            lastActivity = System.nanoTime()
+            lastActivityNs = System.nanoTime()
           }
         }
         Thread.sleep(10000)
@@ -358,7 +358,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   def releaseWorker(worker: Socket) {
     if (useDaemon) {
       self.synchronized {
-        lastActivity = System.nanoTime()
+        lastActivityNs = System.nanoTime()
         idleWorkers.enqueue(worker)
       }
     } else {

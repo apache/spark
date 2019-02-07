@@ -1745,17 +1745,17 @@ private[spark] object Utils extends Logging {
    */
   def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
     if (prepare.isEmpty) {
-      val start = System.nanoTime()
+      val startNs = System.nanoTime()
       times(numIters)(f)
-      System.nanoTime() - start
+      System.nanoTime() - startNs
     } else {
       var i = 0
       var sum = 0L
       while (i < numIters) {
         prepare.get.apply()
-        val start = System.nanoTime()
+        val startNs = System.nanoTime()
         f
-        sum += System.nanoTime() - start
+        sum += System.nanoTime() - startNs
         i += 1
       }
       sum

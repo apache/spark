@@ -210,7 +210,7 @@ private[spark] class BlockManager(
   // Field related to peer block managers that are necessary for block replication
   @volatile private var cachedPeers: Seq[BlockManagerId] = _
   private val peerFetchLock = new Object
-  private var lastPeerFetchTime = 0L
+  private var lastPeerFetchTimeNs = 0L
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
@@ -1096,7 +1096,7 @@ private[spark] class BlockManager(
       }
     }
 
-    val startTime = System.nanoTime()
+    val startTimeNs = System.nanoTime()
     var exceptionWasThrown: Boolean = true
     val result: Option[T] = try {
       val res = putBody(putBlockInfo)
@@ -1135,7 +1135,7 @@ private[spark] class BlockManager(
         addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
       }
     }
-    val usedTimeMs = Utils.getUsedTimeMs(startTime)
+    val usedTimeMs = Utils.getUsedTimeMs(startTimeNs)
     if (level.replication > 1) {
       logDebug(s"Putting block ${blockId} with replication took $usedTimeMs")
     } else {
@@ -1340,12 +1340,12 @@ private[spark] class BlockManager(
     peerFetchLock.synchronized {
       def timeout: Boolean = {
         val cachedPeersTtl = conf.get(config.STORAGE_CACHED_PEERS_TTL) // milliseconds
-        val diff = System.nanoTime() - lastPeerFetchTime
+        val diff = System.nanoTime() - lastPeerFetchTimeNs
         diff > TimeUnit.MILLISECONDS.toNanos(cachedPeersTtl)
       }
       if (cachedPeers == null || forceFetch || timeout) {
         cachedPeers = master.getPeers(blockManagerId).sortBy(_.hashCode)
-        lastPeerFetchTime = System.nanoTime()
+        lastPeerFetchTimeNs = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
       cachedPeers

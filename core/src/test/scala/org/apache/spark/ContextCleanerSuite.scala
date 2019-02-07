@@ -99,10 +99,10 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
   /** Run GC and make sure it actually has run */
   protected def runGC() {
     val weakRef = new WeakReference(new Object())
-    val startTime = System.nanoTime()
+    val startTimeNs = System.nanoTime()
     System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
     // Wait until a weak reference object has been GCed
-    while (System.nanoTime() - startTime < TimeUnit.SECONDS.toNanos(10) && weakRef.get != null) {
+    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(10) && weakRef.get != null) {
       System.gc()
       Thread.sleep(200)
     }

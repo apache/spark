@@ -273,8 +273,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     val jobA = Future {
       sc.setJobGroup("jobA", "this is a job to be cancelled", interruptOnCancel = true)
       sc.parallelize(1 to 2, 2).map { i =>
-        val startTime = System.nanoTime()
-        while (System.nanoTime() < startTime + TimeUnit.SECONDS.toNanos(10)) { }
+        val startTimeNs = System.nanoTime()
+        while (System.nanoTime() < startTimeNs + TimeUnit.SECONDS.toNanos(10)) { }
       }.count()
     }
 

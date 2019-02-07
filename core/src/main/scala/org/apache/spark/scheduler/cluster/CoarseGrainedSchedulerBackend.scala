@@ -65,7 +65,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // if minRegisteredRatio has not yet been reached
   private val maxRegisteredWaitingTimeNs = TimeUnit.MILLISECONDS.toNanos(
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
-  private val createTime = System.nanoTime()
+  private val createTimeNs = System.nanoTime()
 
   // Accessing `executorDataMap` in `DriverEndpoint.receive/receiveAndReply` doesn't need any
   // protection. But accessing `executorDataMap` out of `DriverEndpoint.receive/receiveAndReply`
@@ -499,7 +499,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
     }
-    if ((System.nanoTime() - createTime) >= maxRegisteredWaitingTimeNs) {
+    if ((System.nanoTime() - createTimeNs) >= maxRegisteredWaitingTimeNs) {
       logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
         s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTimeNs(ns)")
       return true

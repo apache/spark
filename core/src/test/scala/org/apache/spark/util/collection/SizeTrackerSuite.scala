@@ -194,9 +194,9 @@ private object SizeTrackerSuite {
   }
 
   def time(f: => Unit): Long = {
-    val start = System.nanoTime()
+    val startNs = System.nanoTime()
     f
-    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
   }
 
   def averageTime(v: Seq[Long]): Long = {

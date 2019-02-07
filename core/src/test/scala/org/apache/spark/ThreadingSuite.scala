@@ -126,9 +126,9 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
             val ans = nums.map(number => {
               val running = ThreadingSuiteState.runningThreads
               running.getAndIncrement()
-              val time = System.nanoTime()
+              val timeNs = System.nanoTime()
               while (running.get() != 4 &&
-                (System.nanoTime() - time < TimeUnit.SECONDS.toNanos(1))) {
+                (System.nanoTime() - timeNs < TimeUnit.SECONDS.toNanos(1))) {
                 Thread.sleep(100)
               }
               if (running.get() != 4) {
