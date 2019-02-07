@@ -143,17 +143,16 @@ private[deploy] object HadoopFSDelegationTokenProvider {
     val defaultFS = FileSystem.get(hadoopConf)
     val master = sparkConf.get("spark.master", null)
     val stagingFS = if (master != null && master.contains("yarn")) {
-      sparkConf.get(STAGING_DIR)
-        .map(new Path(_).getFileSystem(hadoopConf))
-        .getOrElse(defaultFS)
+      sparkConf.get(STAGING_DIR).map(new Path(_).getFileSystem(hadoopConf))
     } else {
-      defaultFS
+      None
     }
 
     // Add the list of available namenodes for all namespaces in HDFS federation.
     // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
     // namespaces.
-    val hadoopFilesystems = if (!filesystemsToAccess.isEmpty || stagingFS.getScheme == "viewfs") {
+    val hadoopFilesystems = if (!filesystemsToAccess.isEmpty || defaultFS.getScheme == "viewfs" ||
+      (stagingFS.isDefined && stagingFS.get.getScheme == "viewfs")) {
       filesystemsToAccess.map(new Path(_).getFileSystem(hadoopConf)).toSet
     } else {
       val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
@@ -172,6 +171,6 @@ private[deploy] object HadoopFSDelegationTokenProvider {
       (filesystemsWithoutHA ++ filesystemsWithHA).toSet
     }
 
-    hadoopFilesystems + stagingFS + defaultFS
+    hadoopFilesystems ++ stagingFS + defaultFS
   }
 }
