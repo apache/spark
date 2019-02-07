@@ -909,8 +909,7 @@ object SQLConf {
 
   val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
     buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
-      .doc("Temporary checkpoint locations deleted normally when the query didn't fail." +
-        " When true, it will be deleted even if the query failed.")
+      .doc("When true, enable temporary checkpoint locations force delete.")
       .booleanConf
       .createWithDefault(false)
 
