@@ -85,7 +85,6 @@ private[spark] class HiveDelegationTokenProvider
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
       sparkConf: SparkConf,
-      fileSystems: Set[FileSystem],
       creds: Credentials): Option[Long] = {
     try {
       val conf = hiveConf(hadoopConf)
