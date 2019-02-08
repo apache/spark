@@ -366,9 +366,9 @@ class ExpressionParserSuite extends PlanTest {
 
   test("row constructor") {
     // Note that '(a)' will be interpreted as a nested expression.
-    assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
-    assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
-    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
+    assertEqual("(a, b)", UnresolvedRow(Seq('a, 'b)))
+    assertEqual("(a, b, c)", UnresolvedRow(Seq('a, 'b, 'c)))
+    assertEqual("(a as b, b as c)", UnresolvedRow(Seq('a as 'b, 'b as 'c)))
   }
 
   test("scalar sub-query") {

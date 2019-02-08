@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedRow, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -643,8 +643,8 @@ class PlanParserSuite extends AnalysisTest {
       parsePlan("SELECT /*+ HINT1('a', (b, c), (1, 2)) */ * from t"),
       UnresolvedHint("HINT1",
         Seq(Literal("a"),
-          CreateStruct($"b" :: $"c" :: Nil),
-          CreateStruct(Literal(1) :: Literal(2) :: Nil)),
+          UnresolvedRow($"b" :: $"c" :: Nil),
+          UnresolvedRow(Literal(1) :: Literal(2) :: Nil)),
         table("t").select(star())
       )
     )
