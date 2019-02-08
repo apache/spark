@@ -68,9 +68,13 @@ private[spark] class ExecutorPodsLifecycleManager(
               s" pod name ${state.pod.getMetadata.getName}")
             onFinalNonDeletedState(failed, execId, schedulerBackend, execIdsRemovedInThisRound)
           case succeeded@PodSucceeded(_) =>
-            logDebug(s"Snapshot reported succeeded executor with id $execId," +
-              s" pod name ${state.pod.getMetadata.getName}. Note that succeeded executors are" +
-              s" unusual unless Spark specifically informed the executor to exit.")
+            if (schedulerBackend.isExecutorActive(execId.toString)) {
+              logInfo(s"Snapshot reported succeeded executor with id $execId, " +
+                "even though the application has not requested for it to be removed.")
+            } else {
+              logDebug(s"Snapshot reported succeeded executor with id $execId," +
+                s" pod name ${state.pod.getMetadata.getName}.")
+            }
             onFinalNonDeletedState(succeeded, execId, schedulerBackend, execIdsRemovedInThisRound)
           case _ =>
         }
