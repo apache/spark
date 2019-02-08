@@ -252,8 +252,7 @@ private[spark] class BlockManager(
       } else {
         val memoryMode = level.memoryMode
         memoryStore.putBytes(blockId, blockSize, memoryMode, () => {
-          if (memoryMode == MemoryMode.OFF_HEAP &&
-            byteBuffer.chunks.exists(buffer => !buffer.isDirect)) {
+          if (memoryMode == MemoryMode.OFF_HEAP && byteBuffer.chunks.exists(!_.isDirect)) {
             byteBuffer.copy(Platform.allocateDirectBuffer)
           } else {
             byteBuffer
