@@ -907,6 +907,12 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
+      .doc("When true, enable temporary checkpoint locations force delete.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
     .internal()
     .doc("The minimum number of batches that must be retained and made recoverable.")
