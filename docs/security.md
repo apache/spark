@@ -752,6 +752,10 @@ configuration has Kerberos authentication turned (`hbase.security.authentication
 Similarly, a Hive token will be obtained if Hive is in the classpath, and the configuration includes
 URIs for remote metastore services (`hive.metastore.uris` is not empty).
 
+If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
+explicitly provided to Spark at launch time. This is done by listing them in the
+`spark.kerberos.access.hadoopFileSystems` property, described in the configuration section below.
+
 Delegation token support is currently only supported in YARN and Mesos modes. Consult the
 deployment-specific page for more information.
 
@@ -767,6 +771,18 @@ The following options provides finer-grained control for this feature:
   By default, credentials for all supported services are retrieved when those services are
   configured, but it's possible to disable that behavior if it somehow conflicts with the
   application being run.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kerberos.access.hadoopFileSystems</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
+    example, <code>spark.kerberos.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
+    and Kerberos must be properly configured to be able to access them (either in the same realm
+    or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
+    the Spark application can access those remote Hadoop filesystems.
   </td>
 </tr>
 </table>

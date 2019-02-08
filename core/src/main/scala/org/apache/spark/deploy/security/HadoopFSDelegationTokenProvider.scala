@@ -22,7 +22,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
@@ -44,9 +44,9 @@ private[deploy] class HadoopFSDelegationTokenProvider
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
       sparkConf: SparkConf,
-      fileSystems: Set[FileSystem],
       creds: Credentials): Option[Long] = {
     try {
+      val fileSystems = HadoopFSDelegationTokenProvider.hadoopFSsToAccess(sparkConf, hadoopConf)
       val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fileSystems, creds)
 
       // Get the token renewal interval if it is not set. It will only be called once.
@@ -131,5 +131,46 @@ private[deploy] class HadoopFSDelegationTokenProvider
       }.toOption
     }
     if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
+  }
+}
+
+private[deploy] object HadoopFSDelegationTokenProvider {
+  def hadoopFSsToAccess(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Set[FileSystem] = {
+    val filesystemsToAccess = sparkConf.get(KERBEROS_FILESYSTEMS_TO_ACCESS)
+
+    val defaultFS = FileSystem.get(hadoopConf)
+    val master = sparkConf.get("spark.master", null)
+    val stagingFS = if (master != null && master.contains("yarn")) {
+      sparkConf.get(STAGING_DIR).map(new Path(_).getFileSystem(hadoopConf))
+    } else {
+      None
+    }
+
+    // Add the list of available namenodes for all namespaces in HDFS federation.
+    // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
+    // namespaces.
+    val hadoopFilesystems = if (!filesystemsToAccess.isEmpty || defaultFS.getScheme == "viewfs" ||
+      (stagingFS.isDefined && stagingFS.get.getScheme == "viewfs")) {
+      filesystemsToAccess.map(new Path(_).getFileSystem(hadoopConf)).toSet
+    } else {
+      val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
+      // Retrieving the filesystem for the nameservices where HA is not enabled
+      val filesystemsWithoutHA = nameservices.flatMap { ns =>
+        Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")).map { nameNode =>
+          new Path(s"hdfs://$nameNode").getFileSystem(hadoopConf)
+        }
+      }
+      // Retrieving the filesystem for the nameservices where HA is enabled
+      val filesystemsWithHA = nameservices.flatMap { ns =>
+        Option(hadoopConf.get(s"dfs.ha.namenodes.$ns")).map { _ =>
+          new Path(s"hdfs://$ns").getFileSystem(hadoopConf)
+        }
+      }
+      (filesystemsWithoutHA ++ filesystemsWithHA).toSet
+    }
+
+    hadoopFilesystems ++ stagingFS + defaultFS
   }
 }
