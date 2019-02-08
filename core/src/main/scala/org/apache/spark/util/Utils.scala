@@ -1007,7 +1007,7 @@ private[spark] object Utils extends Logging {
    * Return the string to tell how long has passed in milliseconds.
    * @param startTimeNs - a timestamp in nanoseconds returned by `System.nanoTime`.
    */
-  def getUsedTimeMs(startTimeNs: Long): String = {
+  def getUsedTimeNs(startTimeNs: Long): String = {
     s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms"
   }
 

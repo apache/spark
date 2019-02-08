@@ -560,7 +560,7 @@ private[spark] class BlockManager(
   private def getLocationBlockIds(blockIds: Array[BlockId]): Array[Seq[BlockManagerId]] = {
     val startTimeNs = System.nanoTime()
     val locations = master.getLocations(blockIds).toArray
-    logDebug(s"Got multiple block location in ${Utils.getUsedTimeMs(startTimeNs)}")
+    logDebug(s"Got multiple block location in ${Utils.getUsedTimeNs(startTimeNs)}")
     locations
   }
 
@@ -1048,7 +1048,7 @@ private[spark] class BlockManager(
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
       }
-      logDebug(s"Put block ${blockId} locally took ${Utils.getUsedTimeMs(startTimeNs)}")
+      logDebug(s"Put block ${blockId} locally took ${Utils.getUsedTimeNs(startTimeNs)}")
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
         try {
@@ -1135,7 +1135,7 @@ private[spark] class BlockManager(
         addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
       }
     }
-    val usedTimeMs = Utils.getUsedTimeMs(startTimeNs)
+    val usedTimeMs = Utils.getUsedTimeNs(startTimeNs)
     if (level.replication > 1) {
       logDebug(s"Putting block ${blockId} with replication took $usedTimeMs")
     } else {
@@ -1224,7 +1224,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, putBlockStatus)
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
-        logDebug(s"Put block $blockId locally took ${Utils.getUsedTimeMs(startTimeNs)}")
+        logDebug(s"Put block $blockId locally took ${Utils.getUsedTimeNs(startTimeNs)}")
         if (level.replication > 1) {
           val remoteStartTimeNs = System.nanoTime()
           val bytesToReplicate = doGetLocalBytes(blockId, info)
@@ -1241,7 +1241,7 @@ private[spark] class BlockManager(
           } finally {
             bytesToReplicate.dispose()
           }
-          logDebug(s"Put block $blockId remotely took ${Utils.getUsedTimeMs(remoteStartTimeNs)}")
+          logDebug(s"Put block $blockId remotely took ${Utils.getUsedTimeNs(remoteStartTimeNs)}")
         }
       }
       assert(blockWasSuccessfullyStored == iteratorFromFailedMemoryStorePut.isEmpty)
