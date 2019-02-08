@@ -233,10 +233,10 @@ private[spark] class BlockManager(
       keepReadLock: Boolean) {
 
     /**
-     *  @return the content of the block as a byte buffer, calling it multiple times returns
-     *          the same object.
+     *  Reads the block content into the memory. If the update of the block store is based on a
+     *  temporary file this could lead to loading the whole file into a ChunkedByteBuffer.
      */
-    protected def byteBuffer: ChunkedByteBuffer
+    protected def readToByteBuffer: ChunkedByteBuffer
 
     protected def getInputStream(): InputStream
 
@@ -281,6 +281,11 @@ private[spark] class BlockManager(
      def save(): Boolean = {
       doPut(blockId, level, classTag, tellMaster, keepReadLock) { info =>
         val startTimeNs = System.nanoTime()
+
+        // lazy as for a storage level which only targets disk (without any replication)
+        // this val won't be used at all
+        lazy val byteBuffer = readToByteBuffer
+
         // Since we're storing bytes, initiate the replication before storing them locally.
         // This is faster as data is already serialized and ready to send.
         val replicationFuture = if (level.replication > 1) {
@@ -361,7 +366,7 @@ private[spark] class BlockManager(
       keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock) {
 
-    override def byteBuffer: ChunkedByteBuffer = bytes
+    override def readToByteBuffer: ChunkedByteBuffer = bytes
 
     override def saveToDiskStore(): Unit = diskStore.putBytes(blockId, bytes)
 
@@ -381,11 +386,10 @@ private[spark] class BlockManager(
 
     private var isTempFileMoved = false
 
-    // lazy as for a storage level which only targets disk (without any replication)
-    // this val won't be used at all
-    private lazy val bytes = readTmpFileToMem()
-
-    private def readTmpFileToMem(): ChunkedByteBuffer = securityManager.getIOEncryptionKey() match {
+    /**
+     * Calling this method once leads to loading the content of the temporary file into the memory.
+     */
+    override def readToByteBuffer: ChunkedByteBuffer = securityManager.getIOEncryptionKey() match {
       case Some(key) =>
         // we need to pass in the size of the unencrypted block
         val allocator = level.memoryMode match {
@@ -406,11 +410,6 @@ private[spark] class BlockManager(
         case None =>
           new FileInputStream(tmpFile)
       }
-
-    /**
-     * Calling this method once leads to loading the content of the temporary file into the memory.
-     */
-    override def byteBuffer: ChunkedByteBuffer = bytes
 
     override def saveToDiskStore(): Unit = {
       diskStore.moveFileToBlock(tmpFile, blockSize, blockId)
