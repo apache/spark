@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable.ListBuffer
 
@@ -84,11 +84,8 @@ private[spark] class DiskStore(
         }
       }
     }
-    val finishTimeNs = System.nanoTime()
-    logDebug("Block %s stored as %s file on disk in %d ns".format(
-      file.getName,
-      Utils.bytesToString(file.length()),
-      finishTimeNs - startTimeNs))
+    logDebug(s"Block ${file.getName} stored as ${Utils.bytesToString(file.length())} file" +
+      s" on disk in ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
   }
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
