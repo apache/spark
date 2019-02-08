@@ -706,7 +706,8 @@ private[spark] class Executor(
           if (taskRunner.isFinished) {
             finished = true
           } else {
-            logWarning(s"Killed task $taskId is still running after $elapsedTimeNs ns")
+            val elapsedTimeMs = TimeUnit.NANOSECONDS.toMillis(elapsedTimeNs)
+            logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
             if (takeThreadDump) {
               try {
                 Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
