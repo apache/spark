@@ -13,15 +13,15 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
 Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 Limiting:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Top-level column                               241 /  246          4.2         240.9       1.0X
-Nested column                                 1828 / 1904          0.5        1827.5       0.1X
+Top-level column                               229 /  237          4.4         229.3       1.0X
+Nested column                                  381 /  396          2.6         380.6       0.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
 Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 Repartitioning:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Top-level column                               201 /  208          5.0         200.8       1.0X
-Nested column                                 1811 / 1864          0.6        1811.4       0.1X
+Top-level column                               199 /  206          5.0         199.2       1.0X
+Nested column                                  359 /  366          2.8         358.8       0.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
 Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz

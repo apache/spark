@@ -574,7 +574,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  */
 object ColumnPruning extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
@@ -607,7 +607,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
     case s @ ScriptTransformation(_, _, _, child, _)
-      if !child.outputSet.subsetOf(s.references) =>
+        if !child.outputSet.subsetOf(s.references) =>
       s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
@@ -651,22 +651,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    // If the current project or the child references to nested fields, and not all the fields
-    // in a nested attribute are used, we can create a new [[CreateNamedStruct]] containing only
-    // subset of the fields as a new project in the child. Thus, the current projects can be
-    // replaced by the ones on the new pruned nested attributes to reduce data reading / shuffle.
-    case p @ Project(_, child)
-        if canProjectPushThrough(child) && createPrunedNestedAttrsAndProjects(p, child).nonEmpty =>
-      val (prunedNestedAttrs: Map[AttributeSet, Alias],
-      projectsOnPrunedNestedAttrs: Map[Expression, Expression]) =
-        createPrunedNestedAttrsAndProjects(p, child).get
-      val newChild = child.withNewChildren(child.children.map { plan =>
-        Project(plan.output.map(a => prunedNestedAttrs.getOrElse(AttributeSet(a), a)), plan)
-      })
-      val newProjectList = p.projectList.map(_.transform {
-        case e if projectsOnPrunedNestedAttrs.contains(e) => projectsOnPrunedNestedAttrs(e)
-      }.asInstanceOf[NamedExpression])
-      Project(newProjectList, newChild)
+    case p @ NestedColumnPruning(prunedNestedAttrs, projectsOnPrunedNestedAttrs)
+        if SQLConf.get.nestedSchemaPruningEnabled =>
+      NestedColumnPruning.prune(p, prunedNestedAttrs, projectsOnPrunedNestedAttrs)
 
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
@@ -679,147 +666,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
   })
-
-  /**
-   * Returns true for those operators that project can be pushed through.
-   */
-  private def canProjectPushThrough(p: LogicalPlan): Boolean = p match {
-    // TODO: There are more operators that project can be pushed through to be added.
-    case _: GlobalLimit => true
-    case _: LocalLimit => true
-    case _: RepartitionOperation => true
-    case _: Sample => true
-    case _: Sort => true
-    case _ => false
-  }
-
-  /**
-   * Similar to [[QueryPlan.references]], but this only returns all attributes
-   * that are explicitly referenced on the root levels in a [[LogicalPlan]].
-   */
-  private def getRootReferences(plan: LogicalPlan): AttributeSet = {
-    def helper(e: Expression): AttributeSet = e match {
-      case attr: AttributeReference => AttributeSet(attr)
-      case _: GetStructField => AttributeSet.empty
-      case es if es.children.nonEmpty => AttributeSet(es.children.flatMap(helper))
-      case _ => AttributeSet.empty
-    }
-
-    AttributeSet.fromAttributeSets(plan.expressions.map(helper))
-  }
-
-  /**
-   * Returns all the nested fields that are explicitly referenced as [[Expression]]
-   * in a [[LogicalPlan]].
-   */
-  private def getNestedFieldReferences(plan: LogicalPlan): Seq[Expression] = {
-    // TODO: Currently, we only support having [[GetStructField]] in the chain
-    // of the expressions. If the chain contains GetArrayStructFields, GetMapValue, or
-    // GetArrayItem, the nested field alias substitution will not be performed.
-    def isGetStructFieldOrAttr(e: Expression): Boolean = e match {
-      case _: AttributeReference => true
-      case GetStructField(child, _, _) => isGetStructFieldOrAttr(child)
-      case _ => false
-    }
-
-    def helper(e: Expression): Seq[Expression] = e match {
-      case f @ GetStructField(child, _, _) if isGetStructFieldOrAttr(child) => Seq(f)
-      case es if es.children.nonEmpty => es.children.flatMap(e => helper(e))
-      case _ => Seq.empty[Expression]
-    }
-
-    plan.expressions.flatMap(helper)
-  }
-
-  /**
-   * The key with type [[AttributeSet]] in the returned map contains only one root column attribute,
-   * and the value is Seq of tuple containing [[Expression]] of nested fields to be replaced, and
-   * corresponding [[Alias]]. Note that the [[Expression]] of nested fields are canonicalized
-   * to remove the cosmetic differences.
-   */
-  private def createPrunedNestedAttrsAndProjects(
-      plans: LogicalPlan*
-  ): Option[(Map[AttributeSet, Alias], Map[Expression, Expression])] = {
-
-    def createPrunedNameStruct(attr: Attribute)
-    : Option[CreateNamedStruct] = {
-
-      def helper(): Option[CreateNamedStruct] = {
-        attr.dataType match {
-          case s: StructType =>
-            CreateNamedStruct(
-              s.zipWithIndex.flatMap { case (field: StructField, index: Int) =>
-                val name = field.name
-                val f = GetStructField(attr, index, Some(name))
-                Seq(Literal(name), f)
-
-              })
-          case a: ArrayType =>
-          case m: MapType =>
-          case _ => None
-        }
-        ???
-      }
-
-      ???
-    }
-
-    val rootReferences: AttributeSet = plans.map(getRootReferences).reduce(_ ++ _)
-    // Note that each nested expression should only has one attribute as reference.
-    val nestedFieldReferences: Seq[Expression] = plans.map(getNestedFieldReferences).reduce(_ ++ _)
-
-    val projectsOnPrunedNestedAttrs = mutable.Map.empty[Expression, Expression]
-
-    val prunedNestedAttrs: Map[AttributeSet, Alias] = nestedFieldReferences
-      .filter(!_.references.subsetOf(rootReferences))
-      .groupBy(_.references)
-      .filter(_._1.size == 1).map(x => (x._1, x._2.toSet))
-      .flatMap { case (attr: AttributeSet, nestedFields: Set[Expression]) =>
-
-        def helper(e: Expression): Option[CreateNamedStruct] = {
-          e.dataType match {
-            case s: StructType =>
-              val a = s.zipWithIndex.flatMap { e =>
-                val res = GetStructField(attr.head, e._2, Some(e._1.name))
-                if (nestedFields.map(_.canonicalized).contains(res.canonicalized)) {
-                  if (res.name.nonEmpty) {
-                    Seq(Literal(res.name.get), res)
-                  } else {
-                    Seq(Literal(""), res)
-                  }
-                } else {
-                  None
-                }
-              }
-              Some(CreateNamedStruct(a))
-            case _ => None
-          }
-        }
-
-        val res = helper(attr.head)
-        if (res.nonEmpty) {
-          if (res.get.children.length / 2 < attr.head.dataType.asInstanceOf[StructType].length) {
-            val n = attr.head.name
-
-            val alias = Alias(res.get, n)()
-            nestedFields.foreach {
-              case s: GetStructField =>
-                projectsOnPrunedNestedAttrs.put(s, s.copy(child = alias.toAttribute, ordinal = 0))
-            }
-            Some(attr -> alias)
-          } else {
-            None
-          }
-        } else {
-          None
-        }
-      }
-    if (prunedNestedAttrs.nonEmpty) {
-      Some((prunedNestedAttrs, projectsOnPrunedNestedAttrs.toMap))
-    } else {
-      None
-    }
-  }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =

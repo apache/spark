@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
-import java.lang
 
 import org.scalactic.Equality
-import org.apache.spark.sql._
+
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.FileSourceScanExec
@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
-class ParquetSchemaPruningSuitepp
+class ParquetSchemaPruningSuite
     extends QueryTest
     with ParquetTest
     with SchemaPruningTest
@@ -87,69 +87,9 @@ class ParquetSchemaPruningSuitepp
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
 
   testSchemaPruning("select a single complex field") {
-    def testSelectSingleNestedField(input: DataFrame, checkResult: Boolean = true): Unit = {
-      val query = input.select("id", "name.middle")
-      query.explain(true)
-      checkScan(query, "struct<id:int,name:struct<middle:string>>")
-      if (checkResult) {
-        checkAnswer(query.orderBy("id"),
-          Row(0, "X.") :: Row(1, "Y.") :: Row(2, null) :: Row(3, null) :: Nil)
-      }
-    }
-
-    val data = sql("select * from contacts")
-    testSelectSingleNestedField(data)
-    testSelectSingleNestedField(data.limit(100))
-    testSelectSingleNestedField(data.coalesce(1))
-    testSelectSingleNestedField(data.sample(0.1, 0L), false)
-    testSelectSingleNestedField(data.sort(col("id")))
-    val a = 10
-  }
-
-  testSchemaPruning("select a new complex column constructed by nested field inputs") {
-    def testSelectNewComplexColumn(input: DataFrame, checkResult: Boolean = true): Unit = {
-      val nameCol = struct(input("name.first"), input("name.last")) as "name"
-      val query = input.select(col("id"), nameCol)
-      checkScan(query, "struct<id:int,name:struct<first:string,last:string>>")
-      if (checkResult) {
-        checkAnswer(query.orderBy("id"),
-          Row(0, Row("Jane", "Doe")) ::
-            Row(1, Row("John", "Doe")) ::
-            Row(2, Row("Janet", "Jones")) ::
-            Row(3, Row("Jim", "Jones")) ::
-            Nil)
-      }
-    }
-
-    val data = sql("select * from contacts")
-    testSelectNewComplexColumn(data)
-    testSelectNewComplexColumn(data.limit(100))
-    testSelectNewComplexColumn(data.coalesce(1))
-    testSelectNewComplexColumn(data.sample(0.1, 0L), false)
-    testSelectNewComplexColumn(data.sort(col("id")))
-  }
-
-  testSchemaPruning("select the UDF with nested field inputs") {
-    def testSelectUDFWithNestedFieldInputs(input: DataFrame, checkResult: Boolean = true): Unit = {
-      val firstAndLastName = udf((first: String, last: String) => first + " " + last)
-      val query = input.select(col("id"), firstAndLastName(col("name.first"), col("name.last")))
-      checkScan(query, "struct<id:int,name:struct<first:string,last:string>>")
-      if (checkResult) {
-        checkAnswer(query.orderBy("id"),
-          Row(0, "Jane Doe") ::
-            Row(1, "John Doe") ::
-            Row(2, "Janet Jones") ::
-            Row(3, "Jim Jones") ::
-            Nil)
-      }
-    }
-
-    val data = sql("select * from contacts")
-    testSelectUDFWithNestedFieldInputs(data)
-    // testSelectUDFWithNestedFieldInputs(data.limit(100))
-    testSelectUDFWithNestedFieldInputs(data.coalesce(1))
-    testSelectUDFWithNestedFieldInputs(data.sample(0.1, 0L), false)
-    testSelectUDFWithNestedFieldInputs(data.sort(col("id")))
+    val query = sql("select name.middle from contacts")
+    checkScan(query, "struct<name:struct<middle:string>>")
+    checkAnswer(query.orderBy("id"), Row("X.") :: Row("Y.") :: Row(null) :: Row(null) :: Nil)
   }
 
   testSchemaPruning("select a single complex field and its parent struct") {
@@ -191,7 +131,7 @@ class ParquetSchemaPruningSuitepp
       Row("X.", 1) :: Row("Y.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
-  testSchemaPruning("partial schema intersection - select missing subfield") {
+  ignore("partial schema intersection - select missing subfield") {
     val query = sql("select name.middle, address from contacts where p=2")
     checkScan(query, "struct<name:struct<middle:string>,address:string>")
     checkAnswer(query.orderBy("id"),
