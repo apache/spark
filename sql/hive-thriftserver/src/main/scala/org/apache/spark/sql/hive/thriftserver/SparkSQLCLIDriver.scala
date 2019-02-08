@@ -126,7 +126,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val tokenProvider = new HiveDelegationTokenProvider()
     if (tokenProvider.delegationTokensRequired(sparkConf, hadoopConf)) {
       val credentials = new Credentials()
-      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, Set.empty, credentials)
+      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, credentials)
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
