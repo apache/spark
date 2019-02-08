@@ -232,33 +232,39 @@ private[spark] class BlockManager(
       tellMaster: Boolean,
       keepReadLock: Boolean) {
 
+    /**
+     *  @return the content of the block as a byte buffer, calling it multiple times returns
+     *          the same object.
+     */
     protected def byteBuffer: ChunkedByteBuffer
+
+    protected def getInputStream(): InputStream
 
     protected def saveToDiskStore(): Unit
 
-    private def saveToMemoryStore(): Boolean = {
-      if (level.deserialized) {
-        val values =
-          serializerManager.dataDeserializeStream(blockId, byteBuffer.toInputStream())(classTag)
-        memoryStore.putIteratorAsValues(blockId, values, classTag) match {
-          case Right(_) => true
-          case Left(iter) =>
-            // If putting deserialized values in memory failed, we will put the bytes directly
-            // to disk, so we don't need this iterator and can close it to free resources
-            // earlier.
-            iter.close()
-            false
-        }
-      } else {
-        val memoryMode = level.memoryMode
-        memoryStore.putBytes(blockId, blockSize, memoryMode, () => {
-          if (memoryMode == MemoryMode.OFF_HEAP && byteBuffer.chunks.exists(!_.isDirect)) {
-            byteBuffer.copy(Platform.allocateDirectBuffer)
-          } else {
-            byteBuffer
-          }
-        })
+    private def saveDeserializedValuesToMemoryStore(inputStream: InputStream) = {
+      val values =
+        serializerManager.dataDeserializeStream(blockId, inputStream)(classTag)
+      memoryStore.putIteratorAsValues(blockId, values, classTag) match {
+        case Right(_) => true
+        case Left(iter) =>
+          // If putting deserialized values in memory failed, we will put the bytes directly
+          // to disk, so we don't need this iterator and can close it to free resources
+          // earlier.
+          iter.close()
+          false
       }
+    }
+
+    private def saveSerializedValuesToMemoryStore(bytes: ChunkedByteBuffer) = {
+      val memoryMode = level.memoryMode
+      memoryStore.putBytes(blockId, blockSize, memoryMode, () => {
+        if (memoryMode == MemoryMode.OFF_HEAP && bytes.chunks.exists(!_.isDirect)) {
+          bytes.copy(Platform.allocateDirectBuffer)
+        } else {
+          bytes
+        }
+      })
     }
 
     /**
@@ -290,7 +296,22 @@ private[spark] class BlockManager(
         if (level.useMemory) {
           // Put it in memory first, even if it also has useDisk set to true;
           // We will drop it to disk later if the memory store can't hold it.
-          if (!saveToMemoryStore() && level.useDisk) {
+          val putSucceeded = if (level.deserialized) {
+            // trying to save memory by choosing the right input stream
+            val inputStream = if (level.replication > 1) {
+              // the bytebuffer is already used for replication so the block is in the memory
+              byteBuffer.toInputStream()
+            } else {
+              // if the update of the block store is based on a temporary file and replication is
+              // not requested then an InputStream constructed for the file directly can be used
+              // (reading the whole file into a ChunkedByteBuffer can be avoided)
+              getInputStream()
+            }
+            saveDeserializedValuesToMemoryStore(inputStream)
+          } else {
+            saveSerializedValuesToMemoryStore(byteBuffer)
+          }
+          if (!putSucceeded && level.useDisk) {
             logWarning(s"Persisting block $blockId to disk instead.")
             saveToDiskStore()
           }
@@ -344,6 +365,8 @@ private[spark] class BlockManager(
 
     override def saveToDiskStore(): Unit = diskStore.putBytes(blockId, bytes)
 
+    override protected def getInputStream(): InputStream = bytes.toInputStream()
+
   }
 
   private case class TempFileBasedBlockStoreUpdater[T](
@@ -375,6 +398,18 @@ private[spark] class BlockManager(
         ChunkedByteBuffer.fromFile(tmpFile)
     }
 
+    override def getInputStream(): InputStream = securityManager.getIOEncryptionKey() match {
+        case Some(key) =>
+          // we need to pass in the size of the unencrypted block
+          new EncryptedBlockData(tmpFile, blockSize, conf, key).toInputStream()
+
+        case None =>
+          new FileInputStream(tmpFile)
+      }
+
+    /**
+     * Calling this method once leads to loading the content of the temporary file into the memory.
+     */
     override def byteBuffer: ChunkedByteBuffer = bytes
 
     override def saveToDiskStore(): Unit = {
