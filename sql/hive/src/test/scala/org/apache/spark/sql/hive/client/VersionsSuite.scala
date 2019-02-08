@@ -56,15 +56,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
   import HiveClientBuilder.buildClient
 
   /**
-   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
-   * returns.
-   */
-  protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
-
-  /**
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
@@ -112,7 +103,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   private val versions =
-    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3")
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.1")
 
   private var client: HiveClient = null
 
@@ -127,15 +118,20 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
       // hive.metastore.schema.verification from false to true since 2.0
       // For details, see the JIRA HIVE-6113 and HIVE-12463
-      if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3") {
+      if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3" ||
+          version == "3.1") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
+      }
+      // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
+      if (version == "3.1") {
+        hadoopConf.set("hive.in.test", "true")
       }
       client = buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
       if (versionSpark != null) versionSpark.reset()
       versionSpark = TestHiveVersion(client)
-      assert(versionSpark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-        .version.fullVersion.startsWith(version))
+      assert(versionSpark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+        .client.version.fullVersion.startsWith(version))
     }
 
     def table(database: String, tableName: String): CatalogTable = {
@@ -327,7 +323,20 @@ class VersionsSuite extends SparkFunSuite with Logging {
       properties = Map.empty)
 
     test(s"$version: sql create partitioned table") {
-      client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")
+      val table = CatalogTable(
+        identifier = TableIdentifier("src_part", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        schema = new StructType().add("value", "int").add("key1", "int").add("key2", "int"),
+        partitionColumnNames = Seq("key1", "key2"),
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = Some(classOf[TextInputFormat].getName),
+          outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+          serde = Some(classOf[LazySimpleSerDe].getName()),
+          compressed = false,
+          properties = Map.empty
+        ))
+      client.createTable(table, ignoreIfExists = false)
     }
 
     val testPartitionCount = 2
@@ -565,9 +574,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: sql create index and reset") {
-      client.runSqlHive("CREATE TABLE indexed_table (key INT)")
-      client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
-        "as 'COMPACT' WITH DEFERRED REBUILD")
+      // HIVE-18448 Since Hive 3.0, INDEX is not supported.
+      if (version != "3.1") {
+        client.runSqlHive("CREATE TABLE indexed_table (key INT)")
+        client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
+          "as 'COMPACT' WITH DEFERRED REBUILD")
+      }
     }
 
     ///////////////////////////////////////////////////////////////////////////

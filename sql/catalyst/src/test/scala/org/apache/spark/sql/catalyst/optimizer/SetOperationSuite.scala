@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.BooleanType
 
 class SetOperationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -143,5 +144,83 @@ class SetOperationSuite extends PlanTest {
       Union(Distinct(Union(query1 :: query2 :: Nil)),
             Distinct(Union(query3 :: query4 :: Nil))).analyze
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
+  }
+
+  test("EXCEPT ALL rewrite") {
+    val input = Except(testRelation, testRelation2, isAll = true)
+    val rewrittenPlan = RewriteExceptAll(input)
+
+    val planFragment = testRelation.select(Literal(1L).as("vcol"), 'a, 'b, 'c)
+      .union(testRelation2.select(Literal(-1L).as("vcol"), 'd, 'e, 'f))
+      .groupBy('a, 'b, 'c)('a, 'b, 'c, sum('vcol).as("sum"))
+      .where(GreaterThan('sum, Literal(0L))).analyze
+    val multiplerAttr = planFragment.output.last
+    val output = planFragment.output.dropRight(1)
+    val expectedPlan = Project(output,
+      Generate(
+        ReplicateRows(Seq(multiplerAttr) ++ output),
+        Nil,
+        false,
+        None,
+        output,
+        planFragment
+      ))
+    comparePlans(expectedPlan, rewrittenPlan)
+  }
+
+  test("INTERSECT ALL rewrite") {
+    val input = Intersect(testRelation, testRelation2, isAll = true)
+    val rewrittenPlan = RewriteIntersectAll(input)
+    val leftRelation = testRelation
+      .select(Literal(true).as("vcol1"), Literal(null, BooleanType).as("vcol2"), 'a, 'b, 'c)
+    val rightRelation = testRelation2
+      .select(Literal(null, BooleanType).as("vcol1"), Literal(true).as("vcol2"), 'd, 'e, 'f)
+    val planFragment = leftRelation.union(rightRelation)
+      .groupBy('a, 'b, 'c)(count('vcol1).as("vcol1_count"),
+        count('vcol2).as("vcol2_count"), 'a, 'b, 'c)
+      .where(And(GreaterThanOrEqual('vcol1_count, Literal(1L)),
+        GreaterThanOrEqual('vcol2_count, Literal(1L))))
+      .select('a, 'b, 'c,
+        If(GreaterThan('vcol1_count, 'vcol2_count), 'vcol2_count, 'vcol1_count).as("min_count"))
+      .analyze
+    val multiplerAttr = planFragment.output.last
+    val output = planFragment.output.dropRight(1)
+    val expectedPlan = Project(output,
+      Generate(
+        ReplicateRows(Seq(multiplerAttr) ++ output),
+        Nil,
+        false,
+        None,
+        output,
+        planFragment
+      ))
+    comparePlans(expectedPlan, rewrittenPlan)
+  }
+
+  test("SPARK-23356 union: expressions with literal in project list are pushed down") {
+    val unionQuery = testUnion.select(('a + 1).as("aa"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 1).as("aa")) ::
+        testRelation2.select(('d + 1).as("aa")) ::
+        testRelation3.select(('g + 1).as("aa")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: expressions in project list are pushed down") {
+    val unionQuery = testUnion.select(('a + 'b).as("ab"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 'b).as("ab")) ::
+        testRelation2.select(('d + 'e).as("ab")) ::
+        testRelation3.select(('g + 'h).as("ab")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: no pushdown for non-deterministic expression") {
+    val unionQuery = testUnion.select('a, Rand(10).as("rnd"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer = unionQuery.analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
   }
 }

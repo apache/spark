@@ -18,13 +18,11 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import scala.collection.JavaConverters._
-
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 
-import org.apache.spark.SparkException
+import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils
 
@@ -99,82 +97,10 @@ private[k8s] class LoggingPodStatusWatcherImpl(
     scheduler.shutdown()
   }
 
-  private def formatPodState(pod: Pod): String = {
-    val details = Seq[(String, String)](
-      // pod metadata
-      ("pod name", pod.getMetadata.getName),
-      ("namespace", pod.getMetadata.getNamespace),
-      ("labels", pod.getMetadata.getLabels.asScala.mkString(", ")),
-      ("pod uid", pod.getMetadata.getUid),
-      ("creation time", formatTime(pod.getMetadata.getCreationTimestamp)),
-
-      // spec details
-      ("service account name", pod.getSpec.getServiceAccountName),
-      ("volumes", pod.getSpec.getVolumes.asScala.map(_.getName).mkString(", ")),
-      ("node name", pod.getSpec.getNodeName),
-
-      // status
-      ("start time", formatTime(pod.getStatus.getStartTime)),
-      ("container images",
-        pod.getStatus.getContainerStatuses
-          .asScala
-          .map(_.getImage)
-          .mkString(", ")),
-      ("phase", pod.getStatus.getPhase),
-      ("status", pod.getStatus.getContainerStatuses.toString)
-    )
-
-    formatPairsBundle(details)
-  }
-
-  private def formatPairsBundle(pairs: Seq[(String, String)]) = {
-    // Use more loggable format if value is null or empty
-    pairs.map {
-      case (k, v) => s"\n\t $k: ${Option(v).filter(_.nonEmpty).getOrElse("N/A")}"
-    }.mkString("")
-  }
-
   override def awaitCompletion(): Unit = {
     podCompletedFuture.await()
     logInfo(pod.map { p =>
       s"Container final statuses:\n\n${containersDescription(p)}"
     }.getOrElse("No containers were found in the driver pod."))
-  }
-
-  private def containersDescription(p: Pod): String = {
-    p.getStatus.getContainerStatuses.asScala.map { status =>
-      Seq(
-        ("Container name", status.getName),
-        ("Container image", status.getImage)) ++
-        containerStatusDescription(status)
-    }.map(formatPairsBundle).mkString("\n\n")
-  }
-
-  private def containerStatusDescription(
-      containerStatus: ContainerStatus): Seq[(String, String)] = {
-    val state = containerStatus.getState
-    Option(state.getRunning)
-      .orElse(Option(state.getTerminated))
-      .orElse(Option(state.getWaiting))
-      .map {
-        case running: ContainerStateRunning =>
-          Seq(
-            ("Container state", "Running"),
-            ("Container started at", formatTime(running.getStartedAt)))
-        case waiting: ContainerStateWaiting =>
-          Seq(
-            ("Container state", "Waiting"),
-            ("Pending reason", waiting.getReason))
-        case terminated: ContainerStateTerminated =>
-          Seq(
-            ("Container state", "Terminated"),
-            ("Exit code", terminated.getExitCode.toString))
-        case unknown =>
-          throw new SparkException(s"Unexpected container status type ${unknown.getClass}.")
-        }.getOrElse(Seq(("Container state", "N/A")))
-  }
-
-  private def formatTime(time: Time): String = {
-    if (time != null) time.getTime else "N/A"
   }
 }

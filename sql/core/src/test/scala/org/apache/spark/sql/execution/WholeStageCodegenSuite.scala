@@ -32,6 +32,8 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
 
+  import testImplicits._
+
   test("range/filter should be combined") {
     val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
     val plan = df.queryExecution.executedPlan
@@ -49,12 +51,12 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
-    val df = spark.range(3).groupBy("id").count().orderBy("id")
+    val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
+    assert(df.collect() === Array(Row(0, 1), Row(2, 1), Row(4, 1)))
   }
 
   test("BroadcastHashJoin should be included in WholeStageCodegen") {
@@ -306,5 +308,35 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
 
       // a different query can result in codegen cache miss, that's by design
     }
+  }
+
+  ignore("SPARK-23598: Codegen working for lots of aggregation operations without runtime errors") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      var df = Seq((8, "bat"), (15, "mouse"), (5, "horse")).toDF("age", "name")
+      for (i <- 0 until 70) {
+        df = df.groupBy("name").agg(avg("age").alias("age"))
+      }
+      assert(df.limit(1).collect() === Array(Row("bat", 8.0)))
+    }
+  }
+
+  test("SPARK-25767: Lazy evaluated stream of expressions handled correctly") {
+    val a = Seq(1).toDF("key")
+    val b = Seq((1, "a")).toDF("key", "value")
+    val c = Seq(1).toDF("key")
+
+    val ab = a.join(b, Stream("key"), "left")
+    val abc = ab.join(c, Seq("key"), "left")
+
+    checkAnswer(abc, Row(1, "a"))
+  }
+
+  test("SPARK-26680: Stream in groupBy does not cause StackOverflowError") {
+    val groupByCols = Stream(col("key"))
+    val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
+      .groupBy(groupByCols: _*)
+      .max("value")
+
+    checkAnswer(df, Seq(Row(1, 3), Row(2, 3)))
   }
 }

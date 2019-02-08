@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
@@ -141,7 +141,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     MLTestingUtils.checkCopyAndUids(rf, model)
 
-    testTransformer[(Vector, Double)](df, model, "prediction", "rawPrediction",
+    testTransformer[(Vector, Double, Double)](df, model, "prediction", "rawPrediction",
       "probability") { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
       assert(pred === rawPred.argmax,
         s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
@@ -155,6 +155,22 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       Vector, RandomForestClassificationModel](this, model, df)
   }
 
+  test("prediction on single instance") {
+    val rdd = orderedLabeledPoints5_20
+    val rf = new RandomForestClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setSeed(123)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val numClasses = 2
+
+    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val model = rf.fit(df)
+
+    testPredictionModelSinglePrediction(model, df)
+  }
+
   test("Fitting without numClasses in metadata") {
     val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val rf = new RandomForestClassifier().setMaxDepth(1).setNumTrees(1)
@@ -164,7 +180,6 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
-
   test("Feature importance with toy data") {
     val numClasses = 2
     val rf = new RandomForestClassifier()

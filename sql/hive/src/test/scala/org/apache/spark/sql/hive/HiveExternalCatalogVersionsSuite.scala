@@ -49,44 +49,55 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
   override def afterAll(): Unit = {
-    Utils.deleteRecursively(wareHousePath)
-    Utils.deleteRecursively(tmpDataDir)
-    Utils.deleteRecursively(sparkTestingDir)
-    super.afterAll()
+    try {
+      Utils.deleteRecursively(wareHousePath)
+      Utils.deleteRecursively(tmpDataDir)
+      Utils.deleteRecursively(sparkTestingDir)
+    } finally {
+      super.afterAll()
+    }
   }
 
   private def tryDownloadSpark(version: String, path: String): Unit = {
-    // Try mirrors a few times until one succeeds
-    for (i <- 0 until 3) {
-      // we don't retry on a failure to get mirror url. If we can't get a mirror url,
-      // the test fails (getStringFromUrl will throw an exception)
-      val preferredMirror =
-        getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true")
+    // Try a few mirrors first; fall back to Apache archive
+    val mirrors =
+      (0 until 2).flatMap { _ =>
+        try {
+          Some(getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true"))
+        } catch {
+          // If we can't get a mirror URL, skip it. No retry.
+          case _: Exception => None
+        }
+      }
+    val sites = mirrors.distinct :+ "https://archive.apache.org/dist"
+    logInfo(s"Trying to download Spark $version from $sites")
+    for (site <- sites) {
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
-      val url = s"$preferredMirror/spark/spark-$version/$filename"
+      val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
       try {
         getFileFromUrl(url, path, filename)
-        return
+        val downloaded = new File(sparkTestingDir, filename).getCanonicalPath
+        val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
+
+        Seq("mkdir", targetDir).!
+        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
+        Seq("rm", downloaded).!
+
+        // For a corrupted file, `tar` returns non-zero values. However, we also need to check
+        // the extracted file because `tar` returns 0 for empty file.
+        val sparkSubmit = new File(sparkTestingDir, s"spark-$version/bin/spark-submit")
+        if (exitCode == 0 && sparkSubmit.exists()) {
+          return
+        } else {
+          Seq("rm", "-rf", targetDir).!
+        }
       } catch {
-        case ex: Exception => logWarning(s"Failed to download Spark $version from $url", ex)
+        case ex: Exception =>
+          logWarning(s"Failed to download Spark $version from $url: ${ex.getMessage}")
       }
     }
     fail(s"Unable to download Spark $version")
-  }
-
-
-  private def downloadSpark(version: String): Unit = {
-    tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
-
-    val downloaded = new File(sparkTestingDir, s"spark-$version-bin-hadoop2.7.tgz").getCanonicalPath
-    val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
-
-    Seq("mkdir", targetDir).!
-
-    Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
-
-    Seq("rm", downloaded).!
   }
 
   private def genDataDir(name: String): String = {
@@ -161,7 +172,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
-        downloadSpark(version)
+        tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
 
       val args = Seq(
@@ -173,7 +184,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
         tempPyFile.getCanonicalPath)
-      runSparkSubmit(args, Some(sparkHome.getCanonicalPath))
+      runSparkSubmit(args, Some(sparkHome.getCanonicalPath), false)
     }
 
     tempPyFile.delete()
@@ -195,7 +206,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.0.2", "2.1.2", "2.2.0", "2.2.1", "2.3.0")
+  val testingVersions = Seq("2.3.2", "2.4.0")
 
   protected var spark: SparkSession = _
 

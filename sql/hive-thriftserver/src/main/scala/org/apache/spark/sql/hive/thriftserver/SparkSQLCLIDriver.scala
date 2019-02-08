@@ -34,7 +34,8 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.log4j.{Level, Logger}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.SparkConf
@@ -42,6 +43,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -119,6 +121,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         conf.set(key, value)
         sessionState.getOverriddenConfigurations.put(key, value)
       }
+    }
+
+    val tokenProvider = new HiveDelegationTokenProvider()
+    if (tokenProvider.delegationTokensRequired(sparkConf, hadoopConf)) {
+      val credentials = new Credentials()
+      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, Set.empty, credentials)
+      UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
     SessionState.start(sessionState)
@@ -249,6 +258,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
+    cli.printMasterAndAppId
+
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
@@ -291,10 +302,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   private val console = new SessionState.LogHelper(LOG)
 
-  if (sessionState.getIsSilent) {
-    Logger.getRootLogger.setLevel(Level.WARN)
-  }
-
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
   }
@@ -306,6 +313,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
     SparkSQLEnv.init()
+    if (sessionState.getIsSilent) {
+      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+    }
   } else {
     // Hive 1.2 + not supported in CLI
     throw new RuntimeException("Remote operations not supported")
@@ -313,6 +323,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
     hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
+  }
+
+  def printMasterAndAppId(): Unit = {
+    val master = SparkSQLEnv.sparkContext.master
+    val appId = SparkSQLEnv.sparkContext.applicationId
+    console.printInfo(s"Spark master: $master, Application Id: $appId")
   }
 
   override def processCmd(cmd: String): Int = {

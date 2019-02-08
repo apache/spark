@@ -105,6 +105,7 @@ private[hive] class HiveClientImpl(
     case hive.v2_1 => new Shim_v2_1()
     case hive.v2_2 => new Shim_v2_2()
     case hive.v2_3 => new Shim_v2_3()
+    case hive.v3_1 => new Shim_v3_1()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -353,15 +354,19 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala
   }
 
+  private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
+    Option(client.getTable(dbName, tableName, false /* do not throw exception */))
+  }
+
   override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
-    Option(client.getTable(dbName, tableName, false /* do not throw exception */)).nonEmpty
+    getRawTableOption(dbName, tableName).nonEmpty
   }
 
   override def getTableOption(
       dbName: String,
       tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
-    Option(client.getTable(dbName, tableName, false)).map { h =>
+    getRawTableOption(dbName, tableName).map { h =>
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
       val cols = h.getCols.asScala.map(fromHiveColumn)
@@ -463,9 +468,12 @@ private[hive] class HiveClientImpl(
         properties = filteredProperties,
         stats = readHiveStats(properties),
         comment = comment,
-        // In older versions of Spark(before 2.2.0), we expand the view original text and store
-        // that into `viewExpandedText`, and that should be used in view resolution. So we get
-        // `viewExpandedText` instead of `viewOriginalText` for viewText here.
+        // In older versions of Spark(before 2.2.0), we expand the view original text and
+        // store that into `viewExpandedText`, that should be used in view resolution.
+        // We get `viewExpandedText` as viewText, and also get `viewOriginalText` in order to
+        // display the original view text in `DESC [EXTENDED|FORMATTED] table` command for views
+        // that created by older versions of Spark.
+        viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures,
         ignoredProperties = ignoredProperties.toMap)
@@ -845,11 +853,17 @@ private[hive] class HiveClientImpl(
     client.getAllTables("default").asScala.foreach { t =>
       logDebug(s"Deleting table $t")
       val table = client.getTable("default", t)
-      client.getIndexes("default", t, 255).asScala.foreach { index =>
-        shim.dropIndex(client, "default", t, index.getIndexName)
-      }
-      if (!table.isIndexTable) {
-        client.dropTable("default", t)
+      try {
+        client.getIndexes("default", t, 255).asScala.foreach { index =>
+          shim.dropIndex(client, "default", t, index.getIndexName)
+        }
+        if (!table.isIndexTable) {
+          client.dropTable("default", t)
+        }
+      } catch {
+        case _: NoSuchMethodError =>
+          // HIVE-18448 Hive 3.0 remove index APIs
+          client.dropTable("default", t)
       }
     }
     client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
@@ -923,6 +937,9 @@ private[hive] object HiveClientImpl {
       case CatalogTableType.MANAGED =>
         HiveTableType.MANAGED_TABLE
       case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at toHiveTable: $t")
     })
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
@@ -995,6 +1012,8 @@ private[hive] object HiveClientImpl {
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
+    tpart.setCreateTime((p.createTime / 1000).toInt)
+    tpart.setLastAccessTime((p.lastAccessTime / 1000).toInt)
     tpart.setParameters(mutable.Map(p.parameters.toSeq: _*).asJava)
     new HivePartition(ht, tpart)
   }
@@ -1019,6 +1038,8 @@ private[hive] object HiveClientImpl {
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
+      createTime = apiPartition.getCreateTime.toLong * 1000,
+      lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,
       stats = readHiveStats(properties))
   }

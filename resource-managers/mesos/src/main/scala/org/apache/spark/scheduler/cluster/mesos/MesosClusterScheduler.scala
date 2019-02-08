@@ -30,9 +30,9 @@ import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
-import org.apache.spark.deploy.mesos.MesosDriverDescription
-import org.apache.spark.deploy.mesos.config
+import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
@@ -130,7 +130,7 @@ private[spark] class MesosClusterScheduler(
   private val queuedCapacity = conf.getInt("spark.mesos.maxDrivers", 200)
   private val retainedDrivers = conf.getInt("spark.mesos.retainedDrivers", 200)
   private val maxRetryWaitTime = conf.getInt("spark.mesos.cluster.retry.wait.max", 60) // 1 minute
-  private val useFetchCache = conf.getBoolean("spark.mesos.fetchCache.enable", false)
+  private val useFetchCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   // Keyed by submission id
@@ -203,7 +203,7 @@ private[spark] class MesosClusterScheduler(
       } else if (removeFromPendingRetryDrivers(submissionId)) {
         k.success = true
         k.message = "Removed driver while it's being retried"
-      } else if (finishedDrivers.exists(_.driverDescription.submissionId.equals(submissionId))) {
+      } else if (finishedDrivers.exists(_.driverDescription.submissionId == submissionId)) {
         k.success = false
         k.message = "Driver already terminated"
       } else {
@@ -223,21 +223,21 @@ private[spark] class MesosClusterScheduler(
     }
     s.submissionId = submissionId
     stateLock.synchronized {
-      if (queuedDrivers.exists(_.submissionId.equals(submissionId))) {
+      if (queuedDrivers.exists(_.submissionId == submissionId)) {
         s.success = true
         s.driverState = "QUEUED"
       } else if (launchedDrivers.contains(submissionId)) {
         s.success = true
         s.driverState = "RUNNING"
         launchedDrivers(submissionId).mesosTaskStatus.foreach(state => s.message = state.toString)
-      } else if (finishedDrivers.exists(_.driverDescription.submissionId.equals(submissionId))) {
+      } else if (finishedDrivers.exists(_.driverDescription.submissionId == submissionId)) {
         s.success = true
         s.driverState = "FINISHED"
         finishedDrivers
           .find(d => d.driverDescription.submissionId.equals(submissionId)).get.mesosTaskStatus
           .foreach(state => s.message = state.toString)
-      } else if (pendingRetryDrivers.exists(_.submissionId.equals(submissionId))) {
-        val status = pendingRetryDrivers.find(_.submissionId.equals(submissionId))
+      } else if (pendingRetryDrivers.exists(_.submissionId == submissionId)) {
+        val status = pendingRetryDrivers.find(_.submissionId == submissionId)
           .get.retryState.get.lastFailureStatus
         s.success = true
         s.driverState = "RETRYING"
@@ -255,13 +255,13 @@ private[spark] class MesosClusterScheduler(
    */
   def getDriverState(submissionId: String): Option[MesosDriverState] = {
     stateLock.synchronized {
-      queuedDrivers.find(_.submissionId.equals(submissionId))
+      queuedDrivers.find(_.submissionId == submissionId)
         .map(d => new MesosDriverState("QUEUED", d))
         .orElse(launchedDrivers.get(submissionId)
           .map(d => new MesosDriverState("RUNNING", d.driverDescription, Some(d))))
-        .orElse(finishedDrivers.find(_.driverDescription.submissionId.equals(submissionId))
+        .orElse(finishedDrivers.find(_.driverDescription.submissionId == submissionId)
           .map(d => new MesosDriverState("FINISHED", d.driverDescription, Some(d))))
-        .orElse(pendingRetryDrivers.find(_.submissionId.equals(submissionId))
+        .orElse(pendingRetryDrivers.find(_.submissionId == submissionId)
           .map(d => new MesosDriverState("RETRYING", d)))
     }
   }
@@ -366,8 +366,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverExecutorURI(desc: MesosDriverDescription): Option[String] = {
-    desc.conf.getOption("spark.executor.uri")
-      .orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
+    desc.conf.get(config.EXECUTOR_URI).orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
   }
 
   private def getDriverFrameworkID(desc: MesosDriverDescription): String = {
@@ -418,17 +417,33 @@ private[spark] class MesosClusterScheduler(
     envBuilder.build()
   }
 
+  private def isContainerLocalAppJar(desc: MesosDriverDescription): Boolean = {
+    val isLocalJar = desc.jarUrl.startsWith("local://")
+    val isContainerLocal = desc.conf.getOption("spark.mesos.appJar.local.resolution.mode").exists {
+      case "container" => true
+      case "host" => false
+      case other =>
+        logWarning(s"Unknown spark.mesos.appJar.local.resolution.mode $other, using host.")
+        false
+      }
+    isLocalJar && isContainerLocal
+  }
+
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
     val confUris = List(conf.getOption("spark.mesos.uris"),
       desc.conf.getOption("spark.mesos.uris"),
-      desc.conf.getOption("spark.submit.pyFiles")).flatMap(
+      Some(desc.conf.get(SUBMIT_PYTHON_FILES).mkString(","))).flatMap(
       _.map(_.split(",").map(_.trim))
     ).flatten
 
-    val jarUrl = desc.jarUrl.stripPrefix("file:").stripPrefix("local:")
-
-    ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
-      CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
+    if (isContainerLocalAppJar(desc)) {
+      (confUris ++ getDriverExecutorURI(desc).toList).map(uri =>
+        CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
+    } else {
+      val jarUrl = desc.jarUrl.stripPrefix("file:").stripPrefix("local:")
+      ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
+        CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
+    }
   }
 
   private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
@@ -459,7 +474,7 @@ private[spark] class MesosClusterScheduler(
     } else if (executorUri.isDefined) {
       val folderBasename = executorUri.get.split('/').last.split('.').head
 
-      val entries = conf.getOption("spark.executor.extraLibraryPath")
+      val entries = conf.get(EXECUTOR_LIBRARY_PATH)
         .map(path => Seq(path) ++ desc.command.libraryPathEntries)
         .getOrElse(desc.command.libraryPathEntries)
 
@@ -480,7 +495,14 @@ private[spark] class MesosClusterScheduler(
       (cmdExecutable, ".")
     }
     val cmdOptions = generateCmdOption(desc, sandboxPath).mkString(" ")
-    val primaryResource = new File(sandboxPath, desc.jarUrl.split("/").last).toString()
+    val primaryResource = {
+      if (isContainerLocalAppJar(desc)) {
+        new File(desc.jarUrl.stripPrefix("local://")).toString()
+      } else {
+        new File(sandboxPath, desc.jarUrl.split("/").last).toString()
+      }
+    }
+
     val appArguments = desc.command.arguments.mkString(" ")
 
     s"$executable $cmdOptions $primaryResource $appArguments"
@@ -506,22 +528,22 @@ private[spark] class MesosClusterScheduler(
       options ++= Seq("--class", desc.command.mainClass)
     }
 
-    desc.conf.getOption("spark.executor.memory").foreach { v =>
+    desc.conf.getOption(EXECUTOR_MEMORY.key).foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
-    desc.conf.getOption("spark.cores.max").foreach { v =>
+    desc.conf.getOption(CORES_MAX.key).foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
-    desc.conf.getOption("spark.submit.pyFiles").foreach { pyFiles =>
-      val formattedFiles = pyFiles.split(",")
-        .map { path => new File(sandboxPath, path.split("/").last).toString() }
-        .mkString(",")
-      options ++= Seq("--py-files", formattedFiles)
-    }
+
+    val pyFiles = desc.conf.get(SUBMIT_PYTHON_FILES)
+    val formattedFiles = pyFiles.map { path =>
+      new File(sandboxPath, path.split("/").last).toString()
+    }.mkString(",")
+    options ++= Seq("--py-files", formattedFiles)
 
     // --conf
     val replicatedOptionsBlacklist = Set(
-      "spark.jars", // Avoids duplicate classes in classpath
+      JARS.key, // Avoids duplicate classes in classpath
       "spark.submit.deployMode", // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master
     )
@@ -530,9 +552,9 @@ private[spark] class MesosClusterScheduler(
       .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
       .toMap
     (defaultConf ++ driverConf).foreach { case (key, value) =>
-      options ++= Seq("--conf", s""""$key=${shellEscape(value)}"""".stripMargin) }
+      options ++= Seq("--conf", s"${key}=${value}") }
 
-    options
+    options.map(shellEscape)
   }
 
   /**
@@ -792,7 +814,7 @@ private[spark] class MesosClusterScheduler(
       status: Int): Unit = {}
 
   private def removeFromQueuedDrivers(subId: String): Boolean = {
-    val index = queuedDrivers.indexWhere(_.submissionId.equals(subId))
+    val index = queuedDrivers.indexWhere(_.submissionId == subId)
     if (index != -1) {
       queuedDrivers.remove(index)
       queuedDriversState.expunge(subId)
@@ -812,7 +834,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def removeFromPendingRetryDrivers(subId: String): Boolean = {
-    val index = pendingRetryDrivers.indexWhere(_.submissionId.equals(subId))
+    val index = pendingRetryDrivers.indexWhere(_.submissionId == subId)
     if (index != -1) {
       pendingRetryDrivers.remove(index)
       pendingRetryDriversState.expunge(subId)

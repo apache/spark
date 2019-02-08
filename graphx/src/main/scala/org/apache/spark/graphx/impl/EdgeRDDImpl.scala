@@ -58,7 +58,7 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
-  override def unpersist(blocking: Boolean = true): this.type = {
+  override def unpersist(blocking: Boolean = false): this.type = {
     partitionsRDD.unpersist(blocking)
     this
   }
@@ -87,7 +87,7 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
 
   /** The number of edges in the RDD. */
   override def count(): Long = {
-    partitionsRDD.map(_._2.size.toLong).reduce(_ + _)
+    partitionsRDD.map(_._2.size.toLong).fold(0)(_ + _)
   }
 
   override def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDDImpl[ED2, VD] =

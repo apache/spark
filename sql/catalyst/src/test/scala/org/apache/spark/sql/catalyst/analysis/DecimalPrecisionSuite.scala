@@ -272,6 +272,15 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-24468: operations on decimals with negative scale") {
+    val a = AttributeReference("a", DecimalType(3, -10))()
+    val b = AttributeReference("b", DecimalType(1, -1))()
+    val c = AttributeReference("c", DecimalType(35, 1))()
+    checkType(Multiply(a, b), DecimalType(5, -11))
+    checkType(Multiply(a, c), DecimalType(38, -9))
+    checkType(Multiply(b, c), DecimalType(37, 0))
+  }
+
   /** strength reduction for integer/decimal comparisons */
   def ruleTest(initial: Expression, transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())

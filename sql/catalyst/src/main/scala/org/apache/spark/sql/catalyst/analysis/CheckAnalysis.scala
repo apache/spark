@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -66,11 +68,15 @@ trait CheckAnalysis extends PredicateHelper {
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
         s"The limit expression must be integer type, but got " +
-          e.dataType.simpleString)
-      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
-        "The limit expression must be equal to or greater than 0, but got " +
-          e.eval().asInstanceOf[Int])
-      case e => // OK
+          e.dataType.catalogString)
+      case e =>
+        e.eval() match {
+          case null => failAnalysis(
+            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+          case v: Int if v < 0 => failAnalysis(
+            s"The limit expression must be equal to or greater than 0, but got $v")
+          case _ => // OK
+        }
     }
   }
 
@@ -78,10 +84,27 @@ trait CheckAnalysis extends PredicateHelper {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+
+      case p if p.analyzed => // Skip already analyzed sub-plans
+
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
+        // Check argument data types of higher-order functions downwards first.
+        // If the arguments of the higher-order functions are resolved but the type check fails,
+        // the argument functions will not get resolved, but we should report the argument type
+        // check failure instead of claiming the argument functions are unresolved.
+        operator transformExpressionsDown {
+          case hof: HigherOrderFunction
+              if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
+            hof.checkArgumentDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                hof.failAnalysis(
+                  s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
+            }
+        }
+
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.qualifiedName).mkString(", ")
@@ -95,8 +118,8 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case c: Cast if !c.resolved =>
-            failAnalysis(
-              s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
+            failAnalysis(s"invalid cast from ${c.child.dataType.catalogString} to " +
+              c.dataType.catalogString)
 
           case g: Grouping =>
             failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
@@ -114,9 +137,11 @@ trait CheckAnalysis extends PredicateHelper {
 
           case w @ WindowExpression(e, s) =>
             // Only allow window functions with an aggregate expression or an offset window
-            // function.
+            // function or a Pandas window UDF.
             e match {
               case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+                w
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
                 w
               case _ =>
                 failAnalysis(s"Expression '$e' not supported within a window function.")
@@ -136,25 +161,25 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
                 failAnalysis(
                   s"Event time must be defined on a window or a timestamp, but " +
-                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.simpleString}")
+                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.catalogString}")
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
-                s"of type ${f.condition.dataType.simpleString} is not a boolean.")
+                s"of type ${f.condition.dataType.catalogString} is not a boolean.")
 
           case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
             failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
               s"conditions: $condition")
 
-          case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
+          case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
-                s"of type ${condition.dataType.simpleString} is not a boolean.")
+                s"of type ${condition.dataType.catalogString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression) = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupAggPandasUDF(expr)
+              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
 
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
@@ -211,7 +236,7 @@ trait CheckAnalysis extends PredicateHelper {
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
-                    s"because its data type ${expr.dataType.simpleString} is not an orderable " +
+                    s"because its data type ${expr.dataType.catalogString} is not an orderable " +
                     s"data type.")
               }
 
@@ -231,7 +256,7 @@ trait CheckAnalysis extends PredicateHelper {
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
                 failAnalysis(
-                  s"sorting is not supported for columns of type ${order.dataType.simpleString}")
+                  s"sorting is not supported for columns of type ${order.dataType.catalogString}")
               }
             }
 
@@ -279,7 +304,7 @@ trait CheckAnalysis extends PredicateHelper {
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
             val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
-              s"from $input in operator ${operator.simpleString}."
+              s"from $input in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}."
 
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
@@ -334,7 +359,7 @@ trait CheckAnalysis extends PredicateHelper {
             val mapCol = mapColumnInSetOperation(o).get
             failAnalysis("Cannot have map type columns in DataFrame which calls " +
               s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
-              "is " + mapCol.dataType.simpleString)
+              "is " + mapCol.dataType.catalogString)
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
@@ -344,7 +369,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"""nondeterministic expressions are only allowed in
                  |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.sql).mkString(",")}
-                 |in operator ${operator.simpleString}
+                 |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
 
           case _: UnresolvedHint =>
@@ -356,10 +381,12 @@ trait CheckAnalysis extends PredicateHelper {
     }
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
-      case AnalysisBarrier(child) if !child.resolved => checkAnalysis(child)
-      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case o if !o.resolved =>
+        failAnalysis(s"unresolved operator ${o.simpleString(SQLConf.get.maxToStringFields)}")
       case _ =>
     }
+
+    plan.setAnalyzed()
   }
 
   /**
@@ -523,9 +550,8 @@ trait CheckAnalysis extends PredicateHelper {
 
     var foundNonEqualCorrelatedPred: Boolean = false
 
-    // Simplify the predicates before validating any unsupported correlation patterns
-    // in the plan.
-    BooleanSimplification(sub).foreachUp {
+    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
+    AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
       // Whitelist operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
@@ -583,7 +609,7 @@ trait CheckAnalysis extends PredicateHelper {
         failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
 
       // Join can host correlated expressions.
-      case j @ Join(left, right, joinType, _) =>
+      case j @ Join(left, right, joinType, _, _) =>
         joinType match {
           // Inner join, like Filter, can be anywhere.
           case _: InnerLike =>
@@ -627,6 +653,6 @@ trait CheckAnalysis extends PredicateHelper {
       // are not allowed to have any correlated expressions.
       case p =>
         failOnOuterReferenceInSubTree(p)
-    }
+    }}
   }
 }

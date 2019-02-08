@@ -1123,7 +1123,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             compareStruct(childFields, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>
-            throw new NotImplementedError("Not implemented " + field.dataType)
+            throw new UnsupportedOperationException("Not implemented " + field.dataType)
         }
       }
     }
@@ -1332,5 +1332,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
 
       column.close()
+  }
+
+  testVector("WritableColumnVector.reserve(): requested capacity is negative", 1024, ByteType) {
+    column =>
+      val ex = intercept[RuntimeException] { column.reserve(-1) }
+      assert(ex.getMessage.contains(
+          "Cannot reserve additional contiguous bytes in the vectorized reader (integer overflow)"))
   }
 }

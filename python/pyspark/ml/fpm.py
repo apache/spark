@@ -16,11 +16,12 @@
 #
 
 from pyspark import keyword_only, since
+from pyspark.sql import DataFrame
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.param.shared import *
 
-__all__ = ["FPGrowth", "FPGrowthModel"]
+__all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 
 
 class HasMinSupport(Params):
@@ -144,10 +145,11 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("2.2.0")
     def associationRules(self):
         """
-        DataFrame with three columns:
+        DataFrame with four columns:
         * `antecedent`  - Array of the same type as the input column.
         * `consequent`  - Array of the same type as the input column.
         * `confidence`  - Confidence for the rule (`DoubleType`).
+        * `lift`        - Lift for the rule (`DoubleType`).
         """
         return self._call_java("associationRules")
 
@@ -156,7 +158,7 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
                HasMinSupport, HasNumPartitions, HasMinConfidence,
                JavaMLWritable, JavaMLReadable):
 
-    """
+    r"""
     .. note:: Experimental
 
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
@@ -165,8 +167,8 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
     independent group of mining tasks. The FP-Growth algorithm is described in
     Han et al., Mining frequent patterns without candidate generation [HAN2000]_
 
-    .. [LI2008] http://dx.doi.org/10.1145/1454008.1454027
-    .. [HAN2000] http://dx.doi.org/10.1145/335191.335372
+    .. [LI2008] https://doi.org/10.1145/1454008.1454027
+    .. [HAN2000] https://doi.org/10.1145/335191.335372
 
     .. note:: null values in the feature column are ignored during fit().
     .. note:: Internally `transform` `collects` and `broadcasts` association rules.
@@ -243,3 +245,105 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
 
     def _create_model(self, java_model):
         return FPGrowthModel(java_model)
+
+
+class PrefixSpan(JavaParams):
+    """
+    .. note:: Experimental
+
+    A parallel PrefixSpan algorithm to mine frequent sequential patterns.
+    The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
+    Efficiently by Prefix-Projected Pattern Growth
+    (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
+    This class is not yet an Estimator/Transformer, use :py:func:`findFrequentSequentialPatterns`
+    method to run the PrefixSpan algorithm.
+
+    @see <a href="https://en.wikipedia.org/wiki/Sequential_Pattern_Mining">Sequential Pattern Mining
+    (Wikipedia)</a>
+    .. versionadded:: 2.4.0
+
+    """
+
+    minSupport = Param(Params._dummy(), "minSupport", "The minimal support level of the " +
+                       "sequential pattern. Sequential pattern that appears more than " +
+                       "(minSupport * size-of-the-dataset) times will be output. Must be >= 0.",
+                       typeConverter=TypeConverters.toFloat)
+
+    maxPatternLength = Param(Params._dummy(), "maxPatternLength",
+                             "The maximal length of the sequential pattern. Must be > 0.",
+                             typeConverter=TypeConverters.toInt)
+
+    maxLocalProjDBSize = Param(Params._dummy(), "maxLocalProjDBSize",
+                               "The maximum number of items (including delimiters used in the " +
+                               "internal storage format) allowed in a projected database before " +
+                               "local processing. If a projected database exceeds this size, " +
+                               "another iteration of distributed prefix growth is run. " +
+                               "Must be > 0.",
+                               typeConverter=TypeConverters.toInt)
+
+    sequenceCol = Param(Params._dummy(), "sequenceCol", "The name of the sequence column in " +
+                        "dataset, rows with nulls in this column are ignored.",
+                        typeConverter=TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+                 sequenceCol="sequence"):
+        """
+        __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+                 sequenceCol="sequence")
+        """
+        super(PrefixSpan, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
+        self._setDefault(minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+                         sequenceCol="sequence")
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.4.0")
+    def setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+                  sequenceCol="sequence"):
+        """
+        setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+                  sequenceCol="sequence")
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.4.0")
+    def findFrequentSequentialPatterns(self, dataset):
+        """
+        .. note:: Experimental
+
+        Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
+
+        :param dataset: A dataframe containing a sequence column which is
+                        `ArrayType(ArrayType(T))` type, T is the item type for the input dataset.
+        :return: A `DataFrame` that contains columns of sequence and corresponding frequency.
+                 The schema of it will be:
+                 - `sequence: ArrayType(ArrayType(T))` (T is the item type)
+                 - `freq: Long`
+
+        >>> from pyspark.ml.fpm import PrefixSpan
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([Row(sequence=[[1, 2], [3]]),
+        ...                      Row(sequence=[[1], [3, 2], [1, 2]]),
+        ...                      Row(sequence=[[1, 2], [5]]),
+        ...                      Row(sequence=[[6]])]).toDF()
+        >>> prefixSpan = PrefixSpan(minSupport=0.5, maxPatternLength=5)
+        >>> prefixSpan.findFrequentSequentialPatterns(df).sort("sequence").show(truncate=False)
+        +----------+----+
+        |sequence  |freq|
+        +----------+----+
+        |[[1]]     |3   |
+        |[[1], [3]]|2   |
+        |[[1, 2]]  |3   |
+        |[[2]]     |3   |
+        |[[3]]     |2   |
+        +----------+----+
+
+        .. versionadded:: 2.4.0
+        """
+        self._transfer_params_to_java()
+        jdf = self._java_obj.findFrequentSequentialPatterns(dataset._jdf)
+        return DataFrame(jdf, dataset.sql_ctx)

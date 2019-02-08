@@ -31,6 +31,7 @@ import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
@@ -57,8 +58,7 @@ private[deploy] class DriverRunner(
   @volatile private[worker] var finalException: Option[Exception] = None
 
   // Timeout to wait for when trying to terminate a driver.
-  private val DRIVER_TERMINATE_TIMEOUT_MS =
-    conf.getTimeAsMs("spark.worker.driverTerminateTimeout", "10s")
+  private val driverTerminateTimeoutMs = conf.get(WORKER_DRIVER_TERMINATE_TIMEOUT)
 
   // Decoupled for testing
   def setClock(_clock: Clock): Unit = {
@@ -122,7 +122,7 @@ private[deploy] class DriverRunner(
     killed = true
     synchronized {
       process.foreach { p =>
-        val exitCode = Utils.terminateProcess(p, DRIVER_TERMINATE_TIMEOUT_MS)
+        val exitCode = Utils.terminateProcess(p, driverTerminateTimeoutMs)
         if (exitCode.isEmpty) {
           logWarning("Failed to terminate driver process: " + p +
               ". This process will likely be orphaned.")
@@ -225,7 +225,7 @@ private[deploy] class DriverRunner(
       // check if attempting another run
       keepTrying = supervise && exitCode != 0 && !killed
       if (keepTrying) {
-        if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
+        if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000L) {
           waitSeconds = 1
         }
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")

@@ -27,6 +27,8 @@ import scala.concurrent.duration._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
@@ -51,7 +53,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("local mode, FIFO scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
+    val conf = new SparkConf().set(SCHEDULER_MODE, "FIFO")
     sc = new SparkContext("local[2]", "test", conf)
     testCount()
     testTake()
@@ -60,9 +62,9 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("local mode, fair scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
+    val conf = new SparkConf().set(SCHEDULER_MODE, "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    conf.set("spark.scheduler.allocation.file", xmlPath)
+    conf.set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext("local[2]", "test", conf)
     testCount()
     testTake()
@@ -71,7 +73,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("cluster mode, FIFO scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
+    val conf = new SparkConf().set(SCHEDULER_MODE, "FIFO")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     testCount()
     testTake()
@@ -80,9 +82,9 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("cluster mode, fair scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
+    val conf = new SparkConf().set(SCHEDULER_MODE, "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    conf.set("spark.scheduler.allocation.file", xmlPath)
+    conf.set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     testCount()
     testTake()
@@ -216,8 +218,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
   test("task reaper kills JVM if killed tasks keep running for too long") {
     val conf = new SparkConf()
-      .set("spark.task.reaper.enabled", "true")
-      .set("spark.task.reaper.killTimeout", "5s")
+      .set(TASK_REAPER_ENABLED, true)
+      .set(TASK_REAPER_KILL_TIMEOUT.key, "5s")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
     // Add a listener to release the semaphore once any tasks are launched.
@@ -253,10 +255,10 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
   test("task reaper will not kill JVM if spark.task.killTimeout == -1") {
     val conf = new SparkConf()
-      .set("spark.task.reaper.enabled", "true")
-      .set("spark.task.reaper.killTimeout", "-1")
-      .set("spark.task.reaper.PollingInterval", "1s")
-      .set("spark.deploy.maxExecutorRetries", "1")
+      .set(TASK_REAPER_ENABLED, true)
+      .set(TASK_REAPER_KILL_TIMEOUT.key, "-1")
+      .set(TASK_REAPER_POLLING_INTERVAL.key, "1s")
+      .set(MAX_EXECUTOR_RETRIES, 1)
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
     // Add a listener to release the semaphore once any tasks are launched.
@@ -332,13 +334,15 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     import JobCancellationSuite._
     sc = new SparkContext("local[2]", "test interruptible iterator")
 
+    // Increase the number of elements to be proceeded to avoid this test being flaky.
+    val numElements = 10000
     val taskCompletedSem = new Semaphore(0)
 
     sc.addSparkListener(new SparkListener {
       override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
         // release taskCancelledSemaphore when cancelTasks event has been posted
         if (stageCompleted.stageInfo.stageId == 1) {
-          taskCancelledSemaphore.release(1000)
+          taskCancelledSemaphore.release(numElements)
         }
       }
 
@@ -349,28 +353,31 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       }
     })
 
-    val f = sc.parallelize(1 to 1000).map { i => (i, i) }
+    // Explicitly disable interrupt task thread on cancelling tasks, so the task thread can only be
+    // interrupted by `InterruptibleIterator`.
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+
+    val f = sc.parallelize(1 to numElements).map { i => (i, i) }
       .repartitionAndSortWithinPartitions(new HashPartitioner(1))
       .mapPartitions { iter =>
         taskStartedSemaphore.release()
         iter
       }.foreachAsync { x =>
-        if (x._1 >= 10) {
-          // This block of code is partially executed. It will be blocked when x._1 >= 10 and the
-          // next iteration will be cancelled if the source iterator is interruptible. Then in this
-          // case, the maximum num of increment would be 10(|1...10|)
-          taskCancelledSemaphore.acquire()
-        }
+        // Block this code from being executed, until the job get cancelled. In this case, if the
+        // source iterator is interruptible, the max number of increment should be under
+        // `numElements`.
+        taskCancelledSemaphore.acquire()
         executionOfInterruptibleCounter.getAndIncrement()
     }
 
     taskStartedSemaphore.acquire()
     // Job is cancelled when:
     // 1. task in reduce stage has been started, guaranteed by previous line.
-    // 2. task in reduce stage is blocked after processing at most 10 records as
-    //    taskCancelledSemaphore is not released until cancelTasks event is posted
-    // After job being cancelled, task in reduce stage will be cancelled and no more iteration are
-    // executed.
+    // 2. task in reduce stage is blocked as taskCancelledSemaphore is not released until
+    //    JobCancelled event is posted.
+    // After job being cancelled, task in reduce stage will be cancelled asynchronously, thus
+    // partial of the inputs should not get processed (It's very unlikely that Spark can process
+    // 10000 elements between JobCancelled is posted and task is really killed).
     f.cancel()
 
     val e = intercept[SparkException](f.get()).getCause
@@ -378,7 +385,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     // Make sure tasks are indeed completed.
     taskCompletedSem.acquire()
-    assert(executionOfInterruptibleCounter.get() <= 10)
+    assert(executionOfInterruptibleCounter.get() < numElements)
  }
 
   def testCount() {

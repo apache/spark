@@ -39,6 +39,7 @@ import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
@@ -529,7 +530,7 @@ object ALSModel extends MLReadable[ALSModel] {
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -556,7 +557,7 @@ object ALSModel extends MLReadable[ALSModel] {
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * http://dx.doi.org/10.1109/ICDM.2008.22, adapted for the blocked approach used here.
+ * https://doi.org/10.1109/ICDM.2008.22, adapted for the blocked approach used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
@@ -654,7 +655,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): ALSModel = {
+  override def fit(dataset: Dataset[_]): ALSModel = instrumented { instr =>
     transformSchema(dataset.schema)
     import dataset.sparkSession.implicits._
 
@@ -666,8 +667,9 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
 
-    val instr = Instrumentation.create(this, ratings)
-    instr.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
       itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
       seed, intermediateStorageLevel, finalStorageLevel)
 
@@ -681,7 +683,6 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
-    instr.logSuccess(model)
     copyValues(model)
   }
 

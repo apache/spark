@@ -30,6 +30,7 @@ if sys.version > '3':
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
+from pyspark.util import VersionUtils
 
 
 def _jvm():
@@ -62,7 +63,7 @@ class Identifiable(object):
         Generate a unique unicode id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[12:])
+        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
 
 
 @inherit_doc
@@ -148,6 +149,23 @@ class MLWriter(BaseReadWrite):
 
 
 @inherit_doc
+class GeneralMLWriter(MLWriter):
+    """
+    Utility class that can save ML instances in different formats.
+
+    .. versionadded:: 2.4.0
+    """
+
+    def format(self, source):
+        """
+        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        name for export).
+        """
+        self.source = source
+        return self
+
+
+@inherit_doc
 class JavaMLWriter(MLWriter):
     """
     (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaParams` types
@@ -169,6 +187,10 @@ class JavaMLWriter(MLWriter):
         self._jwrite.overwrite()
         return self
 
+    def option(self, key, value):
+        self._jwrite.option(key, value)
+        return self
+
     def context(self, sqlContext):
         """
         Sets the SQL context to use for saving.
@@ -184,6 +206,24 @@ class JavaMLWriter(MLWriter):
     def session(self, sparkSession):
         """Sets the Spark Session to use for saving."""
         self._jwrite.session(sparkSession._jsparkSession)
+        return self
+
+
+@inherit_doc
+class GeneralJavaMLWriter(JavaMLWriter):
+    """
+    (Private) Specialization of :py:class:`GeneralMLWriter` for :py:class:`JavaParams` types
+    """
+
+    def __init__(self, instance):
+        super(GeneralJavaMLWriter, self).__init__(instance)
+
+    def format(self, source):
+        """
+        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        name for export).
+        """
+        self._jwrite.format(source)
         return self
 
 
@@ -213,6 +253,17 @@ class JavaMLWritable(MLWritable):
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
+
+
+@inherit_doc
+class GeneralJavaMLWritable(JavaMLWritable):
+    """
+    (Private) Mixin for ML instances that provide :py:class:`GeneralJavaMLWriter`.
+    """
+
+    def write(self):
+        """Returns an GeneralMLWriter instance for this ML instance."""
+        return GeneralJavaMLWriter(self)
 
 
 @inherit_doc
@@ -392,6 +443,7 @@ class DefaultParamsWriter(MLWriter):
         - sparkVersion
         - uid
         - paramMap
+        - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
         :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
         :param paramMap:  If given, this is saved in the "paramMap" field.
@@ -413,15 +465,24 @@ class DefaultParamsWriter(MLWriter):
         """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
-        params = instance.extractParamMap()
+
+        # User-supplied param values
+        params = instance._paramMap
         jsonParams = {}
         if paramMap is not None:
             jsonParams = paramMap
         else:
             for p in params:
                 jsonParams[p.name] = params[p]
+
+        # Default param values
+        jsonDefaultParams = {}
+        for p in instance._defaultParamMap:
+            jsonDefaultParams[p.name] = instance._defaultParamMap[p]
+
         basicMetadata = {"class": cls, "timestamp": long(round(time.time() * 1000)),
-                         "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams}
+                         "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams,
+                         "defaultParamMap": jsonDefaultParams}
         if extraMetadata is not None:
             basicMetadata.update(extraMetadata)
         return json.dumps(basicMetadata, separators=[',',  ':'])
@@ -519,10 +580,25 @@ class DefaultParamsReader(MLReader):
         """
         Extract Params from metadata, and set them in the instance.
         """
+        # Set user-supplied param values
         for paramName in metadata['paramMap']:
             param = instance.getParam(paramName)
             paramValue = metadata['paramMap'][paramName]
             instance.set(param, paramValue)
+
+        # Set default param values
+        majorAndMinorVersions = VersionUtils.majorMinorVersion(metadata['sparkVersion'])
+        major = majorAndMinorVersions[0]
+        minor = majorAndMinorVersions[1]
+
+        # For metadata file prior to Spark 2.4, there is no default section.
+        if major > 2 or (major == 2 and minor >= 4):
+            assert 'defaultParamMap' in metadata, "Error loading metadata: Expected " + \
+                "`defaultParamMap` section not found"
+
+            for paramName in metadata['defaultParamMap']:
+                paramValue = metadata['defaultParamMap'][paramName]
+                instance._setDefault(**{paramName: paramValue})
 
     @staticmethod
     def loadParamsInstance(path, sc):
@@ -535,3 +611,29 @@ class DefaultParamsReader(MLReader):
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
+
+
+@inherit_doc
+class HasTrainingSummary(object):
+    """
+    Base class for models that provides Training summary.
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of the model trained on the training set. An exception is thrown if
+        no summary exists.
+        """
+        return (self._call_java("summary"))

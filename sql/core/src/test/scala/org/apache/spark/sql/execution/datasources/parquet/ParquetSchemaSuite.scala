@@ -20,10 +20,13 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -379,6 +382,58 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       }.getMessage
 
       assert(message.contains("Failed merging schema"))
+    }
+  }
+
+  // =======================================
+  // Tests for parquet schema mismatch error
+  // =======================================
+  def testSchemaMismatch(path: String, vectorizedReaderEnabled: Boolean): SparkException = {
+    import testImplicits._
+
+    var e: SparkException = null
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+      // Create two parquet files with different schemas in the same folder
+      Seq(("bcd", 2)).toDF("a", "b").coalesce(1).write.mode("overwrite").parquet(s"$path/parquet")
+      Seq((1, "abc")).toDF("a", "b").coalesce(1).write.mode("append").parquet(s"$path/parquet")
+
+      e = intercept[SparkException] {
+        spark.read.parquet(s"$path/parquet").collect()
+      }
+    }
+    e
+  }
+
+  test("schema mismatch failure error message for parquet reader") {
+    withTempPath { dir =>
+      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
+      val expectedMessage = "Encounter error while reading parquet files. " +
+        "One possible cause: Parquet column cannot be converted in the corresponding " +
+        "files. Details:"
+      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
+      assert(e.getCause.getMessage.startsWith(expectedMessage))
+    }
+  }
+
+  test("schema mismatch failure error message for parquet vectorized reader") {
+    withTempPath { dir =>
+      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
+      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+
+      // Check if the physical type is reporting correctly
+      val errMsg = e.getCause.getMessage
+      assert(errMsg.startsWith("Parquet column cannot be converted in file"))
+      val file = errMsg.substring("Parquet column cannot be converted in file ".length,
+        errMsg.indexOf(". "))
+      val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
+      assert(col.length == 1)
+      if (col(0).dataType == StringType) {
+        assert(errMsg.contains("Column: [a], Expected: int, Found: BINARY"))
+      } else {
+        assert(errMsg.endsWith("Column: [a], Expected: string, Found: INT32"))
+      }
     }
   }
 
@@ -959,19 +1014,21 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: String): Unit = {
+      expectedSchema: String,
+      caseSensitive: Boolean = true): Unit = {
     testSchemaClipping(testName, parquetSchema, catalystSchema,
-      MessageTypeParser.parseMessageType(expectedSchema))
+      MessageTypeParser.parseMessageType(expectedSchema), caseSensitive)
   }
 
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: MessageType): Unit = {
+      expectedSchema: MessageType,
+      caseSensitive: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
-        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
+        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive)
 
       try {
         expectedSchema.checkContains(actual)
@@ -1332,7 +1389,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE,
+    caseSensitive = true)
 
   testSchemaClipping(
     "disjoint field sets",
@@ -1489,4 +1547,52 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin)
+
+  testSchemaClipping(
+    "case-insensitive resolution: no ambiguity",
+    parquetSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+    catalystSchema = {
+      val nestedType = new StructType().add("b", IntegerType, nullable = true)
+      new StructType()
+        .add("a", nestedType, nullable = true)
+        .add("c", IntegerType, nullable = true)
+    },
+    expectedSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+    caseSensitive = false)
+
+    test("Clipping - case-insensitive resolution: more than one field is matched") {
+      val parquetSchema =
+        """message root {
+          |  required group A {
+          |    optional int32 B;
+          |  }
+          |  optional int32 c;
+          |  optional int32 a;
+          |}
+        """.stripMargin
+      val catalystSchema = {
+        val nestedType = new StructType().add("b", IntegerType, nullable = true)
+        new StructType()
+          .add("a", nestedType, nullable = true)
+          .add("c", IntegerType, nullable = true)
+      }
+      assertThrows[RuntimeException] {
+        ParquetReadSupport.clipParquetSchema(
+          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
+      }
+    }
 }

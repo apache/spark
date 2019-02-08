@@ -81,7 +81,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public void reserve(int requiredCapacity) {
-    if (requiredCapacity > capacity) {
+    if (requiredCapacity < 0) {
+      throwUnsupportedException(requiredCapacity, null);
+    } else if (requiredCapacity > capacity) {
       int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
       if (requiredCapacity <= newCapacity) {
         try {
@@ -96,13 +98,17 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   private void throwUnsupportedException(int requiredCapacity, Throwable cause) {
-    String message = "Cannot reserve additional contiguous bytes in the vectorized reader " +
-        "(requested = " + requiredCapacity + " bytes). As a workaround, you can disable the " +
-        "vectorized reader, or increase the vectorized reader batch size. For parquet file " +
-        "format, refer to " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + " and " +
-        SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().key() + "; for orc file format, refer to " +
-        SQLConf.ORC_VECTORIZED_READER_ENABLED().key() + " and " +
-        SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().key() + ".";
+    String message = "Cannot reserve additional contiguous bytes in the vectorized reader (" +
+        (requiredCapacity >= 0 ? "requested " + requiredCapacity + " bytes" : "integer overflow") +
+        "). As a workaround, you can reduce the vectorized reader batch size, or disable the " +
+        "vectorized reader, or disable " + SQLConf.BUCKETING_ENABLED().key() + " if you read " +
+        "from bucket table. For Parquet file format, refer to " +
+        SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().key() +
+        " (default " + SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
+        ") and " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + "; for ORC file format, " +
+        "refer to " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().key() +
+        " (default " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
+        ") and " + SQLConf.ORC_VECTORIZED_READER_ENABLED().key() + ".";
     throw new RuntimeException(message, cause);
   }
 

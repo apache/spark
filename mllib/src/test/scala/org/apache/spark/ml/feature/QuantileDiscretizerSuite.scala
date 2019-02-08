@@ -17,15 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.udf
 
-class QuantileDiscretizerSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -35,24 +31,24 @@ class QuantileDiscretizerSuite
 
     val datasetSize = 100000
     val numBuckets = 5
-    val df = sc.parallelize(1.0 to datasetSize by 1.0).map(Tuple1.apply).toDF("input")
+    val df = sc.parallelize(1 to datasetSize).map(_.toDouble).map(Tuple1.apply).toDF("input")
     val discretizer = new QuantileDiscretizer()
       .setInputCol("input")
       .setOutputCol("result")
       .setNumBuckets(numBuckets)
-    val result = discretizer.fit(df).transform(df)
+    val model = discretizer.fit(df)
 
-    val observedNumBuckets = result.select("result").distinct.count
-    assert(observedNumBuckets === numBuckets,
-      "Observed number of buckets does not equal expected number of buckets.")
-
-    val relativeError = discretizer.getRelativeError
-    val isGoodBucket = udf {
-      (size: Int) => math.abs( size - (datasetSize / numBuckets)) <= (relativeError * datasetSize)
+    testTransformerByGlobalCheckFunc[(Double)](df, model, "result") { rows =>
+      val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
+      val observedNumBuckets = result.select("result").distinct.count
+      assert(observedNumBuckets === numBuckets,
+        "Observed number of buckets does not equal expected number of buckets.")
+      val relativeError = discretizer.getRelativeError
+      val numGoodBuckets = result.groupBy("result").count
+        .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}").count
+      assert(numGoodBuckets === numBuckets,
+        "Bucket sizes are not within expected relative error tolerance.")
     }
-    val numGoodBuckets = result.groupBy("result").count.filter(isGoodBucket($"count")).count
-    assert(numGoodBuckets === numBuckets,
-      "Bucket sizes are not within expected relative error tolerance.")
   }
 
   test("Test on data with high proportion of duplicated values") {
@@ -67,11 +63,14 @@ class QuantileDiscretizerSuite
       .setInputCol("input")
       .setOutputCol("result")
       .setNumBuckets(numBuckets)
-    val result = discretizer.fit(df).transform(df)
-    val observedNumBuckets = result.select("result").distinct.count
-    assert(observedNumBuckets == expectedNumBuckets,
-      s"Observed number of buckets are not correct." +
-        s" Expected $expectedNumBuckets but found $observedNumBuckets")
+    val model = discretizer.fit(df)
+    testTransformerByGlobalCheckFunc[(Double)](df, model, "result") { rows =>
+      val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
+      val observedNumBuckets = result.select("result").distinct.count
+      assert(observedNumBuckets == expectedNumBuckets,
+        s"Observed number of buckets are not correct." +
+          s" Expected $expectedNumBuckets but found $observedNumBuckets")
+    }
   }
 
   test("Test transform on data with NaN value") {
@@ -90,17 +89,20 @@ class QuantileDiscretizerSuite
 
     withClue("QuantileDiscretizer with handleInvalid=error should throw exception for NaN values") {
       val dataFrame: DataFrame = validData.toSeq.toDF("input")
-      intercept[SparkException] {
-        discretizer.fit(dataFrame).transform(dataFrame).collect()
-      }
+      val model = discretizer.fit(dataFrame)
+      testTransformerByInterceptingException[(Double)](
+        dataFrame,
+        model,
+        expectedMessagePart = "Bucketizer encountered NaN value.",
+        firstResultCol = "result")
     }
 
     List(("keep", expectedKeep), ("skip", expectedSkip)).foreach{
       case(u, v) =>
         discretizer.setHandleInvalid(u)
         val dataFrame: DataFrame = validData.zip(v).toSeq.toDF("input", "expected")
-        val result = discretizer.fit(dataFrame).transform(dataFrame)
-        result.select("result", "expected").collect().foreach {
+        val model = discretizer.fit(dataFrame)
+        testTransformer[(Double, Double)](dataFrame, model, "result", "expected") {
           case Row(x: Double, y: Double) =>
             assert(x === y,
               s"The feature value is not correct after bucketing.  Expected $y but found $x")
@@ -112,21 +114,24 @@ class QuantileDiscretizerSuite
     val spark = this.spark
     import spark.implicits._
 
-    val trainDF = sc.parallelize(1.0 to 100.0 by 1.0).map(Tuple1.apply).toDF("input")
-    val testDF = sc.parallelize(-10.0 to 110.0 by 1.0).map(Tuple1.apply).toDF("input")
+    val trainDF = sc.parallelize((1 to 100).map(_.toDouble)).map(Tuple1.apply).toDF("input")
+    val testDF = sc.parallelize((-10 to 110).map(_.toDouble)).map(Tuple1.apply).toDF("input")
     val discretizer = new QuantileDiscretizer()
       .setInputCol("input")
       .setOutputCol("result")
       .setNumBuckets(5)
 
-    val result = discretizer.fit(trainDF).transform(testDF)
-    val firstBucketSize = result.filter(result("result") === 0.0).count
-    val lastBucketSize = result.filter(result("result") === 4.0).count
+    val model = discretizer.fit(trainDF)
+    testTransformerByGlobalCheckFunc[(Double)](testDF, model, "result") { rows =>
+      val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
+      val firstBucketSize = result.filter(result("result") === 0.0).count
+      val lastBucketSize = result.filter(result("result") === 4.0).count
 
-    assert(firstBucketSize === 30L,
-      s"Size of first bucket ${firstBucketSize} did not equal expected value of 30.")
-    assert(lastBucketSize === 31L,
-      s"Size of last bucket ${lastBucketSize} did not equal expected value of 31.")
+      assert(firstBucketSize === 30L,
+        s"Size of first bucket ${firstBucketSize} did not equal expected value of 30.")
+      assert(lastBucketSize === 31L,
+        s"Size of last bucket ${lastBucketSize} did not equal expected value of 31.")
+    }
   }
 
   test("read/write") {
@@ -167,21 +172,24 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
       .setNumBuckets(numBuckets)
-    val result = discretizer.fit(df).transform(df)
+    val model = discretizer.fit(df)
+    testTransformerByGlobalCheckFunc[(Double, Double)](df, model, "result1", "result2") { rows =>
+      val result =
+        rows.map { r => Tuple2(r.getDouble(0), r.getDouble(1)) }.toDF("result1", "result2")
+      val relativeError = discretizer.getRelativeError
+      for (i <- 1 to 2) {
+        val observedNumBuckets = result.select("result" + i).distinct.count
+        assert(observedNumBuckets === numBuckets,
+          "Observed number of buckets does not equal expected number of buckets.")
 
-    val relativeError = discretizer.getRelativeError
-    val isGoodBucket = udf {
-      (size: Int) => math.abs( size - (datasetSize / numBuckets)) <= (relativeError * datasetSize)
-    }
-
-    for (i <- 1 to 2) {
-      val observedNumBuckets = result.select("result" + i).distinct.count
-      assert(observedNumBuckets === numBuckets,
-        "Observed number of buckets does not equal expected number of buckets.")
-
-      val numGoodBuckets = result.groupBy("result" + i).count.filter(isGoodBucket($"count")).count
-      assert(numGoodBuckets === numBuckets,
-        "Bucket sizes are not within expected relative error tolerance.")
+        val numGoodBuckets = result
+          .groupBy("result" + i)
+          .count
+          .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
+          .count
+        assert(numGoodBuckets === numBuckets,
+          "Bucket sizes are not within expected relative error tolerance.")
+      }
     }
   }
 
@@ -198,12 +206,16 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
       .setNumBuckets(numBuckets)
-    val result = discretizer.fit(df).transform(df)
-    for (i <- 1 to 2) {
-      val observedNumBuckets = result.select("result" + i).distinct.count
-      assert(observedNumBuckets == expectedNumBucket,
-        s"Observed number of buckets are not correct." +
-          s" Expected $expectedNumBucket but found ($observedNumBuckets")
+    val model = discretizer.fit(df)
+    testTransformerByGlobalCheckFunc[(Double, Double)](df, model, "result1", "result2") { rows =>
+      val result =
+        rows.map { r => Tuple2(r.getDouble(0), r.getDouble(1)) }.toDF("result1", "result2")
+      for (i <- 1 to 2) {
+        val observedNumBuckets = result.select("result" + i).distinct.count
+        assert(observedNumBuckets == expectedNumBucket,
+          s"Observed number of buckets are not correct." +
+            s" Expected $expectedNumBucket but found ($observedNumBuckets")
+      }
     }
   }
 
@@ -226,9 +238,12 @@ class QuantileDiscretizerSuite
 
     withClue("QuantileDiscretizer with handleInvalid=error should throw exception for NaN values") {
       val dataFrame: DataFrame = validData1.zip(validData2).toSeq.toDF("input1", "input2")
-      intercept[SparkException] {
-        discretizer.fit(dataFrame).transform(dataFrame).collect()
-      }
+      val model = discretizer.fit(dataFrame)
+      testTransformerByInterceptingException[(Double, Double)](
+        dataFrame,
+        model,
+        expectedMessagePart = "Bucketizer encountered NaN value.",
+        firstResultCol = "result1")
     }
 
     List(("keep", expectedKeep1, expectedKeep2), ("skip", expectedSkip1, expectedSkip2)).foreach {
@@ -237,8 +252,14 @@ class QuantileDiscretizerSuite
         val dataFrame: DataFrame = validData1.zip(validData2).zip(v).zip(w).map {
           case (((a, b), c), d) => (a, b, c, d)
         }.toSeq.toDF("input1", "input2", "expected1", "expected2")
-        val result = discretizer.fit(dataFrame).transform(dataFrame)
-        result.select("result1", "expected1", "result2", "expected2").collect().foreach {
+        val model = discretizer.fit(dataFrame)
+        testTransformer[(Double, Double, Double, Double)](
+          dataFrame,
+          model,
+          "result1",
+          "expected1",
+          "result2",
+          "expected2") {
           case Row(x: Double, y: Double, z: Double, w: Double) =>
             assert(x === y && w === z)
         }
@@ -255,10 +276,10 @@ class QuantileDiscretizerSuite
       1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
     val data2 = Array.range(1, 40, 2).map(_.toDouble)
     val expected2 = Array (0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0,
-      2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0)
+      2.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0)
     val data3 = Array.range(1, 60, 3).map(_.toDouble)
-    val expected3 = Array (0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 5.0,
-      5.0, 5.0, 6.0, 6.0, 7.0, 8.0, 8.0, 9.0, 9.0, 9.0)
+    val expected3 = Array (0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0,
+      5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 9.0, 9.0, 9.0)
     val data = (0 until 20).map { idx =>
       (data1(idx), data2(idx), data3(idx), expected1(idx), expected2(idx), expected3(idx))
     }
@@ -270,9 +291,16 @@ class QuantileDiscretizerSuite
       .setOutputCols(Array("result1", "result2", "result3"))
       .setNumBucketsArray(numBucketsArray)
 
-    discretizer.fit(df).transform(df).
-      select("result1", "expected1", "result2", "expected2", "result3", "expected3")
-      .collect().foreach {
+    val model = discretizer.fit(df)
+    testTransformer[(Double, Double, Double, Double, Double, Double)](
+      df,
+      model,
+      "result1",
+      "expected1",
+      "result2",
+      "expected2",
+      "result3",
+      "expected3") {
       case Row(r1: Double, e1: Double, r2: Double, e2: Double, r3: Double, e3: Double) =>
         assert(r1 === e1,
           s"The result value is not correct after bucketing. Expected $e1 but found $r1")
@@ -324,20 +352,16 @@ class QuantileDiscretizerSuite
       .setStages(Array(discretizerForCol1, discretizerForCol2, discretizerForCol3))
       .fit(df)
 
-    val resultForMultiCols = plForMultiCols.transform(df)
-      .select("result1", "result2", "result3")
-      .collect()
+    val expected = plForSingleCol.transform(df).select("result1", "result2", "result3").collect()
 
-    val resultForSingleCol = plForSingleCol.transform(df)
-      .select("result1", "result2", "result3")
-      .collect()
-
-    resultForSingleCol.zip(resultForMultiCols).foreach {
-      case (rowForSingle, rowForMultiCols) =>
-        assert(rowForSingle.getDouble(0) == rowForMultiCols.getDouble(0) &&
-          rowForSingle.getDouble(1) == rowForMultiCols.getDouble(1) &&
-          rowForSingle.getDouble(2) == rowForMultiCols.getDouble(2))
-    }
+    testTransformerByGlobalCheckFunc[(Double, Double, Double)](
+      df,
+      plForMultiCols,
+      "result1",
+      "result2",
+      "result3") { rows =>
+        assert(rows === expected)
+      }
   }
 
   test("Multiple Columns: Comparing setting numBuckets with setting numBucketsArray " +
@@ -364,18 +388,16 @@ class QuantileDiscretizerSuite
       .setOutputCols(Array("result1", "result2", "result3"))
       .setNumBucketsArray(Array(10, 10, 10))
 
-    val result1 = discretizerSingleNumBuckets.fit(df).transform(df)
-      .select("result1", "result2", "result3")
-      .collect()
-    val result2 = discretizerNumBucketsArray.fit(df).transform(df)
-      .select("result1", "result2", "result3")
-      .collect()
+    val model = discretizerSingleNumBuckets.fit(df)
+    val expected = model.transform(df).select("result1", "result2", "result3").collect()
 
-    result1.zip(result2).foreach {
-      case (row1, row2) =>
-        assert(row1.getDouble(0) == row2.getDouble(0) &&
-          row1.getDouble(1) == row2.getDouble(1) &&
-          row1.getDouble(2) == row2.getDouble(2))
+    testTransformerByGlobalCheckFunc[(Double, Double, Double)](
+      df,
+      discretizerNumBucketsArray.fit(df),
+      "result1",
+      "result2",
+      "result3") { rows =>
+      assert(rows === expected)
     }
   }
 

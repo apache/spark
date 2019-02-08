@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.sql.{Date, Timestamp}
 import java.util.Locale
 import javax.xml.bind.DatatypeConverter
 
@@ -37,9 +36,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -394,6 +394,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Filter(expression(ctx), plan)
     }
 
+    def withHaving(ctx: BooleanExpressionContext, plan: LogicalPlan): LogicalPlan = {
+      // Note that we add a cast to non-predicate expressions. If the expression itself is
+      // already boolean, the optimizer will get rid of the unnecessary cast.
+      val predicate = expression(ctx) match {
+        case p: Predicate => p
+        case e => Cast(e, BooleanType)
+      }
+      Filter(predicate, plan)
+    }
+
+
     // Expressions.
     val expressions = Option(namedExpressionSeq).toSeq
       .flatMap(_.namedExpression.asScala)
@@ -446,30 +457,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case e: NamedExpression => e
           case e: Expression => UnresolvedAlias(e)
         }
-        val withProject = if (aggregation != null) {
-          withAggregation(aggregation, namedExpressions, withFilter)
-        } else if (namedExpressions.nonEmpty) {
+
+        def createProject() = if (namedExpressions.nonEmpty) {
           Project(namedExpressions, withFilter)
         } else {
           withFilter
         }
 
-        // Having
-        val withHaving = withProject.optional(having) {
-          // Note that we add a cast to non-predicate expressions. If the expression itself is
-          // already boolean, the optimizer will get rid of the unnecessary cast.
-          val predicate = expression(having) match {
-            case p: Predicate => p
-            case e => Cast(e, BooleanType)
+        val withProject = if (aggregation == null && having != null) {
+          if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
+            // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
+            withHaving(having, createProject())
+          } else {
+            // According to SQL standard, HAVING without GROUP BY means global aggregate.
+            withHaving(having, Aggregate(Nil, namedExpressions, withFilter))
           }
-          Filter(predicate, withProject)
+        } else if (aggregation != null) {
+          val aggregate = withAggregation(aggregation, namedExpressions, withFilter)
+          aggregate.optionalMap(having)(withHaving)
+        } else {
+          // When hitting this branch, `having` must be null.
+          createProject()
         }
 
         // Distinct
         val withDistinct = if (setQuantifier() != null && setQuantifier().DISTINCT() != null) {
-          Distinct(withHaving)
+          Distinct(withProject)
         } else {
-          withHaving
+          withProject
         }
 
         // Window
@@ -500,21 +515,27 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
     val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
       val right = plan(relation.relationPrimary)
-      val join = right.optionalMap(left)(Join(_, _, Inner, None))
+      val join = right.optionalMap(left)(Join(_, _, Inner, None, JoinHint.NONE))
       withJoinRelations(join, relation)
     }
-    ctx.lateralView.asScala.foldLeft(from)(withGenerate)
+    if (ctx.pivotClause() != null) {
+      if (!ctx.lateralView.isEmpty) {
+        throw new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+      }
+      withPivot(ctx.pivotClause, from)
+    } else {
+      ctx.lateralView.asScala.foldLeft(from)(withGenerate)
+    }
   }
 
   /**
    * Connect two queries by a Set operator.
    *
    * Supported Set operators are:
-   * - UNION [DISTINCT]
-   * - UNION ALL
-   * - EXCEPT [DISTINCT]
-   * - MINUS [DISTINCT]
-   * - INTERSECT [DISTINCT]
+   * - UNION [ DISTINCT | ALL ]
+   * - EXCEPT [ DISTINCT | ALL ]
+   * - MINUS [ DISTINCT | ALL ]
+   * - INTERSECT [DISTINCT | ALL]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
     val left = plan(ctx.left)
@@ -526,17 +547,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.UNION =>
         Distinct(Union(left, right))
       case SqlBaseParser.INTERSECT if all =>
-        throw new ParseException("INTERSECT ALL is not supported.", ctx)
+        Intersect(left, right, isAll = true)
       case SqlBaseParser.INTERSECT =>
-        Intersect(left, right)
+        Intersect(left, right, isAll = false)
       case SqlBaseParser.EXCEPT if all =>
-        throw new ParseException("EXCEPT ALL is not supported.", ctx)
+        Except(left, right, isAll = true)
       case SqlBaseParser.EXCEPT =>
-        Except(left, right)
+        Except(left, right, isAll = false)
       case SqlBaseParser.SETMINUS if all =>
-        throw new ParseException("MINUS ALL is not supported.", ctx)
+        Except(left, right, isAll = true)
       case SqlBaseParser.SETMINUS =>
-        Except(left, right)
+        Except(left, right, isAll = false)
     }
   }
 
@@ -615,6 +636,38 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Add a [[Pivot]] to a logical plan.
+   */
+  private def withPivot(
+      ctx: PivotClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val aggregates = Option(ctx.aggregates).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(typedVisit[Expression])
+    val pivotColumn = if (ctx.pivotColumn.identifiers.size == 1) {
+      UnresolvedAttribute.quoted(ctx.pivotColumn.identifier.getText)
+    } else {
+      CreateStruct(
+        ctx.pivotColumn.identifiers.asScala.map(
+          identifier => UnresolvedAttribute.quoted(identifier.getText)))
+    }
+    val pivotValues = ctx.pivotValues.asScala.map(visitPivotValue)
+    Pivot(None, pivotColumn, pivotValues, aggregates, query)
+  }
+
+  /**
+   * Create a Pivot column value with or without an alias.
+   */
+  override def visitPivotValue(ctx: PivotValueContext): Expression = withOrigin(ctx) {
+    val e = expression(ctx.expression)
+    if (ctx.identifier != null) {
+      Alias(e, ctx.identifier.getText)()
+    } else {
+      e
+    }
+  }
+
+  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -625,7 +678,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
       unrequiredChildIndex = Nil,
       outer = ctx.OUTER != null,
+      // scalastyle:off caselocale
       Some(ctx.tblName.getText.toLowerCase),
+      // scalastyle:on caselocale
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
       query)
   }
@@ -661,7 +716,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         // Resolve the join type and join condition
         val (joinType, condition) = Option(join.joinCriteria) match {
           case Some(c) if c.USING != null =>
-            (UsingJoin(baseJoinType, c.identifier.asScala.map(_.getText)), None)
+            (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case None if join.NATURAL != null =>
@@ -672,7 +727,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case None =>
             (baseJoinType, None)
         }
-        Join(left, plan(join.right), joinType, condition)
+        Join(left, plan(join.right), joinType, condition, JoinHint.NONE)
       }
     }
   }
@@ -1065,6 +1120,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case not => Not(e)
     }
 
+    def getValueExpressions(e: Expression): Seq[Expression] = e match {
+      case c: CreateNamedStruct => c.valExprs
+      case other => Seq(other)
+    }
+
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1073,7 +1133,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        invertIfNotDefined(In(e, Seq(ListQuery(plan(ctx.query)))))
+        invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
@@ -1114,7 +1174,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.PERCENT =>
         Remainder(left, right)
       case SqlBaseParser.DIV =>
-        Cast(Divide(left, right), LongType)
+        IntegralDivide(left, right)
       case SqlBaseParser.PLUS =>
         Add(left, right)
       case SqlBaseParser.MINUS =>
@@ -1186,6 +1246,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a Extract expression.
+   */
+  override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
+    ctx.field.getText.toUpperCase(Locale.ROOT) match {
+      case "YEAR" =>
+        Year(expression(ctx.source))
+      case "QUARTER" =>
+        Quarter(expression(ctx.source))
+      case "MONTH" =>
+        Month(expression(ctx.source))
+      case "WEEK" =>
+        WeekOfYear(expression(ctx.source))
+      case "DAY" =>
+        DayOfMonth(expression(ctx.source))
+      case "DAYOFWEEK" =>
+        DayOfWeek(expression(ctx.source))
+      case "HOUR" =>
+        Hour(expression(ctx.source))
+      case "MINUTE" =>
+        Minute(expression(ctx.source))
+      case "SECOND" =>
+        Second(expression(ctx.source))
+      case other =>
+        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+    }
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
@@ -1243,6 +1331,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
+  }
+
+  /**
+   * Create an [[LambdaFunction]].
+   */
+  override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {
+    val arguments = ctx.IDENTIFIER().asScala.map { name =>
+      UnresolvedNamedLambdaVariable(UnresolvedAttribute.quoted(name.getText).nameParts)
+    }
+    val function = expression(ctx.expression).transformUp {
+      case a: UnresolvedAttribute => UnresolvedNamedLambdaVariable(a.nameParts)
+    }
+    LambdaFunction(function, arguments)
   }
 
   /**
@@ -1451,14 +1552,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
     val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
+    def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
+      f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
+        throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
+      }
+    }
     try {
       valueType match {
-        case "DATE" =>
-          Literal(Date.valueOf(value))
+        case "DATE" => toLiteral(stringToDate, DateType)
         case "TIMESTAMP" =>
-          Literal(Timestamp.valueOf(value))
+          val timeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
+          toLiteral(stringToTimestamp(_, timeZone), TimestampType)
         case "X" =>
-          val padding = if (value.length % 2 == 1) "0" else ""
+          val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)

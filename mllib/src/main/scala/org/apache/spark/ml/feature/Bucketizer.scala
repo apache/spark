@@ -89,7 +89,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * Param for how to handle invalid entries containing NaN values. Values outside the splits
+   * will always be treated as errors. Options are 'skip' (filter out rows with
    * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
    * additional bucket). Note that in the multiple column case, the invalid handling is applied
    * to all columns. That said for 'error' it will throw an error if any invalids are found in
@@ -99,7 +100,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    */
   @Since("2.1.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
-    "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
+    "how to handle invalid entries containing NaN values. Values outside the splits will always " +
+    "be treated as errorsOptions are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
 
@@ -217,8 +219,6 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   override def copy(extra: ParamMap): Bucketizer = {
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
-
-  override def write: MLWriter = new Bucketizer.BucketizerWriter(this)
 }
 
 @Since("1.6.0")
@@ -293,28 +293,6 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
           insertPos - 1
         }
       }
-    }
-  }
-
-
-  private[Bucketizer] class BucketizerWriter(instance: Bucketizer) extends MLWriter {
-
-    override protected def saveImpl(path: String): Unit = {
-      // SPARK-23377: The default params will be saved and loaded as user-supplied params.
-      // Once `inputCols` is set, the default value of `outputCol` param causes the error
-      // when checking exclusive params. As a temporary to fix it, we skip the default value
-      // of `outputCol` if `inputCols` is set when saving the metadata.
-      // TODO: If we modify the persistence mechanism later to better handle default params,
-      // we can get rid of this.
-      var paramWithoutOutputCol: Option[JValue] = None
-      if (instance.isSet(instance.inputCols)) {
-        val params = instance.extractParamMap().toSeq
-        val jsonParams = params.filter(_.param != instance.outputCol).map { case ParamPair(p, v) =>
-          p.name -> parse(p.jsonEncode(v))
-        }.toList
-        paramWithoutOutputCol = Some(render(jsonParams))
-      }
-      DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = paramWithoutOutputCol)
     }
   }
 

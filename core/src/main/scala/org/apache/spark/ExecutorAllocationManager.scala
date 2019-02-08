@@ -25,8 +25,9 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMaster
@@ -57,7 +58,8 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * a long time to ramp up under heavy workloads.
  *
  * The remove policy is simpler: If an executor has been idle for K seconds, meaning it has not
- * been scheduled to run any tasks, then it is removed.
+ * been scheduled to run any tasks, then it is removed. Note that an executor caching any data
+ * blocks will be removed if it has been idle for more than L seconds.
  *
  * There is no retry logic in either case because we make the assumption that the cluster manager
  * will eventually fulfill all requests it receives asynchronously.
@@ -69,6 +71,10 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *   spark.dynamicAllocation.maxExecutors - Upper bound on the number of executors
  *   spark.dynamicAllocation.initialExecutors - Number of executors to start with
  *
+ *   spark.dynamicAllocation.executorAllocationRatio -
+ *     This is used to reduce the parallelism of the dynamic allocation that can waste
+ *     resources when tasks are small
+ *
  *   spark.dynamicAllocation.schedulerBacklogTimeout (M) -
  *     If there are backlogged tasks for this duration, add new executors
  *
@@ -77,7 +83,12 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *     This is used only after the initial backlog timeout is exceeded
  *
  *   spark.dynamicAllocation.executorIdleTimeout (K) -
- *     If an executor has been idle for this duration, remove it
+ *     If an executor without caching any data blocks has been idle for this duration, remove it
+ *
+ *   spark.dynamicAllocation.cachedExecutorIdleTimeout (L) -
+ *     If an executor with caching data blocks has been idle for more than this duration,
+ *     the executor will be removed
+ *
  */
 private[spark] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
@@ -96,28 +107,28 @@ private[spark] class ExecutorAllocationManager(
   private val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
-  private val schedulerBacklogTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.schedulerBacklogTimeout", "1s")
+  private val schedulerBacklogTimeoutS = conf.get(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
   // Same as above, but used only after `schedulerBacklogTimeoutS` is exceeded
-  private val sustainedSchedulerBacklogTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", s"${schedulerBacklogTimeoutS}s")
+  private val sustainedSchedulerBacklogTimeoutS =
+    conf.get(DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT)
 
   // How long an executor must be idle for before it is removed (seconds)
-  private val executorIdleTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.executorIdleTimeout", "60s")
+  private val executorIdleTimeoutS = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT)
 
-  private val cachedExecutorIdleTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.cachedExecutorIdleTimeout", s"${Integer.MAX_VALUE}s")
+  private val cachedExecutorIdleTimeoutS = conf.get(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT)
 
   // During testing, the methods to actually kill and add executors are mocked out
-  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
+  private val testing = conf.get(DYN_ALLOCATION_TESTING)
 
   // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
-  private val tasksPerExecutor =
-    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+  private val tasksPerExecutorForFullParallelism =
+    conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
+
+  private val executorAllocationRatio =
+    conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
   validateSettings()
 
@@ -144,7 +155,7 @@ private[spark] class ExecutorAllocationManager(
 
   // Polling loop interval (ms)
   private val intervalMillis: Long = if (Utils.isTesting) {
-      conf.getLong(TESTING_SCHEDULE_INTERVAL_KEY, 100)
+      conf.get(TEST_SCHEDULE_INTERVAL)
     } else {
       100
     }
@@ -181,36 +192,43 @@ private[spark] class ExecutorAllocationManager(
    */
   private def validateSettings(): Unit = {
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
-      throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be positive!")
+      throw new SparkException(
+        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} and ${DYN_ALLOCATION_MAX_EXECUTORS.key} must be " +
+          "positive!")
     }
     if (maxNumExecutors == 0) {
-      throw new SparkException("spark.dynamicAllocation.maxExecutors cannot be 0!")
+      throw new SparkException(s"${DYN_ALLOCATION_MAX_EXECUTORS.key} cannot be 0!")
     }
     if (minNumExecutors > maxNumExecutors) {
-      throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
-        s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
+      throw new SparkException(s"${DYN_ALLOCATION_MIN_EXECUTORS.key} ($minNumExecutors) must " +
+        s"be less than or equal to ${DYN_ALLOCATION_MAX_EXECUTORS.key} ($maxNumExecutors)!")
     }
     if (schedulerBacklogTimeoutS <= 0) {
-      throw new SparkException("spark.dynamicAllocation.schedulerBacklogTimeout must be > 0!")
+      throw new SparkException(s"${DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (sustainedSchedulerBacklogTimeoutS <= 0) {
       throw new SparkException(
-        "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
+        s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (executorIdleTimeoutS < 0) {
-      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be >= 0!")
+      throw new SparkException(s"${DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key} must be >= 0!")
     }
     if (cachedExecutorIdleTimeoutS < 0) {
-      throw new SparkException("spark.dynamicAllocation.cachedExecutorIdleTimeout must be >= 0!")
+      throw new SparkException(s"${DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key} must be >= 0!")
     }
     // Require external shuffle service for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
-    if (!conf.getBoolean("spark.shuffle.service.enabled", false) && !testing) {
+    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
       throw new SparkException("Dynamic allocation of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
-    if (tasksPerExecutor == 0) {
-      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
+    if (tasksPerExecutorForFullParallelism == 0) {
+      throw new SparkException(s"${EXECUTOR_CORES.key} must not be < ${CPUS_PER_TASK.key}.")
+    }
+
+    if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
+      throw new SparkException(
+        s"${DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO.key} must be > 0 and <= 1.0")
     }
   }
 
@@ -273,7 +291,9 @@ private[spark] class ExecutorAllocationManager(
    */
   private def maxNumExecutorsNeeded(): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
-    (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
+    math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
+              tasksPerExecutorForFullParallelism)
+      .toInt
   }
 
   private def totalRunningTasks(): Int = synchronized {
@@ -292,8 +312,6 @@ private[spark] class ExecutorAllocationManager(
   private def schedule(): Unit = synchronized {
     val now = clock.getTimeMillis
 
-    updateAndSyncNumExecutorsTarget(now)
-
     val executorIdsToBeRemoved = ArrayBuffer[String]()
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
@@ -303,6 +321,8 @@ private[spark] class ExecutorAllocationManager(
       }
       !expired
     }
+    // Update executor target number only after initializing flag is unset
+    updateAndSyncNumExecutorsTarget(now)
     if (executorIdsToBeRemoved.nonEmpty) {
       removeExecutors(executorIdsToBeRemoved)
     }
@@ -474,9 +494,15 @@ private[spark] class ExecutorAllocationManager(
     newExecutorTotal = numExistingExecutors
     if (testing || executorsRemoved.nonEmpty) {
       executorsRemoved.foreach { removedExecutorId =>
+        // If it is a cached block, it uses cachedExecutorIdleTimeoutS for timeout
+        val idleTimeout = if (blockManagerMaster.hasCachedBlocks(removedExecutorId)) {
+          cachedExecutorIdleTimeoutS
+        } else {
+          executorIdleTimeoutS
+        }
         newExecutorTotal -= 1
         logInfo(s"Removing executor $removedExecutorId because it has been idle for " +
-          s"$executorIdleTimeoutS seconds (new desired total will be $newExecutorTotal)")
+          s"$idleTimeout seconds (new desired total will be $newExecutorTotal)")
         executorsPendingToRemove.add(removedExecutorId)
       }
       executorsRemoved
@@ -873,5 +899,4 @@ private[spark] class ExecutorAllocationManager(
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
-  val TESTING_SCHEDULE_INTERVAL_KEY = "spark.testing.dynamicAllocation.scheduleInterval"
 }

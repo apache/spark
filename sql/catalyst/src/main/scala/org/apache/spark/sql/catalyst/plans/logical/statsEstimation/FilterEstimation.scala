@@ -395,6 +395,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
+        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
+          return Some(0.0)
+        }
+
         val statsInterval =
           ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
         val validQuerySet = hSet.filter { v =>
@@ -418,6 +422,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType =>
+        if (ndv.toDouble == 0)  {
+          return Some(0.0)
+        }
+
         newNdv = ndv.min(BigInt(hSet.size))
         if (update) {
           val newStats = colStat.copy(distinctCount = Some(newNdv), nullCount = Some(0))
@@ -662,6 +670,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
         logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)
         return None
       case _ =>
+        if (!colStatsMap.hasMinMaxStats(attrLeft)) {
+          logDebug("[CBO] No min/max statistics for " + attrLeft)
+          return None
+        }
+        if (!colStatsMap.hasMinMaxStats(attrRight)) {
+          logDebug("[CBO] No min/max statistics for " + attrRight)
+          return None
+        }
     }
 
     val colStatLeft = colStatsMap(attrLeft)
@@ -871,13 +887,13 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   }
 
   def hasCountStats(a: Attribute): Boolean =
-    get(a).map(_.hasCountStats).getOrElse(false)
+    get(a).exists(_.hasCountStats)
 
   def hasDistinctCount(a: Attribute): Boolean =
-    get(a).map(_.distinctCount.isDefined).getOrElse(false)
+    get(a).exists(_.distinctCount.isDefined)
 
   def hasMinMaxStats(a: Attribute): Boolean =
-    get(a).map(_.hasCountStats).getOrElse(false)
+    get(a).exists(_.hasMinMaxStats)
 
   /**
    * Gets column stat for the given attribute. Prefer the column stat in updatedMap than that in

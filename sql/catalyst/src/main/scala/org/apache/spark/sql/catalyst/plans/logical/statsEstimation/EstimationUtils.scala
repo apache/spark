@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
-
 
 object EstimationUtils {
 
@@ -73,13 +71,12 @@ object EstimationUtils {
     AttributeMap(output.flatMap(a => inputMap.get(a).map(a -> _)))
   }
 
-  def getOutputSize(
+  def getSizePerRow(
       attributes: Seq[Attribute],
-      outputRowCount: BigInt,
       attrStats: AttributeMap[ColumnStat] = AttributeMap(Nil)): BigInt = {
     // We assign a generic overhead for a Row object, the actual overhead is different for different
     // Row format.
-    val sizePerRow = 8 + attributes.map { attr =>
+    8 + attributes.map { attr =>
       if (attrStats.get(attr).map(_.avgLen.isDefined).getOrElse(false)) {
         attr.dataType match {
           case StringType =>
@@ -92,10 +89,15 @@ object EstimationUtils {
         attr.dataType.defaultSize
       }
     }.sum
+  }
 
+  def getOutputSize(
+      attributes: Seq[Attribute],
+      outputRowCount: BigInt,
+      attrStats: AttributeMap[ColumnStat] = AttributeMap(Nil)): BigInt = {
     // Output size can't be zero, or sizeInBytes of BinaryNode will also be zero
     // (simple computation of statistics returns product of children).
-    if (outputRowCount > 0) outputRowCount * sizePerRow else 1
+    if (outputRowCount > 0) outputRowCount * getSizePerRow(attributes, attrStats) else 1
   }
 
   /**

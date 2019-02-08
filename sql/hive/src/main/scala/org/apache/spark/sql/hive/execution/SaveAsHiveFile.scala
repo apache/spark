@@ -51,7 +51,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
-      allColumns: Seq[Attribute],
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
       partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
 
@@ -90,7 +89,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
       outputSpec =
-        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, allColumns),
+        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
@@ -115,14 +114,14 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // be removed by Hive when Hive is trying to empty the table directory.
     val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
     val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] =
-      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3)
+      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_1)
 
     // Ensure all the supported versions are considered here.
     assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
       allSupportedHiveVersions)
 
     val externalCatalog = sparkSession.sharedState.externalCatalog
-    val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
+    val hiveVersion = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.version
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 

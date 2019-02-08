@@ -22,7 +22,7 @@ import warnings
 if sys.version >= '3':
     basestring = unicode = str
 
-from pyspark import since
+from pyspark import since, _NoValue
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -93,6 +93,11 @@ class SQLContext(object):
         """
         return self._jsqlContext
 
+    @property
+    def _conf(self):
+        """Accessor for the JVM SQL-specific configurations"""
+        return self.sparkSession._jsparkSession.sessionState().conf()
+
     @classmethod
     @since(1.6)
     def getOrCreate(cls, sc):
@@ -124,11 +129,11 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def getConf(self, key, defaultValue=None):
+    def getConf(self, key, defaultValue=_NoValue):
         """Returns the value of Spark SQL configuration property for the given key.
 
-        If the key is not set and defaultValue is not None, return
-        defaultValue. If the key is not set and defaultValue is None, return
+        If the key is not set and defaultValue is set, return
+        defaultValue. If the key is not set and defaultValue is not set, return
         the system default value.
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
@@ -480,7 +485,8 @@ class HiveContext(SQLContext):
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
             DeprecationWarning)
         if jhiveContext is None:
-            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
+            sparkContext._conf.set("spark.sql.catalogImplementation", "hive")
+            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
@@ -531,10 +537,8 @@ def _test():
     globs['df'] = rdd.toDF()
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
-        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
-        '"field6":[{"field7": "row2"}]}',
-        '{"field1" : null, "field2": "row3", '
-        '"field3":{"field4":33, "field5": []}}'
+        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},"field6":[{"field7": "row2"}]}',
+        '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}'
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)

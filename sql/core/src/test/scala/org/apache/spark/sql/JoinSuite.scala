@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
@@ -239,7 +241,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
             Row(2, 2, 1, null) ::
             Row(2, 2, 2, 2) :: Nil)
       }
-      assert(e.getMessage.contains("Detected cartesian product for INNER join " +
+      assert(e.getMessage.contains("Detected implicit cartesian product for INNER join " +
         "between logical plans"))
     }
   }
@@ -611,7 +613,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       val e = intercept[Exception] {
         checkAnswer(sql(query), Nil);
       }
-      assert(e.getMessage.contains("Detected cartesian product"))
+      assert(e.getMessage.contains("Detected implicit cartesian product"))
     }
 
     cartesianQueries.foreach(checkCartesianDetection)
@@ -831,7 +833,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         case _ =>
       }
       val joinPairs = physicalJoins.zip(executedJoins)
-      val numOfJoins = sqlString.split(" ").count(_.toUpperCase == "JOIN")
+      val numOfJoins = sqlString.split(" ").count(_.toUpperCase(Locale.ROOT) == "JOIN")
       assert(joinPairs.size == numOfJoins)
 
       joinPairs.foreach {
@@ -880,6 +882,91 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       assert(joins(0).isInstanceOf[SortMergeJoinExec])
       assert(joins(1).isInstanceOf[BroadcastHashJoinExec])
       checkAnswer(df, Row(3, 8, 7, 2) :: Row(3, 8, 4, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-24495: Join may return wrong result when having duplicated equal-join keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 100, 1, 2)
+      val df2 = spark.range(100).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
+      checkAnswer(res, Row(0, 0, 0))
+    }
+  }
+
+  test("SPARK-26352: join reordering should not change the order of columns") {
+    withTable("tab1", "tab2", "tab3") {
+      spark.sql("select 1 as x, 100 as y").write.saveAsTable("tab1")
+      spark.sql("select 42 as i, 200 as j").write.saveAsTable("tab2")
+      spark.sql("select 1 as a, 42 as b").write.saveAsTable("tab3")
+
+      val df = spark.sql("""
+        with tmp as (select * from tab1 cross join tab2)
+        select * from tmp join tab3 on a = x and b = i
+      """)
+      checkAnswer(df, Row(1, 100, 42, 200, 1, 42))
+    }
+  }
+
+  test("NaN and -0.0 in join keys") {
+    withTempView("v1", "v2", "v3", "v4") {
+      Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v1")
+      Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT v1.f, v1.d, v2.f, v2.d
+            |FROM v1 JOIN v2
+            |ON v1.f = v2.f AND v1.d = v2.d
+          """.stripMargin),
+        Seq(
+          Row(Float.NaN, Double.NaN, Float.NaN, Double.NaN),
+          Row(0.0f, 0.0, 0.0f, 0.0),
+          Row(0.0f, 0.0, -0.0f, -0.0),
+          Row(-0.0f, -0.0, 0.0f, 0.0),
+          Row(-0.0f, -0.0, -0.0f, -0.0)))
+
+      // test with complicated join keys.
+      checkAnswer(
+        sql(
+          """
+            |SELECT v1.f, v1.d, v2.f, v2.d
+            |FROM v1 JOIN v2
+            |ON
+            |  array(v1.f) = array(v2.f) AND
+            |  struct(v1.d) = struct(v2.d) AND
+            |  array(struct(v1.f, v1.d)) = array(struct(v2.f, v2.d)) AND
+            |  struct(array(v1.f), array(v1.d)) = struct(array(v2.f), array(v2.d))
+          """.stripMargin),
+        Seq(
+          Row(Float.NaN, Double.NaN, Float.NaN, Double.NaN),
+          Row(0.0f, 0.0, 0.0f, 0.0),
+          Row(0.0f, 0.0, -0.0f, -0.0),
+          Row(-0.0f, -0.0, 0.0f, 0.0),
+          Row(-0.0f, -0.0, -0.0f, -0.0)))
+
+      // test with tables with complicated-type columns.
+      Seq((Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))))
+        .toDF("arr", "stru", "arrOfStru").createTempView("v3")
+      Seq((Array(0.0f, -0.0f), Tuple2(0.0d, 0.0/0.0), Seq(Tuple2(0.0d, 0.0/0.0))))
+        .toDF("arr", "stru", "arrOfStru").createTempView("v4")
+      checkAnswer(
+        sql(
+          """
+            |SELECT v3.arr, v3.stru, v3.arrOfStru, v4.arr, v4.stru, v4.arrOfStru
+            |FROM v3 JOIN v4
+            |ON v3.arr = v4.arr AND v3.stru = v4.stru AND v3.arrOfStru = v4.arrOfStru
+          """.stripMargin),
+        Seq(Row(
+          Seq(-0.0f, 0.0f),
+          Row(-0.0d, Double.NaN),
+          Seq(Row(-0.0d, Double.NaN)),
+          Seq(0.0f, -0.0f),
+          Row(0.0d, 0.0/0.0),
+          Seq(Row(0.0d, 0.0/0.0)))))
     }
   }
 }

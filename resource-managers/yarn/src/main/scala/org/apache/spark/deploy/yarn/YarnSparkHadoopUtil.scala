@@ -27,18 +27,12 @@ import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.CredentialUpdater
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
-import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
-
-  private var credentialUpdater: CredentialUpdater = _
 
   // Additional memory overhead
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
@@ -196,31 +190,35 @@ object YarnSparkHadoopUtil {
       sparkConf: SparkConf,
       hadoopConf: Configuration): Set[FileSystem] = {
     val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .toSet
+    val requestAllDelegationTokens = filesystemsToAccess.isEmpty
 
     val stagingFS = sparkConf.get(STAGING_DIR)
       .map(new Path(_).getFileSystem(hadoopConf))
       .getOrElse(FileSystem.get(hadoopConf))
 
-    filesystemsToAccess + stagingFS
-  }
-
-  def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val credentialManager = new YARNHadoopDelegationTokenManager(
-      sparkConf,
-      hadoopConf,
-      conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
-    credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
-    credentialUpdater.start()
-  }
-
-  def stopCredentialUpdater(): Unit = {
-    if (credentialUpdater != null) {
-      credentialUpdater.stop()
-      credentialUpdater = null
+    // Add the list of available namenodes for all namespaces in HDFS federation.
+    // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
+    // namespaces.
+    val hadoopFilesystems = if (!requestAllDelegationTokens || stagingFS.getScheme == "viewfs") {
+      filesystemsToAccess.map(new Path(_).getFileSystem(hadoopConf)).toSet
+    } else {
+      val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
+      // Retrieving the filesystem for the nameservices where HA is not enabled
+      val filesystemsWithoutHA = nameservices.flatMap { ns =>
+        Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")).map { nameNode =>
+          new Path(s"hdfs://$nameNode").getFileSystem(hadoopConf)
+        }
+      }
+      // Retrieving the filesystem for the nameservices where HA is enabled
+      val filesystemsWithHA = nameservices.flatMap { ns =>
+        Option(hadoopConf.get(s"dfs.ha.namenodes.$ns")).map { _ =>
+          new Path(s"hdfs://$ns").getFileSystem(hadoopConf)
+        }
+      }
+      (filesystemsWithoutHA ++ filesystemsWithHA).toSet
     }
+
+    hadoopFilesystems + stagingFS
   }
 
 }

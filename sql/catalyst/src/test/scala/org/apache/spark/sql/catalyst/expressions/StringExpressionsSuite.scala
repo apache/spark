@@ -629,9 +629,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("REVERSE") {
     val s = 'a.string.at(0)
     val row1 = create_row("abccc")
-    checkEvaluation(StringReverse(Literal("abccc")), "cccba", row1)
-    checkEvaluation(StringReverse(s), "cccba", row1)
-    checkEvaluation(StringReverse(Literal.create(null, StringType)), null, row1)
+    checkEvaluation(Reverse(Literal("abccc")), "cccba", row1)
+    checkEvaluation(Reverse(s), "cccba", row1)
+    checkEvaluation(Reverse(Literal.create(null, StringType)), null, row1)
   }
 
   test("SPACE") {
@@ -706,6 +706,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
     assert(FormatNumber(Literal.create(null, NullType), Literal(3)).resolved === false)
+
+    checkEvaluation(FormatNumber(Literal(12332.123456), Literal("##############.###")), "12332.123")
+    checkEvaluation(FormatNumber(Literal(12332.123456), Literal("##.###")), "12332.123")
+    checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Byte]), Literal("##.####")), "4")
+    checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Short]), Literal("##.####")), "4")
+    checkEvaluation(FormatNumber(Literal(4.0f), Literal("##.###")), "4")
+    checkEvaluation(FormatNumber(Literal(4), Literal("##.###")), "4")
+    checkEvaluation(FormatNumber(Literal(12831273.23481d),
+      Literal("###,###,###,###,###.###")), "12,831,273.235")
+    checkEvaluation(FormatNumber(Literal(12831273.83421d), Literal("")), "12,831,274")
+    checkEvaluation(FormatNumber(Literal(123123324123L), Literal("###,###,###,###,###.###")),
+      "123,123,324,123")
+    checkEvaluation(
+      FormatNumber(Literal(Decimal(123123324123L) * Decimal(123123.21234d)),
+        Literal("###,###,###,###,###.####")), "15,159,339,180,002,773.2778")
+    checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal("##.###")), null)
+    assert(FormatNumber(Literal.create(null, NullType), Literal("##.###")).resolved === false)
+
+    checkEvaluation(FormatNumber(Literal(12332.123456), Literal("#,###,###,###,###,###,##0")),
+      "12,332")
+    checkEvaluation(FormatNumber(
+      Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
+    checkEvaluation(FormatNumber(
+      Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
   }
 
   test("find in set") {
@@ -720,16 +744,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ParseUrl") {
     def checkParseUrl(expected: String, urlStr: String, partToExtract: String): Unit = {
-      checkEvaluation(
-        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract))), expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract)), expected)
     }
     def checkParseUrlWithKey(
         expected: String,
         urlStr: String,
         partToExtract: String,
         key: String): Unit = {
-      checkEvaluation(
-        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract), Literal(key))), expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract, key)), expected)
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
@@ -774,7 +796,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sentences(nullString, nullString, nullString), null)
     checkEvaluation(Sentences(nullString, nullString), null)
     checkEvaluation(Sentences(nullString), null)
-    checkEvaluation(Sentences(Literal.create(null, NullType)), null)
     checkEvaluation(Sentences("", nullString, nullString), Seq.empty)
     checkEvaluation(Sentences("", nullString), Seq.empty)
     checkEvaluation(Sentences(""), Seq.empty)

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
@@ -390,11 +394,46 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.filter($"b".isin("z", "y")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
 
+    // Auto casting should work with mixture of different types in collections
+    checkAnswer(df.filter($"a".isin(1.toShort, "2")),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isin("3", 2.toLong)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isin(3, "1")),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
 
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       df2.filter($"a".isin($"b"))
     }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
+  }
+
+  test("isInCollection: Scala Collection") {
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    // Test with different types of collections
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+    checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).toArray)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
+
+    val e = intercept[AnalysisException] {
+      df2.filter($"a".isInCollection(Seq($"b")))
+    }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
   }
 
   test("&&") {
@@ -466,7 +505,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
-      ('a' to 'd').map(c => Row(c.toString.toUpperCase))
+      ('a' to 'd').map(c => Row(c.toString.toUpperCase(Locale.ROOT)))
     )
 
     checkAnswer(
@@ -487,7 +526,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   test("lower") {
     checkAnswer(
       upperCaseData.select(lower('L)),
-      ('A' to 'F').map(c => Row(c.toString.toLowerCase))
+      ('A' to 'F').map(c => Row(c.toString.toLowerCase(Locale.ROOT)))
     )
 
     checkAnswer(

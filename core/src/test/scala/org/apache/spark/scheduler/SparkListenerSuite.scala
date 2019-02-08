@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
@@ -28,6 +29,7 @@ import org.scalatest.Matchers
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
@@ -294,10 +296,13 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
-    // just to make sure some of the tasks take a noticeable amount of time
+    // just to make sure some of the tasks and their deserialization take a noticeable
+    // amount of time
+    val slowDeserializable = new SlowDeserializable
     val w = { i: Int =>
       if (i == 0) {
         Thread.sleep(100)
+        slowDeserializable.use()
       }
       i
     }
@@ -354,7 +359,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
-    val conf = new SparkConf().set("spark.rpc.message.maxSize", "1")
+    val conf = new SparkConf().set(RPC_MESSAGE_MAX_SIZE, 1)
     sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
@@ -485,6 +490,48 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(bus.findListenersByClass[BasicJobCounter]().isEmpty)
   }
 
+  Seq(true, false).foreach { throwInterruptedException =>
+    val suffix = if (throwInterruptedException) "throw interrupt" else "set Thread interrupted"
+    test(s"interrupt within listener is handled correctly: $suffix") {
+      val conf = new SparkConf(false)
+        .set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 5)
+      val bus = new LiveListenerBus(conf)
+      val counter1 = new BasicJobCounter()
+      val counter2 = new BasicJobCounter()
+      val interruptingListener1 = new InterruptingListener(throwInterruptedException)
+      val interruptingListener2 = new InterruptingListener(throwInterruptedException)
+      bus.addToSharedQueue(counter1)
+      bus.addToSharedQueue(interruptingListener1)
+      bus.addToStatusQueue(counter2)
+      bus.addToEventLogQueue(interruptingListener2)
+      assert(bus.activeQueues() === Set(SHARED_QUEUE, APP_STATUS_QUEUE, EVENT_LOG_QUEUE))
+      assert(bus.findListenersByClass[BasicJobCounter]().size === 2)
+      assert(bus.findListenersByClass[InterruptingListener]().size === 2)
+
+      bus.start(mockSparkContext, mockMetricsSystem)
+
+      // after we post one event, both interrupting listeners should get removed, and the
+      // event log queue should be removed
+      bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      assert(bus.activeQueues() === Set(SHARED_QUEUE, APP_STATUS_QUEUE))
+      assert(bus.findListenersByClass[BasicJobCounter]().size === 2)
+      assert(bus.findListenersByClass[InterruptingListener]().size === 0)
+      assert(counter1.count === 1)
+      assert(counter2.count === 1)
+
+      // posting more events should be fine, they'll just get processed from the OK queue.
+      (0 until 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
+      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      assert(counter1.count === 6)
+      assert(counter2.count === 6)
+
+      // Make sure stopping works -- this requires putting a poison pill in all active queues, which
+      // would fail if our interrupted queue was still active, as its queue would be full.
+      bus.stop()
+    }
+  }
+
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */
@@ -543,6 +590,18 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = { throw new Exception }
   }
 
+  /**
+   * A simple listener that interrupts on job end.
+   */
+  private class InterruptingListener(val throwInterruptedException: Boolean) extends SparkListener {
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      if (throwInterruptedException) {
+        throw new InterruptedException("got interrupted")
+      } else {
+        Thread.currentThread().interrupt()
+      }
+    }
+  }
 }
 
 // These classes can't be declared inside of the SparkListenerSuite class because we don't want
@@ -582,4 +641,13 @@ private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf) extends Spar
     case job: SparkListenerJobEnd => count += 1
     case _ =>
   }
+}
+
+private class SlowDeserializable extends Externalizable {
+
+  override def writeExternal(out: ObjectOutput): Unit = { }
+
+  override def readExternal(in: ObjectInput): Unit = Thread.sleep(1)
+
+  def use(): Unit = { }
 }

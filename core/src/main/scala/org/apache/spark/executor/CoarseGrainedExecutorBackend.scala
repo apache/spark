@@ -60,7 +60,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls))
+      ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
+        extractAttributes))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
@@ -74,6 +75,12 @@ private[spark] class CoarseGrainedExecutorBackend(
     val prefix = "SPARK_LOG_URL_"
     sys.env.filterKeys(_.startsWith(prefix))
       .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
+  }
+
+  def extractAttributes: Map[String, String] = {
+    val prefix = "SPARK_EXECUTOR_ATTRIBUTE_"
+    sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2))
   }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -213,13 +220,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
-      if (driverConf.contains("spark.yarn.credentials.file")) {
-        logInfo("Will periodically update credentials from: " +
-          driverConf.get("spark.yarn.credentials.file"))
-        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
-          .getMethod("startCredentialUpdater", classOf[SparkConf])
-          .invoke(null, driverConf)
-      }
 
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
@@ -234,11 +234,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
-      if (driverConf.contains("spark.yarn.credentials.file")) {
-        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
-          .getMethod("stopCredentialUpdater")
-          .invoke(null)
-      }
     }
   }
 

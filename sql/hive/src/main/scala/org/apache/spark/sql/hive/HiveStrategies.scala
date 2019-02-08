@@ -31,8 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTab
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
@@ -87,7 +86,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
     }
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
       // Finds the database name if the name does not exist.
       val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
@@ -114,7 +113,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case relation: HiveTableRelation
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
@@ -145,11 +144,11 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
  * `PreprocessTableInsertion`.
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoTable(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
-        ifPartitionNotExists, query.output)
+        ifPartitionNotExists, query.output.map(_.name))
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
@@ -157,14 +156,14 @@ object HiveAnalysis extends Rule[LogicalPlan] {
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
-      CreateHiveTableAsSelectCommand(tableDesc, query, query.output, mode)
+      CreateHiveTableAsSelectCommand(tableDesc, query, query.output.map(_.name), mode)
 
     case InsertIntoDir(isLocal, storage, provider, child, overwrite)
         if DDLUtils.isHiveTable(provider) =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 
-      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output)
+      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output.map(_.name))
   }
 }
 
@@ -181,49 +180,39 @@ case class RelationConversions(
     conf: SQLConf,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
-    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
-      serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+    isConvertible(relation.tableMeta)
   }
 
-  private def convert(relation: HiveTableRelation): LogicalRelation = {
-    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    if (serde.contains("parquet")) {
-      val options = relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
-        conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
-      sessionCatalog.metastoreCatalog
-        .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
-    } else {
-      val options = relation.tableMeta.storage.properties
-      if (conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
-        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
-          relation,
-          options,
-          classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat],
-          "orc")
-      } else {
-        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
-          relation,
-          options,
-          classOf[org.apache.spark.sql.hive.orc.OrcFileFormat],
-          "orc")
-      }
-    }
+  private def isConvertible(tableMeta: CatalogTable): Boolean = {
+    val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
+
+  private val metastoreCatalog = sessionCatalog.metastoreCatalog
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transformUp {
+    plan resolveOperators {
       // Write path
       case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
         // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             !r.isPartitioned && isConvertible(r) =>
-        InsertIntoTable(convert(r), partition, query, overwrite, ifPartitionNotExists)
+        InsertIntoTable(metastoreCatalog.convert(r), partition,
+          query, overwrite, ifPartitionNotExists)
 
       // Read path
       case relation: HiveTableRelation
           if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
-        convert(relation)
+        metastoreCatalog.convert(relation)
+
+      // CTAS
+      case CreateTable(tableDesc, mode, Some(query))
+          if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
+            isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
+        DDLUtils.checkDataColNames(tableDesc)
+        OptimizedCreateHiveTableAsSelectCommand(
+          tableDesc, query, query.output.map(_.name), mode)
     }
   }
 }

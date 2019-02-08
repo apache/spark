@@ -36,6 +36,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
+import org.mockito.Mockito._
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -44,7 +45,10 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
-import org.apache.spark.deploy.history.config._
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
@@ -77,10 +81,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     Utils.deleteRecursively(storeDir)
     assert(storeDir.mkdir())
     val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir)
-      .set("spark.history.fs.update.interval", "0")
-      .set("spark.testing", "true")
+      .set(HISTORY_LOG_DIR, logDir)
+      .set(UPDATE_INTERVAL_S.key, "0")
+      .set(IS_TESTING, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
+      .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
+      .set(EVENT_LOG_PROCESS_TREE_METRICS, true)
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
@@ -127,6 +133,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "succeeded&failed job list json" ->
       "applications/local-1422981780767/jobs?status=succeeded&status=failed",
     "executor list json" -> "applications/local-1422981780767/executors",
+    "executor list with executor metrics json" ->
+      "applications/application_1506645932520_24630151/executors",
+    "executor list with executor process tree metrics json" ->
+      "applications/application_1538416563558_0014/executors",
     "stage list json" -> "applications/local-1422981780767/stages",
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
@@ -281,6 +291,29 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }
 
+  test("automatically retrieve uiRoot from request through Knox") {
+    assert(sys.props.get("spark.ui.proxyBase").isEmpty,
+      "spark.ui.proxyBase is defined but it should not for this UT")
+    assert(sys.env.get("APPLICATION_WEB_PROXY_BASE").isEmpty,
+      "APPLICATION_WEB_PROXY_BASE is defined but it should not for this UT")
+    val page = new HistoryPage(server)
+    val requestThroughKnox = mock[HttpServletRequest]
+    val knoxBaseUrl = "/gateway/default/sparkhistoryui"
+    when(requestThroughKnox.getHeader("X-Forwarded-Context")).thenReturn(knoxBaseUrl)
+    val responseThroughKnox = page.render(requestThroughKnox)
+
+    val urlsThroughKnox = responseThroughKnox \\ "@href" map (_.toString)
+    val siteRelativeLinksThroughKnox = urlsThroughKnox filter (_.startsWith("/"))
+    all (siteRelativeLinksThroughKnox) should startWith (knoxBaseUrl)
+
+    val directRequest = mock[HttpServletRequest]
+    val directResponse = page.render(directRequest)
+
+    val directUrls = directResponse \\ "@href" map (_.toString)
+    val directSiteRelativeLinks = directUrls filter (_.startsWith("/"))
+    all (directSiteRelativeLinks) should not startWith (knoxBaseUrl)
+  }
+
   test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
     val page = new HistoryPage(server)
@@ -294,6 +327,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
     all (siteRelativeLinks) should startWith (uiRoot)
+  }
+
+  test("/version api endpoint") {
+    val response = getUrl("version")
+    assert(response.contains(SPARK_VERSION))
   }
 
   test("ajax rendered relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
@@ -364,7 +402,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
    */
   test("security manager starts with spark.authenticate set") {
     val conf = new SparkConf()
-      .set("spark.testing", "true")
+      .set(IS_TESTING, true)
       .set(SecurityManager.SPARK_AUTH_CONF, "true")
     HistoryServer.createSecurityManager(conf)
   }
@@ -381,13 +419,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // allowed refresh rate (1Hz)
     stop()
     val myConf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
-      .set("spark.eventLog.dir", logDir.getAbsolutePath)
-      .set("spark.history.fs.update.interval", "1s")
-      .set("spark.eventLog.enabled", "true")
-      .set("spark.history.cache.window", "250ms")
+      .set(HISTORY_LOG_DIR, logDir.getAbsolutePath)
+      .set(EVENT_LOG_DIR, logDir.getAbsolutePath)
+      .set(UPDATE_INTERVAL_S.key, "1s")
+      .set(EVENT_LOG_ENABLED, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-      .remove("spark.testing")
+      .remove(IS_TESTING)
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
 
@@ -577,9 +614,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     stop()
     init(
-      "spark.ui.filters" -> classOf[FakeAuthFilter].getName(),
-      "spark.history.ui.acls.enable" -> "true",
-      "spark.history.ui.admin.acls" -> admin)
+      UI_FILTERS.key -> classOf[FakeAuthFilter].getName(),
+      HISTORY_SERVER_UI_ACLS_ENABLE.key -> "true",
+      HISTORY_SERVER_UI_ADMIN_ACLS.key -> admin)
 
     val tests = Seq(
       (owner, HttpServletResponse.SC_OK),

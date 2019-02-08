@@ -21,16 +21,19 @@ import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, Ou
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Python._
+import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
-  extends Logging {
+  extends Logging { self =>
 
   import PythonWorkerFactory._
 
@@ -38,8 +41,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   // pyspark/daemon.py (by default) and tell it to fork new workers for our tasks. This daemon
   // currently only works on UNIX-based systems now because it uses signals for child management,
   // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
-  val useDaemon = {
-    val useDaemonEnabled = SparkEnv.get.conf.getBoolean("spark.python.use.daemon", true)
+  private val useDaemon = {
+    val useDaemonEnabled = SparkEnv.get.conf.get(PYTHON_USE_DAEMON)
 
     // This flag is ignored on Windows as it's unable to fork.
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
@@ -50,42 +53,52 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   // as expert-only option, and shouldn't be used before knowing what it means exactly.
 
   // This configuration indicates the module to run the daemon to execute its Python workers.
-  val daemonModule = SparkEnv.get.conf.getOption("spark.python.daemon.module").map { value =>
-    logInfo(
-      s"Python daemon module in PySpark is set to [$value] in 'spark.python.daemon.module', " +
-      "using this to start the daemon up. Note that this configuration only has an effect when " +
-      "'spark.python.use.daemon' is enabled and the platform is not Windows.")
-    value
-  }.getOrElse("pyspark.daemon")
+  private val daemonModule =
+    SparkEnv.get.conf.get(PYTHON_DAEMON_MODULE).map { value =>
+      logInfo(
+        s"Python daemon module in PySpark is set to [$value] in '${PYTHON_DAEMON_MODULE.key}', " +
+        "using this to start the daemon up. Note that this configuration only has an effect when " +
+        s"'${PYTHON_USE_DAEMON.key}' is enabled and the platform is not Windows.")
+      value
+    }.getOrElse("pyspark.daemon")
 
   // This configuration indicates the module to run each Python worker.
-  val workerModule = SparkEnv.get.conf.getOption("spark.python.worker.module").map { value =>
-    logInfo(
-      s"Python worker module in PySpark is set to [$value] in 'spark.python.worker.module', " +
-      "using this to start the worker up. Note that this configuration only has an effect when " +
-      "'spark.python.use.daemon' is disabled or the platform is Windows.")
-    value
-  }.getOrElse("pyspark.worker")
+  private val workerModule =
+    SparkEnv.get.conf.get(PYTHON_WORKER_MODULE).map { value =>
+      logInfo(
+        s"Python worker module in PySpark is set to [$value] in '${PYTHON_WORKER_MODULE.key}', " +
+        "using this to start the worker up. Note that this configuration only has an effect when " +
+        s"'${PYTHON_USE_DAEMON.key}' is disabled or the platform is Windows.")
+      value
+    }.getOrElse("pyspark.worker")
 
-  var daemon: Process = null
+  private val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
+
+  @GuardedBy("self")
+  private var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
-  var daemonPort: Int = 0
-  val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
-  val idleWorkers = new mutable.Queue[Socket]()
-  var lastActivity = 0L
+  @GuardedBy("self")
+  private var daemonPort: Int = 0
+  @GuardedBy("self")
+  private val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
+  @GuardedBy("self")
+  private val idleWorkers = new mutable.Queue[Socket]()
+  @GuardedBy("self")
+  private var lastActivity = 0L
   new MonitorThread().start()
 
-  var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
+  @GuardedBy("self")
+  private val simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
 
-  val pythonPath = PythonUtils.mergePythonPaths(
+  private val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
   def create(): Socket = {
     if (useDaemon) {
-      synchronized {
-        if (idleWorkers.size > 0) {
+      self.synchronized {
+        if (idleWorkers.nonEmpty) {
           return idleWorkers.dequeue()
         }
       }
@@ -108,11 +121,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       if (pid < 0) {
         throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
+
+      authHelper.authToServer(socket)
       daemonWorkers.put(socket, pid)
       socket
     }
 
-    synchronized {
+    self.synchronized {
       // Start the daemon if it hasn't been started
       startDaemon()
 
@@ -145,25 +160,26 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       workerEnv.put("PYTHONPATH", pythonPath)
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
+      workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocket.getLocalPort.toString)
+      workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
       redirectStreamsToStderr(worker.getInputStream, worker.getErrorStream)
 
-      // Tell the worker our port
-      val out = new  OutputStreamWriter(worker.getOutputStream, StandardCharsets.UTF_8)
-      out.write(serverSocket.getLocalPort + "\n")
-      out.flush()
-
-      // Wait for it to connect to our socket
+      // Wait for it to connect to our socket, and validate the auth secret.
       serverSocket.setSoTimeout(10000)
+
       try {
         val socket = serverSocket.accept()
-        simpleWorkers.put(socket, worker)
+        authHelper.authClient(socket)
+        self.synchronized {
+          simpleWorkers.put(socket, worker)
+        }
         return socket
       } catch {
         case e: Exception =>
-          throw new SparkException("Python worker did not connect back in time", e)
+          throw new SparkException("Python worker failed to connect back.", e)
       }
     } finally {
       if (serverSocket != null) {
@@ -174,7 +190,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   private def startDaemon() {
-    synchronized {
+    self.synchronized {
       // Is it already running?
       if (daemon != null) {
         return
@@ -187,6 +203,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
+        workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
         daemon = pb.start()
@@ -218,7 +235,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
         // Redirect daemon stdout and stderr
         redirectStreamsToStderr(in, daemon.getErrorStream)
-
       } catch {
         case e: Exception =>
 
@@ -274,7 +290,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
     override def run() {
       while (true) {
-        synchronized {
+        self.synchronized {
           if (lastActivity + IDLE_WORKER_TIMEOUT_MS < System.currentTimeMillis()) {
             cleanupIdleWorkers()
             lastActivity = System.currentTimeMillis()
@@ -299,7 +315,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   private def stopDaemon() {
-    synchronized {
+    self.synchronized {
       if (useDaemon) {
         cleanupIdleWorkers()
 
@@ -321,7 +337,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   def stopWorker(worker: Socket) {
-    synchronized {
+    self.synchronized {
       if (useDaemon) {
         if (daemon != null) {
           daemonWorkers.get(worker).foreach { pid =>
@@ -341,7 +357,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   def releaseWorker(worker: Socket) {
     if (useDaemon) {
-      synchronized {
+      self.synchronized {
         lastActivity = System.currentTimeMillis()
         idleWorkers.enqueue(worker)
       }

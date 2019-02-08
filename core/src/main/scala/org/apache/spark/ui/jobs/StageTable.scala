@@ -42,17 +42,14 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
-  // stripXSS is called to remove suspicious characters used in XSS attacks
-  val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
-  val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
+  val parameterOtherTable = request.getParameterMap().asScala
+    .filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 
-  val parameterStagePage = UIUtils.stripXSS(request.getParameter(stageTag + ".page"))
-  val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
-  val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
-  val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
-  val parameterStagePrevPageSize =
-    UIUtils.stripXSS(request.getParameter(stageTag + ".prevPageSize"))
+  val parameterStagePage = request.getParameter(stageTag + ".page")
+  val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
+  val parameterStageSortDesc = request.getParameter(stageTag + ".desc")
+  val parameterStagePageSize = request.getParameter(stageTag + ".pageSize")
 
   val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
   val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>
@@ -63,18 +60,7 @@ private[ui] class StageTableBase(
     stageSortColumn == "Stage Id"
   )
   val stagePageSize = Option(parameterStagePageSize).map(_.toInt).getOrElse(100)
-  val stagePrevPageSize = Option(parameterStagePrevPageSize).map(_.toInt)
-    .getOrElse(stagePageSize)
 
-  val page: Int = {
-    // If the user has changed to a larger page size, then go to page 1 in order to avoid
-    // IndexOutOfBoundsException.
-    if (stagePageSize <= stagePrevPageSize) {
-      stagePage
-    } else {
-      1
-    }
-  }
   val currentTime = System.currentTimeMillis()
 
   val toNodeSeq = try {
@@ -92,8 +78,9 @@ private[ui] class StageTableBase(
       stageSortColumn,
       stageSortDesc,
       isFailedStage,
-      parameterOtherTable
-    ).table(page)
+      parameterOtherTable,
+      request
+    ).table(stagePage)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
       <div class="alert alert-error">
@@ -147,7 +134,8 @@ private[ui] class StagePagedTable(
     sortColumn: String,
     desc: Boolean,
     isFailedStage: Boolean,
-    parameterOtherTable: Iterable[String]) extends PagedTable[StageTableRowData] {
+    parameterOtherTable: Iterable[String],
+    request: HttpServletRequest) extends PagedTable[StageTableRowData] {
 
   override def tableId: String = stageTag + "-table"
 
@@ -157,11 +145,9 @@ private[ui] class StagePagedTable(
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
 
-  override def prevPageSizeFormField: String = stageTag + ".prevPageSize"
-
   override def pageNumberFormField: String = stageTag + ".page"
 
-  val parameterPath = UIUtils.prependBaseUri(basePath) + s"/$subPath/?" +
+  val parameterPath = UIUtils.prependBaseUri(request, basePath) + s"/$subPath/?" +
     parameterOtherTable.mkString("&")
 
   override val dataSource = new StageDataSource(
@@ -288,7 +274,7 @@ private[ui] class StagePagedTable(
         {if (isFairScheduler) {
           <td>
             <a href={"%s/stages/pool?poolname=%s"
-              .format(UIUtils.prependBaseUri(basePath), data.schedulingPool)}>
+              .format(UIUtils.prependBaseUri(request, basePath), data.schedulingPool)}>
               {data.schedulingPool}
             </a>
           </td>
@@ -346,7 +332,7 @@ private[ui] class StagePagedTable(
   }
 
   private def makeDescription(s: v1.StageData, descriptionOption: Option[String]): Seq[Node] = {
-    val basePathUri = UIUtils.prependBaseUri(basePath)
+    val basePathUri = UIUtils.prependBaseUri(request, basePath)
 
     val killLink = if (killEnabled) {
       val confirm =
@@ -366,7 +352,7 @@ private[ui] class StagePagedTable(
       Seq.empty
     }
 
-    val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
+    val nameLinkUri = s"$basePathUri/stages/stage/?id=${s.stageId}&attempt=${s.attemptId}"
     val nameLink = <a href={nameLinkUri} class="name-link">{s.name}</a>
 
     val cachedRddInfos = store.rddList().filter { rdd => s.rddIds.contains(rdd.id) }
@@ -379,7 +365,7 @@ private[ui] class StagePagedTable(
         {if (cachedRddInfos.nonEmpty) {
           Text("RDD: ") ++
           cachedRddInfos.map { i =>
-            <a href={s"$basePathUri/storage/rdd?id=${i.id}"}>{i.name}</a>
+            <a href={s"$basePathUri/storage/rdd/?id=${i.id}"}>{i.name}</a>
           }
         }}
         <pre>{s.details}</pre>

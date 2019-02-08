@@ -75,11 +75,18 @@ package object client {
       exclusions = Seq("org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    case object v2_3 extends HiveVersion("2.3.2",
+    case object v2_3 extends HiveVersion("2.3.4",
       exclusions = Seq("org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    val allSupportedHiveVersions = Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3)
+    // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
+    case object v3_1 extends HiveVersion("3.1.1",
+      extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
+        "org.apache.derby:derby:10.14.1.0"),
+      exclusions = Seq("org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm"))
+
+    val allSupportedHiveVersions = Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_1)
   }
   // scalastyle:on
 

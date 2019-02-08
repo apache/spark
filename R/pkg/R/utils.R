@@ -746,7 +746,7 @@ varargsToJProperties <- function(...) {
   props
 }
 
-launchScript <- function(script, combinedArgs, wait = FALSE) {
+launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr = "") {
   if (.Platform$OS.type == "windows") {
     scriptWithArgs <- paste(script, combinedArgs, sep = " ")
     # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
@@ -756,7 +756,7 @@ launchScript <- function(script, combinedArgs, wait = FALSE) {
     # stdout = F means discard output
     # stdout = "" means to its console (default)
     # Note that the console of this child process might not be the same as the running R process.
-    system2(script, combinedArgs, stdout = "", wait = wait)
+    system2(script, combinedArgs, stdout = stdout, wait = wait, stderr = stderr)
   }
 }
 

@@ -22,7 +22,6 @@ import java.net.URI
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.parallel.ForkJoinTaskSupport
 import scala.util.{Failure, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -34,6 +33,7 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
@@ -77,7 +77,6 @@ class ParquetFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-
     val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
 
     val conf = ContextUtil.getConfiguration(job)
@@ -125,16 +124,17 @@ class ParquetFileFormat
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
     // SPARK-15719: Disables writing Parquet summary files by default.
-    if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
-      conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+    if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null
+      && conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
+      conf.setEnum(ParquetOutputFormat.JOB_SUMMARY_LEVEL, JobSummaryLevel.NONE)
     }
 
-    if (conf.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+    if (ParquetOutputFormat.getJobSummaryLevel(conf) == JobSummaryLevel.NONE
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
       logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
         s" create job summaries. " +
-        s"Set Parquet option ${ParquetOutputFormat.ENABLE_JOB_SUMMARY} to false.")
+        s"Set Parquet option ${ParquetOutputFormat.JOB_SUMMARY_LEVEL} to NONE.")
     }
 
     new OutputWriterFactory {
@@ -310,6 +310,9 @@ class ParquetFileFormat
     hadoopConf.set(
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
+    hadoopConf.setBoolean(
+      SQLConf.CASE_SENSITIVE.key,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
@@ -320,19 +323,6 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
-
-    // Try to push down filters when filter push-down is enabled.
-    val pushed =
-      if (sparkSession.sessionState.conf.parquetFilterPushDown) {
-        filters
-          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
-          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
-          // is used here.
-          .flatMap(ParquetFilters.createFilter(requiredSchema, _))
-          .reduceOption(FilterApi.and)
-      } else {
-        None
-      }
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -346,40 +336,61 @@ class ParquetFileFormat
     val enableVectorizedReader: Boolean =
       sqlConf.parquetVectorizedReaderEnabled &&
       resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
-    val enableRecordFilter: Boolean =
-      sparkSession.sessionState.conf.parquetRecordFilterEnabled
-    val timestampConversion: Boolean =
-      sparkSession.sessionState.conf.isParquetINT96TimestampConversion
+    val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
+    val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
     val capacity = sqlConf.parquetVectorizedReaderBatchSize
+    val enableParquetFilterPushDown: Boolean = sqlConf.parquetFilterPushDown
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
+    val pushDownDate = sqlConf.parquetFilterPushDownDate
+    val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
+    val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
+    val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+    val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+    val isCaseSensitive = sqlConf.caseSensitiveAnalysis
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
-      val fileSplit =
-        new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
-
+      val filePath = new Path(new URI(file.filePath))
       val split =
         new org.apache.parquet.hadoop.ParquetInputSplit(
-          fileSplit.getPath,
-          fileSplit.getStart,
-          fileSplit.getStart + fileSplit.getLength,
-          fileSplit.getLength,
-          fileSplit.getLocations,
+          filePath,
+          file.start,
+          file.start + file.length,
+          file.length,
+          Array.empty,
           null)
 
       val sharedConf = broadcastedHadoopConf.value.value
+
+      lazy val footerFileMetaData =
+        ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+      // Try to push down filters when filter push-down is enabled.
+      val pushed = if (enableParquetFilterPushDown) {
+        val parquetSchema = footerFileMetaData.getSchema
+        val parquetFilters = new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownDecimal,
+          pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
+        filters
+          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+          // is used here.
+          .flatMap(parquetFilters.createFilter(parquetSchema, _))
+          .reduceOption(FilterApi.and)
+      } else {
+        None
+      }
+
       // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
       // *only* if the file was created by something other than "parquet-mr", so check the actual
       // writer here for this file.  We have to do this per-file, as each file in the table may
       // have different writers.
-      def isCreatedByParquetMr(): Boolean = {
-        val footer = ParquetFileReader.readFooter(sharedConf, fileSplit.getPath, SKIP_ROW_GROUPS)
-        footer.getFileMetaData().getCreatedBy().startsWith("parquet-mr")
-      }
+      // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
+      def isCreatedByParquetMr: Boolean =
+        footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
+
       val convertTz =
-        if (timestampConversion && !isCreatedByParquetMr()) {
+        if (timestampConversion && !isCreatedByParquetMr) {
           Some(DateTimeUtils.getTimeZone(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
         } else {
           None
@@ -400,7 +411,7 @@ class ParquetFileFormat
           convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion lister before `initialization`.
-        taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
+        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
@@ -421,7 +432,7 @@ class ParquetFileFormat
         }
         val iter = new RecordReaderIterator(reader)
         // SPARK-23457 Register a task completion lister before `initialization`.
-        taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
+        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         reader.initialize(split, hadoopAttemptContext)
 
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
@@ -440,6 +451,21 @@ class ParquetFileFormat
         }
       }
     }
+  }
+
+  override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType) && supportDataType(valueType)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
+
+    case _ => false
   }
 }
 
@@ -506,30 +532,23 @@ object ParquetFileFormat extends Logging {
       conf: Configuration,
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
-    val parFiles = partFiles.par
-    val pool = ThreadUtils.newForkJoinPool("readingParquetFooters", 8)
-    parFiles.tasksupport = new ForkJoinTaskSupport(pool)
-    try {
-      parFiles.flatMap { currentFile =>
-        try {
-          // Skips row group information since we only need the schema.
-          // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
-          // when it can't read the footer.
-          Some(new Footer(currentFile.getPath(),
-            ParquetFileReader.readFooter(
-              conf, currentFile, SKIP_ROW_GROUPS)))
-        } catch { case e: RuntimeException =>
-          if (ignoreCorruptFiles) {
-            logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
-            None
-          } else {
-            throw new IOException(s"Could not read footer for file: $currentFile", e)
-          }
+    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
+      try {
+        // Skips row group information since we only need the schema.
+        // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
+        // when it can't read the footer.
+        Some(new Footer(currentFile.getPath(),
+          ParquetFileReader.readFooter(
+            conf, currentFile, SKIP_ROW_GROUPS)))
+      } catch { case e: RuntimeException =>
+        if (ignoreCorruptFiles) {
+          logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
+          None
+        } else {
+          throw new IOException(s"Could not read footer for file: $currentFile", e)
         }
-      }.seq
-    } finally {
-      pool.shutdown()
-    }
+      }
+    }.flatten
   }
 
   /**

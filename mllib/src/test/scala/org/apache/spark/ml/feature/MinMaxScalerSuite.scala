@@ -17,13 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.Row
 
-class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class MinMaxScalerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -48,9 +46,9 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       .setMax(5)
 
     val model = scaler.fit(df)
-    model.transform(df).select("expected", "scaled").collect()
-      .foreach { case Row(vector1: Vector, vector2: Vector) =>
-        assert(vector1.equals(vector2), "Transformed vector is different with expected.")
+    testTransformer[(Vector, Vector)](df, model, "expected", "scaled") {
+      case Row(vector1: Vector, vector2: Vector) =>
+        assert(vector1 === vector2, "Transformed vector is different with expected.")
     }
 
     MLTestingUtils.checkCopyAndUids(scaler, model)
@@ -114,7 +112,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
     val model = scaler.fit(df)
     model.transform(df).select("expected", "scaled").collect()
       .foreach { case Row(vector1: Vector, vector2: Vector) =>
-        assert(vector1.equals(vector2), "Transformed vector is different with expected.")
+        assert(vector1 === vector2, "Transformed vector is different with expected.")
       }
   }
 }

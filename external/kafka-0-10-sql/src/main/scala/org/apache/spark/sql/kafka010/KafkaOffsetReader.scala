@@ -21,6 +21,7 @@ import java.{util => ju}
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
@@ -45,7 +46,7 @@ import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
  */
 private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
-    driverKafkaParams: ju.Map[String, Object],
+    val driverKafkaParams: ju.Map[String, Object],
     readerOptions: Map[String, String],
     driverGroupIdPrefix: String) extends Logging {
   /**
@@ -75,7 +76,19 @@ private[kafka010] class KafkaOffsetReader(
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
    */
-  protected var consumer = createConsumer()
+  @volatile protected var _consumer: Consumer[Array[Byte], Array[Byte]] = null
+
+  protected def consumer: Consumer[Array[Byte], Array[Byte]] = synchronized {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    if (_consumer == null) {
+      val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
+      if (driverKafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG) == null) {
+        newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
+      }
+      _consumer = consumerStrategy.createConsumer(newKafkaParams)
+    }
+    _consumer
+  }
 
   private val maxOffsetFetchAttempts =
     readerOptions.getOrElse("fetchOffset.numRetries", "3").toInt
@@ -95,9 +108,7 @@ private[kafka010] class KafkaOffsetReader(
    * Closes the connection to Kafka, and cleans up state.
    */
   def close(): Unit = {
-    runUninterruptibly {
-      consumer.close()
-    }
+    if (_consumer != null) runUninterruptibly { stopConsumer() }
     kafkaReaderThread.shutdown()
   }
 
@@ -129,6 +140,12 @@ private[kafka010] class KafkaOffsetReader(
         // Poll to get the latest assigned partitions
         consumer.poll(0)
         val partitions = consumer.assignment()
+
+        // Call `position` to wait until the potential offset request triggered by `poll(0)` is
+        // done. This is a workaround for KAFKA-7703, which an async `seekToBeginning` triggered by
+        // `poll(0)` may reset offsets that should have been set by another request.
+        partitions.asScala.map(p => p -> consumer.position(p)).foreach(_ => {})
+
         consumer.pause(partitions)
         assert(partitions.asScala == partitionOffsets.keySet,
           "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
@@ -184,19 +201,82 @@ private[kafka010] class KafkaOffsetReader(
   /**
    * Fetch the latest offsets for the topic partitions that are indicated
    * in the [[ConsumerStrategy]].
+   *
+   * Kafka may return earliest offsets when we are requesting latest offsets if `poll` is called
+   * right before `seekToEnd` (KAFKA-7703). As a workaround, we will call `position` right after
+   * `poll` to wait until the potential offset request triggered by `poll(0)` is done.
+   *
+   * In addition, to avoid other unknown issues, we also use the given `knownOffsets` to audit the
+   * latest offsets returned by Kafka. If we find some incorrect offsets (a latest offset is less
+   * than an offset in `knownOffsets`), we will retry at most `maxOffsetFetchAttempts` times. When
+   * a topic is recreated, the latest offsets may be less than offsets in `knownOffsets`. We cannot
+   * distinguish this with KAFKA-7703, so we just return whatever we get from Kafka after retrying.
    */
-  def fetchLatestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
+  def fetchLatestOffsets(
+      knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap = runUninterruptibly {
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
       consumer.poll(0)
       val partitions = consumer.assignment()
+
+      // Call `position` to wait until the potential offset request triggered by `poll(0)` is
+      // done. This is a workaround for KAFKA-7703, which an async `seekToBeginning` triggered by
+      // `poll(0)` may reset offsets that should have been set by another request.
+      partitions.asScala.map(p => p -> consumer.position(p)).foreach(_ => {})
+
       consumer.pause(partitions)
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the end.")
 
-      consumer.seekToEnd(partitions)
-      val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
-      logDebug(s"Got latest offsets for partition : $partitionOffsets")
-      partitionOffsets
+      if (knownOffsets.isEmpty) {
+        consumer.seekToEnd(partitions)
+        partitions.asScala.map(p => p -> consumer.position(p)).toMap
+      } else {
+        var partitionOffsets: PartitionOffsetMap = Map.empty
+
+        /**
+         * Compare `knownOffsets` and `partitionOffsets`. Returns all partitions that have incorrect
+         * latest offset (offset in `knownOffsets` is great than the one in `partitionOffsets`).
+         */
+        def findIncorrectOffsets(): Seq[(TopicPartition, Long, Long)] = {
+          var incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
+          partitionOffsets.foreach { case (tp, offset) =>
+            knownOffsets.foreach(_.get(tp).foreach { knownOffset =>
+              if (knownOffset > offset) {
+                val incorrectOffset = (tp, knownOffset, offset)
+                incorrectOffsets += incorrectOffset
+              }
+            })
+          }
+          incorrectOffsets
+        }
+
+        // Retry to fetch latest offsets when detecting incorrect offsets. We don't use
+        // `withRetriesWithoutInterrupt` to retry because:
+        //
+        // - `withRetriesWithoutInterrupt` will reset the consumer for each attempt but a fresh
+        //    consumer has a much bigger chance to hit KAFKA-7703.
+        // - Avoid calling `consumer.poll(0)` which may cause KAFKA-7703.
+        var incorrectOffsets: Seq[(TopicPartition, Long, Long)] = Nil
+        var attempt = 0
+        do {
+          consumer.seekToEnd(partitions)
+          partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
+          attempt += 1
+
+          incorrectOffsets = findIncorrectOffsets()
+          if (incorrectOffsets.nonEmpty) {
+            logWarning("Found incorrect offsets in some partitions " +
+              s"(partition, previous offset, fetched offset): $incorrectOffsets")
+            if (attempt < maxOffsetFetchAttempts) {
+              logWarning("Retrying to fetch latest offsets because of incorrect offsets")
+              Thread.sleep(offsetFetchAttemptIntervalMs)
+            }
+          }
+        } while (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts)
+
+        logDebug(s"Got latest offsets for partition : $partitionOffsets")
+        partitionOffsets
+      }
     }
   }
 
@@ -304,19 +384,14 @@ private[kafka010] class KafkaOffsetReader(
     }
   }
 
-  /**
-   * Create a consumer using the new generated group id. We always use a new consumer to avoid
-   * just using a broken consumer to retry on Kafka errors, which likely will fail again.
-   */
-  private def createConsumer(): Consumer[Array[Byte], Array[Byte]] = synchronized {
-    val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
-    newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
-    consumerStrategy.createConsumer(newKafkaParams)
+  private def stopConsumer(): Unit = synchronized {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    if (_consumer != null) _consumer.close()
   }
 
   private def resetConsumer(): Unit = synchronized {
-    consumer.close()
-    consumer = createConsumer()
+    stopConsumer()
+    _consumer = null  // will automatically get reinitialized again
   }
 }
 

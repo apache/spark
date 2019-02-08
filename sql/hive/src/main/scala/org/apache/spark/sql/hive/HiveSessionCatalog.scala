@@ -30,16 +30,17 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalog, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
+import org.apache.spark.util.Utils
 
 
 private[sql] class HiveSessionCatalog(
-    externalCatalogBuilder: () => HiveExternalCatalog,
+    externalCatalogBuilder: () => ExternalCatalog,
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
     val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
@@ -131,18 +132,20 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName)) {
-          // If the function actually exists in functionRegistry, it means that there is an
-          // error when we create the Expression using the given children.
+        if (super.functionExists(name)) {
+          // If the function exists (either in functionRegistry or externalCatalog),
+          // it means that there is an error when we create the Expression using the given children.
           // We need to throw the original exception.
           throw error
         } else {
-          // This function is not in functionRegistry, let's try to load it as a Hive's
-          // built-in function.
+          // This function does not exist (neither in functionRegistry or externalCatalog),
+          // let's try to load it as a Hive's built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
+          logWarning("Encountered a failure during looking up function:" +
+            s" ${Utils.exceptionString(error)}")
           if (!hiveFunctions.contains(functionName)) {
-            failFunctionLookup(funcName)
+            failFunctionLookup(funcName, Some(error))
           }
 
           // TODO: Remove this fallback path once we implement the list of fallback functions
@@ -150,12 +153,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(funcName))
+                failFunctionLookup(funcName, Some(error)))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(funcName)
+              case NonFatal(e) => failFunctionLookup(funcName, Some(e))
             }
           }
           val className = functionInfo.getFunctionClass.getName
@@ -173,6 +176,10 @@ private[sql] class HiveSessionCatalog(
   // TODO Removes this method after implementing Spark native "histogram_numeric".
   override def functionExists(name: FunctionIdentifier): Boolean = {
     super.functionExists(name) || hiveFunctions.contains(name.funcName)
+  }
+
+  override def isPersistentFunction(name: FunctionIdentifier): Boolean = {
+    super.isPersistentFunction(name) || hiveFunctions.contains(name.funcName)
   }
 
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */

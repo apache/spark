@@ -21,9 +21,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasWeightCol}
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -74,7 +74,7 @@ object MLTestingUtils extends SparkFunSuite {
       estimator.fit(dfWithStringLabels)
     }
     assert(thrown.getMessage.contains(
-      "Column label must be of type NumericType but was actually of type StringType"))
+      "Column label must be of type numeric but was actually of type string"))
 
     estimator match {
       case weighted: Estimator[M] with HasWeightCol =>
@@ -86,7 +86,7 @@ object MLTestingUtils extends SparkFunSuite {
           weighted.fit(dfWithStringWeights)
         }
         assert(thrown.getMessage.contains(
-          "Column weight must be of type NumericType but was actually of type StringType"))
+          "Column weight must be of type numeric but was actually of type string"))
       case _ =>
     }
   }
@@ -104,7 +104,7 @@ object MLTestingUtils extends SparkFunSuite {
       evaluator.evaluate(dfWithStringLabels)
     }
     assert(thrown.getMessage.contains(
-      "Column label must be of type NumericType but was actually of type StringType"))
+      "Column label must be of type numeric but was actually of type string"))
   }
 
   def genClassifDFWithNumericLabelCol(
@@ -205,8 +205,8 @@ object MLTestingUtils extends SparkFunSuite {
       seed: Long): Unit = {
     val (overSampledData, weightedData) = genEquivalentOversampledAndWeightedInstances(
       data, seed)
-    val weightedModel = estimator.set(estimator.weightCol, "weight").fit(weightedData)
     val overSampledModel = estimator.set(estimator.weightCol, "").fit(overSampledData)
+    val weightedModel = estimator.set(estimator.weightCol, "weight").fit(weightedData)
     modelEquals(weightedModel, overSampledModel)
   }
 
@@ -228,7 +228,8 @@ object MLTestingUtils extends SparkFunSuite {
         List.fill(outlierRatio)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
     }
     val trueModel = estimator.set(estimator.weightCol, "").fit(data)
-    val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)
+    val outlierModel = estimator.set(estimator.weightCol, "weight")
+      .fit(outlierDS)
     modelEquals(trueModel, outlierModel)
   }
 
@@ -241,10 +242,47 @@ object MLTestingUtils extends SparkFunSuite {
       estimator: E with HasWeightCol,
       modelEquals: (M, M) => Unit): Unit = {
     estimator.set(estimator.weightCol, "weight")
-    val models = Seq(0.001, 1.0, 1000.0).map { w =>
+    val models = Seq(0.01, 1.0, 1000.0).map { w =>
       val df = data.withColumn("weight", lit(w))
       estimator.fit(df)
     }
     models.sliding(2).foreach { case Seq(m1, m2) => modelEquals(m1, m2)}
+  }
+
+  /**
+   * Helper function for testing different input types for "features" column. Given a DataFrame,
+   * generate three output DataFrames: one having vector "features" column with float precision,
+   * one having double array "features" column with float precision, and one having float array
+   * "features" column.
+   */
+  def generateArrayFeatureDataset(dataset: Dataset[_],
+    featuresColName: String = "features"): (Dataset[_], Dataset[_], Dataset[_]) = {
+    val toFloatVectorUDF = udf { (features: Vector) =>
+      Vectors.dense(features.toArray.map(_.toFloat.toDouble))}
+    val toDoubleArrayUDF = udf { (features: Vector) => features.toArray}
+    val toFloatArrayUDF = udf { (features: Vector) => features.toArray.map(_.toFloat)}
+    val newDataset = dataset.withColumn(featuresColName, toFloatVectorUDF(col(featuresColName)))
+    val newDatasetD = newDataset.withColumn(featuresColName, toDoubleArrayUDF(col(featuresColName)))
+    val newDatasetF = newDataset.withColumn(featuresColName, toFloatArrayUDF(col(featuresColName)))
+    assert(newDataset.schema(featuresColName).dataType.equals(new VectorUDT))
+    assert(newDatasetD.schema(featuresColName).dataType.equals(new ArrayType(DoubleType, false)))
+    assert(newDatasetF.schema(featuresColName).dataType.equals(new ArrayType(FloatType, false)))
+    (newDataset, newDatasetD, newDatasetF)
+  }
+
+  def modelPredictionEquals[M <: PredictionModel[_, M]](
+      data: DataFrame,
+      compareFunc: (Double, Double) => Boolean,
+      fractionInTol: Double)(
+      model1: M,
+      model2: M): Unit = {
+    val pred1 = model1.transform(data).select(model1.getPredictionCol).collect()
+    val pred2 = model2.transform(data).select(model2.getPredictionCol).collect()
+    val inTol = pred1.zip(pred2).count { case (p1, p2) =>
+      val x = p1.getDouble(0)
+      val y = p2.getDouble(0)
+      compareFunc(x, y)
+    }
+    assert(inTol / pred1.length.toDouble >= fractionInTol)
   }
 }

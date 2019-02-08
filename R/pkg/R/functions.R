@@ -80,6 +80,11 @@ NULL
 #'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
 #'          \item \code{next_day}: day of the week string.
 #'          }
+#' @param ... additional argument(s).
+#'          \itemize{
+#'          \item \code{months_between}, this contains an optional parameter to specify the
+#'              the result is rounded off to 8 digits.
+#'          }
 #'
 #' @name column_datetime_diff_functions
 #' @rdname column_datetime_diff_functions
@@ -112,7 +117,7 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = log(df$mpg), v2 = cbrt(df$disp),
 #'                   v3 = bround(df$wt, 1), v4 = bin(df$cyl),
-#'                   v5 = hex(df$wt), v6 = toDegrees(df$gear),
+#'                   v5 = hex(df$wt), v6 = degrees(df$gear),
 #'                   v7 = atan2(df$cyl, df$am), v8 = hypot(df$cyl, df$am),
 #'                   v9 = pmod(df$hp, df$cyl), v10 = shiftLeft(df$disp, 1),
 #'                   v11 = conv(df$hp, 10, 16), v12 = sign(df$vs - 0.5),
@@ -187,11 +192,38 @@ NULL
 #'          \itemize{
 #'          \item \code{to_json}: it is the column containing the struct, array of the structs,
 #'              the map or array of maps.
+#'          \item \code{to_csv}: it is the column containing the struct.
 #'          \item \code{from_json}: it is the column containing the JSON string.
+#'          \item \code{from_csv}: it is the column containing the CSV string.
 #'          }
-#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
-#'            additional named properties to control how it is converted, accepts the same
-#'            options as the JSON data source.
+#' @param y Column to compute on.
+#' @param value A value to compute on.
+#'          \itemize{
+#'          \item \code{array_contains}: a value to be checked if contained in the column.
+#'          \item \code{array_position}: a value to locate in the given array.
+#'          \item \code{array_remove}: a value to remove in the given array.
+#'          }
+#' @param schema
+#'          \itemize{
+#'          \item \code{from_json}: a structType object to use as the schema to use
+#'              when parsing the JSON string. Since Spark 2.3, the DDL-formatted string is
+#'              also supported for the schema. Since Spark 3.0, \code{schema_of_json} or
+#'              the DDL-formatted string literal can also be accepted.
+#'          \item \code{from_csv}: a structType object, DDL-formatted string or \code{schema_of_csv}
+#'          }
+#' @param ... additional argument(s).
+#'          \itemize{
+#'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
+#'              additional named properties to control how it is converted and accepts the
+#'              same options as the JSON data source.
+#'          \item \code{to_json}: it supports the "pretty" option which enables pretty
+#'              JSON generation.
+#'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
+#'              additional named properties to control how it is converted and accepts the
+#'              same options as the CSV data source.
+#'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
+#'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
+#'          }
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
@@ -200,15 +232,33 @@ NULL
 #' # Dataframe used throughout this doc
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
-#' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
+#' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
+#' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
+#' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
+#' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
+#' head(select(tmp, slice(tmp$v1, 2L, 2L)))
 #' head(select(tmp, sort_array(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
-#' head(select(tmp3, map_keys(tmp3$v3)))
-#' head(select(tmp3, map_values(tmp3$v3)))}
+#' head(select(tmp3, map_entries(tmp3$v3), map_keys(tmp3$v3), map_values(tmp3$v3)))
+#' head(select(tmp3, element_at(tmp3$v3, "Valiant"), map_concat(tmp3$v3, tmp3$v3)))
+#' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
+#' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, array_except(tmp4$v4, tmp4$v5), array_intersect(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, array_union(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5)))
+#' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
+#' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
+#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))
+#' tmp6 <- mutate(df, v7 = create_array(create_array(df$model, df$model)))
+#' head(select(tmp6, flatten(tmp6$v7)))
+#' tmp7 <- mutate(df, v8 = create_array(df$model, df$cyl), v9 = create_array(df$model, df$hp))
+#' head(select(tmp7, map_from_arrays(tmp7$v8, tmp7$v9)))
+#' tmp8 <- mutate(df, v10 = create_array(struct(df$model, df$cyl)))
+#' head(select(tmp8, map_from_entries(tmp8$v10)))}
 NULL
 
 #' Window functions for Column operations
@@ -290,23 +340,37 @@ setMethod("acos",
           })
 
 #' @details
+#' \code{approx_count_distinct}: Returns the approximate number of distinct items in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases approx_count_distinct approx_count_distinct,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, approx_count_distinct(df$gear)))
+#' head(select(df, approx_count_distinct(df$gear, 0.02)))
+#' head(select(df, countDistinct(df$gear, df$cyl)))
+#' head(select(df, n_distinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
+#' @note approx_count_distinct(Column) since 3.0.0
+setMethod("approx_count_distinct",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "approx_count_distinct", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{approxCountDistinct}: Returns the approximate number of distinct items in a group.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct approxCountDistinct,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, approxCountDistinct(df$gear)))
-#' head(select(df, approxCountDistinct(df$gear, 0.02)))
-#' head(select(df, countDistinct(df$gear, df$cyl)))
-#' head(select(df, n_distinct(df$gear)))
-#' head(distinct(select(df, "gear")))}
 #' @note approxCountDistinct(Column) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc)
+            .Deprecated("approx_count_distinct")
+            jc <- callJStatic("org.apache.spark.sql.functions", "approx_count_distinct", x@jc)
             column(jc)
           })
 
@@ -796,6 +860,8 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
@@ -939,6 +1005,8 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -1192,6 +1260,7 @@ setMethod("minute",
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
 #' The method should be used with no argument.
+#' Note: the function is non-deterministic because its result depends on partition IDs.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
@@ -1245,9 +1314,9 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{reverse}: Reverses the string column and returns it as a new string column.
+#' \code{reverse}: Returns a reversed string or an array with reverse order of elements.
 #'
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @aliases reverse reverse,Column-method
 #' @note reverse since 1.5.0
 setMethod("reverse",
@@ -1616,7 +1685,22 @@ setMethod("tanh",
 setMethod("toDegrees",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "toDegrees", x@jc)
+            .Deprecated("degrees")
+            jc <- callJStatic("org.apache.spark.sql.functions", "degrees", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{degrees}: Converts an angle measured in radians to an approximately equivalent angle
+#' measured in degrees.
+#'
+#' @rdname column_math_functions
+#' @aliases degrees degrees,Column-method
+#' @note degrees since 3.0.0
+setMethod("degrees",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "degrees", x@jc)
             column(jc)
           })
 
@@ -1630,14 +1714,29 @@ setMethod("toDegrees",
 setMethod("toRadians",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "toRadians", x@jc)
+            .Deprecated("radians")
+            jc <- callJStatic("org.apache.spark.sql.functions", "radians", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{radians}: Converts an angle measured in degrees to an approximately equivalent angle
+#' measured in radians.
+#'
+#' @rdname column_math_functions
+#' @aliases radians radians,Column-method
+#' @note radians since 3.0.0
+setMethod("radians",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "radians", x@jc)
             column(jc)
           })
 
 #' @details
 #' \code{to_date}: Converts the column into a DateType. You may optionally specify
 #' a format according to the rules in:
-#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a DateType if the format is omitted
@@ -1674,8 +1773,8 @@ setMethod("to_date",
           })
 
 #' @details
-#' \code{to_json}: Converts a column containing a \code{structType}, array of \code{structType},
-#' a \code{mapType} or array of \code{mapType} into a Column of JSON string.
+#' \code{to_json}: Converts a column containing a \code{structType}, a \code{mapType}
+#' or an \code{arrayType} into a Column of JSON string.
 #' Resolving the Column can fail if an unsupported type is encountered.
 #'
 #' @rdname column_collection_functions
@@ -1692,12 +1791,16 @@ setMethod("to_date",
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #'
 #' # Converts a map into a JSON object
-#' df2 <- sql("SELECT map('name', 'Bob')) as people")
+#' df2 <- sql("SELECT map('name', 'Bob') as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #'
 #' # Converts an array of maps into a JSON array
 #' df2 <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
-#' df2 <- mutate(df2, people_json = to_json(df2$people))}
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#'
+#' # Converts a map into a pretty JSON object
+#' df2 <- sql("SELECT map('name', 'Bob') as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people, pretty = TRUE))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
           function(x, ...) {
@@ -1707,9 +1810,29 @@ setMethod("to_json", signature(x = "Column"),
           })
 
 #' @details
+#' \code{to_csv}: Converts a column containing a \code{structType} into a Column of CSV string.
+#' Resolving the Column can fail if an unsupported type is encountered.
+#'
+#' @rdname column_collection_functions
+#' @aliases to_csv to_csv,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' # Converts a struct into a CSV string
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df2, to_csv(df2$d, dateFormat = 'dd/MM/yyyy'))}
+#' @note to_csv since 3.0.0
+setMethod("to_csv", signature(x = "Column"),
+          function(x, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_csv", x@jc, options)
+            column(jc)
+          })
+
+#' @details
 #' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
 #' a format according to the rules in:
-#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a TimestampType if the format is omitted
@@ -1898,6 +2021,7 @@ setMethod("atan2", signature(y = "Column"),
 
 #' @details
 #' \code{datediff}: Returns the number of days from \code{y} to \code{x}.
+#' If \code{y} is later than \code{x} then the result is positive.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases datediff datediff,Column-method
@@ -1958,16 +2082,25 @@ setMethod("levenshtein", signature(y = "Column"),
 
 #' @details
 #' \code{months_between}: Returns number of months between dates \code{y} and \code{x}.
+#' If \code{y} is later than \code{x}, then the result is positive. If \code{y} and \code{x}
+#' are on the same day of month, or both are the last day of month, time of day will be ignored.
+#' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
 #'
+#' @param roundOff an optional parameter to specify if the result is rounded off to 8 digits
 #' @rdname column_datetime_diff_functions
 #' @aliases months_between months_between,Column-method
 #' @note months_between since 1.5.0
 setMethod("months_between", signature(y = "Column"),
-          function(y, x) {
+          function(y, x, roundOff = NULL) {
             if (class(x) == "Column") {
               x <- x@jc
             }
-            jc <- callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            jc <- if (is.null(roundOff)) {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            } else {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x,
+                           as.logical(roundOff))
+            }
             column(jc)
           })
 
@@ -2007,12 +2140,23 @@ setMethod("pmod", signature(y = "Column"),
 #' @param rsd maximum estimation error allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
+#' @aliases approx_count_distinct,Column-method
+#' @note approx_count_distinct(Column, numeric) since 3.0.0
+setMethod("approx_count_distinct",
+          signature(x = "Column"),
+          function(x, rsd = 0.05) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "approx_count_distinct", x@jc, rsd)
+            column(jc)
+          })
+
+#' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct,Column-method
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x, rsd = 0.05) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
+            .Deprecated("approx_count_distinct")
+            jc <- callJStatic("org.apache.spark.sql.functions", "approx_count_distinct", x@jc, rsd)
             column(jc)
           })
 
@@ -2036,20 +2180,10 @@ setMethod("countDistinct",
 
 #' @details
 #' \code{concat}: Concatenates multiple input columns together into a single column.
-#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+#' The function works with strings, binary and compatible array columns.
 #'
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @aliases concat concat,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' # concatenate strings
-#' tmp <- mutate(df, s1 = concat(df$Class, df$Sex),
-#'                   s2 = concat(df$Class, df$Sex, df$Age),
-#'                   s3 = concat(df$Class, df$Sex, df$Age, df$Class),
-#'                   s4 = concat_ws("_", df$Class, df$Sex),
-#'                   s5 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
-#' head(tmp)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
@@ -2125,7 +2259,7 @@ setMethod("n", signature(x = "Column"),
 #' \code{date_format}: Converts a date/timestamp/string to a value of string in the format
 #' specified by the date format given by the second argument. A pattern could be for instance
 #' \code{dd.MM.yyyy} and could return a string like '18.03.1993'. All
-#' pattern letters of \code{java.text.SimpleDateFormat} can be used.
+#' pattern letters of \code{java.time.format.DateTimeFormatter} can be used.
 #' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
@@ -2139,16 +2273,16 @@ setMethod("date_format", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+setClassUnion("characterOrstructTypeOrColumn", c("character", "structType", "Column"))
+
 #' @details
 #' \code{from_json}: Parses a column containing a JSON string into a Column of \code{structType}
 #' with the specified \code{schema} or array of \code{structType} if \code{as.json.array} is set
 #' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
-#' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#'               Since Spark 2.3, the DDL-formatted string is also supported for the schema.
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
-#' @aliases from_json from_json,Column,characterOrstructType-method
+#' @aliases from_json from_json,Column,characterOrstructTypeOrColumn-method
 #' @examples
 #'
 #' \dontrun{
@@ -2156,25 +2290,37 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' df2 <- mutate(df2, d2 = to_json(df2$d, dateFormat = 'dd/MM/yyyy'))
 #' schema <- structType(structField("date", "string"))
 #' head(select(df2, from_json(df2$d2, schema, dateFormat = 'dd/MM/yyyy')))
-
 #' df2 <- sql("SELECT named_struct('name', 'Bob') as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #' schema <- structType(structField("name", "string"))
 #' head(select(df2, from_json(df2$people_json, schema)))
-#' head(select(df2, from_json(df2$people_json, "name STRING")))}
+#' head(select(df2, from_json(df2$people_json, "name STRING")))
+#' head(select(df2, from_json(df2$people_json, schema_of_json(head(df2)$people_json))))}
 #' @note from_json since 2.2.0
-setMethod("from_json", signature(x = "Column", schema = "characterOrstructType"),
+setMethod("from_json", signature(x = "Column", schema = "characterOrstructTypeOrColumn"),
           function(x, schema, as.json.array = FALSE, ...) {
             if (is.character(schema)) {
-              schema <- structType(schema)
+              jschema <- structType(schema)$jobj
+            } else if (class(schema) == "structType") {
+              jschema <- schema$jobj
+            } else {
+              jschema <- schema@jc
             }
 
             if (as.json.array) {
-              jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
-                                     "createArrayType",
-                                     schema$jobj)
-            } else {
-              jschema <- schema$jobj
+              # This case is R-specifically different. Unlike Scala and Python side,
+              # R side has 'as.json.array' option to indicate if the schema should be
+              # treated as struct or element type of array in order to make it more
+              # R-friendly.
+              if (class(schema) == "Column") {
+                jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                       "createArrayType",
+                                       jschema)
+              } else {
+                jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
+                                       "createArrayType",
+                                       jschema)
+              }
             }
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -2184,9 +2330,103 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
-#' \code{from_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
-#' time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1'
-#' would yield '2017-07-14 03:40:00.0'.
+#' \code{schema_of_json}: Parses a JSON string and infers its schema in DDL format.
+#'
+#' @rdname column_collection_functions
+#' @aliases schema_of_json schema_of_json,characterOrColumn-method
+#' @examples
+#'
+#' \dontrun{
+#' json <- "{\"name\":\"Bob\"}"
+#' df <- sql("SELECT * FROM range(1)")
+#' head(select(df, schema_of_json(json)))}
+#' @note schema_of_json since 3.0.0
+setMethod("schema_of_json", signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "character") {
+              col <- callJStatic("org.apache.spark.sql.functions", "lit", x)
+            } else {
+              col <- x@jc
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "schema_of_json",
+                              col, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
+#' with the specified \code{schema}.
+#' If the string is unparseable, the Column will contain the value NA.
+#'
+#' @rdname column_collection_functions
+#' @aliases from_csv from_csv,Column,characterOrstructTypeOrColumn-method
+#' @examples
+#'
+#' \dontrun{
+#' csv <- "Amsterdam,2018"
+#' df <- sql(paste0("SELECT '", csv, "' as csv"))
+#' schema <- "city STRING, year INT"
+#' head(select(df, from_csv(df$csv, schema)))
+#' head(select(df, from_csv(df$csv, structType(schema))))
+#' head(select(df, from_csv(df$csv, schema_of_csv(csv))))}
+#' @note from_csv since 3.0.0
+setMethod("from_csv", signature(x = "Column", schema = "characterOrstructTypeOrColumn"),
+          function(x, schema, ...) {
+            if (class(schema) == "structType") {
+              schema <- callJMethod(schema$jobj, "toDDL")
+            }
+
+            if (is.character(schema)) {
+              jschema <- callJStatic("org.apache.spark.sql.functions", "lit", schema)
+            } else {
+              jschema <- schema@jc
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_csv",
+                              x@jc, jschema, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{schema_of_csv}: Parses a CSV string and infers its schema in DDL format.
+#'
+#' @rdname column_collection_functions
+#' @aliases schema_of_csv schema_of_csv,characterOrColumn-method
+#' @examples
+#'
+#' \dontrun{
+#' csv <- "Amsterdam,2018"
+#' df <- sql("SELECT * FROM range(1)")
+#' head(select(df, schema_of_csv(csv)))}
+#' @note schema_of_csv since 3.0.0
+setMethod("schema_of_csv", signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "character") {
+              col <- callJStatic("org.apache.spark.sql.functions", "lit", x)
+            } else {
+              col <- x@jc
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "schema_of_csv",
+                              col, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{from_utc_timestamp}: This is a common function for databases supporting TIMESTAMP WITHOUT
+#' TIMEZONE. This function takes a timestamp which is timezone-agnostic, and interprets it as a
+#' timestamp in UTC, and renders that timestamp as a timestamp in the given time zone.
+#' However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+#' timezone-agnostic. So in Spark this function just shift the timestamp value from UTC timezone to
+#' the given timezone.
+#' This function may return confusing result if the input is a string with timezone, e.g.
+#' (\code{2018-03-13T06:18:23+00:00}). The reason is that, Spark firstly cast the string to
+#' timestamp according to the timezone in the string, and finally display the result by converting
+#' the timestamp to string according to the session local timezone.
 #'
 #' @rdname column_datetime_diff_functions
 #'
@@ -2242,9 +2482,16 @@ setMethod("next_day", signature(y = "Column", x = "character"),
           })
 
 #' @details
-#' \code{to_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
-#' time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1'
-#' would yield '2017-07-14 01:40:00.0'.
+#' \code{to_utc_timestamp}: This is a common function for databases supporting TIMESTAMP WITHOUT
+#' TIMEZONE. This function takes a timestamp which is timezone-agnostic, and interprets it as a
+#' timestamp in the given timezone, and renders that timestamp as a timestamp in UTC.
+#' However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+#' timezone-agnostic. So in Spark this function just shift the timestamp value from the given
+#' timezone to UTC timezone.
+#' This function may return confusing result if the input is a string with timezone, e.g.
+#' (\code{2018-03-13T06:18:23+00:00}). The reason is that, Spark firstly cast the string to
+#' timestamp according to the timezone in the string, and finally display the result by converting
+#' the timestamp to string according to the session local timezone.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method
@@ -2390,6 +2637,13 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #' @param sep separator to use.
 #' @rdname column_string_functions
 #' @aliases concat_ws concat_ws,character,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' # concatenate strings
+#' tmp <- mutate(df, s1 = concat_ws("_", df$Class, df$Sex),
+#'                   s2 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
+#' head(tmp)}
 #' @note concat_ws since 1.5.0
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
@@ -2450,7 +2704,7 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
 #' to a string representing the timestamp of that moment in the current system time zone in the JVM
 #' in the given format.
-#' See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#' See \href{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}{
 #' Customizing Formats} for available options.
 #'
 #' @rdname column_datetime_functions
@@ -2575,6 +2829,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
 #' samples from U[0.0, 1.0].
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
@@ -2603,6 +2858,7 @@ setMethod("rand", signature(seed = "numeric"),
 #' @details
 #' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples
 #' from the standard normal distribution.
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases randn randn,missing-method
@@ -2975,7 +3231,6 @@ setMethod("row_number",
 #' \code{array_contains}: Returns null if the array is null, true if the array contains
 #' the value, and false otherwise.
 #'
-#' @param value a value to be checked if contained in the column
 #' @rdname column_collection_functions
 #' @aliases array_contains array_contains,Column-method
 #' @note array_contains since 1.6.0
@@ -2985,6 +3240,289 @@ setMethod("array_contains",
             jc <- callJStatic("org.apache.spark.sql.functions", "array_contains", x@jc, value)
             column(jc)
           })
+
+#' @details
+#' \code{array_distinct}: Removes duplicate values from the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_distinct array_distinct,Column-method
+#' @note array_distinct since 2.4.0
+setMethod("array_distinct",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_distinct", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_except}: Returns an array of the elements in the first array but not in the second
+#'  array, without duplicates. The order of elements in the result is not determined.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_except array_except,Column-method
+#' @note array_except since 2.4.0
+setMethod("array_except",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_except", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_intersect}: Returns an array of the elements in the intersection of the given two
+#'  arrays, without duplicates.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_intersect array_intersect,Column-method
+#' @note array_intersect since 2.4.0
+setMethod("array_intersect",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_intersect", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_join}: Concatenates the elements of column using the delimiter.
+#' Null values are replaced with nullReplacement if set, otherwise they are ignored.
+#'
+#' @param delimiter a character string that is used to concatenate the elements of column.
+#' @param nullReplacement an optional character string that is used to replace the Null values.
+#' @rdname column_collection_functions
+#' @aliases array_join array_join,Column-method
+#' @note array_join since 2.4.0
+setMethod("array_join",
+         signature(x = "Column", delimiter = "character"),
+         function(x, delimiter, nullReplacement = NULL) {
+           jc <- if (is.null(nullReplacement)) {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter)
+           } else {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter,
+                         as.character(nullReplacement))
+           }
+           column(jc)
+         })
+
+#' @details
+#' \code{array_max}: Returns the maximum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_max array_max,Column-method
+#' @note array_max since 2.4.0
+setMethod("array_max",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_min}: Returns the minimum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_min array_min,Column-method
+#' @note array_min since 2.4.0
+setMethod("array_min",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_position}: Locates the position of the first occurrence of the given value
+#' in the given array. Returns NA if either of the arguments are NA.
+#' Note: The position is not zero based, but 1 based index. Returns 0 if the given
+#' value could not be found in the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_position array_position,Column-method
+#' @note array_position since 2.4.0
+setMethod("array_position",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_position", x@jc, value)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_remove}: Removes all elements that equal to element from the given array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_remove array_remove,Column-method
+#' @note array_remove since 2.4.0
+setMethod("array_remove",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_remove", x@jc, value)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_repeat}: Creates an array containing \code{x} repeated the number of times
+#' given by \code{count}.
+#'
+#' @param count a Column or constant determining the number of repetitions.
+#' @rdname column_collection_functions
+#' @aliases array_repeat array_repeat,Column,numericOrColumn-method
+#' @note array_repeat since 2.4.0
+setMethod("array_repeat",
+          signature(x = "Column", count = "numericOrColumn"),
+          function(x, count) {
+            if (class(count) == "Column") {
+              count <- count@jc
+            } else {
+              count <- as.integer(count)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_repeat", x@jc, count)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_sort}: Sorts the input array in ascending order. The elements of the input array
+#' must be orderable. NA elements will be placed at the end of the returned array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_sort array_sort,Column-method
+#' @note array_sort since 2.4.0
+setMethod("array_sort",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{arrays_overlap}: Returns true if the input arrays have at least one non-null element in
+#' common. If not and both arrays are non-empty and any of them contains a null, it returns null.
+#' It returns false otherwise.
+#'
+#' @rdname column_collection_functions
+#' @aliases arrays_overlap arrays_overlap,Column-method
+#' @note arrays_overlap since 2.4.0
+setMethod("arrays_overlap",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "arrays_overlap", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_union}: Returns an array of the elements in the union of the given two arrays,
+#'  without duplicates.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_union array_union,Column-method
+#' @note array_union since 2.4.0
+setMethod("array_union",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_union", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{arrays_zip}: Returns a merged array of structs in which the N-th struct contains all N-th
+#' values of input arrays.
+#'
+#' @rdname column_collection_functions
+#' @aliases arrays_zip arrays_zip,Column-method
+#' @note arrays_zip since 2.4.0
+setMethod("arrays_zip",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(arg) {
+              stopifnot(class(arg) == "Column")
+              arg@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "arrays_zip", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{shuffle}: Returns a random permutation of the given array.
+#'
+#' @rdname column_collection_functions
+#' @aliases shuffle shuffle,Column-method
+#' @note shuffle since 2.4.0
+setMethod("shuffle",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "shuffle", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{flatten}: Creates a single array from an array of arrays.
+#' If a structure of nested arrays is deeper than two levels, only one level of nesting is removed.
+#'
+#' @rdname column_collection_functions
+#' @aliases flatten flatten,Column-method
+#' @note flatten since 2.4.0
+setMethod("flatten",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{map_concat}: Returns the union of all the given maps.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_concat map_concat,Column-method
+#' @note map_concat since 3.0.0
+setMethod("map_concat",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(arg) {
+              stopifnot(class(arg) == "Column")
+              arg@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_concat", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{map_entries}: Returns an unordered array of all entries in the given map.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_entries map_entries,Column-method
+#' @note map_entries since 3.0.0
+setMethod("map_entries",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_entries", x@jc)
+            column(jc)
+         })
+
+#' @details
+#' \code{map_from_arrays}: Creates a new map column. The array in the first column is used for
+#' keys. The array in the second column is used for values. All elements in the array for key
+#' should not be null.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_from_arrays map_from_arrays,Column-method
+#' @note map_from_arrays since 2.4.0
+setMethod("map_from_arrays",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_from_arrays", x@jc, y@jc)
+            column(jc)
+         })
+
+#' @details
+#' \code{map_from_entries}: Returns a map created from the given array of entries.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_from_entries map_from_entries,Column-method
+#' @note map_from_entries since 3.0.0
+setMethod("map_from_entries",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_from_entries", x@jc)
+            column(jc)
+         })
 
 #' @details
 #' \code{map_keys}: Returns an unordered array containing the keys of the map.
@@ -3009,6 +3547,22 @@ setMethod("map_values",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "map_values", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{element_at}: Returns element of array at given index in \code{extraction} if
+#' \code{x} is array. Returns value for the given key in \code{extraction} if \code{x} is map.
+#' Note: The position is not zero based, but 1 based index.
+#'
+#' @param extraction index to check for in array or key to check for in map
+#' @rdname column_collection_functions
+#' @aliases element_at element_at,Column-method
+#' @note element_at since 2.4.0
+setMethod("element_at",
+          signature(x = "Column", extraction = "ANY"),
+          function(x, extraction) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "element_at", x@jc, extraction)
             column(jc)
           })
 
@@ -3039,8 +3593,25 @@ setMethod("size",
           })
 
 #' @details
-#' \code{sort_array}: Sorts the input array in ascending or descending order according
-#' to the natural ordering of the array elements.
+#' \code{slice}: Returns an array containing all the elements in x from the index start
+#' (or starting from the end if start is negative) with the specified length.
+#'
+#' @rdname column_collection_functions
+#' @param start an index indicating the first element occurring in the result.
+#' @param length a number of consecutive elements chosen to the result.
+#' @aliases slice slice,Column-method
+#' @note slice since 2.4.0
+setMethod("slice",
+          signature(x = "Column"),
+          function(x, start, length) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "slice", x@jc, start, length)
+            column(jc)
+          })
+
+#' @details
+#' \code{sort_array}: Sorts the input array in ascending or descending order according to
+#' the natural ordering of the array elements. NA elements will be placed at the beginning of
+#' the returned array in ascending order or at the end of the returned array in descending order.
 #'
 #' @rdname column_collection_functions
 #' @param asc a logical flag indicating the sorting order.
@@ -3109,6 +3680,8 @@ setMethod("create_map",
 
 #' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_list collect_list,Column-method
@@ -3128,6 +3701,8 @@ setMethod("collect_list",
 
 #' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_set collect_set,Column-method
@@ -3141,13 +3716,21 @@ setMethod("collect_set",
 
 #' @details
 #' \code{split_string}: Splits string on regular expression.
-#' Equivalent to \code{split} SQL function.
+#' Equivalent to \code{split} SQL function. Optionally a
+#' \code{limit} can be specified
 #'
 #' @rdname column_string_functions
+#' @param limit determines the length of the returned array.
+#'              \itemize{
+#'              \item \code{limit > 0}: length of the array will be at most \code{limit}
+#'              \item \code{limit <= 0}: the returned array can have any length
+#'              }
+#'
 #' @aliases split_string split_string,Column-method
 #' @examples
 #'
 #' \dontrun{
+#' head(select(df, split_string(df$Class, "\\d", 2)))
 #' head(select(df, split_string(df$Sex, "a")))
 #' head(select(df, split_string(df$Class, "\\d")))
 #' # This is equivalent to the following SQL expression
@@ -3155,8 +3738,9 @@ setMethod("collect_set",
 #' @note split_string 2.3.0
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
-          function(x, pattern) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern)
+          function(x, pattern, limit = -1) {
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "split", x@jc, pattern, as.integer(limit))
             column(jc)
           })
 

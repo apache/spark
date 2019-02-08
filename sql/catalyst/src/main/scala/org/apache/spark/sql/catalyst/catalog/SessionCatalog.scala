@@ -34,7 +34,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -101,6 +101,8 @@ class SessionCatalog(
   @GuardedBy("this")
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
+  private val validNameFormat = "([\\w_]+)".r
+
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.
@@ -109,7 +111,6 @@ class SessionCatalog(
    * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
    */
   private def validateName(name: String): Unit = {
-    val validNameFormat = "([\\w_]+)".r
     if (!validNameFormat.pattern.matcher(name).matches()) {
       throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
         "Valid names only contain alphabet characters, numbers and _.")
@@ -286,9 +287,13 @@ class SessionCatalog(
    * Create a metastore table in the database specified in `tableDefinition`.
    * If no such database is specified, create it in the current database.
    */
-  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
+  def createTable(
+      tableDefinition: CatalogTable,
+      ignoreIfExists: Boolean,
+      validateLocation: Boolean = true): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
     validateName(table)
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
@@ -298,13 +303,35 @@ class SessionCatalog(
         makeQualifiedPath(tableDefinition.storage.locationUri.get)
       tableDefinition.copy(
         storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
-        identifier = TableIdentifier(table, Some(db)))
+        identifier = tableIdentifier)
     } else {
-      tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+      tableDefinition.copy(identifier = tableIdentifier)
     }
 
     requireDbExists(db)
+    if (tableExists(newTableDefinition.identifier)) {
+      if (!ignoreIfExists) {
+        throw new TableAlreadyExistsException(db = db, table = table)
+      }
+    } else if (validateLocation) {
+      validateTableLocation(newTableDefinition)
+    }
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
+  }
+
+  def validateTableLocation(table: CatalogTable): Unit = {
+    // SPARK-19724: the default location of a managed table should be non-existent or empty.
+    if (table.tableType == CatalogTableType.MANAGED &&
+      !conf.allowCreatingManagedTableUsingNonemptyLocation) {
+      val tableLocation =
+        new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
+      val fs = tableLocation.getFileSystem(hadoopConf)
+
+      if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
+        throw new AnalysisException(s"Can not create the managed table('${table.identifier}')" +
+          s". The associated location('${tableLocation.toString}') already exists.")
+      }
+    }
   }
 
   /**
@@ -593,6 +620,7 @@ class SessionCatalog(
         requireTableExists(TableIdentifier(oldTableName, Some(db)))
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         validateName(newTableName)
+        validateNewLocationOfRename(oldName, newName)
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {
@@ -657,6 +685,7 @@ class SessionCatalog(
    *
    * If the relation is a view, we generate a [[View]] operator from the view description, and
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
+   * [[SubqueryAlias]] will also keep track of the name and database(optional) of the table/view
    *
    * @param name The name of the table/view that we look up.
    */
@@ -666,12 +695,13 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, viewDef)
+          SubqueryAlias(table, db, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         if (metadata.tableType == CatalogTableType.VIEW) {
           val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+          logDebug(s"'$viewText' will be used for the view($table).")
           // The relation is a view, so we wrap the relation by:
           // 1. Add a [[View]] operator over the relation to keep track of the view desc;
           // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
@@ -679,9 +709,9 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(table, child)
+          SubqueryAlias(table, db, child)
         } else {
-          SubqueryAlias(table, UnresolvedCatalogRelation(metadata))
+          SubqueryAlias(table, db, UnresolvedCatalogRelation(metadata))
         }
       } else {
         SubqueryAlias(table, tempViews(table))
@@ -1032,7 +1062,7 @@ class SessionCatalog(
   }
 
   /**
-   * overwirte a metastore function in the database specified in `funcDefinition`..
+   * overwrite a metastore function in the database specified in `funcDefinition`..
    * If no database is specified, assume the function is in the current database.
    */
   def alterFunction(funcDefinition: CatalogFunction): Unit = {
@@ -1097,13 +1127,23 @@ class SessionCatalog(
       name: String,
       clazz: Class[_],
       input: Seq[Expression]): Expression = {
+    // Unfortunately we need to use reflection here because UserDefinedAggregateFunction
+    // and ScalaUDAF are defined in sql/core module.
     val clsForUDAF =
       Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
     if (clsForUDAF.isAssignableFrom(clazz)) {
       val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-      cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
-        .newInstance(input, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
-        .asInstanceOf[Expression]
+      val e = cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
+        .newInstance(input,
+          clazz.getConstructor().newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+        .asInstanceOf[ImplicitCastInputTypes]
+
+      // Check input argument size
+      if (e.inputTypes.size != input.size) {
+        throw new AnalysisException(s"Invalid number of arguments for function $name. " +
+          s"Expected: ${e.inputTypes.size}; Found: ${input.size}")
+      }
+      e
     } else {
       throw new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
         s"Use sparkSession.udf.register(...) instead.")
@@ -1166,9 +1206,26 @@ class SessionCatalog(
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
-  protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
+  /**
+   * Return whether this function has been registered in the function registry of the current
+   * session. If not existed, return false.
+   */
+  def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
+    functionRegistry.functionExists(name)
+  }
+
+  /**
+   * Returns whether it is a persistent function. If not existed, returns false.
+   */
+  def isPersistentFunction(name: FunctionIdentifier): Boolean = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
+  }
+
+  protected[sql] def failFunctionLookup(
+      name: FunctionIdentifier, cause: Option[Throwable] = None): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, cause)
   }
 
   /**
@@ -1339,5 +1396,24 @@ class SessionCatalog(
     target.currentDb = currentDb
     // copy over temporary views
     tempViews.foreach(kv => target.tempViews.put(kv._1, kv._2))
+  }
+
+  /**
+   * Validate the new locatoin before renaming a managed table, which should be non-existent.
+   */
+  private def validateNewLocationOfRename(
+      oldName: TableIdentifier,
+      newName: TableIdentifier): Unit = {
+    val oldTable = getTableMetadata(oldName)
+    if (oldTable.tableType == CatalogTableType.MANAGED) {
+      val databaseLocation =
+        externalCatalog.getDatabase(oldName.database.getOrElse(currentDb)).locationUri
+      val newTableLocation = new Path(new Path(databaseLocation), formatTableName(newName.table))
+      val fs = newTableLocation.getFileSystem(hadoopConf)
+      if (fs.exists(newTableLocation)) {
+        throw new AnalysisException(s"Can not rename the managed table('$oldName')" +
+          s". The associated location('$newTableLocation') already exists.")
+      }
+    }
   }
 }

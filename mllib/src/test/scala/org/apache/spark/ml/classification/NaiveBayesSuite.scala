@@ -103,7 +103,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
           case Bernoulli =>
             expectedBernoulliProbabilities(model, features)
           case _ =>
-            throw new UnknownError(s"Invalid modelType: $modelType.")
+            throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
         }
         assert(probability ~== expected relTol 1.0e-10)
     }
@@ -165,6 +165,28 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
 
     ProbabilisticClassifierSuite.testPredictMethods[
       Vector, NaiveBayesModel](this, model, testDataset)
+  }
+
+  test("prediction on single instance") {
+    val nPoints = 1000
+    val piArray = Array(0.5, 0.1, 0.4).map(math.log)
+    val thetaArray = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+    val pi = Vectors.dense(piArray)
+    val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
+
+    val trainDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, seed, "multinomial").toDF()
+    val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
+    val model = nb.fit(trainDataset)
+
+    val validationDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
+
+    testPredictionModelSinglePrediction(model, validationDataset)
   }
 
   test("Naive Bayes with weighted samples") {
@@ -356,7 +378,7 @@ object NaiveBayesSuite {
           counts.toArray.sortBy(_._1).map(_._2)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: $modelType.")
+          throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
       }
 
       LabeledPoint(y, Vectors.dense(xi))

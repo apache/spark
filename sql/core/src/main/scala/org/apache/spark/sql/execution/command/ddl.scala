@@ -189,8 +189,9 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val isTempView = catalog.isTemporaryTable(tableName)
 
-    if (!catalog.isTemporaryTable(tableName) && catalog.tableExists(tableName)) {
+    if (!isTempView && catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
@@ -204,9 +205,10 @@ case class DropTableCommand(
       }
     }
 
-    if (catalog.isTemporaryTable(tableName) || catalog.tableExists(tableName)) {
+    if (isTempView || catalog.tableExists(tableName)) {
       try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+        sparkSession.sharedState.cacheManager.uncacheQuery(
+          sparkSession.table(tableName), cascade = !isTempView)
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
@@ -818,6 +820,14 @@ object DDLUtils {
     table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
+  def readHiveTable(table: CatalogTable): HiveTableRelation = {
+    HiveTableRelation(
+      table,
+      // Hive table columns are always nullable.
+      table.dataSchema.asNullable.toAttributes,
+      table.partitionSchema.asNullable.toAttributes)
+  }
+
   /**
    * Throws a standard error for actions that require partitionProvider = hive.
    */
@@ -890,7 +900,8 @@ object DDLUtils {
    */
   def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
     val inputPaths = query.collect {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.rootPaths
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+        r.location.rootPaths
     }.flatten
 
     if (inputPaths.contains(outputPath)) {

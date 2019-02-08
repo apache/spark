@@ -70,12 +70,12 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
     <td><code>--master</code></td>
   </tr>
   <tr>
-    <td><code>spark.yarn.keytab</code></td>
+    <td><code>spark.kerberos.keytab</code></td>
     <td>Application Properties</td>
     <td><code>--keytab</code></td>
   </tr>
   <tr>
-    <td><code>spark.yarn.principal</code></td>
+    <td><code>spark.kerberos.principal</code></td>
     <td>Application Properties</td>
     <td><code>--principal</code></td>
   </tr>
@@ -104,10 +104,10 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
 </div>
 
 ## Creating SparkDataFrames
-With a `SparkSession`, applications can create `SparkDataFrame`s from a local R data frame, from a [Hive table](sql-programming-guide.html#hive-tables), or from other [data sources](sql-programming-guide.html#data-sources).
+With a `SparkSession`, applications can create `SparkDataFrame`s from a local R data frame, from a [Hive table](sql-data-sources-hive-tables.html), or from other [data sources](sql-data-sources.html).
 
 ### From local data frames
-The simplest way to create a data frame is to convert a local R data frame into a SparkDataFrame. Specifically we can use `as.DataFrame` or `createDataFrame` and pass in the local R data frame to create a SparkDataFrame. As an example, the following creates a `SparkDataFrame` based using the `faithful` dataset from R.
+The simplest way to create a data frame is to convert a local R data frame into a SparkDataFrame. Specifically, we can use `as.DataFrame` or `createDataFrame` and pass in the local R data frame to create a SparkDataFrame. As an example, the following creates a `SparkDataFrame` based using the `faithful` dataset from R.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -125,15 +125,15 @@ head(df)
 
 ### From Data Sources
 
-SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
+SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-data-sources-load-save-functions.html#manually-specifying-options) that are available for the built-in data sources.
 
 The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically.
-SparkR supports reading JSON, CSV and Parquet files natively, and through packages available from sources like [Third Party Projects](http://spark.apache.org/third-party-projects.html), you can find data source connectors for popular file formats like Avro. These packages can either be added by
+SparkR supports reading JSON, CSV and Parquet files natively, and through packages available from sources like [Third Party Projects](https://spark.apache.org/third-party-projects.html), you can find data source connectors for popular file formats like Avro. These packages can either be added by
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter when in an interactive R shell or from RStudio.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "org.apache.spark:spark-avro_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION}}")
 {% endhighlight %}
 </div>
 
@@ -169,7 +169,7 @@ df <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings 
 {% endhighlight %}
 </div>
 
-The data sources API can also be used to save out SparkDataFrames into multiple file formats. For example we can save the SparkDataFrame from the previous example
+The data sources API can also be used to save out SparkDataFrames into multiple file formats. For example, we can save the SparkDataFrame from the previous example
 to a Parquet file using `write.df`.
 
 <div data-lang="r"  markdown="1">
@@ -180,7 +180,7 @@ write.df(people, path = "people.parquet", source = "parquet", mode = "overwrite"
 
 ### From Hive tables
 
-You can also create SparkDataFrames from Hive tables. To do this we will need to create a SparkSession with Hive support which can access tables in the Hive MetaStore. Note that Spark should have been built with [Hive support](building-spark.html#building-with-hive-and-jdbc-support) and more details can be found in the [SQL programming guide](sql-programming-guide.html#starting-point-sparksession). In SparkR, by default it will attempt to create a SparkSession with Hive support enabled (`enableHiveSupport = TRUE`).
+You can also create SparkDataFrames from Hive tables. To do this we will need to create a SparkSession with Hive support which can access tables in the Hive MetaStore. Note that Spark should have been built with [Hive support](building-spark.html#building-with-hive-and-jdbc-support) and more details can be found in the [SQL programming guide](sql-getting-started.html#starting-point-sparksession). In SparkR, by default it will attempt to create a SparkSession with Hive support enabled (`enableHiveSupport = TRUE`).
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
@@ -241,7 +241,7 @@ head(filter(df, df$waiting < 50))
 
 ### Grouping, Aggregation
 
-SparkR data frames support a number of commonly used functions to aggregate data after grouping. For example we can compute a histogram of the `waiting` time in the `faithful` dataset as shown below
+SparkR data frames support a number of commonly used functions to aggregate data after grouping. For example, we can compute a histogram of the `waiting` time in the `faithful` dataset as shown below
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -296,7 +296,7 @@ head(agg(rollup(df, "cyl", "disp", "gear"), avg(df$mpg)))
 
 ### Operating on Columns
 
-SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
+SparkR also provides a number of functions that can be directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -450,6 +450,48 @@ print(model.summaries)
 {% endhighlight %}
 </div>
 
+### Eager execution
+
+If eager execution is enabled, the data will be returned to R client immediately when the `SparkDataFrame` is created. By default, eager execution is not enabled and can be enabled by setting the configuration property `spark.sql.repl.eagerEval.enabled` to `true` when the `SparkSession` is started up.
+
+Maximum number of rows and maximum number of characters per column of data to display can be controlled by `spark.sql.repl.eagerEval.maxNumRows` and `spark.sql.repl.eagerEval.truncate` configuration properties, respectively. These properties are only effective when eager execution is enabled. If these properties are not set explicitly, by default, data up to 20 rows and up to 20 characters per column will be showed.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+
+# Start up spark session with eager execution enabled
+sparkR.session(master = "local[*]",
+               sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
+                                  spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
+
+# Create a grouped and sorted SparkDataFrame
+df <- createDataFrame(faithful)
+df2 <- arrange(summarize(groupBy(df, df$waiting), count = n(df$waiting)), "waiting")
+
+# Similar to R data.frame, displays the data returned, instead of SparkDataFrame class string
+df2
+
+##+-------+-----+
+##|waiting|count|
+##+-------+-----+
+##|   43.0|    1|
+##|   45.0|    3|
+##|   46.0|    5|
+##|   47.0|    4|
+##|   48.0|    3|
+##|   49.0|    5|
+##|   50.0|    5|
+##|   51.0|    6|
+##|   52.0|    5|
+##|   53.0|    7|
+##+-------+-----+
+##only showing top 10 rows
+
+{% endhighlight %}
+</div>
+
+Note that to enable eager execution in `sparkR` shell, add `spark.sql.repl.eagerEval.enabled=true` configuration property to the `--conf` option.
+
 ## Running SQL Queries from SparkR
 A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
@@ -502,6 +544,7 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
 * [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
 * [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
+* [`spark.powerIterationClustering (PIC)`](api/R/spark.powerIterationClustering.html): [`Power Iteration Clustering (PIC)`](ml-clustering.html#power-iteration-clustering-pic)
 
 #### Collaborative Filtering
 
@@ -510,6 +553,7 @@ SparkR supports the following machine learning algorithms currently:
 #### Frequent Pattern Mining
 
 * [`spark.fpGrowth`](api/R/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
+* [`spark.prefixSpan`](api/R/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixSpan)
 
 #### Statistics
 
@@ -664,6 +708,15 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - For `summary`, option for statistics to compute has been added. Its output is changed from that from `describe`.
  - A warning can be raised if versions of SparkR package and the Spark JVM do not match.
 
-## Upgrading to Spark 2.4.0
+## Upgrading to SparkR 2.3.1 and above
 
- - The `start` parameter of `substr` method was wrongly subtracted by one, previously. In other words, the index specified by `start` parameter was considered as 0-base. This can lead to inconsistent substring results and also does not match with the behaviour with `substr` in R. It has been fixed so the `start` parameter of `substr` method is now 1-base, e.g., therefore to get the same result as `substr(df$a, 2, 5)`, it should be changed to `substr(df$a, 1, 4)`.
+ - In SparkR 2.3.0 and earlier, the `start` parameter of `substr` method was wrongly subtracted by one and considered as 0-based. This can lead to inconsistent substring results and also does not match with the behaviour with `substr` in R. In version 2.3.1 and later, it has been fixed so the `start` parameter of `substr` method is now 1-based. As an example, `substr(lit('abcdef'), 2, 4))` would result to `abc` in SparkR 2.3.0, and the result would be `bcd` in SparkR 2.3.1.
+
+## Upgrading to SparkR 2.4.0
+
+ - Previously, we don't check the validity of the size of the last layer in `spark.mlp`. For example, if the training data only has two labels, a `layers` param like `c(1, 3)` doesn't cause an error previously, now it does.
+
+## Upgrading to SparkR 3.0.0
+
+ - The deprecated methods `sparkR.init`, `sparkRSQL.init`, `sparkRHive.init` have been removed. Use `sparkR.session` instead.
+ - The deprecated methods `parquetFile`, `saveAsParquetFile`, `jsonFile`, `registerTempTable`, `createExternalTable`, and `dropTempTable` have been removed. Use `read.parquet`, `write.parquet`, `read.json`, `createOrReplaceTempView`, `createTable`, `dropTempView`, `union` instead.

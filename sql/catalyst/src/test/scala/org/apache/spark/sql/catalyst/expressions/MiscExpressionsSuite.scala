@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.PrintStream
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
@@ -42,8 +44,27 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("uuid") {
-    checkEvaluation(Length(Uuid()), 36)
-    assert(evaluateWithoutCodegen(Uuid()) !== evaluateWithoutCodegen(Uuid()))
+    checkEvaluation(Length(Uuid(Some(0))), 36)
+    val r = new Random()
+    val seed1 = Some(r.nextLong())
+    assert(evaluateWithoutCodegen(Uuid(seed1)) === evaluateWithoutCodegen(Uuid(seed1)))
+    assert(evaluateWithMutableProjection(Uuid(seed1)) ===
+      evaluateWithMutableProjection(Uuid(seed1)))
+    assert(evaluateWithUnsafeProjection(Uuid(seed1)) ===
+      evaluateWithUnsafeProjection(Uuid(seed1)))
+
+    val seed2 = Some(r.nextLong())
+    assert(evaluateWithoutCodegen(Uuid(seed1)) !== evaluateWithoutCodegen(Uuid(seed2)))
+    assert(evaluateWithMutableProjection(Uuid(seed1)) !==
+      evaluateWithMutableProjection(Uuid(seed2)))
+    assert(evaluateWithUnsafeProjection(Uuid(seed1)) !==
+      evaluateWithUnsafeProjection(Uuid(seed2)))
+
+    val uuid = Uuid(seed1)
+    assert(uuid.fastEquals(uuid))
+    assert(!uuid.fastEquals(Uuid(seed1)))
+    assert(!uuid.fastEquals(uuid.freshCopy()))
+    assert(!uuid.fastEquals(Uuid(seed2)))
   }
 
   test("PrintToStderr") {
@@ -58,7 +79,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val outputEval = errorStream.toString
       errorStream.reset()
       // check with codegen
-      checkEvaluationWithGeneratedMutableProjection(PrintToStderr(inputExpr), 1)
+      checkEvaluationWithMutableProjection(PrintToStderr(inputExpr), 1)
       val outputCodegen = errorStream.toString
       (outputEval, outputCodegen)
     } finally {

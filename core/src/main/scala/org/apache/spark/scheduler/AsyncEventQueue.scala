@@ -34,7 +34,11 @@ import org.apache.spark.util.Utils
  * Delivery will only begin when the `start()` method is called. The `stop()` method should be
  * called when no more events need to be delivered.
  */
-private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveListenerBusMetrics)
+private class AsyncEventQueue(
+    val name: String,
+    conf: SparkConf,
+    metrics: LiveListenerBusMetrics,
+    bus: LiveListenerBus)
   extends SparkListenerBus
   with Logging {
 
@@ -81,23 +85,18 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
   }
 
   private def dispatch(): Unit = LiveListenerBus.withinListenerThread.withValue(true) {
-    try {
-      var next: SparkListenerEvent = eventQueue.take()
-      while (next != POISON_PILL) {
-        val ctx = processingTime.time()
-        try {
-          super.postToAll(next)
-        } finally {
-          ctx.stop()
-        }
-        eventCount.decrementAndGet()
-        next = eventQueue.take()
+    var next: SparkListenerEvent = eventQueue.take()
+    while (next != POISON_PILL) {
+      val ctx = processingTime.time()
+      try {
+        super.postToAll(next)
+      } finally {
+        ctx.stop()
       }
       eventCount.decrementAndGet()
-    } catch {
-      case ie: InterruptedException =>
-        logInfo(s"Stopping listener queue $name.", ie)
+      next = eventQueue.take()
     }
+    eventCount.decrementAndGet()
   }
 
   override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
@@ -130,7 +129,11 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
       eventCount.incrementAndGet()
       eventQueue.put(POISON_PILL)
     }
-    dispatchThread.join()
+    // this thread might be trying to stop itself as part of error handling -- we can't join
+    // in that case.
+    if (Thread.currentThread() != dispatchThread) {
+      dispatchThread.join()
+    }
   }
 
   def post(event: SparkListenerEvent): Unit = {
@@ -166,7 +169,8 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
           val prevLastReportTimestamp = lastReportTimestamp
           lastReportTimestamp = System.currentTimeMillis()
           val previous = new java.util.Date(prevLastReportTimestamp)
-          logWarning(s"Dropped $droppedEvents events from $name since $previous.")
+          logWarning(s"Dropped $droppedCount events from $name since " +
+            s"${if (prevLastReportTimestamp == 0) "the application started" else s"$previous"}.")
         }
       }
     }
@@ -185,6 +189,12 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
       Thread.sleep(10)
     }
     true
+  }
+
+  override def removeListenerOnError(listener: SparkListenerInterface): Unit = {
+    // the listener failed in an unrecoverably way, we want to remove it from the entire
+    // LiveListenerBus (potentially stopping a queue if it is empty)
+    bus.removeListener(listener)
   }
 
 }

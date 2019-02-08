@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
@@ -29,7 +30,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 
   private def init(): Unit = {
     val threadDumpEnabled =
-      parent.sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
+      parent.sc.isDefined && parent.conf.get(UI_THREAD_DUMPS_ENABLED)
 
     attachPage(new ExecutorsPage(this, threadDumpEnabled))
     if (threadDumpEnabled) {
@@ -49,12 +50,12 @@ private[ui] class ExecutorsPage(
       <div>
         {
           <div id="active-executors" class="row-fluid"></div> ++
-          <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
-          <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
+          <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
+          <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>
         }
       </div>
 
-    UIUtils.headerSparkPage("Executors", content, parent, useDataTables = true)
+    UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)
   }
 }

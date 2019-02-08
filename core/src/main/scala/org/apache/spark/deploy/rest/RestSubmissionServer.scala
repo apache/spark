@@ -51,6 +51,7 @@ private[spark] abstract class RestSubmissionServer(
     val host: String,
     val requestedPort: Int,
     val masterConf: SparkConf) extends Logging {
+
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
@@ -94,6 +95,7 @@ private[spark] abstract class RestSubmissionServer(
       new HttpConnectionFactory())
     connector.setHost(host)
     connector.setPort(startPort)
+    connector.setReuseAddress(!Utils.isWindows)
     server.addConnector(connector)
 
     val mainHandler = new ServletContextHandler

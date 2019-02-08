@@ -35,6 +35,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.util.LevelDBProvider;
@@ -188,6 +190,18 @@ public class YarnShuffleService extends AuxiliaryService {
       port = shuffleServer.getPort();
       boundPort = port;
       String authEnabledString = authEnabled ? "enabled" : "not enabled";
+
+      // register metrics on the block handler into the Node Manager's metrics system.
+      blockHandler.getAllMetrics().getMetrics().put("numRegisteredConnections",
+          shuffleServer.getRegisteredConnections());
+      YarnShuffleServiceMetrics serviceMetrics =
+          new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
+
+      MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+      metricsSystem.register(
+          "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
+      logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
+
       logger.info("Started YARN shuffle service for Spark on port {}. " +
         "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
         registeredExecutorFile);

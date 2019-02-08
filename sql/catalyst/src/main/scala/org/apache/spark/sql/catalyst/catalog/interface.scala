@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -93,12 +94,16 @@ object CatalogStorageFormat {
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  * @param parameters some parameters for the partition
+ * @param createTime creation time of the partition, in milliseconds
+ * @param lastAccessTime last access time, in milliseconds
  * @param stats optional statistics (number of rows, total size, etc.)
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
     parameters: Map[String, String] = Map.empty,
+    createTime: Long = System.currentTimeMillis,
+    lastAccessTime: Long = -1,
     stats: Option[CatalogStatistics] = None) {
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
@@ -109,6 +114,11 @@ case class CatalogTablePartition(
     if (parameters.nonEmpty) {
       map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
+    map.put("Created Time", new Date(createTime).toString)
+    val lastAccess = {
+      if (-1 == lastAccessTime) "UNKNOWN" else new Date(lastAccessTime).toString
+    }
+    map.put("Last Access", lastAccess)
     stats.foreach(s => map.put("Partition Statistics", s.simpleString))
     map
   }
@@ -164,9 +174,12 @@ case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String]) {
-  if (numBuckets <= 0 || numBuckets >= 100000) {
+  def conf: SQLConf = SQLConf.get
+
+  if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
     throw new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than 100000. Got `$numBuckets`")
+      s"Number of buckets should be greater than 0 but less than or equal to " +
+        s"bucketing.maxBuckets (`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
   }
 
   override def toString: String = {
@@ -231,7 +244,8 @@ case class CatalogTable(
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
-    ignoredProperties: Map[String, String] = Map.empty) {
+    ignoredProperties: Map[String, String] = Map.empty,
+    viewOriginalText: Option[String] = None) {
 
   import CatalogTable._
 
@@ -318,6 +332,7 @@ case class CatalogTable(
     comment.foreach(map.put("Comment", _))
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
+      viewOriginalText.foreach(map.put("View Original Text", _))
       viewDefaultDatabase.foreach(map.put("View Default Database", _))
       if (viewQueryColumnNames.nonEmpty) {
         map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -26,6 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -47,7 +50,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
-      assert(sizes.head === BigInt(96),
+      assert(sizes.head === BigInt(128),
         s"expected exact size 96 for table 'test', got: ${sizes.head}")
     }
   }
@@ -201,23 +204,40 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-25028: column stats collection for null partitioning columns") {
+    val table = "analyze_partition_with_null"
+    withTempDir { dir =>
+      withTable(table) {
+        sql(s"""
+             |CREATE TABLE $table (value string, name string)
+             |USING PARQUET
+             |PARTITIONED BY (name)
+             |LOCATION '${dir.toURI}'""".stripMargin)
+        val df = Seq(("a", null), ("b", null)).toDF("value", "name")
+        df.write.mode("overwrite").insertInto(table)
+        sql(s"ANALYZE TABLE $table PARTITION (name) COMPUTE STATISTICS")
+        val partitions = spark.sessionState.catalog.listPartitions(TableIdentifier(table))
+        assert(partitions.head.stats.get.rowCount.get == 2)
+      }
+    }
+  }
+
   test("number format in statistics") {
     val numbers = Seq(
       BigInt(0) -> (("0.0 B", "0")),
       BigInt(100) -> (("100.0 B", "100")),
       BigInt(2047) -> (("2047.0 B", "2.05E+3")),
-      BigInt(2048) -> (("2.0 KB", "2.05E+3")),
-      BigInt(3333333) -> (("3.2 MB", "3.33E+6")),
-      BigInt(4444444444L) -> (("4.1 GB", "4.44E+9")),
-      BigInt(5555555555555L) -> (("5.1 TB", "5.56E+12")),
-      BigInt(6666666666666666L) -> (("5.9 PB", "6.67E+15")),
-      BigInt(1L << 10 ) * (1L << 60) -> (("1024.0 EB", "1.18E+21")),
+      BigInt(2048) -> (("2.0 KiB", "2.05E+3")),
+      BigInt(3333333) -> (("3.2 MiB", "3.33E+6")),
+      BigInt(4444444444L) -> (("4.1 GiB", "4.44E+9")),
+      BigInt(5555555555555L) -> (("5.1 TiB", "5.56E+12")),
+      BigInt(6666666666666666L) -> (("5.9 PiB", "6.67E+15")),
+      BigInt(1L << 10 ) * (1L << 60) -> (("1024.0 EiB", "1.18E+21")),
       BigInt(1L << 11) * (1L << 60) -> (("2.36E+21 B", "2.36E+21"))
     )
     numbers.foreach { case (input, (expectedSize, expectedRows)) =>
       val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
-      val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows," +
-        s" hints=none"
+      val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows"
       assert(stats.simpleString == expectedString)
     }
   }
@@ -242,6 +262,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
     Seq(false, true).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
@@ -269,6 +290,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
             } else {
               checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+              // SPARK-19724: clean up the previous table location.
+              waitForTasksToFinish()
+              Utils.deleteRecursively(tableLoc)
             }
           }
         }
@@ -372,6 +396,34 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             }
           }
         }
+      }
+    }
+  }
+
+  test("Simple queries must be working, if CBO is turned on") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("TBL1", "TBL") {
+        import org.apache.spark.sql.functions._
+        val df = spark.range(1000L).select('id,
+          'id * 2 as "FLD1",
+          'id * 12 as "FLD2",
+          lit("aaa") + 'id as "fld3")
+        df.write
+          .mode(SaveMode.Overwrite)
+          .bucketBy(10, "id", "FLD1", "FLD2")
+          .sortBy("id", "FLD1", "FLD2")
+          .saveAsTable("TBL")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
+        val df2 = spark.sql(
+          """
+             |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
+             |FROM tbl t1
+             |JOIN tbl t2 on t1.id=t2.id
+             |WHERE  t1.fld3 IN (-123.23,321.23)
+          """.stripMargin)
+        df2.createTempView("TBL2")
+        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
       }
     }
   }

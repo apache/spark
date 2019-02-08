@@ -21,6 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -43,6 +44,12 @@ object LocalRelation {
   }
 }
 
+/**
+ * Logical plan node for scanning data from a local collection.
+ *
+ * @param data The local collection holding the data. It doesn't need to be sent to executors
+ *             and then doesn't need to be serializable.
+ */
 case class LocalRelation(
     output: Seq[Attribute],
     data: Seq[InternalRow] = Nil,
@@ -71,7 +78,7 @@ case class LocalRelation(
   }
 
   override def computeStats(): Statistics =
-    Statistics(sizeInBytes = output.map(n => BigInt(n.dataType.defaultSize)).sum * data.length)
+    Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length)
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)

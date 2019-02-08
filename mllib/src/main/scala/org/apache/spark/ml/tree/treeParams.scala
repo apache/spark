@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.util.Try
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
-  with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed with HasWeightCol {
 
   /**
    * Maximum depth of the tree (>= 0).
@@ -74,6 +75,21 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " Should be >= 1.", ParamValidators.gtEq(1))
 
   /**
+   * Minimum fraction of the weighted sample count that each child must have after split.
+   * If a split causes the fraction of the total weight in the left or right child to be less than
+   * minWeightFractionPerNode, the split will be discarded as invalid.
+   * Should be in the interval [0.0, 0.5).
+   * (default = 0.0)
+   * @group param
+   */
+  final val minWeightFractionPerNode: DoubleParam = new DoubleParam(this,
+    "minWeightFractionPerNode", "Minimum fraction of the weighted sample count that each child " +
+    "must have after split. If a split causes the fraction of the total weight in the left or " +
+    "right child to be less than minWeightFractionPerNode, the split will be discarded as " +
+    "invalid. Should be in interval [0.0, 0.5)",
+    ParamValidators.inRange(0.0, 0.5, lowerInclusive = true, upperInclusive = false))
+
+  /**
    * Minimum information gain for a split to be considered at a tree node.
    * Should be >= 0.0.
    * (default = 0.0)
@@ -106,82 +122,30 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
-  setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
-    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setMaxDepth(value: Int): this.type = set(maxDepth, value)
+  setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
+    minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, maxMemoryInMB -> 256,
+    cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setMaxBins(value: Int): this.type = set(maxBins, value)
-
   /** @group getParam */
   final def getMaxBins: Int = $(maxBins)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group getParam */
   final def getMinInstancesPerNode: Int = $(minInstancesPerNode)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
+  /** @group getParam */
+  final def getMinWeightFractionPerNode: Double = $(minWeightFractionPerNode)
 
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setSeed(value: Long): this.type = set(seed, value)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group expertSetParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
-
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = $(maxMemoryInMB)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group expertSetParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
-
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
@@ -198,6 +162,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     strategy.maxMemoryInMB = getMaxMemoryInMB
     strategy.minInfoGain = getMinInfoGain
     strategy.minInstancesPerNode = getMinInstancesPerNode
+    strategy.minWeightFractionPerNode = getMinWeightFractionPerNode
     strategy.useNodeIdCache = getCacheNodeIds
     strategy.numClasses = numClasses
     strategy.categoricalFeaturesInfo = categoricalFeatures
@@ -225,13 +190,6 @@ private[ml] trait TreeClassifierParams extends Params {
 
   setDefault(impurity -> "gini")
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setImpurity(value: String): this.type = set(impurity, value)
-
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
 
@@ -257,11 +215,7 @@ private[ml] object TreeClassifierParams {
 private[ml] trait DecisionTreeClassifierParams
   extends DecisionTreeParams with TreeClassifierParams
 
-/**
- * Parameters for Decision Tree-based regression algorithms.
- */
-private[ml] trait TreeRegressorParams extends Params {
-
+private[ml] trait HasVarianceImpurity extends Params {
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Supported: "variance".
@@ -270,18 +224,11 @@ private[ml] trait TreeRegressorParams extends Params {
    */
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
+    s" ${HasVarianceImpurity.supportedImpurities.mkString(", ")}",
     (value: String) =>
-      TreeRegressorParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
+      HasVarianceImpurity.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "variance")
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
@@ -298,11 +245,16 @@ private[ml] trait TreeRegressorParams extends Params {
   }
 }
 
-private[ml] object TreeRegressorParams {
+private[ml] object HasVarianceImpurity {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] =
     Array("variance").map(_.toLowerCase(Locale.ROOT))
 }
+
+/**
+ * Parameters for Decision Tree-based regression algorithms.
+ */
+private[ml] trait TreeRegressorParams extends HasVarianceImpurity
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
@@ -343,13 +295,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   setDefault(subsamplingRate -> 1.0)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /** @group getParam */
   final def getSubsamplingRate: Double = $(subsamplingRate)
@@ -404,13 +349,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   setDefault(featureSubsetStrategy -> "auto")
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
-
   /** @group getParam */
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
@@ -438,13 +376,6 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   setDefault(numTrees -> 20)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setNumTrees(value: Int): this.type = set(numTrees, value)
-
   /** @group getParam */
   final def getNumTrees: Int = $(numTrees)
 }
@@ -460,25 +391,34 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
-
-  /* TODO: Add this doc when we add this param.  SPARK-7132
-   * Threshold for stopping early when runWithValidation is used.
-   * If the error rate on the validation input changes by less than the validationTol,
-   * then learning will stop early (before [[numIterations]]).
-   * This parameter is ignored when run is used.
-   * (default = 1e-5)
-   * @group param
-   */
-  // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
-  // validationTol -> 1e-5
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize
+  with HasValidationIndicatorCol {
 
   /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
+   * Threshold for stopping early when fit with validation is used.
+   * (This parameter is ignored when fit without validation is used.)
+   * The decision to stop early is decided based on this logic:
+   * If the current loss on the validation set is greater than 0.01, the diff
+   * of validation error is compared to relative tolerance which is
+   * validationTol * (current loss on the validation set).
+   * If the current loss on the validation set is less than or equal to 0.01,
+   * the diff of validation error is compared to absolute tolerance which is
+   * validationTol * 0.01.
+   * @group param
+   * @see validationIndicatorCol
    */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
+  @Since("2.4.0")
+  final val validationTol: DoubleParam = new DoubleParam(this, "validationTol",
+    "Threshold for stopping early when fit with validation is used." +
+    "If the error rate on the validation input changes by less than the validationTol," +
+    "then learning will stop early (before `maxIter`)." +
+    "This parameter is ignored when fit without validation is used.",
+    ParamValidators.gtEq(0.0)
+  )
+
+  /** @group getParam */
+  @Since("2.4.0")
+  final def getValidationTol: Double = $(validationTol)
 
   /**
    * Param for Step size (a.k.a. learning rate) in interval (0, 1] for shrinking
@@ -490,14 +430,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
     "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setStepSize(value: Double): this.type = set(stepSize, value)
-
-  setDefault(maxIter -> 20, stepSize -> 0.1)
+  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01)
 
   setDefault(featureSubsetStrategy -> "all")
 
@@ -507,7 +440,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
       oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
     // NOTE: The old API does not support "seed" so we ignore it.
-    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
+    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize, getValidationTol)
   }
 
   /** Get old Gradient Boosting Loss type */
@@ -521,7 +454,7 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
+private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -579,7 +512,11 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
-    getLossType match {
+    convertToOldLossType(getLossType)
+  }
+
+  private[ml] def convertToOldLossType(loss: String): OldLoss = {
+    loss match {
       case "squared" => OldSquaredError
       case "absolute" => OldAbsoluteError
       case _ =>

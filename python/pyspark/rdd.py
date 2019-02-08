@@ -25,7 +25,6 @@ import warnings
 import heapq
 import bisect
 import random
-import socket
 from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
@@ -39,6 +38,7 @@ if sys.version > '3':
 else:
     from itertools import imap as map, ifilter as filter
 
+from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer
@@ -51,6 +51,7 @@ from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
+from pyspark.util import fail_on_stopiteration
 
 
 __all__ = ["RDD"]
@@ -71,6 +72,7 @@ class PythonEvalType(object):
     SQL_SCALAR_PANDAS_UDF = 200
     SQL_GROUPED_MAP_PANDAS_UDF = 201
     SQL_GROUPED_AGG_PANDAS_UDF = 202
+    SQL_WINDOW_AGG_PANDAS_UDF = 203
 
 
 def portable_hash(x):
@@ -123,7 +125,7 @@ class BoundedFloat(float):
 def _parse_memory(s):
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MB
+    return the value in MiB
 
     >>> _parse_memory("256m")
     256
@@ -136,28 +138,13 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def _load_from_socket(port, serializer):
-    sock = None
-    # Support for both IPv4 and IPv6.
-    # On most of IPv6-ready systems, IPv6 will take precedence.
-    for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-        af, socktype, proto, canonname, sa = res
-        sock = socket.socket(af, socktype, proto)
-        try:
-            sock.settimeout(15)
-            sock.connect(sa)
-        except socket.error:
-            sock.close()
-            sock = None
-            continue
-        break
-    if not sock:
-        raise Exception("could not open socket")
+def _load_from_socket(sock_info, serializer):
+    (sockfile, sock) = local_connect_and_auth(*sock_info)
     # The RDD materialization time is unpredicable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
     # The socket will be automatically closed when garbage-collected.
-    return serializer.load_stream(sock.makefile("rb", 65536))
+    return serializer.load_stream(sockfile)
 
 
 def ignore_unicode_prefix(f):
@@ -257,13 +244,17 @@ class RDD(object):
         self._jrdd.persist(javaStorageLevel)
         return self
 
-    def unpersist(self):
+    def unpersist(self, blocking=False):
         """
         Mark the RDD as non-persistent, and remove all blocks for it from
         memory and disk.
+
+        .. versionchanged:: 3.0.0
+           Added optional argument `blocking` to specify whether to block until all
+           blocks are deleted.
         """
         self.is_cached = False
-        self._jrdd.unpersist()
+        self._jrdd.unpersist(blocking)
         return self
 
     def checkpoint(self):
@@ -332,7 +323,7 @@ class RDD(object):
         [('a', 1), ('b', 1), ('c', 1)]
         """
         def func(_, iterator):
-            return map(f, iterator)
+            return map(fail_on_stopiteration(f), iterator)
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
@@ -347,7 +338,7 @@ class RDD(object):
         [(2, 2), (2, 2), (3, 3), (3, 3), (4, 4), (4, 4)]
         """
         def func(s, iterator):
-            return chain.from_iterable(map(f, iterator))
+            return chain.from_iterable(map(fail_on_stopiteration(f), iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
@@ -410,7 +401,7 @@ class RDD(object):
         [2, 4]
         """
         def func(iterator):
-            return filter(f, iterator)
+            return filter(fail_on_stopiteration(f), iterator)
         return self.mapPartitions(func, True)
 
     def distinct(self, numPartitions=None):
@@ -791,6 +782,8 @@ class RDD(object):
         >>> def f(x): print(x)
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
+        f = fail_on_stopiteration(f)
+
         def processPartition(iterator):
             for x in iterator:
                 f(x)
@@ -822,8 +815,8 @@ class RDD(object):
             to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
-            port = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
-        return list(_load_from_socket(port, self._jrdd_deserializer))
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
+        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
     def reduce(self, f):
         """
@@ -840,6 +833,8 @@ class RDD(object):
             ...
         ValueError: Can not reduce() empty RDD
         """
+        f = fail_on_stopiteration(f)
+
         def func(iterator):
             iterator = iter(iterator)
             try:
@@ -911,6 +906,8 @@ class RDD(object):
         >>> sc.parallelize([1, 2, 3, 4, 5]).fold(0, add)
         15
         """
+        op = fail_on_stopiteration(op)
+
         def func(iterator):
             acc = zeroValue
             for obj in iterator:
@@ -943,6 +940,9 @@ class RDD(object):
         >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
         (0, 0)
         """
+        seqOp = fail_on_stopiteration(seqOp)
+        combOp = fail_on_stopiteration(combOp)
+
         def func(iterator):
             acc = zeroValue
             for obj in iterator:
@@ -1342,7 +1342,7 @@ class RDD(object):
                 if len(items) == 0:
                     numPartsToTry = partsScanned * 4
                 else:
-                    # the first paramter of max is >=1 whenever partsScanned >= 2
+                    # the first parameter of max is >=1 whenever partsScanned >= 2
                     numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
                     numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
 
@@ -1352,7 +1352,10 @@ class RDD(object):
                 iterator = iter(iterator)
                 taken = 0
                 while taken < left:
-                    yield next(iterator)
+                    try:
+                        yield next(iterator)
+                    except StopIteration:
+                        return
                     taken += 1
 
             p = range(partsScanned, min(partsScanned + numPartsToTry, totalParts))
@@ -1636,6 +1639,8 @@ class RDD(object):
         >>> sorted(rdd.reduceByKeyLocally(add).items())
         [('a', 2), ('b', 1)]
         """
+        func = fail_on_stopiteration(func)
+
         def reducePartition(iterator):
             m = {}
             for k, v in iterator:
@@ -2351,7 +2356,7 @@ class RDD(object):
         The algorithm used is based on streamlib's implementation of
         `"HyperLogLog in Practice: Algorithmic Engineering of a State
         of The Art Cardinality Estimation Algorithm", available here
-        <http://dx.doi.org/10.1145/2452376.2452456>`_.
+        <https://doi.org/10.1145/2452376.2452456>`_.
 
         :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
@@ -2380,8 +2385,35 @@ class RDD(object):
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         with SCCallSiteSync(self.context) as css:
-            port = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        return _load_from_socket(port, self._jrdd_deserializer)
+            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
+        return _load_from_socket(sock_info, self._jrdd_deserializer)
+
+    def barrier(self):
+        """
+        .. note:: Experimental
+
+        Marks the current stage as a barrier stage, where Spark must launch all tasks together.
+        In case of a task failure, instead of only restarting the failed task, Spark will abort the
+        entire stage and relaunch all tasks for this stage.
+        The barrier execution mode feature is experimental and it only handles limited scenarios.
+        Please read the linked SPIP and design docs to understand the limitations and future plans.
+
+        :return: an :class:`RDDBarrier` instance that provides actions within a barrier stage.
+
+        .. seealso:: :class:`BarrierTaskContext`
+        .. seealso:: `SPIP: Barrier Execution Mode
+            <http://jira.apache.org/jira/browse/SPARK-24374>`_
+        .. seealso:: `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
+
+        .. versionadded:: 2.4.0
+        """
+        return RDDBarrier(self)
+
+    def _is_barrier(self):
+        """
+        Whether this RDD is in a barrier stage.
+        """
+        return self._jrdd.rdd().isBarrier()
 
 
 def _prepare_for_python_RDD(sc, command):
@@ -2406,6 +2438,36 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
+class RDDBarrier(object):
+
+    """
+    .. note:: Experimental
+
+    Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
+    :class:`RDDBarrier` instances are created by :func:`RDD.barrier`.
+
+    .. versionadded:: 2.4.0
+    """
+
+    def __init__(self, rdd):
+        self.rdd = rdd
+
+    def mapPartitions(self, f, preservesPartitioning=False):
+        """
+        .. note:: Experimental
+
+        Returns a new RDD by applying a function to each partition of the wrapped RDD,
+        where tasks are launched together in a barrier stage.
+        The interface is the same as :func:`RDD.mapPartitions`.
+        Please see the API doc there.
+
+        .. versionadded:: 2.4.0
+        """
+        def func(s, iterator):
+            return f(iterator)
+        return PipelinedRDD(self.rdd, func, preservesPartitioning, isFromBarrier=True)
+
+
 class PipelinedRDD(RDD):
 
     """
@@ -2425,7 +2487,7 @@ class PipelinedRDD(RDD):
     20
     """
 
-    def __init__(self, prev, func, preservesPartitioning=False):
+    def __init__(self, prev, func, preservesPartitioning=False, isFromBarrier=False):
         if not isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
             # This transformation is the first in its stage:
             self.func = func
@@ -2451,6 +2513,7 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
+        self.is_barrier = isFromBarrier or prev._is_barrier()
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()
@@ -2470,7 +2533,7 @@ class PipelinedRDD(RDD):
         wrapped_func = _wrap_function(self.ctx, self.func, self._prev_jrdd_deserializer,
                                       self._jrdd_deserializer, profiler)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
-                                             self.preservesPartitioning)
+                                             self.preservesPartitioning, self.is_barrier)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:
@@ -2485,6 +2548,9 @@ class PipelinedRDD(RDD):
 
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
+
+    def _is_barrier(self):
+        return self.is_barrier
 
 
 def _test():

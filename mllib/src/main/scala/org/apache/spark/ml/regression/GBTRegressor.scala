@@ -31,10 +31,10 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 
 /**
@@ -68,27 +68,27 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMaxDepth(value: Int): this.type = set(maxDepth, value)
+  def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMaxBins(value: Int): this.type = set(maxBins, value)
+  def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
+  def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
+  def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group expertSetParam */
   @Since("1.4.0")
-  override def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
+  def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
   /** @group expertSetParam */
   @Since("1.4.0")
-  override def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
+  def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /**
    * Specifies how often to checkpoint the cached node IDs.
@@ -100,7 +100,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * @group setParam
    */
   @Since("1.4.0")
-  override def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /**
    * The impurity setting is ignored for GBT models.
@@ -109,7 +109,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * @group setParam
    */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = {
+  def setImpurity(value: String): this.type = {
     logWarning("GBTRegressor.setImpurity should NOT be used")
     this
   }
@@ -118,21 +118,21 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
+  def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setSeed(value: Long): this.type = set(seed, value)
+  def setSeed(value: Long): this.type = set(seed, value)
 
   // Parameters from GBTParams:
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMaxIter(value: Int): this.type = set(maxIter, value)
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setStepSize(value: Double): this.type = set(stepSize, value)
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
   // Parameters from GBTRegressorParams:
 
@@ -142,27 +142,50 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("2.3.0")
-  override def setFeatureSubsetStrategy(value: String): this.type =
+  def setFeatureSubsetStrategy(value: String): this.type =
     set(featureSubsetStrategy, value)
 
-  override protected def train(dataset: Dataset[_]): GBTRegressionModel = {
+  /** @group setParam */
+  @Since("2.4.0")
+  def setValidationIndicatorCol(value: String): this.type = {
+    set(validationIndicatorCol, value)
+  }
+
+  override protected def train(dataset: Dataset[_]): GBTRegressionModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
-    val numFeatures = oldDataset.first().features.size
+
+    val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
+
+    val (trainDataset, validationDataset) = if (withValidation) {
+      (
+        extractLabeledPoints(dataset.filter(not(col($(validationIndicatorCol))))),
+        extractLabeledPoints(dataset.filter(col($(validationIndicatorCol))))
+      )
+    } else {
+      (extractLabeledPoints(dataset), null)
+    }
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
 
-    val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, impurity, lossType,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
-      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy)
+      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
+      validationIndicatorCol, validationTol)
+
+    val (baseLearners, learnerWeights) = if (withValidation) {
+      GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
+        $(seed), $(featureSubsetStrategy))
+    } else {
+      GradientBoostedTrees.run(trainDataset, boostingStrategy,
+        $(seed), $(featureSubsetStrategy))
+    }
+
+    val numFeatures = baseLearners.head.numFeatures
     instr.logNumFeatures(numFeatures)
 
-    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
-      $(seed), $(featureSubsetStrategy))
-    val m = new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
-    instr.logSuccess(m)
-    m
+    new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
   @Since("1.4.0")
@@ -230,7 +253,7 @@ class GBTRegressionModel private[ml](
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
@@ -267,6 +290,21 @@ class GBTRegressionModel private[ml](
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
     new OldGBTModel(OldAlgo.Regression, _trees.map(_.toOld), _treeWeights)
+  }
+
+  /**
+   * Method to compute error or loss for every iteration of gradient boosting.
+   *
+   * @param dataset Dataset for validation.
+   * @param loss The loss function used to compute error. Supported options: squared, absolute
+   */
+  @Since("2.4.0")
+  def evaluateEachIteration(dataset: Dataset[_], loss: String): Array[Double] = {
+    val data = dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
+    }
+    GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights,
+      convertToOldLossType(loss), OldAlgo.Regression)
   }
 
   @Since("2.0.0")
@@ -311,7 +349,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
         case (treeMetadata, root) =>
           val tree =
             new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
-          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          treeMetadata.getAndSetParams(tree)
           tree
       }
 
@@ -319,7 +357,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
         s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new GBTRegressionModel(metadata.uid, trees, treeWeights, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

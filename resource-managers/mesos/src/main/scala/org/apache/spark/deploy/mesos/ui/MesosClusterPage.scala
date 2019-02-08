@@ -62,7 +62,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
           {retryTable}
         </div>
       </div>;
-    UIUtils.basicSparkPage(content, "Spark Drivers for Mesos cluster")
+    UIUtils.basicSparkPage(request, content, "Spark Drivers for Mesos cluster")
   }
 
   private def queuedRow(submission: MesosDriverDescription): Seq[Node] = {

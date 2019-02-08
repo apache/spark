@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
 import org.apache.spark.util.Utils
@@ -54,19 +55,22 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.bindAddress",
       "spark.driver.port",
       "spark.master",
+      "spark.kubernetes.driver.pod.name",
+      "spark.kubernetes.executor.podNamePrefix",
       "spark.yarn.jars",
       "spark.yarn.keytab",
       "spark.yarn.principal",
-      "spark.yarn.credentials.file",
-      "spark.yarn.credentials.renewalTime",
-      "spark.yarn.credentials.updateTime",
-      "spark.ui.filters",
+      "spark.kerberos.keytab",
+      "spark.kerberos.principal",
+      UI_FILTERS.key,
       "spark.mesos.driver.frameworkId")
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
       .remove("spark.driver.bindAddress")
       .remove("spark.driver.port")
+      .remove("spark.kubernetes.driver.pod.name")
+      .remove("spark.kubernetes.executor.podNamePrefix")
     val newReloadConf = new SparkConf(loadDefaults = true)
     propertiesToReload.foreach { prop =>
       newReloadConf.getOption(prop).foreach { value =>

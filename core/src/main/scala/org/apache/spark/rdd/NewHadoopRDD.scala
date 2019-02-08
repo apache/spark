@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileInputFormat, FileSplit, InvalidInputException}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
 
 import org.apache.spark._
@@ -90,6 +90,8 @@ class NewHadoopRDD[K, V](
 
   private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
+  private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
+
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
   def getConf: Configuration = {
@@ -118,23 +120,31 @@ class NewHadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
-    val inputFormat = inputFormatClass.newInstance
+    val inputFormat = inputFormatClass.getConstructor().newInstance()
     inputFormat match {
       case configurable: Configurable =>
         configurable.setConf(_conf)
       case _ =>
     }
-    val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
-    val rawSplits = if (ignoreEmptySplits) {
-      allRowSplits.filter(_.getLength > 0)
-    } else {
-      allRowSplits
+    try {
+      val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
+      val rawSplits = if (ignoreEmptySplits) {
+        allRowSplits.filter(_.getLength > 0)
+      } else {
+        allRowSplits
+      }
+      val result = new Array[Partition](rawSplits.size)
+      for (i <- 0 until rawSplits.size) {
+        result(i) =
+            new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+      }
+      result
+    } catch {
+      case e: InvalidInputException if ignoreMissingFiles =>
+        logWarning(s"${_conf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
+            s" partitions returned from this path.", e)
+        Array.empty[Partition]
     }
-    val result = new Array[Partition](rawSplits.size)
-    for (i <- 0 until rawSplits.size) {
-      result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
-    }
-    result
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
@@ -173,7 +183,7 @@ class NewHadoopRDD[K, V](
         }
       }
 
-      private val format = inputFormatClass.newInstance
+      private val format = inputFormatClass.getConstructor().newInstance()
       format match {
         case configurable: Configurable =>
           configurable.setConf(conf)
@@ -189,6 +199,12 @@ class NewHadoopRDD[K, V](
           _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
           _reader
         } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
+            finished = true
+            null
+          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
@@ -198,7 +214,7 @@ class NewHadoopRDD[K, V](
         }
 
       // Register an on-task-completion callback to close the input stream.
-      context.addTaskCompletionListener { context =>
+      context.addTaskCompletionListener[Unit] { context =>
         // Update the bytesRead before closing is to make sure lingering bytesRead statistics in
         // this thread get correctly added.
         updateBytesRead()
@@ -213,6 +229,11 @@ class NewHadoopRDD[K, V](
           try {
             finished = !reader.nextKeyValue
           } catch {
+            case e: FileNotFoundException if ignoreMissingFiles =>
+              logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
+              finished = true
+            // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+            case e: FileNotFoundException if !ignoreMissingFiles => throw e
             case e: IOException if ignoreCorruptFiles =>
               logWarning(
                 s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",

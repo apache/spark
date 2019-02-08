@@ -18,17 +18,22 @@
 package org.apache.spark.sql.streaming
 
 import java.{util => ju}
+import java.io.File
 import java.text.SimpleDateFormat
-import java.util.{Calendar, Date}
+import java.util.{Calendar, Date, Locale}
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.util.Utils
 
 class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matchers with Logging {
 
@@ -38,9 +43,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("EventTimeStats") {
-    val epsilon = 10E-6
+  private val epsilon = 10E-6
 
+  test("EventTimeStats") {
     val stats = EventTimeStats(max = 100, min = 10, avg = 20.0, count = 5)
     stats.add(80L)
     stats.max should be (100)
@@ -57,7 +62,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   test("EventTimeStats: avg on large values") {
-    val epsilon = 10E-6
     val largeValue = 10000000000L // 10B
     // Make sure `largeValue` will cause overflow if we use a Long sum to calc avg.
     assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
@@ -73,6 +77,33 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       count = largeValue)
     stats.merge(stats2)
     stats.avg should be ((largeValue + 0.5) +- epsilon)
+  }
+
+  test("EventTimeStats: zero merge zero") {
+    val stats = EventTimeStats.zero
+    val stats2 = EventTimeStats.zero
+    stats.merge(stats2)
+    stats should be (EventTimeStats.zero)
+  }
+
+  test("EventTimeStats: non-zero merge zero") {
+    val stats = EventTimeStats(max = 10, min = 1, avg = 5.0, count = 3)
+    val stats2 = EventTimeStats.zero
+    stats.merge(stats2)
+    stats.max should be (10L)
+    stats.min should be (1L)
+    stats.avg should be (5.0 +- epsilon)
+    stats.count should be (3L)
+  }
+
+  test("EventTimeStats: zero merge non-zero") {
+    val stats = EventTimeStats.zero
+    val stats2 = EventTimeStats(max = 10, min = 1, avg = 5.0, count = 3)
+    stats.merge(stats2)
+    stats.max should be (10L)
+    stats.min should be (1L)
+    stats.avg should be (5.0 +- epsilon)
+    stats.count should be (3L)
   }
 
   test("error on bad column") {
@@ -122,37 +153,131 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     testStream(aggWithWatermark)(
       AddData(inputData2, 15),
       CheckAnswer(),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(15))
-        assert(e.get("min") === formatTimestamp(15))
-        assert(e.get("avg") === formatTimestamp(15))
-        assert(e.get("watermark") === formatTimestamp(0))
-      },
+      assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
       AddData(inputData2, 10, 12, 14),
       CheckAnswer(),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(14))
-        assert(e.get("min") === formatTimestamp(10))
-        assert(e.get("avg") === formatTimestamp(12))
-        assert(e.get("watermark") === formatTimestamp(5))
-      },
-      AddData(inputData2, 25),
-      CheckAnswer(),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(25))
-        assert(e.get("min") === formatTimestamp(25))
-        assert(e.get("avg") === formatTimestamp(25))
-        assert(e.get("watermark") === formatTimestamp(5))
-      },
+      assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
       AddData(inputData2, 25),
       CheckAnswer((10, 3)),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(25))
-        assert(e.get("min") === formatTimestamp(25))
-        assert(e.get("avg") === formatTimestamp(25))
-        assert(e.get("watermark") === formatTimestamp(15))
-      }
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
     )
+  }
+
+  test("event time and watermark metrics with Trigger.Once (SPARK-24699)") {
+    // All event time metrics where watermarking is set
+    val inputData = MemoryStream[Int]
+    val aggWithWatermark = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    // Unlike the ProcessingTime trigger, Trigger.Once only runs one trigger every time
+    // the query is started and it does not run no-data batches. Hence the answer generated
+    // by the updated watermark is only generated the next time the query is started.
+    // Also, the data to process in the next trigger is added *before* starting the stream in
+    // Trigger.Once to ensure that first and only trigger picks up the new data.
+
+    testStream(aggWithWatermark)(
+      StartStream(Trigger.Once),  // to make sure the query is not running when adding data 1st time
+      awaitTermination(),
+
+      AddData(inputData, 15),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
+      // watermark should be updated to 15 - 10 = 5
+
+      AddData(inputData, 10, 12, 14),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
+      // watermark should stay at 5
+
+      AddData(inputData, 25),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
+      // watermark should be updated to 25 - 10 = 15
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
+      // watermark should be updated to 50 - 10 = 40
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))
+  }
+
+  test("recovery from Spark ver 2.3.1 commit log without commit metadata (SPARK-24699)") {
+    // All event time metrics where watermarking is set
+    val inputData = MemoryStream[Int]
+    val aggWithWatermark = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-without-commit-log-metadata/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    inputData.addData(15)
+    inputData.addData(10, 12, 14)
+
+    testStream(aggWithWatermark)(
+      /*
+
+      Note: The checkpoint was generated using the following input in Spark version 2.3.1
+
+      StartStream(checkpointLocation = "./sql/core/src/test/resources/structured-streaming/" +
+        "checkpoint-version-2.3.1-without-commit-log-metadata/")),
+      AddData(inputData, 15),  // watermark should be updated to 15 - 10 = 5
+      CheckAnswer(),
+      AddData(inputData, 10, 12, 14),  // watermark should stay at 5
+      CheckAnswer(),
+      StopStream,
+
+      // Offset log should have watermark recorded as 5.
+      */
+
+      StartStream(Trigger.Once),
+      awaitTermination(),
+
+      AddData(inputData, 25),
+      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
+      // watermark should be updated to 25 - 10 = 15
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      awaitTermination(),
+      CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
+      // watermark should be updated to 50 - 10 = 40
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      awaitTermination(),
+      CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))
   }
 
   test("append mode") {
@@ -167,15 +292,12 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckLastBatch(),
+      CheckNewAnswer(),
       AddData(inputData, 25),   // Advance watermark to 15 seconds
-      CheckLastBatch(),
-      assertNumStateRows(3),
-      AddData(inputData, 25),   // Emit items less than watermark and drop their state
-      CheckLastBatch((10, 5)),
+      CheckNewAnswer((10, 5)),
       assertNumStateRows(2),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
-      CheckLastBatch(),
+      CheckNewAnswer(),
       assertNumStateRows(2)
     )
   }
@@ -193,15 +315,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(windowedAggregation, OutputMode.Update)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckLastBatch((10, 5), (15, 1)),
+      CheckNewAnswer((10, 5), (15, 1)),
       AddData(inputData, 25),     // Advance watermark to 15 seconds
-      CheckLastBatch((25, 1)),
-      assertNumStateRows(3),
+      CheckNewAnswer((25, 1)),
+      assertNumStateRows(2),
       AddData(inputData, 10, 25), // Ignore 10 as its less than watermark
-      CheckLastBatch((25, 2)),
+      CheckNewAnswer((25, 2)),
       assertNumStateRows(2),
       AddData(inputData, 10),     // Should not emit anything as data less than watermark
-      CheckLastBatch(),
+      CheckNewAnswer(),
       assertNumStateRows(2)
     )
   }
@@ -251,56 +373,25 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(df)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckLastBatch(),
+      CheckAnswer(),
       AddData(inputData, 25), // Advance watermark to 15 seconds
-      StopStream,
-      StartStream(),
-      CheckLastBatch(),
-      AddData(inputData, 25), // Evict items less than previous watermark.
-      CheckLastBatch((10, 5)),
+      CheckAnswer((10, 5)),
       StopStream,
       AssertOnQuery { q => // purge commit and clear the sink
-        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
+        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
         q.commitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
       StartStream(),
-      CheckLastBatch((10, 5)), // Recompute last batch and re-evict timestamp 10
-      AddData(inputData, 30), // Advance watermark to 20 seconds
-      CheckLastBatch(),
+      AddData(inputData, 10, 27, 30), // Advance watermark to 20 seconds, 10 should be ignored
+      CheckAnswer((15, 1)),
       StopStream,
-      StartStream(), // Watermark should still be 15 seconds
-      AddData(inputData, 17),
-      CheckLastBatch(), // We still do not see next batch
-      AddData(inputData, 30), // Advance watermark to 20 seconds
-      CheckLastBatch(),
-      AddData(inputData, 30), // Evict items less than previous watermark.
-      CheckLastBatch((15, 2)) // Ensure we see next window
-    )
-  }
-
-  test("dropping old data") {
-    val inputData = MemoryStream[Int]
-
-    val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
-
-    testStream(windowedAggregation)(
-      AddData(inputData, 10, 11, 12),
-      CheckAnswer(),
-      AddData(inputData, 25),     // Advance watermark to 15 seconds
-      CheckAnswer(),
-      AddData(inputData, 25),     // Evict items less than previous watermark.
-      CheckAnswer((10, 3)),
-      AddData(inputData, 10),     // 10 is later than 15 second watermark
-      CheckAnswer((10, 3)),
-      AddData(inputData, 25),
-      CheckAnswer((10, 3))        // Should not emit an incorrect partial result.
+      StartStream(),
+      AddData(inputData, 17), // Watermark should still be 20 seconds, 17 should be ignored
+      CheckAnswer((15, 1)),
+      AddData(inputData, 40), // Advance watermark to 30 seconds, emit first data 25
+      CheckNewAnswer((25, 2))
     )
   }
 
@@ -421,8 +512,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 10),
       CheckAnswer(),
       AddData(inputData, 25), // Advance watermark to 15 seconds
-      CheckAnswer(),
-      AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
   }
@@ -501,16 +590,183 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("test no-data flag") {
+    val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
+
+    def testWithFlag(flag: Boolean): Unit = withClue(s"with $flagKey = $flag") {
+      val inputData = MemoryStream[Int]
+      val windowedAggregation = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+      testStream(windowedAggregation)(
+        StartStream(additionalConfs = Map(flagKey -> flag.toString)),
+        AddData(inputData, 10, 11, 12, 13, 14, 15),
+        CheckNewAnswer(),
+        AddData(inputData, 25), // Advance watermark to 15 seconds
+        // Check if there is new answer if flag is set, no new answer otherwise
+        if (flag) CheckNewAnswer((10, 5)) else CheckNewAnswer()
+      )
+    }
+
+    testWithFlag(true)
+    testWithFlag(false)
+  }
+
+  test("MultipleWatermarkPolicy: max") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 15), // max(20 - 10, 30 - 15) = 15
+        StopStream,
+        StartStream(),
+        checkWatermark(input1, 15), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input1, 115), // max(120 - 10, 130 - 15) = 115, policy recovered correctly
+        AddData(input1, 150),
+        CheckLastBatch(150),
+        checkWatermark(input1, 140)  // should advance even if one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: min") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 10), // min(20 - 10, 30 - 15) = 10
+        StopStream,
+        StartStream(),
+        checkWatermark(input1, 10), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input2, 110), // min(120 - 10, 130 - 15) = 110, policy recovered correctly
+        AddData(input2, 150),
+        CheckLastBatch(150),
+        checkWatermark(input2, 110)  // does not advance when only one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: recovery from checkpoints ignores session conf") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 15) // max(20 - 10, 30 - 15) = 15
+      )
+    }
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        checkWatermark(input1, 15), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input1, 115), // max(120 - 10, 130 - 15) = 115, policy recovered correctly
+        AddData(input1, 150),
+        CheckLastBatch(150),
+        checkWatermark(input1, 140) // should advance even if one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: recovery from Spark ver 2.3.1 checkpoints ensures min policy") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-for-multi-watermark-policy/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    input1.addData(20)
+    input2.addData(30)
+    input1.addData(10)
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        Execute { _.processAllAvailable() },
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input2, 110), // should calculate 'min' even if session conf has 'max' policy
+        AddData(input2, 150),
+        CheckLastBatch(150),
+        checkWatermark(input2, 110)
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: fail on incorrect conf values") {
+    val invalidValues = Seq("", "random")
+    invalidValues.foreach { value =>
+      val e = intercept[IllegalArgumentException] {
+        spark.conf.set(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key, value)
+      }
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains("valid values are 'min' and 'max'"))
+    }
+  }
+
+  private def dfWithMultipleWatermarks(
+      input1: MemoryStream[Int],
+      input2: MemoryStream[Int]): Dataset[_] = {
+    val df1 = input1.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+    val df2 = input2.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "15 seconds")
+    df1.union(df2).select($"eventTime".cast("int"))
+  }
+
+  private def checkWatermark(input: MemoryStream[Int], watermark: Long) = Execute { q =>
+    input.addData(1)
+    q.processAllAvailable()
+    assert(q.lastProgress.eventTime.get("watermark") == formatTimestamp(watermark))
+  }
+
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
-    val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
     true
   }
 
+  /** Assert event stats generated on that last batch with data in it */
   private def assertEventStats(body: ju.Map[String, String] => Unit): AssertOnQuery = {
-    AssertOnQuery { q =>
+    Execute("AssertEventStats") { q =>
       body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
-      true
+    }
+  }
+
+  /** Assert event stats generated on that last batch with data in it */
+  private def assertEventStats(min: Long, max: Long, avg: Double, wtrmark: Long): AssertOnQuery = {
+    assertEventStats { e =>
+      assert(e.get("min") === formatTimestamp(min), s"min value mismatch")
+      assert(e.get("max") === formatTimestamp(max), s"max value mismatch")
+      assert(e.get("avg") === formatTimestamp(avg.toLong), s"avg value mismatch")
+      assert(e.get("watermark") === formatTimestamp(wtrmark), s"watermark value mismatch")
     }
   }
 
@@ -519,5 +775,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   private def formatTimestamp(sec: Long): String = {
     timestampFormat.format(new ju.Date(sec * 1000))
+  }
+
+  private def awaitTermination(): AssertOnQuery = Execute("AwaitTermination") { q =>
+    q.awaitTermination()
   }
 }

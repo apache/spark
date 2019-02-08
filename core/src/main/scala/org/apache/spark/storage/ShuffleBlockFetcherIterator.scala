@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, IOException}
+import java.io.{InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
@@ -28,9 +28,10 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempFileManager}
-import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.Utils
+import org.apache.spark.network.shuffle._
+import org.apache.spark.network.util.TransportConf
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
+import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
@@ -48,7 +49,9 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param blockManager [[BlockManager]] for reading local blocks
  * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
- *                        order to throttle the memory usage.
+ *                        order to throttle the memory usage. Note that zero-sized blocks are
+ *                        already excluded, which happened in
+ *                        [[org.apache.spark.MapOutputTracker.convertMapStatuses]].
  * @param streamWrapper A function to wrap the returned input stream.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
  * @param maxReqsInFlight max number of remote requests to fetch blocks at any given point.
@@ -56,26 +59,28 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  *                                    for a given remote host:port.
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
+ * @param shuffleMetrics used to report shuffle metrics.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
     context: TaskContext,
     shuffleClient: ShuffleClient,
     blockManager: BlockManager,
-    blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
+    blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long)])],
     streamWrapper: (BlockId, InputStream) => InputStream,
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
-    detectCorrupt: Boolean)
-  extends Iterator[(BlockId, InputStream)] with TempFileManager with Logging {
+    detectCorrupt: Boolean,
+    shuffleMetrics: ShuffleReadMetricsReporter)
+  extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
 
   /**
-   * Total number of blocks to fetch. This can be smaller than the total number of blocks
-   * in [[blocksByAddress]] because we filter out zero-sized blocks in [[initialize]].
+   * Total number of blocks to fetch. This should be equal to the total number of blocks
+   * in [[blocksByAddress]] because we already filter out zero-sized blocks in [[blocksByAddress]].
    *
    * This should equal localBlocks.size + remoteBlocks.size.
    */
@@ -134,11 +139,16 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
 
-  private[this] val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
-
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
-   * longer place fetched blocks into [[results]].
+   * longer place fetched blocks into [[results]] and the iterator is marked as fully consumed.
+   *
+   * When the iterator is inactive, [[hasNext]] and [[next]] calls will honor that as there are
+   * cases the iterator is still being consumed. For example, ShuffledRDD + PipedRDD if the
+   * subprocess command is failed. The task will be marked as failed, then the iterator will be
+   * cleaned up at task completion, the [[next]] call (called in the stdin writer thread of
+   * PipedRDD if not exited yet) may hang at [[results.take]]. The defensive check in [[hasNext]]
+   * and [[next]] reduces the possibility of such race conditions.
    */
   @GuardedBy("this")
   private[this] var isZombie = false
@@ -148,7 +158,9 @@ final class ShuffleBlockFetcherIterator(
    * deleted when cleanup. This is a layer of defensiveness against disk file leaks.
    */
   @GuardedBy("this")
-  private[this] val shuffleFilesSet = mutable.HashSet[File]()
+  private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
+
+  private[this] val onCompleteCallback = new ShuffleFetchCompletionListener(this)
 
   initialize()
 
@@ -162,11 +174,15 @@ final class ShuffleBlockFetcherIterator(
     currentResult = null
   }
 
-  override def createTempFile(): File = {
-    blockManager.diskBlockManager.createTempLocalBlock()._2
+  override def createTempFile(transportConf: TransportConf): DownloadFile = {
+    // we never need to do any encryption or decryption here, regardless of configs, because that
+    // is handled at another layer in the code.  When encryption is enabled, shuffle data is written
+    // to disk encrypted in the first place, and sent over the network still encrypted.
+    new SimpleDownloadFile(
+      blockManager.diskBlockManager.createTempLocalBlock()._2, transportConf)
   }
 
-  override def registerTempFileToClean(file: File): Boolean = synchronized {
+  override def registerTempFileToClean(file: DownloadFile): Boolean = synchronized {
     if (isZombie) {
       false
     } else {
@@ -178,7 +194,7 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
    */
-  private[this] def cleanup() {
+  private[storage] def cleanup() {
     synchronized {
       isZombie = true
     }
@@ -202,7 +218,7 @@ final class ShuffleBlockFetcherIterator(
     }
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
-        logWarning("Failed to cleanup shuffle fetch temp file " + file.getAbsolutePath())
+        logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
       }
     }
   }
@@ -266,14 +282,20 @@ final class ShuffleBlockFetcherIterator(
     // Split local and remote blocks. Remote blocks are further split into FetchRequests of size
     // at most maxBytesInFlight in order to limit the amount of data in flight.
     val remoteRequests = new ArrayBuffer[FetchRequest]
+    var localBlockBytes = 0L
+    var remoteBlockBytes = 0L
 
-    // Tracks total number of blocks (including zero sized blocks)
-    var totalBlocks = 0
     for ((address, blockInfos) <- blocksByAddress) {
-      totalBlocks += blockInfos.size
       if (address.executorId == blockManager.blockManagerId.executorId) {
-        // Filter out zero-sized blocks
-        localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
+        blockInfos.find(_._2 <= 0) match {
+          case Some((blockId, size)) if size < 0 =>
+            throw new BlockException(blockId, "Negative block size " + size)
+          case Some((blockId, size)) if size == 0 =>
+            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
+          case None => // do nothing.
+        }
+        localBlocks ++= blockInfos.map(_._1)
+        localBlockBytes += blockInfos.map(_._2).sum
         numBlocksToFetch += localBlocks.size
       } else {
         val iterator = blockInfos.iterator
@@ -281,14 +303,16 @@ final class ShuffleBlockFetcherIterator(
         var curBlocks = new ArrayBuffer[(BlockId, Long)]
         while (iterator.hasNext) {
           val (blockId, size) = iterator.next()
-          // Skip empty blocks
-          if (size > 0) {
+          remoteBlockBytes += size
+          if (size < 0) {
+            throw new BlockException(blockId, "Negative block size " + size)
+          } else if (size == 0) {
+            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
+          } else {
             curBlocks += ((blockId, size))
             remoteBlocks += blockId
             numBlocksToFetch += 1
             curRequestSize += size
-          } else if (size < 0) {
-            throw new BlockException(blockId, "Negative block size " + size)
           }
           if (curRequestSize >= targetRequestSize ||
               curBlocks.size >= maxBlocksInFlightPerAddress) {
@@ -306,7 +330,10 @@ final class ShuffleBlockFetcherIterator(
         }
       }
     }
-    logInfo(s"Getting $numBlocksToFetch non-empty blocks out of $totalBlocks blocks")
+    val totalBytes = localBlockBytes + remoteBlockBytes
+    logInfo(s"Getting $numBlocksToFetch (${Utils.bytesToString(totalBytes)}) non-empty blocks " +
+      s"including ${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local blocks and " +
+      s"${remoteBlocks.size} (${Utils.bytesToString(remoteBlockBytes)}) remote blocks")
     remoteRequests
   }
 
@@ -339,7 +366,7 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    context.addTaskCompletionListener(_ => cleanup())
+    context.addTaskCompletionListener(onCompleteCallback)
 
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()
@@ -360,7 +387,7 @@ final class ShuffleBlockFetcherIterator(
     logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime))
   }
 
-  override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
+  override def hasNext: Boolean = !isZombie && (numBlocksProcessed < numBlocksToFetch)
 
   /**
    * Fetches the next (BlockId, InputStream). If a task fails, the ManagedBuffers
@@ -372,7 +399,7 @@ final class ShuffleBlockFetcherIterator(
    */
   override def next(): (BlockId, InputStream) = {
     if (!hasNext) {
-      throw new NoSuchElementException
+      throw new NoSuchElementException()
     }
 
     numBlocksProcessed += 1
@@ -383,7 +410,7 @@ final class ShuffleBlockFetcherIterator(
     // then fetch it one more time if it's corrupt, throw FailureFetchResult if the second fetch
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
-    while (result == null) {
+    while (!isZombie && result == null) {
       val startFetchWait = System.currentTimeMillis()
       result = results.take()
       val stopFetchWait = System.currentTimeMillis()
@@ -407,6 +434,25 @@ final class ShuffleBlockFetcherIterator(
             logDebug("Number of requests in flight " + reqsInFlight)
           }
 
+          if (buf.size == 0) {
+            // We will never legitimately receive a zero-size block. All blocks with zero records
+            // have zero size and all zero-size blocks have no records (and hence should never
+            // have been requested in the first place). This statement relies on behaviors of the
+            // shuffle writers, which are guaranteed by the following test cases:
+            //
+            // - BypassMergeSortShuffleWriterSuite: "write with some empty partitions"
+            // - UnsafeShuffleWriterSuite: "writeEmptyIterator"
+            // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or writing"
+            //
+            // There is not an explicit test for SortShuffleWriter but the underlying APIs that
+            // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
+            // which returns a zero-size from commitAndGet() in case no records were written
+            // since the last call.
+            val msg = s"Received a zero-size buffer for block $blockId from $address " +
+              s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
+            throwFetchFailedException(blockId, address, new IOException(msg))
+          }
+
           val in = try {
             buf.createInputStream()
           } catch {
@@ -417,35 +463,35 @@ final class ShuffleBlockFetcherIterator(
               buf.release()
               throwFetchFailedException(blockId, address, e)
           }
-
-          input = streamWrapper(blockId, in)
-          // Only copy the stream if it's wrapped by compression or encryption, also the size of
-          // block is small (the decompressed block is smaller than maxBytesInFlight)
-          if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
-            val originalInput = input
-            val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
-            try {
+          var isStreamCopied: Boolean = false
+          try {
+            input = streamWrapper(blockId, in)
+            // Only copy the stream if it's wrapped by compression or encryption, also the size of
+            // block is small (the decompressed block is smaller than maxBytesInFlight)
+            if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+              isStreamCopied = true
+              val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
               // Decompress the whole block at once to detect any corruption, which could increase
               // the memory usage tne potential increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              Utils.copyStream(input, out)
-              out.close()
+              Utils.copyStream(input, out, closeStreams = true)
               input = out.toChunkedByteBuffer.toInputStream(dispose = true)
-            } catch {
-              case e: IOException =>
-                buf.release()
-                if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                  || corruptedBlocks.contains(blockId)) {
-                  throwFetchFailedException(blockId, address, e)
-                } else {
-                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
-                  corruptedBlocks += blockId
-                  fetchRequests += FetchRequest(address, Array((blockId, size)))
-                  result = null
-                }
-            } finally {
-              // TODO: release the buf here to free memory earlier
-              originalInput.close()
+            }
+          } catch {
+            case e: IOException =>
+              buf.release()
+              if (buf.isInstanceOf[FileSegmentManagedBuffer]
+                || corruptedBlocks.contains(blockId)) {
+                throwFetchFailedException(blockId, address, e)
+              } else {
+                logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                corruptedBlocks += blockId
+                fetchRequests += FetchRequest(address, Array((blockId, size)))
+                result = null
+              }
+          } finally {
+            // TODO: release the buf here to free memory earlier
+            if (isStreamCopied) {
               in.close()
             }
           }
@@ -458,8 +504,16 @@ final class ShuffleBlockFetcherIterator(
       fetchUpToMaxBytes()
     }
 
+    if (result == null) { // the iterator is already closed/cleaned up.
+      throw new NoSuchElementException()
+    }
     currentResult = result.asInstanceOf[SuccessFetchResult]
     (currentResult.blockId, new BufferReleasingInputStream(input, this))
+  }
+
+  def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
+    CompletionIterator[(BlockId, InputStream), this.type](this,
+      onCompleteCallback.onComplete(context))
   }
 
   private def fetchUpToMaxBytes(): Unit = {
@@ -560,6 +614,27 @@ private class BufferReleasingInputStream(
   override def read(b: Array[Byte], off: Int, len: Int): Int = delegate.read(b, off, len)
 
   override def reset(): Unit = delegate.reset()
+}
+
+/**
+ * A listener to be called at the completion of the ShuffleBlockFetcherIterator
+ * @param data the ShuffleBlockFetcherIterator to process
+ */
+private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterator)
+  extends TaskCompletionListener {
+
+  override def onTaskCompletion(context: TaskContext): Unit = {
+    if (data != null) {
+      data.cleanup()
+      // Null out the referent here to make sure we don't keep a reference to this
+      // ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
+      // collected during GC. Otherwise we can hold metadata on block locations(blocksByAddress)
+      data = null
+    }
+  }
+
+  // Just an alias for onTaskCompletion to avoid confusing
+  def onComplete(context: TaskContext): Unit = this.onTaskCompletion(context)
 }
 
 private[storage]

@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,13 +28,19 @@ import java.util.regex.Pattern;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
+
 import static org.junit.Assert.*;
 
 public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private static File dummyPropsFile;
   private static SparkSubmitOptionParser parser;
+
+  @Rule
+  public ExpectedException expectedException = ExpectedException.none();
 
   @BeforeClass
   public static void setUp() throws Exception {
@@ -74,8 +81,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testCliKillAndStatus() throws Exception {
-    testCLIOpts(parser.STATUS);
-    testCLIOpts(parser.KILL_SUBMISSION);
+    List<String> params = Arrays.asList("driver-20160531171222-0000");
+    testCLIOpts(null, parser.STATUS, params);
+    testCLIOpts(null, parser.KILL_SUBMISSION, params);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.STATUS, params);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.KILL_SUBMISSION, params);
   }
 
   @Test
@@ -148,7 +158,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
-    assertEquals("python", cmd.get(cmd.size() - 1));
+    assertTrue(Arrays.asList("python", "python2", "python3").contains(cmd.get(cmd.size() - 1)));
     assertEquals(
       String.format("\"%s\" \"foo\" \"%s\" \"bar\" \"%s\"",
         parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.PYSPARK_SHELL_RESOURCE),
@@ -188,6 +198,33 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
         "\"%s\" \"foo\" \"%s\" \"bar\" \"--conf\" \"spark.r.shell.command=/usr/bin/R\" \"%s\"",
         parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.SPARKR_SHELL_RESOURCE),
       env.get("SPARKR_SUBMIT_ARGS"));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testExamplesRunnerNoArg() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(SparkSubmitCommandBuilder.RUN_EXAMPLE);
+    Map<String, String> env = new HashMap<>();
+    buildCommand(sparkSubmitArgs, env);
+  }
+
+  @Test
+  public void testExamplesRunnerNoMainClass() throws Exception {
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.HELP, null);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.USAGE_ERROR, null);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.VERSION, null);
+  }
+
+  @Test
+  public void testExamplesRunnerWithMasterNoMainClass() throws Exception {
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Missing example class name.");
+
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCommandBuilder.RUN_EXAMPLE,
+      parser.MASTER + "=foo"
+    );
+    Map<String, String> env = new HashMap<>();
+    buildCommand(sparkSubmitArgs, env);
   }
 
   @Test
@@ -344,10 +381,17 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     return newCommandBuilder(args).buildCommand(env);
   }
 
-  private void testCLIOpts(String opt) throws Exception {
-    List<String> helpArgs = Arrays.asList(opt, "driver-20160531171222-0000");
+  private void testCLIOpts(String appResource, String opt, List<String> params) throws Exception {
+    List<String> args = new ArrayList<>();
+    if (appResource != null) {
+      args.add(appResource);
+    }
+    args.add(opt);
+    if (params != null) {
+      args.addAll(params);
+    }
     Map<String, String> env = new HashMap<>();
-    List<String> cmd = buildCommand(helpArgs, env);
+    List<String> cmd = buildCommand(args, env);
     assertTrue(opt + " should be contained in the final cmd.",
       cmd.contains(opt));
   }

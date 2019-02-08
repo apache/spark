@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.File
+import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
+import java.util.UUID
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -613,6 +614,36 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       bufferSrc.close()
     }
   }
+
+  test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
+    def pipeoutFileList(sessionID: UUID): Array[File] = {
+      lScratchDir.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = {
+          name.startsWith(sessionID.toString) && name.endsWith(".pipeout")
+        }
+      })
+    }
+
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      val sessionID = sessionHandle.getSessionId
+
+      assert(pipeoutFileList(sessionID).length == 1)
+
+      client.closeSession(sessionHandle)
+
+      assert(pipeoutFileList(sessionID).length == 0)
+    }
+  }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -743,6 +774,14 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 object ServerMode extends Enumeration {
@@ -779,6 +818,22 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     }
   }
 
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*) {
+    val user = System.getProperty("user.name")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val statements = connections.map(_.createStatement())
+
+    try {
+      statements.zip(fs).foreach { case (s, f) => f(s) }
+    } finally {
+      dbNames.foreach { name =>
+        statements(0).execute(s"DROP DATABASE IF EXISTS $name")
+      }
+      statements.foreach(_.close())
+      connections.foreach(_.close())
+    }
+  }
+
   def withJdbcStatement(tableNames: String*)(f: Statement => Unit) {
     withMultipleConnectionJdbcStatement(tableNames: _*)(f)
   }
@@ -807,6 +862,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
   protected var logPath: File = _
   protected var operationLogPath: File = _
+  protected var lScratchDir: File = _
   private var logTailingProcess: Process = _
   private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
@@ -844,6 +900,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
+       |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
        |  --hiveconf $portConf=$port
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j.debug
@@ -873,6 +930,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     metastorePath.delete()
     operationLogPath = Utils.createTempDir()
     operationLogPath.delete()
+    lScratchDir = Utils.createTempDir()
+    lScratchDir.delete()
     logPath = null
     logTailingProcess = null
 
@@ -955,6 +1014,9 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     operationLogPath.delete()
     operationLogPath = null
+
+    lScratchDir.delete()
+    lScratchDir = null
 
     Option(logPath).foreach(_.delete())
     logPath = null

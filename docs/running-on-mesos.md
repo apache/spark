@@ -13,6 +13,11 @@ The advantages of deploying Spark with Mesos include:
   [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # How it Works
 
 In a standalone cluster deployment, the cluster manager in the below diagram is a Spark master
@@ -90,7 +95,7 @@ Depending on your deployment environment you may wish to create a single set of 
 
 Framework credentials may be specified in a variety of ways depending on your deployment environment and security requirements.  The most simple way is to specify the `spark.mesos.principal` and `spark.mesos.secret` values directly in your Spark configuration.  Alternatively you may specify these values indirectly by instead specifying `spark.mesos.principal.file` and `spark.mesos.secret.file`, these settings point to files containing the principal and secret.  These files must be plaintext files in UTF-8 encoding.  Combined with appropriate file ownership and mode/ACLs this provides a more secure way to specify these credentials.
 
-Additionally if you prefer to use environment variables you can specify all of the above via environment variables instead, the environment variable names are simply the configuration settings uppercased with `.` replaced with `_` e.g. `SPARK_MESOS_PRINCIPAL`.
+Additionally, if you prefer to use environment variables you can specify all of the above via environment variables instead, the environment variable names are simply the configuration settings uppercased with `.` replaced with `_` e.g. `SPARK_MESOS_PRINCIPAL`.
 
 ### Credential Specification Preference Order
 
@@ -102,6 +107,19 @@ Please note that if you specify multiple ways to obtain the credentials then the
 - `SPARK_MESOS_PRINCIPAL_FILE` environment variable
 
 An equivalent order applies for the secret.  Essentially we prefer the configuration to be specified directly rather than indirectly by files, and we prefer that configuration settings are used over environment variables.
+
+### Deploy to a Mesos running on Secure Sockets
+
+If you want to deploy a Spark Application into a Mesos cluster that is running in a secure mode there are some environment variables that need to be set.
+
+- `LIBPROCESS_SSL_ENABLED=true` enables SSL communication
+- `LIBPROCESS_SSL_VERIFY_CERT=false` verifies the ssl certificate 
+- `LIBPROCESS_SSL_KEY_FILE=pathToKeyFile.key` path to key 
+- `LIBPROCESS_SSL_CERT_FILE=pathToCRTFile.crt` the certificate file to be used
+
+All options can be found at http://mesos.apache.org/documentation/latest/ssl/
+
+Then submit happens as described in Client mode or Cluster mode below
 
 ## Uploading Spark Package
 
@@ -174,6 +192,8 @@ can find the results of the driver from the Mesos Web UI.
 
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
+Note that the `MesosClusterDispatcher` does not support authentication.  You should ensure that all network access to it is
+protected (port 7077 by default).
 
 By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispatcher, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
 
@@ -225,7 +245,7 @@ details and default values.
 Executors are brought up eagerly when the application starts, until
 `spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
 Spark application will consume all resources offered to it by Mesos,
-so we of course urge you to set this variable in any sort of
+so we, of course, urge you to set this variable in any sort of
 multi-tenant cluster, including one which runs multiple concurrent
 Spark applications.
 
@@ -233,14 +253,14 @@ The scheduler will start executors round-robin on the offers Mesos
 gives it, but there are no spread guarantees, as Mesos does not
 provide such guarantees on the offer stream.
 
-In this mode spark executors will honor port allocation if such is
-provided from the user. Specifically if the user defines
+In this mode Spark executors will honor port allocation if such is
+provided from the user. Specifically, if the user defines
 `spark.blockManager.port` in Spark configuration,
 the mesos scheduler will check the available offers for a valid port
 range containing the port numbers. If no such range is available it will
 not launch any task. If no restriction is imposed on port numbers by the
 user, ephemeral ports are used as usual. This port honouring implementation
-implies one task per host if the user defines a port. In the future network
+implies one task per host if the user defines a port. In the future network,
 isolation shall be supported.
 
 The benefit of coarse-grained mode is much lower startup overhead, but
@@ -430,7 +450,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.executor.memoryOverhead</code></td>
   <td>executor memory * 0.10, with minimum of 384</td>
   <td>
-    The amount of additional memory, specified in MB, to be allocated per executor. By default,
+    The amount of additional memory, specified in MiB, to be allocated per executor. By default,
     the overhead will be larger of either 384 or 10% of <code>spark.executor.memory</code>. If set,
     the final overhead will be this value.
   </td>
@@ -486,7 +506,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.constraints</code></td>
   <td>(none)</td>
   <td>
-    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. This setting
+    Attribute-based constraints on mesos resource offers. By default, all resource offers will be accepted. This setting
     applies only to executors. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos
     Attributes & Resources</a> for more information on attributes.
     <ul>
@@ -670,7 +690,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
   <td><code>(none)</code></td>
   <td>
-    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    Set the URL of the <a href="monitoring.html#viewing-after-the-fact">history
     server</a>.  The dispatcher will then link each driver to its entry
     in the history server.
   </td>
@@ -680,7 +700,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0</code></td>
   <td>
     Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
-    since this configuration is just a upper limit and not a guaranteed amount.
+    since this configuration is just an upper limit and not a guaranteed amount.
   </td>
   </tr>
 <tr>
@@ -751,6 +771,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Time to consider unused resources refused when maximum number of cores
     <code>spark.cores.max</code> is reached
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.appJar.local.resolution.mode</code></td>
+  <td><code>host</code></td>
+  <td>
+    Provides support for the `local:///` scheme to reference the app jar resource in cluster mode.
+    If user uses a local resource (`local:///path/to/jar`) and the config option is not used it defaults to `host` eg.
+    the mesos fetcher tries to get the resource from the host's file system.
+    If the value is unknown it prints a warning msg in the dispatcher logs and defaults to `host`.
+    If the value is `container` then spark submit in the container will use the jar in the container's path:
+    `/path/to/jar`.
   </td>
 </tr>
 </table>

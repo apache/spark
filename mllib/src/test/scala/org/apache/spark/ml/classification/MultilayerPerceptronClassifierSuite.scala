@@ -76,6 +76,18 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
     }
   }
 
+  test("prediction on single instance") {
+    val layers = Array[Int](2, 5, 2)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(dataset)
+    testPredictionModelSinglePrediction(model, dataset)
+  }
+
   test("Predicted class probabilities: calibration on toy dataset") {
     val layers = Array[Int](4, 5, 2)
 

@@ -655,6 +655,30 @@ class HasParallelism(Params):
         return self.getOrDefault(self.parallelism)
 
 
+class HasCollectSubModels(Params):
+    """
+    Mixin for param collectSubModels: Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
+    """
+
+    collectSubModels = Param(Params._dummy(), "collectSubModels", "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.", typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self):
+        super(HasCollectSubModels, self).__init__()
+        self._setDefault(collectSubModels=False)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
+
+    def getCollectSubModels(self):
+        """
+        Gets the value of collectSubModels or its default value.
+        """
+        return self.getOrDefault(self.collectSubModels)
+
+
 class HasLoss(Params):
     """
     Mixin for param loss: the loss function to be optimized.
@@ -676,6 +700,53 @@ class HasLoss(Params):
         Gets the value of loss or its default value.
         """
         return self.getOrDefault(self.loss)
+
+
+class HasDistanceMeasure(Params):
+    """
+    Mixin for param distanceMeasure: the distance measure. Supported options: 'euclidean' and 'cosine'.
+    """
+
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasDistanceMeasure, self).__init__()
+        self._setDefault(distanceMeasure='euclidean')
+
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    def getDistanceMeasure(self):
+        """
+        Gets the value of distanceMeasure or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
+
+
+class HasValidationIndicatorCol(Params):
+    """
+    Mixin for param validationIndicatorCol: name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.
+    """
+
+    validationIndicatorCol = Param(Params._dummy(), "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasValidationIndicatorCol, self).__init__()
+
+    def setValidationIndicatorCol(self, value):
+        """
+        Sets the value of :py:attr:`validationIndicatorCol`.
+        """
+        return self._set(validationIndicatorCol=value)
+
+    def getValidationIndicatorCol(self):
+        """
+        Gets the value of validationIndicatorCol or its default value.
+        """
+        return self.getOrDefault(self.validationIndicatorCol)
 
 
 class DecisionTreeParams(Params):

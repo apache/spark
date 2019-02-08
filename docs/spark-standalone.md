@@ -8,6 +8,11 @@ title: Spark Standalone Mode
 
 In addition to running on the Mesos or YARN cluster managers, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # Installing Spark Standalone to a Cluster
 
 To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](building-spark.html).
@@ -55,7 +60,7 @@ Finally, the following configuration options can be passed to the master and wor
   </tr>
   <tr>
     <td><code>-m MEM</code>, <code>--memory MEM</code></td>
-    <td>Total amount of memory to allow Spark applications to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GiB); only on worker</td>
   </tr>
   <tr>
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
@@ -123,7 +128,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_WORKER_MEMORY</code></td>
-    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GiB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_PORT</code></td>
@@ -255,6 +260,18 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
+  <td>true</td>
+  <td>
+    Enable cleanup non-shuffle files(such as temp. shuffle blocks, cached RDD/broadcast blocks,
+    spill files, etc) of worker directories following executor exits. Note that this doesn't
+    overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
+    local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
+    all files/subdirectories of a stopped and timeout application.
+    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
   <td>100</td>
   <td>
@@ -338,7 +355,7 @@ worker during one single schedule iteration.
 
 # Monitoring and Logging
 
-Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
+Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default, you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
 
 In addition, detailed log output for each job is also written to the work directory of each slave node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
 
@@ -350,8 +367,15 @@ You can run Spark alongside your existing Hadoop cluster by just launching it as
 
 # Configuring Ports for Network Security
 
-Spark makes heavy use of the network, and some environments have strict requirements for using
-tight firewall settings. For a complete list of ports to configure, see the
+Generally speaking, a Spark cluster and its services are not deployed on the public internet.
+They are generally private services, and should only be accessible within the network of the
+organization that deploys Spark. Access to the hosts and ports used by Spark services should
+be limited to origin hosts that need to access the services.
+
+This is particularly important for clusters using the standalone resource manager, as they do
+not support fine-grained access control in a way that other resource managers do.
+
+For a complete list of ports to configure, see the
 [security page](security.html#configuring-ports-for-network-security).
 
 # High Availability
@@ -364,7 +388,7 @@ By default, standalone scheduling clusters are resilient to Worker failures (ins
 
 Utilizing ZooKeeper to provide leader election and some state storage, you can launch multiple Masters in your cluster connected to the same ZooKeeper instance. One will be elected "leader" and the others will remain in standby mode. If the current leader dies, another Master will be elected, recover the old Master's state, and then resume scheduling. The entire recovery process (from the time the first leader goes down) should take between 1 and 2 minutes. Note that this delay only affects scheduling _new_ applications -- applications that were already running during Master failover are unaffected.
 
-Learn more about getting started with ZooKeeper [here](http://zookeeper.apache.org/doc/current/zookeeperStarted.html).
+Learn more about getting started with ZooKeeper [here](https://zookeeper.apache.org/doc/current/zookeeperStarted.html).
 
 **Configuration**
 
@@ -407,6 +431,6 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
 
 **Details**
 
-* This solution can be used in tandem with a process monitor/manager like [monit](http://mmonit.com/monit/), or just to enable manual recovery via restart.
+* This solution can be used in tandem with a process monitor/manager like [monit](https://mmonit.com/monit/), or just to enable manual recovery via restart.
 * While filesystem recovery seems straightforwardly better than not doing any recovery at all, this mode may be suboptimal for certain development or experimental purposes. In particular, killing a master via stop-master.sh does not clean up its recovery state, so whenever you start a new Master, it will enter recovery mode. This could increase the startup time by up to 1 minute if it needs to wait for all previously-registered Workers/clients to timeout.
 * While it's not officially supported, you could mount an NFS directory as the recovery directory. If the original Master node dies completely, you could then start a Master on a different node, which would correctly recover all previously registered Workers/applications (equivalent to ZooKeeper recovery). Future applications will have to be able to find the new Master, however, in order to register.

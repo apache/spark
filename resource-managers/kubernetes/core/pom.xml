@@ -19,17 +19,17 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.4.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-kubernetes_2.11</artifactId>
+  <artifactId>spark-kubernetes_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
-    <kubernetes.client.version>3.0.0</kubernetes.client.version>
+    <kubernetes.client.version>4.1.0</kubernetes.client.version>
   </properties>
 
   <dependencies>
@@ -45,6 +45,12 @@
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
     </dependency>
 
     <dependency>
@@ -78,15 +84,21 @@
     <!-- End of shaded deps. -->
 
     <dependency>
+      <groupId>com.squareup.okhttp3</groupId>
+      <artifactId>okhttp</artifactId>
+      <version>3.8.1</version>
+    </dependency>
+
+    <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
 
     <dependency>
-      <groupId>com.squareup.okhttp3</groupId>
-      <artifactId>okhttp</artifactId>
-      <version>3.8.1</version>
+      <groupId>org.jmock</groupId>
+      <artifactId>jmock-junit4</artifactId>
+      <scope>test</scope>
     </dependency>
 
   </dependencies>

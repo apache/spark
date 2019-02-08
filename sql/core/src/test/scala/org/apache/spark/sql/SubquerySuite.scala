@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.Join
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -954,5 +957,363 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-23316: AnalysisException after max iteration reached for IN query") {
     // before the fix this would throw AnalysisException
     spark.range(10).where("(id,id) in (select id, null from range(3))").count
+  }
+
+  test("SPARK-24085 scalar subquery in partitioning expression") {
+    withTable("parquet_part") {
+      Seq("1" -> "a", "2" -> "a", "3" -> "b", "4" -> "b")
+        .toDF("id_value", "id_type")
+        .write
+        .mode(SaveMode.Overwrite)
+        .partitionBy("id_type")
+        .format("parquet")
+        .saveAsTable("parquet_part")
+      checkAnswer(
+        sql("SELECT * FROM parquet_part WHERE id_type = (SELECT 'b')"),
+        Row("3", "b") :: Row("4", "b") :: Nil)
+    }
+  }
+
+  private def getNumSortsInQuery(query: String): Int = {
+    val plan = sql(query).queryExecution.optimizedPlan
+    getNumSorts(plan) + getSubqueryExpressions(plan).map{s => getNumSorts(s.plan)}.sum
+  }
+
+  private def getSubqueryExpressions(plan: LogicalPlan): Seq[SubqueryExpression] = {
+    val subqueryExpressions = ArrayBuffer.empty[SubqueryExpression]
+    plan transformAllExpressions {
+      case s: SubqueryExpression =>
+        subqueryExpressions ++= (getSubqueryExpressions(s.plan) :+ s)
+        s
+    }
+    subqueryExpressions
+  }
+
+  private def getNumSorts(plan: LogicalPlan): Int = {
+    plan.collect { case s: Sort => s }.size
+  }
+
+  test("SPARK-23957 Remove redundant sort from subquery plan(in subquery)") {
+    withTempView("t1", "t2", "t3") {
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((1, 1, 1), (2, 2, 2)).toDF("c1", "c2", "c3").createOrReplaceTempView("t3")
+
+      // Simple order by
+      val query1 =
+        """
+           |SELECT c1 FROM t1
+           |WHERE
+           |c1 IN (SELECT c1 FROM t2 ORDER BY c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query1) == 0)
+
+      // Nested order bys
+      val query2 =
+        """
+           |SELECT c1
+           |FROM   t1
+           |WHERE  c1 IN (SELECT c1
+           |              FROM   (SELECT *
+           |                      FROM   t2
+           |                      ORDER  BY c2)
+           |              ORDER  BY c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query2) == 0)
+
+
+      // nested IN
+      val query3 =
+        """
+           |SELECT c1
+           |FROM   t1
+           |WHERE  c1 IN (SELECT c1
+           |              FROM   t2
+           |              WHERE  c1 IN (SELECT c1
+           |                            FROM   t3
+           |                            WHERE  c1 = 1
+           |                            ORDER  BY c3)
+           |              ORDER  BY c2)
+        """.stripMargin
+      assert(getNumSortsInQuery(query3) == 0)
+
+      // Complex subplan and multiple sorts
+      val query4 =
+        """
+           |SELECT c1
+           |FROM   t1
+           |WHERE  c1 IN (SELECT c1
+           |              FROM   (SELECT c1, c2, count(*)
+           |                      FROM   t2
+           |                      GROUP BY c1, c2
+           |                      HAVING count(*) > 0
+           |                      ORDER BY c2)
+           |              ORDER  BY c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query4) == 0)
+
+      // Join in subplan
+      val query5 =
+        """
+           |SELECT c1 FROM t1
+           |WHERE
+           |c1 IN (SELECT t2.c1 FROM t2, t3
+           |       WHERE t2.c1 = t3.c1
+           |       ORDER BY t2.c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query5) == 0)
+
+      val query6 =
+        """
+           |SELECT c1
+           |FROM   t1
+           |WHERE  (c1, c2) IN (SELECT c1, max(c2)
+           |                    FROM   (SELECT c1, c2, count(*)
+           |                            FROM   t2
+           |                            GROUP BY c1, c2
+           |                            HAVING count(*) > 0
+           |                            ORDER BY c2)
+           |                    GROUP BY c1
+           |                    HAVING max(c2) > 0
+           |                    ORDER  BY c1)
+        """.stripMargin
+      // The rule to remove redundant sorts is not able to remove the inner sort under
+      // an Aggregate operator. We only remove the top level sort.
+      assert(getNumSortsInQuery(query6) == 1)
+
+      // Cases when sort is not removed from the plan
+      // Limit on top of sort
+      val query7 =
+        """
+           |SELECT c1 FROM t1
+           |WHERE
+           |c1 IN (SELECT c1 FROM t2 ORDER BY c1 limit 1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query7) == 1)
+
+      // Sort below a set operations (intersect, union)
+      val query8 =
+        """
+           |SELECT c1 FROM t1
+           |WHERE
+           |c1 IN ((
+           |        SELECT c1 FROM t2
+           |        ORDER BY c1
+           |       )
+           |       UNION
+           |       (
+           |         SELECT c1 FROM t2
+           |         ORDER BY c1
+           |       ))
+        """.stripMargin
+      assert(getNumSortsInQuery(query8) == 2)
+    }
+  }
+
+  test("SPARK-23957 Remove redundant sort from subquery plan(exists subquery)") {
+    withTempView("t1", "t2", "t3") {
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((1, 1, 1), (2, 2, 2)).toDF("c1", "c2", "c3").createOrReplaceTempView("t3")
+
+      // Simple order by exists correlated
+      val query1 =
+        """
+           |SELECT c1 FROM t1
+           |WHERE
+           |EXISTS (SELECT t2.c1 FROM t2 WHERE t1.c1 = t2.c1 ORDER BY t2.c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query1) == 0)
+
+      // Nested order by and correlated.
+      val query2 =
+        """
+           |SELECT c1
+           |FROM   t1
+           |WHERE  EXISTS (SELECT c1
+           |               FROM (SELECT *
+           |                     FROM   t2
+           |                     WHERE t2.c1 = t1.c1
+           |                     ORDER  BY t2.c2) t2
+           |               ORDER BY t2.c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query2) == 0)
+
+      // nested EXISTS
+      val query3 =
+        """
+           |SELECT c1
+           |FROM   t1
+           |WHERE  EXISTS (SELECT c1
+           |               FROM t2
+           |               WHERE EXISTS (SELECT c1
+           |                             FROM   t3
+           |                             WHERE  t3.c1 = t2.c1
+           |                             ORDER  BY c3)
+           |               AND t2.c1 = t1.c1
+           |               ORDER BY c2)
+        """.stripMargin
+      assert(getNumSortsInQuery(query3) == 0)
+
+      // Cases when sort is not removed from the plan
+      // Limit on top of sort
+      val query4 =
+        """
+           |SELECT c1 FROM t1
+           |WHERE
+           |EXISTS (SELECT t2.c1 FROM t2 WHERE t2.c1 = 1 ORDER BY t2.c1 limit 1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query4) == 1)
+
+      // Sort below a set operations (intersect, union)
+      val query5 =
+        """
+           |SELECT c1 FROM t1
+           |WHERE
+           |EXISTS ((
+           |        SELECT c1 FROM t2
+           |        WHERE t2.c1 = 1
+           |        ORDER BY t2.c1
+           |        )
+           |        UNION
+           |        (
+           |         SELECT c1 FROM t2
+           |         WHERE t2.c1 = 2
+           |         ORDER BY t2.c1
+           |        ))
+        """.stripMargin
+      assert(getNumSortsInQuery(query5) == 2)
+    }
+  }
+
+  ignore("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
+    withTempView("t1", "t2", "t3") {
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((1, 1, 1), (2, 2, 2)).toDF("c1", "c2", "c3").createOrReplaceTempView("t3")
+
+      // Two scalar subqueries in OR
+      val query1 =
+        """
+          |SELECT * FROM t1
+          |WHERE  c1 = (SELECT max(t2.c1)
+          |             FROM   t2
+          |             ORDER BY max(t2.c1))
+          |OR     c2 = (SELECT min(t3.c2)
+          |             FROM   t3
+          |             WHERE  t3.c1 = 1
+          |             ORDER BY min(t3.c2))
+        """.stripMargin
+      assert(getNumSortsInQuery(query1) == 0)
+
+      // scalar subquery - groupby and having
+      val query2 =
+        """
+          |SELECT *
+          |FROM   t1
+          |WHERE  c1 = (SELECT   max(t2.c1)
+          |             FROM     t2
+          |             GROUP BY t2.c1
+          |             HAVING   count(*) >= 1
+          |             ORDER BY max(t2.c1))
+        """.stripMargin
+      assert(getNumSortsInQuery(query2) == 0)
+
+      // nested scalar subquery
+      val query3 =
+        """
+          |SELECT *
+          |FROM   t1
+          |WHERE  c1 = (SELECT   max(t2.c1)
+          |             FROM     t2
+          |             WHERE c1 = (SELECT max(t3.c1)
+          |                         FROM t3
+          |                         WHERE t3.c1 = 1
+          |                         GROUP BY t3.c1
+          |                         ORDER BY max(t3.c1)
+          |                        )
+          |              GROUP BY t2.c1
+          |              HAVING   count(*) >= 1
+          |              ORDER BY max(t2.c1))
+        """.stripMargin
+      assert(getNumSortsInQuery(query3) == 0)
+
+      // Scalar subquery in projection
+      val query4 =
+        """
+          |SELECT (SELECT min(c1) from t1 group by c1 order by c1)
+          |FROM t1
+          |WHERE t1.c1 = 1
+        """.stripMargin
+      assert(getNumSortsInQuery(query4) == 0)
+
+      // Limit on top of sort prevents it from being pruned.
+      val query5 =
+        """
+          |SELECT *
+          |FROM   t1
+          |WHERE  c1 = (SELECT   max(t2.c1)
+          |             FROM     t2
+          |             WHERE c1 = (SELECT max(t3.c1)
+          |                         FROM t3
+          |                         WHERE t3.c1 = 1
+          |                         GROUP BY t3.c1
+          |                         ORDER BY max(t3.c1)
+          |                         )
+          |             GROUP BY t2.c1
+          |             HAVING   count(*) >= 1
+          |             ORDER BY max(t2.c1)
+          |             LIMIT 1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query5) == 1)
+    }
+  }
+
+  test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
+    withTempView("t1", "t2") {
+      sql("create temporary view t1(a int) using parquet")
+      sql("create temporary view t2(b int) using parquet")
+      val plan = sql("select * from t2 where b > (select max(a) from t1)")
+      val subqueries = plan.queryExecution.executedPlan.collect {
+        case p => p.subqueries
+      }.flatten
+      assert(subqueries.length == 1)
+    }
+  }
+
+  test("SPARK-26078: deduplicate fake self joins for IN subqueries") {
+    withTempView("a", "b") {
+      Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("a")
+      Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("b")
+
+      val df1 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2)
+        """.stripMargin)
+      checkAnswer(df1, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
+      val df2 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id NOT IN (SELECT id FROM b WHERE num = 2)
+        """.stripMargin)
+      checkAnswer(df2, Seq(Row("b", 1, "a"), Row("b", 1, "b")))
+      val df3 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2) OR
+          |c.id IN (SELECT id FROM b WHERE num = 3)
+        """.stripMargin)
+      checkAnswer(df3, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
+    }
   }
 }

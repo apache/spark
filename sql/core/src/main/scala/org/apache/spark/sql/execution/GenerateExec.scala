@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * For lazy computing, be sure the generator.terminate() called in the very last
@@ -170,9 +171,11 @@ case class GenerateExec(
     // Add position
     val position = if (e.position) {
       if (outer) {
-        Seq(ExprCode("", s"$index == -1", index))
+        Seq(ExprCode(
+          JavaCode.isNullExpression(s"$index == -1"),
+          JavaCode.variable(index, IntegerType)))
       } else {
-        Seq(ExprCode("", "false", index))
+        Seq(ExprCode(FalseLiteral, JavaCode.variable(index, IntegerType)))
       }
     } else {
       Seq.empty
@@ -311,13 +314,13 @@ case class GenerateExec(
     if (checks.nonEmpty) {
       val isNull = ctx.freshName("isNull")
       val code =
-        s"""
+        code"""
            |boolean $isNull = ${checks.mkString(" || ")};
            |$javaType $value = $isNull ? ${CodeGenerator.defaultValue(dt)} : $getter;
          """.stripMargin
-      ExprCode(code, isNull, value)
+      ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, dt))
     } else {
-      ExprCode(s"$javaType $value = $getter;", "false", value)
+      ExprCode(code"$javaType $value = $getter;", FalseLiteral, JavaCode.variable(value, dt))
     }
   }
 

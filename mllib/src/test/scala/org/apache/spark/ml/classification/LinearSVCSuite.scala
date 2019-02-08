@@ -181,8 +181,8 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     }
     assert(thrown.getMessage.contains("coefficients only supports dense"))
 
-    bcCoefficients.destroy(blocking = false)
-    bcFeaturesStd.destroy(blocking = false)
+    bcCoefficients.destroy()
+    bcFeaturesStd.destroy()
   }
 
   test("linearSVC with sample weights") {
@@ -199,6 +199,12 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
       dataset.as[LabeledPoint], estimator, 2, modelEquals, outlierRatio = 3)
     MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+  }
+
+  test("prediction on single instance") {
+    val trainer = new LinearSVC()
+    val model = trainer.fit(smallBinaryDataset)
+    testPredictionModelSinglePrediction(model, smallBinaryDataset)
   }
 
   test("linearSVC comparison with R e1071 and scikit-learn") {

@@ -29,11 +29,12 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
+import org.apache.spark.internal.config.{STORAGE_UNROLL_MEMORY_THRESHOLD, UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -99,7 +100,7 @@ private[spark] class MemoryStore(
 
   // Initial memory to request before unrolling any block
   private val unrollMemoryThreshold: Long =
-    conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
+    conf.get(STORAGE_UNROLL_MEMORY_THRESHOLD)
 
   /** Total amount of memory available for storage, in bytes. */
   private def maxMemory: Long = {
@@ -333,11 +334,11 @@ private[spark] class MemoryStore(
 
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
-    val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
+    val chunkSize = if (initialMemoryThreshold > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
         s"is too large to be set as chunk size. Chunk size has been capped to " +
-        s"${Utils.bytesToString(Int.MaxValue)}")
-      Int.MaxValue
+        s"${Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)}")
+      ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     } else {
       initialMemoryThreshold.toInt
     }
@@ -827,7 +828,7 @@ private[storage] class PartiallySerializedBlock[T](
   // completion listener here in order to ensure that `unrolled.dispose()` is called at least once.
   // The dispose() method is idempotent, so it's safe to call it unconditionally.
   Option(TaskContext.get()).foreach { taskContext =>
-    taskContext.addTaskCompletionListener { _ =>
+    taskContext.addTaskCompletionListener[Unit] { _ =>
       // When a task completes, its unroll memory will automatically be freed. Thus we do not call
       // releaseUnrollMemoryForThisTask() here because we want to avoid double-freeing.
       unrolledBuffer.dispose()

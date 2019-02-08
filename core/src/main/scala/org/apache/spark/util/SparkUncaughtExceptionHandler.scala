@@ -39,10 +39,15 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
       if (!ShutdownHookManager.inShutdown()) {
-        if (exception.isInstanceOf[OutOfMemoryError]) {
-          System.exit(SparkExitCode.OOM)
-        } else if (exitOnUncaughtException) {
-          System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
+        exception match {
+          case _: OutOfMemoryError =>
+            System.exit(SparkExitCode.OOM)
+          case e: SparkFatalException if e.throwable.isInstanceOf[OutOfMemoryError] =>
+            // SPARK-24294: This is defensive code, in case that SparkFatalException is
+            // misused and uncaught.
+            System.exit(SparkExitCode.OOM)
+          case _ if exitOnUncaughtException =>
+            System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
         }
       }
     } catch {

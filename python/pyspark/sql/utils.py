@@ -121,7 +121,10 @@ def require_minimum_pandas_version():
     from distutils.version import LooseVersion
     try:
         import pandas
+        have_pandas = True
     except ImportError:
+        have_pandas = False
+    if not have_pandas:
         raise ImportError("Pandas >= %s must be installed; however, "
                           "it was not found." % minimum_pandas_version)
     if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
@@ -138,9 +141,54 @@ def require_minimum_pyarrow_version():
     from distutils.version import LooseVersion
     try:
         import pyarrow
+        have_arrow = True
     except ImportError:
+        have_arrow = False
+    if not have_arrow:
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "it was not found." % minimum_pyarrow_version)
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
+
+
+def require_test_compiled():
+    """ Raise Exception if test classes are not compiled
+    """
+    import os
+    import glob
+    try:
+        spark_home = os.environ['SPARK_HOME']
+    except KeyError:
+        raise RuntimeError('SPARK_HOME is not defined in environment')
+
+    test_class_path = os.path.join(
+        spark_home, 'sql', 'core', 'target', '*', 'test-classes')
+    paths = glob.glob(test_class_path)
+
+    if len(paths) == 0:
+        raise RuntimeError(
+            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path)
+
+
+class ForeachBatchFunction(object):
+    """
+    This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps
+    the user-defined 'foreachBatch' function such that it can be called from the JVM when
+    the query is active.
+    """
+
+    def __init__(self, sql_ctx, func):
+        self.sql_ctx = sql_ctx
+        self.func = func
+
+    def call(self, jdf, batch_id):
+        from pyspark.sql.dataframe import DataFrame
+        try:
+            self.func(DataFrame(jdf, self.sql_ctx), batch_id)
+        except Exception as e:
+            self.error = e
+            raise e
+
+    class Java:
+        implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']

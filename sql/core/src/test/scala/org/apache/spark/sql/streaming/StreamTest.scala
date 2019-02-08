@@ -37,6 +37,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
@@ -77,8 +78,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop() // stop the state store maintenance thread and unload store providers
+    try {
+      super.afterAll()
+    } finally {
+      StateStore.stop() // stop the state store maintenance thread and unload store providers
+    }
   }
 
   protected val defaultTrigger = Trigger.ProcessingTime(0)
@@ -98,7 +102,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
    * been processed.
    */
   object AddData {
-    def apply[A](source: MemoryStream[A], data: A*): AddDataMemory[A] =
+    def apply[A](source: MemoryStreamBase[A], data: A*): AddDataMemory[A] =
       AddDataMemory(source, data)
   }
 
@@ -130,7 +134,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     def runAction(): Unit
   }
 
-  case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
+  case class AddDataMemory[A](source: MemoryStreamBase[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
 
     override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
@@ -191,14 +195,30 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   case class CheckAnswerRowsContains(expectedAnswer: Seq[Row], lastOnly: Boolean = false)
     extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
-    private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
+    private def operatorName = if (lastOnly) "CheckLastBatchContains" else "CheckAnswerContains"
   }
 
   case class CheckAnswerRowsByFunc(
       globalCheckFunction: Seq[Row] => Unit,
       lastOnly: Boolean) extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName"
-    private def operatorName = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
+    override def toString: String = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
+  }
+
+  case class CheckNewAnswerRows(expectedAnswer: Seq[Row])
+    extends StreamAction with StreamMustBeRunning {
+    override def toString: String = s"CheckNewAnswer: ${expectedAnswer.mkString(",")}"
+  }
+
+  object CheckNewAnswer {
+    def apply(): CheckNewAnswerRows = CheckNewAnswerRows(Seq.empty)
+
+    def apply[A: Encoder](data: A, moreData: A*): CheckNewAnswerRows = {
+      val encoder = encoderFor[A]
+      val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
+      CheckNewAnswerRows((data +: moreData).map(d => toExternalRow.fromRow(encoder.toRow(d))))
+    }
+
+    def apply(rows: Row*): CheckNewAnswerRows = CheckNewAnswerRows(rows)
   }
 
   /** Stops the stream. It must currently be running. */
@@ -273,8 +293,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
   /** Execute arbitrary code */
   object Execute {
-    def apply(func: StreamExecution => Any): AssertOnQuery =
-      AssertOnQuery(query => { func(query); true })
+    def apply(name: String)(func: StreamExecution => Any): AssertOnQuery =
+      AssertOnQuery(query => { func(query); true }, "name")
+
+    def apply(func: StreamExecution => Any): AssertOnQuery = apply("Execute")(func)
   }
 
   object AwaitEpoch {
@@ -434,31 +456,67 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
          """.stripMargin)
     }
 
-    def fetchStreamAnswer(currentStream: StreamExecution, lastOnly: Boolean) = {
+    var lastFetchedMemorySinkLastBatchId: Long = -1
+
+    def fetchStreamAnswer(
+        currentStream: StreamExecution,
+        lastOnly: Boolean = false,
+        sinceLastFetchOnly: Boolean = false) = {
+      verify(
+        !(lastOnly && sinceLastFetchOnly), "both lastOnly and sinceLastFetchOnly cannot be true")
       verify(currentStream != null, "stream not running")
 
       // Block until all data added has been processed for all the source
       awaiting.foreach { case (sourceIndex, offset) =>
         failAfter(streamingTimeout) {
-          currentStream.awaitOffset(sourceIndex, offset)
+          currentStream.awaitOffset(sourceIndex, offset, streamingTimeout.toMillis)
+          // Make sure all processing including no-data-batches have been executed
+          if (!currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
+            currentStream.processAllAvailable()
+          }
         }
       }
 
-      val (latestBatchData, allData) = sink match {
-        case s: MemorySink => (s.latestBatchData, s.allData)
-        case s: MemorySinkV2 => (s.latestBatchData, s.allData)
+      val lastExecution = currentStream.lastExecution
+      if (currentStream.isInstanceOf[MicroBatchExecution] && lastExecution != null) {
+        // Verify if stateful operators have correct metadata and distribution
+        // This can often catch hard to debug errors when developing stateful operators
+        lastExecution.executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
+          assert(s.stateInfo.map(_.numPartitions).contains(lastExecution.numStateStores))
+          s.requiredChildDistribution.foreach { d =>
+            withClue(s"$s specifies incorrect # partitions in requiredChildDistribution $d") {
+              assert(d.requiredNumPartitions.isDefined)
+              assert(d.requiredNumPartitions.get >= 1)
+              if (d != AllTuples) {
+                assert(d.requiredNumPartitions.get == s.stateInfo.get.numPartitions)
+              }
+            }
+          }
+        }
       }
-      try if (lastOnly) latestBatchData else allData catch {
+
+      val rows = try {
+        if (sinceLastFetchOnly) {
+          if (sink.latestBatchId.getOrElse(-1L) < lastFetchedMemorySinkLastBatchId) {
+            failTest("MemorySink was probably cleared since last fetch. Use CheckAnswer instead.")
+          }
+          sink.dataSinceBatch(lastFetchedMemorySinkLastBatchId)
+        } else {
+          if (lastOnly) sink.latestBatchData else sink.allData
+        }
+      } catch {
         case e: Exception =>
           failTest("Exception while getting data from sink", e)
       }
+      lastFetchedMemorySinkLastBatchId = sink.latestBatchId.getOrElse(-1L)
+      rows
     }
 
     def executeAction(action: StreamAction): Unit = {
       logInfo(s"Processing test stream action: $action")
       action match {
         case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
-          verify(currentStream == null, "stream already running")
+          verify(currentStream == null || !currentStream.isActive, "stream already running")
           verify(triggerClock.isInstanceOf[SystemClock]
             || triggerClock.isInstanceOf[StreamManualClock],
             "Use either SystemClock or StreamManualClock to start the stream")
@@ -629,8 +687,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             def findSourceIndex(plan: LogicalPlan): Option[Int] = {
               plan
                 .collect {
+                  // v1 source
                   case r: StreamingExecutionRelation => r.source
-                  case r: StreamingDataSourceV2Relation => r.reader
+                  // v2 source
+                  case r: StreamingDataSourceV2Relation => r.stream
+                  // We can add data to memory stream before starting it. Then the input plan has
+                  // not been processed by the streaming engine and contains `StreamingRelationV2`.
+                  case r: StreamingRelationV2 if r.sourceName == "memory" =>
+                    r.table.asInstanceOf[MemoryStreamTable].stream
                 }
                 .zipWithIndex
                 .find(_._1 == source)
@@ -679,14 +743,22 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           }
 
         case CheckAnswerRowsByFunc(globalCheckFunction, lastOnly) =>
-          val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+          val sparkAnswer = currentStream match {
+            case null => fetchStreamAnswer(lastStream, lastOnly)
+            case s => fetchStreamAnswer(s, lastOnly)
+          }
           try {
             globalCheckFunction(sparkAnswer)
           } catch {
             case e: Throwable => failTest(e.toString)
           }
+
+        case CheckNewAnswerRows(expectedAnswer) =>
+          val sparkAnswer = fetchStreamAnswer(currentStream, sinceLastFetchOnly = true)
+          QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
+            error => failTest(error)
+          }
       }
-      pos += 1
     }
 
     try {
@@ -700,8 +772,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           currentStream.asInstanceOf[MicroBatchExecution].withProgressLocked {
             actns.foreach(executeAction)
           }
+          pos += 1
 
-        case action: StreamAction => executeAction(action)
+        case action: StreamAction =>
+          executeAction(action)
+          pos += 1
       }
       if (streamThreadDeathCause != null) {
         failTest("Stream Thread Died", streamThreadDeathCause)

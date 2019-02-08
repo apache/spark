@@ -19,9 +19,10 @@ package org.apache.spark.deploy
 
 import java.io._
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
-import java.net.URL
+import java.net.{URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
+import java.util.UUID
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -49,6 +50,7 @@ import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
 
@@ -58,7 +60,7 @@ import org.apache.spark.util._
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
-  val SUBMIT, KILL, REQUEST_STATUS = Value
+  val SUBMIT, KILL, REQUEST_STATUS, PRINT_VERSION = Value
 }
 
 /**
@@ -67,76 +69,30 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit extends CommandLineUtils with Logging {
+private[spark] class SparkSubmit extends Logging {
 
   import DependencyUtils._
+  import SparkSubmit._
 
-  // Cluster managers
-  private val YARN = 1
-  private val STANDALONE = 2
-  private val MESOS = 4
-  private val LOCAL = 8
-  private val KUBERNETES = 16
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES
-
-  // Deploy modes
-  private val CLIENT = 1
-  private val CLUSTER = 2
-  private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
-
-  // Special primary resource names that represent shells rather than application jars.
-  private val SPARK_SHELL = "spark-shell"
-  private val PYSPARK_SHELL = "pyspark-shell"
-  private val SPARKR_SHELL = "sparkr-shell"
-  private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
-  private val R_PACKAGE_ARCHIVE = "rpkg.zip"
-
-  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
-
-  // Following constants are visible for testing.
-  private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
-    "org.apache.spark.deploy.yarn.YarnClusterApplication"
-  private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
-  private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
-  private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS =
-    "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
-
-  // scalastyle:off println
-  private[spark] def printVersionAndExit(): Unit = {
-    printStream.println("""Welcome to
-      ____              __
-     / __/__  ___ _____/ /__
-    _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version %s
-      /_/
-                        """.format(SPARK_VERSION))
-    printStream.println("Using Scala %s, %s, %s".format(
-      Properties.versionString, Properties.javaVmName, Properties.javaVersion))
-    printStream.println("Branch %s".format(SPARK_BRANCH))
-    printStream.println("Compiled by user %s on %s".format(SPARK_BUILD_USER, SPARK_BUILD_DATE))
-    printStream.println("Revision %s".format(SPARK_REVISION))
-    printStream.println("Url %s".format(SPARK_REPO_URL))
-    printStream.println("Type --help for more information.")
-    exitFn(0)
-  }
-  // scalastyle:on println
-
-  override def main(args: Array[String]): Unit = {
+  def doSubmit(args: Array[String]): Unit = {
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
     val uninitLog = initializeLogIfNecessary(true, silent = true)
 
-    val appArgs = new SparkSubmitArguments(args)
+    val appArgs = parseArguments(args)
     if (appArgs.verbose) {
-      // scalastyle:off println
-      printStream.println(appArgs)
-      // scalastyle:on println
+      logInfo(appArgs.toString)
     }
     appArgs.action match {
       case SparkSubmitAction.SUBMIT => submit(appArgs, uninitLog)
       case SparkSubmitAction.KILL => kill(appArgs)
       case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs)
+      case SparkSubmitAction.PRINT_VERSION => printVersion()
     }
+  }
+
+  protected def parseArguments(args: Array[String]): SparkSubmitArguments = {
+    new SparkSubmitArguments(args)
   }
 
   /**
@@ -154,6 +110,24 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private def requestStatus(args: SparkSubmitArguments): Unit = {
     new RestSubmissionClient(args.master)
       .requestSubmissionStatus(args.submissionToRequestStatusFor)
+  }
+
+  /** Print version information to the log. */
+  private def printVersion(): Unit = {
+    logInfo("""Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version %s
+      /_/
+                        """.format(SPARK_VERSION))
+    logInfo("Using Scala %s, %s, %s".format(
+      Properties.versionString, Properties.javaVmName, Properties.javaVersion))
+    logInfo(s"Branch $SPARK_BRANCH")
+    logInfo(s"Compiled by user $SPARK_BUILD_USER on $SPARK_BUILD_DATE")
+    logInfo(s"Revision $SPARK_REVISION")
+    logInfo(s"Url $SPARK_REPO_URL")
+    logInfo("Type --help for more information.")
   }
 
   /**
@@ -185,10 +159,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
             // makes the message printed to the output by the JVM not very helpful. Instead,
             // detect exceptions with empty stack traces here, and treat them differently.
             if (e.getStackTrace().length == 0) {
-              // scalastyle:off println
-              printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
-              // scalastyle:on println
-              exitFn(1)
+              error(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
             } else {
               throw e
             }
@@ -210,14 +181,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // to use the legacy gateway if the master endpoint turns out to be not a REST server.
     if (args.isStandaloneCluster && args.useRest) {
       try {
-        // scalastyle:off println
-        printStream.println("Running Spark using the REST application submission protocol.")
-        // scalastyle:on println
+        logInfo("Running Spark using the REST application submission protocol.")
         doRunMain()
       } catch {
         // Fail over to use the legacy submission gateway
         case e: SubmitRestConnectionException =>
-          printWarning(s"Master endpoint ${args.master} was not a REST server. " +
+          logWarning(s"Master endpoint ${args.master} was not a REST server. " +
             "Falling back to legacy submission gateway instead.")
           args.useRest = false
           submit(args, false)
@@ -255,7 +224,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     val clusterManager: Int = args.master match {
       case "yarn" => YARN
       case "yarn-client" | "yarn-cluster" =>
-        printWarning(s"Master ${args.master} is deprecated since 2.0." +
+        logWarning(s"Master ${args.master} is deprecated since 2.0." +
           " Please use master \"yarn\" with specified deploy mode instead.")
         YARN
       case m if m.startsWith("spark") => STANDALONE
@@ -263,7 +232,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       case m if m.startsWith("k8s") => KUBERNETES
       case m if m.startsWith("local") => LOCAL
       case _ =>
-        printErrorAndExit("Master must either be yarn or start with spark, mesos, k8s, or local")
+        error("Master must either be yarn or start with spark, mesos, k8s, or local")
         -1
     }
 
@@ -271,7 +240,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
     var deployMode: Int = args.deployMode match {
       case "client" | null => CLIENT
       case "cluster" => CLUSTER
-      case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
+      case _ =>
+        error("Deploy mode must be either client or cluster")
+        -1
     }
 
     // Because the deprecated way of specifying "yarn-cluster" and "yarn-client" encapsulate both
@@ -283,16 +254,16 @@ object SparkSubmit extends CommandLineUtils with Logging {
           deployMode = CLUSTER
           args.master = "yarn"
         case ("yarn-cluster", "client") =>
-          printErrorAndExit("Client deploy mode is not compatible with master \"yarn-cluster\"")
+          error("Client deploy mode is not compatible with master \"yarn-cluster\"")
         case ("yarn-client", "cluster") =>
-          printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"")
+          error("Cluster deploy mode is not compatible with master \"yarn-client\"")
         case (_, mode) =>
           args.master = "yarn"
       }
 
       // Make sure YARN is included in our build if we're trying to use it
       if (!Utils.classIsLoadable(YARN_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
-        printErrorAndExit(
+        error(
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
       }
@@ -302,7 +273,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       args.master = Utils.checkAndGetK8sMasterUrl(args.master)
       // Make sure KUBERNETES is included in our build if we're trying to use it
       if (!Utils.classIsLoadable(KUBERNETES_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
-        printErrorAndExit(
+        error(
           "Could not load KUBERNETES classes. " +
             "This copy of Spark may not have been compiled with KUBERNETES support.")
       }
@@ -311,25 +282,19 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // Fail fast, the following modes are not supported or applicable
     (clusterManager, deployMode) match {
       case (STANDALONE, CLUSTER) if args.isPython =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+        error("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
       case (STANDALONE, CLUSTER) if args.isR =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for R " +
+        error("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
-      case (KUBERNETES, _) if args.isPython =>
-        printErrorAndExit("Python applications are currently not supported for Kubernetes.")
-      case (KUBERNETES, _) if args.isR =>
-        printErrorAndExit("R applications are currently not supported for Kubernetes.")
-      case (KUBERNETES, CLIENT) =>
-        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
+        error("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+        error("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
+        error("Cluster deploy mode is not applicable to Spark SQL shell.")
       case (_, CLUSTER) if isThriftServer(args.mainClass) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")
+        error("Cluster deploy mode is not applicable to Spark Thrift server.")
       case _ =>
     }
 
@@ -343,16 +308,18 @@ object SparkSubmit extends CommandLineUtils with Logging {
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
+    val isMesosClient = clusterManager == MESOS && deployMode == CLIENT
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
       // too for packages that include Python code
       val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(
-        args.packagesExclusions, args.packages, args.repositories, args.ivyRepoPath)
+        args.packagesExclusions, args.packages, args.repositories, args.ivyRepoPath,
+        args.ivySettingsPath)
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
-        if (args.isPython) {
+        if (args.isPython || isInternal(args.primaryResource)) {
           args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
         }
       }
@@ -368,19 +335,20 @@ object SparkSubmit extends CommandLineUtils with Logging {
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
     val targetDir = Utils.createTempDir()
 
-    // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL || clusterManager == MESOS) {
-      if (args.principal != null) {
-        if (args.keytab != null) {
-          require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
-          // Add keytab and principal configurations in sysProps to make them available
-          // for later use; e.g. in spark sql, the isolated class loader used to talk
-          // to HiveMetastore will use these settings. They will be set as Java system
-          // properties and then loaded by SparkConf
-          sparkConf.set(KEYTAB, args.keytab)
-          sparkConf.set(PRINCIPAL, args.principal)
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-        }
+    // Kerberos is not supported in standalone mode, and keytab support is not yet available
+    // in Mesos cluster mode.
+    if (clusterManager != STANDALONE
+        && !isMesosCluster
+        && args.principal != null
+        && args.keytab != null) {
+      // If client mode, make sure the keytab is just a local path.
+      if (deployMode == CLIENT && Utils.isLocalUri(args.keytab)) {
+        args.keytab = new URI(args.keytab).getPath()
+      }
+
+      if (!Utils.isLocalUri(args.keytab)) {
+        require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
+        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
       }
     }
 
@@ -418,7 +386,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
       def shouldDownload(scheme: String): Boolean = {
-        forceDownloadSchemes.contains(scheme) ||
+        forceDownloadSchemes.contains("*") || forceDownloadSchemes.contains(scheme) ||
           Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }.isFailure
       }
 
@@ -461,18 +429,15 @@ object SparkSubmit extends CommandLineUtils with Logging {
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
         args.childArgs = ArrayBuffer(localPrimaryResource, localPyFiles) ++ args.childArgs
-        if (clusterManager != YARN) {
-          // The YARN backend distributes the primary file differently, so don't merge it.
-          args.files = mergeFileLists(args.files, args.primaryResource)
-        }
       }
       if (clusterManager != YARN) {
         // The YARN backend handles python files differently, so don't merge the lists.
         args.files = mergeFileLists(args.files, args.pyFiles)
       }
-      if (localPyFiles != null) {
-        sparkConf.set("spark.submit.pyFiles", localPyFiles)
-      }
+    }
+
+    if (localPyFiles != null) {
+      sparkConf.set(SUBMIT_PYTHON_FILES, localPyFiles.split(",").toSeq)
     }
 
     // In YARN mode for an R app, add the SparkR package archive and the R package
@@ -481,11 +446,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
     if (args.isR && clusterManager == YARN) {
       val sparkRPackagePath = RUtils.localSparkRPackagePath
       if (sparkRPackagePath.isEmpty) {
-        printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
+        error("SPARK_HOME does not exist for R application in YARN mode.")
       }
       val sparkRPackageFile = new File(sparkRPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
       if (!sparkRPackageFile.exists()) {
-        printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
+        error(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
       val sparkRPackageURI = Utils.resolveURI(sparkRPackageFile.getAbsolutePath).toString
 
@@ -498,7 +463,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         val rPackageFile =
           RPackageUtils.zipRLibraries(new File(RUtils.rPackages.get), R_PACKAGE_ARCHIVE)
         if (!rPackageFile.exists()) {
-          printErrorAndExit("Failed to zip all the built R packages.")
+          error("Failed to zip all the built R packages.")
         }
 
         val rPackageURI = Utils.resolveURI(rPackageFile.getAbsolutePath).toString
@@ -509,12 +474,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // TODO: Support distributing R packages with standalone cluster
     if (args.isR && clusterManager == STANDALONE && !RUtils.rPackages.isEmpty) {
-      printErrorAndExit("Distributing R packages with standalone cluster is not supported.")
+      error("Distributing R packages with standalone cluster is not supported.")
     }
 
     // TODO: Support distributing R packages with mesos cluster
     if (args.isR && clusterManager == MESOS && !RUtils.rPackages.isEmpty) {
-      printErrorAndExit("Distributing R packages with mesos cluster is not supported.")
+      error("Distributing R packages with mesos cluster is not supported.")
     }
 
     // If we're running an R app, set the main class to our specific R runner
@@ -550,13 +515,17 @@ object SparkSubmit extends CommandLineUtils with Logging {
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
-        confKey = "spark.driver.memory"),
+        confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.driver.extraClassPath"),
+        confKey = DRIVER_CLASS_PATH.key),
       OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.driver.extraJavaOptions"),
+        confKey = DRIVER_JAVA_OPTIONS.key),
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.driver.extraLibraryPath"),
+        confKey = DRIVER_LIBRARY_PATH.key),
+      OptionAssigner(args.principal, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        confKey = PRINCIPAL.key),
+      OptionAssigner(args.keytab, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        confKey = KEYTAB.key),
 
       // Propagate attributes for dependency resolution at the driver side
       OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.packages"),
@@ -568,33 +537,31 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.queue"),
-      OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
-        confKey = "spark.executor.instances"),
       OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.pyFiles"),
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.jars"),
       OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.archives"),
-      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.principal"),
-      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.keytab"),
 
       // Other options
+      OptionAssigner(args.numExecutors, YARN | KUBERNETES, ALL_DEPLOY_MODES,
+        confKey = EXECUTOR_INSTANCES.key),
       OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.executor.cores"),
+        confKey = EXECUTOR_CORES.key),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.executor.memory"),
+        confKey = EXECUTOR_MEMORY.key),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.cores.max"),
+        confKey = CORES_MAX.key),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.files"),
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.jars"),
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
-        confKey = "spark.driver.memory"),
+        confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
-        confKey = "spark.driver.cores"),
+        confKey = DRIVER_CORES.key),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
-        confKey = "spark.driver.supervise"),
+        confKey = DRIVER_SUPERVISE.key),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
 
       // An internal option used only for spark-shell to add user jars to repl's classloader,
@@ -614,7 +581,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
     // Add the main application jar and any added jars to classpath in case YARN client
     // requires these jars.
-    // This assumes both primaryResource and user jars are local jars, otherwise it will not be
+    // This assumes both primaryResource and user jars are local jars, or already downloaded
+    // to local by configuring "spark.yarn.dist.forceDownloadSchemes", otherwise it will not be
     // added to the classpath of YARN client.
     if (isYarnCluster) {
       if (isUserJar(args.primaryResource)) {
@@ -646,11 +614,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python and R files, the primary resource is already distributed as a regular file
     if (!isYarnCluster && !args.isPython && !args.isR) {
-      var jars = sparkConf.getOption("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
+      var jars = sparkConf.get(JARS)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
-      sparkConf.set("spark.jars", jars.mkString(","))
+      sparkConf.set(JARS, jars)
     }
 
     // In standalone cluster mode, use the REST client to submit the application (Spark 1.3+).
@@ -680,7 +648,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
     }
 
-    if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
+    if ((clusterManager == MESOS || clusterManager == KUBERNETES)
+       && UserGroupInformation.isSecurityEnabled) {
       setRMPrincipal(sparkConf)
     }
 
@@ -712,7 +681,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         // Second argument is main class
         childArgs += (args.primaryResource, "")
         if (args.pyFiles != null) {
-          sparkConf.set("spark.submit.pyFiles", args.pyFiles)
+          sparkConf.set(SUBMIT_PYTHON_FILES, args.pyFiles.split(",").toSeq)
         }
       } else if (args.isR) {
         // Second argument is main class
@@ -728,9 +697,23 @@ object SparkSubmit extends CommandLineUtils with Logging {
     if (isKubernetesCluster) {
       childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
       if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
-        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+        if (args.isPython) {
+          childArgs ++= Array("--primary-py-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
+          if (args.pyFiles != null) {
+            childArgs ++= Array("--other-py-files", args.pyFiles)
+          }
+        } else if (args.isR) {
+          childArgs ++= Array("--primary-r-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.RRunner")
+        }
+        else {
+          childArgs ++= Array("--primary-java-resource", args.primaryResource)
+          childArgs ++= Array("--main-class", args.mainClass)
+        }
+      } else {
+        childArgs ++= Array("--main-class", args.mainClass)
       }
-      childArgs ++= Array("--main-class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>
           childArgs += ("--arg", arg)
@@ -745,7 +728,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // Ignore invalid spark.driver.host in cluster modes.
     if (deployMode == CLUSTER) {
-      sparkConf.remove("spark.driver.host")
+      sparkConf.remove(DRIVER_HOST_ADDRESS)
     }
 
     // Resolve paths in certain spark properties
@@ -765,31 +748,28 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // Resolve and format python file paths properly before adding them to the PYTHONPATH.
     // The resolving part is redundant in the case of --py-files, but necessary if the user
     // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
-    sparkConf.getOption("spark.submit.pyFiles").foreach { pyFiles =>
-      val resolvedPyFiles = Utils.resolveURIs(pyFiles)
-      val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
-        PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
-      } else {
-        // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
-        // support dealing with remote python files, they could distribute and add python files
-        // locally.
-        resolvedPyFiles
-      }
-      sparkConf.set("spark.submit.pyFiles", formattedPyFiles)
+    val pyFiles = sparkConf.get(SUBMIT_PYTHON_FILES)
+    val resolvedPyFiles = Utils.resolveURIs(pyFiles.mkString(","))
+    val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
+      PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+    } else {
+      // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
+      // support dealing with remote python files, they could distribute and add python files
+      // locally.
+      resolvedPyFiles
     }
+    sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
     (childArgs, childClasspath, sparkConf, childMainClass)
   }
 
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
-  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
-  // must trick it into thinking we're YARN.
+  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos or Kubernetes
+  // mode, we must trick it into thinking we're YARN.
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
-    // scalastyle:off println
-    printStream.println(s"Setting ${key} to ${shortUserName}")
-    // scalastyle:off println
+    logInfo(s"Setting ${key} to ${shortUserName}")
     sparkConf.set(key, shortUserName)
   }
 
@@ -805,16 +785,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
       sparkConf: SparkConf,
       childMainClass: String,
       verbose: Boolean): Unit = {
-    // scalastyle:off println
     if (verbose) {
-      printStream.println(s"Main class:\n$childMainClass")
-      printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
+      logInfo(s"Main class:\n$childMainClass")
+      logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
-      printStream.println(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).mkString("\n")}")
-      printStream.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
-      printStream.println("\n")
+      logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).mkString("\n")}")
+      logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
+      logInfo("\n")
     }
-    // scalastyle:on println
 
     val loader =
       if (sparkConf.get(DRIVER_USER_CLASS_PATH_FIRST)) {
@@ -836,31 +814,27 @@ object SparkSubmit extends CommandLineUtils with Logging {
       mainClass = Utils.classForName(childMainClass)
     } catch {
       case e: ClassNotFoundException =>
-        e.printStackTrace(printStream)
+        logError(s"Failed to load class $childMainClass.")
         if (childMainClass.contains("thriftserver")) {
-          // scalastyle:off println
-          printStream.println(s"Failed to load main class $childMainClass.")
-          printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
-          // scalastyle:on println
+          logInfo(s"Failed to load main class $childMainClass.")
+          logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
-        System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
       case e: NoClassDefFoundError =>
-        e.printStackTrace(printStream)
+        logError(s"Failed to load $childMainClass: ${e.getMessage()}")
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
-          // scalastyle:off println
-          printStream.println(s"Failed to load hive class.")
-          printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
-          // scalastyle:on println
+          logInfo(s"Failed to load hive class.")
+          logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
-        System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
-      mainClass.newInstance().asInstanceOf[SparkApplication]
+      mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
     } else {
       // SPARK-4170
       if (classOf[scala.App].isAssignableFrom(mainClass)) {
-        printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
+        logWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
       }
       new JavaMainApplication(mainClass)
     }
@@ -879,29 +853,92 @@ object SparkSubmit extends CommandLineUtils with Logging {
       app.start(childArgs.toArray, sparkConf)
     } catch {
       case t: Throwable =>
-        findCause(t) match {
-          case SparkUserAppException(exitCode) =>
-            System.exit(exitCode)
-
-          case t: Throwable =>
-            throw t
-        }
+        throw findCause(t)
     }
   }
 
-  private[deploy] def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
-    val uri = Utils.resolveURI(localJar)
-    uri.getScheme match {
-      case "file" | "local" =>
-        val file = new File(uri.getPath)
-        if (file.exists()) {
-          loader.addURL(file.toURI.toURL)
-        } else {
-          printWarning(s"Local jar $file does not exist, skipping.")
+  /** Throw a SparkException with the given error message. */
+  private def error(msg: String): Unit = throw new SparkException(msg)
+
+}
+
+
+/**
+ * This entry point is used by the launcher library to start in-process Spark applications.
+ */
+private[spark] object InProcessSparkSubmit {
+
+  def main(args: Array[String]): Unit = {
+    val submit = new SparkSubmit()
+    submit.doSubmit(args)
+  }
+
+}
+
+object SparkSubmit extends CommandLineUtils with Logging {
+
+  // Cluster managers
+  private val YARN = 1
+  private val STANDALONE = 2
+  private val MESOS = 4
+  private val LOCAL = 8
+  private val KUBERNETES = 16
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES
+
+  // Deploy modes
+  private val CLIENT = 1
+  private val CLUSTER = 2
+  private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
+
+  // Special primary resource names that represent shells rather than application jars.
+  private val SPARK_SHELL = "spark-shell"
+  private val PYSPARK_SHELL = "pyspark-shell"
+  private val SPARKR_SHELL = "sparkr-shell"
+  private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
+  private val R_PACKAGE_ARCHIVE = "rpkg.zip"
+
+  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
+
+  // Following constants are visible for testing.
+  private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.yarn.YarnClusterApplication"
+  private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
+  private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
+  private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
+
+  override def main(args: Array[String]): Unit = {
+    val submit = new SparkSubmit() {
+      self =>
+
+      override protected def parseArguments(args: Array[String]): SparkSubmitArguments = {
+        new SparkSubmitArguments(args) {
+          override protected def logInfo(msg: => String): Unit = self.logInfo(msg)
+
+          override protected def logWarning(msg: => String): Unit = self.logWarning(msg)
+
+          override protected def logError(msg: => String): Unit = self.logError(msg)
         }
-      case _ =>
-        printWarning(s"Skip remote jar $uri.")
+      }
+
+      override protected def logInfo(msg: => String): Unit = printMessage(msg)
+
+      override protected def logWarning(msg: => String): Unit = printMessage(s"Warning: $msg")
+
+      override protected def logError(msg: => String): Unit = printMessage(s"Error: $msg")
+
+      override def doSubmit(args: Array[String]): Unit = {
+        try {
+          super.doSubmit(args)
+        } catch {
+          case e: SparkUserAppException =>
+            exitFn(e.exitCode)
+        }
+      }
+
     }
+
+    submit.doSubmit(args)
   }
 
   /**
@@ -950,17 +987,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
     res == SparkLauncher.NO_RESOURCE
   }
 
-  /**
-   * Merge a sequence of comma-separated file lists, some of which may be null to indicate
-   * no files, into a single comma-separated string.
-   */
-  private[deploy] def mergeFileLists(lists: String*): String = {
-    val merged = lists.filterNot(StringUtils.isBlank)
-                      .flatMap(_.split(","))
-                      .mkString(",")
-    if (merged == "") null else merged
-  }
-
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
@@ -971,9 +997,9 @@ private[spark] object SparkSubmitUtils {
 
   // Exposed for testing.
   // These components are used to make the default exclusion rules for Spark dependencies.
-  // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
-  // other spark-streaming utility components. Underscore is there to differentiate between
-  // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
+  // We need to specify each component explicitly, otherwise we miss
+  // spark-streaming utility components. Underscore is there to differentiate between
+  // spark-streaming_2.1x and spark-streaming-kafka-0-10-assembly_2.1x
   val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "kvstore_", "launcher_", "mllib_",
     "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
     "tags_", "unsafe_")
@@ -988,12 +1014,12 @@ private[spark] object SparkSubmitUtils {
     override def toString: String = s"$groupId:$artifactId:$version"
   }
 
-/**
- * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
- * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
- * @param coordinates Comma-delimited string of maven coordinates
- * @return Sequence of Maven coordinates
- */
+  /**
+   * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
+   * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
+   * @param coordinates Comma-delimited string of maven coordinates
+   * @return Sequence of Maven coordinates
+   */
   def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
     coordinates.split(",").map { p =>
       val splits = p.replace("/", ":").split(":")
@@ -1195,7 +1221,33 @@ private[spark] object SparkSubmitUtils {
 
   /** A nice function to use in tests as well. Values are dummy strings. */
   def getModuleDescriptor: DefaultModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
-    ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
+    // Include UUID in module name, so multiple clients resolving maven coordinate at the same time
+    // do not modify the same resolution file concurrently.
+    ModuleRevisionId.newInstance("org.apache.spark",
+      s"spark-submit-parent-${UUID.randomUUID.toString}",
+      "1.0"))
+
+  /**
+   * Clear ivy resolution from current launch. The resolution file is usually at
+   * ~/.ivy2/org.apache.spark-spark-submit-parent-$UUID-default.xml,
+   * ~/.ivy2/resolved-org.apache.spark-spark-submit-parent-$UUID-1.0.xml, and
+   * ~/.ivy2/resolved-org.apache.spark-spark-submit-parent-$UUID-1.0.properties.
+   * Since each launch will have its own resolution files created, delete them after
+   * each resolution to prevent accumulation of these files in the ivy cache dir.
+   */
+  private def clearIvyResolutionFiles(
+      mdId: ModuleRevisionId,
+      ivySettings: IvySettings,
+      ivyConfName: String): Unit = {
+    val currentResolutionFiles = Seq(
+      s"${mdId.getOrganisation}-${mdId.getName}-$ivyConfName.xml",
+      s"resolved-${mdId.getOrganisation}-${mdId.getName}-${mdId.getRevision}.xml",
+      s"resolved-${mdId.getOrganisation}-${mdId.getName}-${mdId.getRevision}.properties"
+    )
+    currentResolutionFiles.foreach { filename =>
+      new File(ivySettings.getDefaultCache, filename).delete()
+    }
+  }
 
   /**
    * Resolves any dependencies that were supplied through maven coordinates
@@ -1246,14 +1298,6 @@ private[spark] object SparkSubmitUtils {
 
         // A Module descriptor must be specified. Entries are dummy strings
         val md = getModuleDescriptor
-        // clear ivy resolution from previous launches. The resolution file is usually at
-        // ~/.ivy2/org.apache.spark-spark-submit-parent-default.xml. In between runs, this file
-        // leads to confusion with Ivy when the files can no longer be found at the repository
-        // declared in that file/
-        val mdId = md.getModuleRevisionId
-        val previousResolution = new File(ivySettings.getDefaultCache,
-          s"${mdId.getOrganisation}-${mdId.getName}-$ivyConfName.xml")
-        if (previousResolution.exists) previousResolution.delete
 
         md.setDefaultConf(ivyConfName)
 
@@ -1274,7 +1318,10 @@ private[spark] object SparkSubmitUtils {
           packagesDirectory.getAbsolutePath + File.separator +
             "[organization]_[artifact]-[revision](-[classifier]).[ext]",
           retrieveOptions.setConfs(Array(ivyConfName)))
-        resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
+        val paths = resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
+        val mdId = md.getModuleRevisionId
+        clearIvyResolutionFiles(mdId, ivySettings, ivyConfName)
+        paths
       } finally {
         System.setOut(sysOut)
       }
@@ -1290,6 +1337,13 @@ private[spark] object SparkSubmitUtils {
     val rule = new DefaultExcludeRule(id, ivySettings.getMatcher("glob"), null)
     rule.addConfiguration(ivyConfName)
     rule
+  }
+
+  def parseSparkConfProperty(pair: String): (String, String) = {
+    pair.split("=", 2).toSeq match {
+      case Seq(k, v) => (k, v)
+      case _ => throw new SparkException(s"Spark config without '=': $pair")
+    }
   }
 
 }

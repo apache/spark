@@ -38,10 +38,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
@@ -56,16 +58,19 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
  */
-case class ExprCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(var code: Block, var isNull: ExprValue, var value: ExprValue)
 
 object ExprCode {
-  def forNullValue(dataType: DataType): ExprCode = {
-    val defaultValueLiteral = CodeGenerator.defaultValue(dataType, typedNull = true)
-    ExprCode(code = "", isNull = "true", value = defaultValueLiteral)
+  def apply(isNull: ExprValue, value: ExprValue): ExprCode = {
+    ExprCode(code = EmptyBlock, isNull, value)
   }
 
-  def forNonNullValue(value: String): ExprCode = {
-    ExprCode(code = "", isNull = "false", value = value)
+  def forNullValue(dataType: DataType): ExprCode = {
+    ExprCode(code = EmptyBlock, isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
+  }
+
+  def forNonNullValue(value: ExprValue): ExprCode = {
+    ExprCode(code = EmptyBlock, isNull = FalseLiteral, value = value)
   }
 }
 
@@ -77,7 +82,7 @@ object ExprCode {
  * @param value A term for a value of a common sub-expression. Not valid if `isNull`
  *              is set to `true`.
  */
-case class SubExprEliminationState(isNull: String, value: String)
+case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -326,11 +331,11 @@ class CodegenContext {
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
     val code = dataType match {
-      case StringType => s"$value = $initCode.clone();"
-      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
-      case _ => s"$value = $initCode;"
+      case StringType => code"$value = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
+      case _ => code"$value = $initCode;"
     }
-    ExprCode(code, "false", value)
+    ExprCode(code, FalseLiteral, JavaCode.global(value, dataType))
   }
 
   def declareMutableStates(): String = {
@@ -402,7 +407,7 @@ class CodegenContext {
   val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+  var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
@@ -466,6 +471,8 @@ class CodegenContext {
       case NewFunctionSpec(functionName, None, None) => functionName
       case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
         innerClassInstance + "." + functionName
+      case _ =>
+        throw new IllegalArgumentException(s"$funcName is not matched at addNewFunction")
     }
   }
 
@@ -569,23 +576,32 @@ class CodegenContext {
     } else {
       s"${freshNamePrefix}_$name"
     }
-    if (freshNameIds.contains(fullName)) {
-      val id = freshNameIds(fullName)
-      freshNameIds(fullName) = id + 1
-      s"$fullName$id"
-    } else {
-      freshNameIds += fullName -> 1
-      fullName
-    }
+    val id = freshNameIds.getOrElse(fullName, 0)
+    freshNameIds(fullName) = id + 1
+    s"${fullName}_$id"
   }
+
+  /**
+   * Creates an `ExprValue` representing a local java variable of required data type.
+   */
+  def freshVariable(name: String, dt: DataType): VariableValue =
+    JavaCode.variable(freshName(name), dt)
+
+  /**
+   * Creates an `ExprValue` representing a local java variable of required Java class.
+   */
+  def freshVariable(name: String, javaClass: Class[_]): VariableValue =
+    JavaCode.variable(freshName(name), javaClass)
 
   /**
    * Generates code for equal expression in Java.
    */
   def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
     case BinaryType => s"java.util.Arrays.equals($c1, $c2)"
-    case FloatType => s"(java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2"
-    case DoubleType => s"(java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2"
+    case FloatType =>
+      s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
+    case DoubleType =>
+      s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
@@ -594,7 +610,7 @@ class CodegenContext {
     case NullType => "false"
     case _ =>
       throw new IllegalArgumentException(
-        "cannot generate equality code for un-comparable type: " + dataType.simpleString)
+        "cannot generate equality code for un-comparable type: " + dataType.catalogString)
   }
 
   /**
@@ -681,7 +697,7 @@ class CodegenContext {
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException(
-        "cannot generate compare code for un-comparable type: " + dataType.simpleString)
+        "cannot generate compare code for un-comparable type: " + dataType.catalogString)
   }
 
   /**
@@ -694,6 +710,40 @@ class CodegenContext {
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
     case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
+  }
+
+  /**
+   * Generates code for updating `partialResult` if `item` is smaller than it.
+   *
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
+   */
+  def reassignIfSmaller(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
+    s"""
+       |if (!${item.isNull} && (${partialResult.isNull} ||
+       |  ${genGreater(dataType, partialResult.value, item.value)})) {
+       |  ${partialResult.isNull} = false;
+       |  ${partialResult.value} = ${item.value};
+       |}
+      """.stripMargin
+  }
+
+  /**
+   * Generates code for updating `partialResult` if `item` is greater than it.
+   *
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
+   */
+  def reassignIfGreater(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
+    s"""
+       |if (!${item.isNull} && (${partialResult.isNull} ||
+       |  ${genGreater(dataType, item.value, partialResult.value)})) {
+       |  ${partialResult.isNull} = false;
+       |  ${partialResult.value} = ${item.value};
+       |}
+      """.stripMargin
   }
 
   /**
@@ -713,6 +763,36 @@ class CodegenContext {
       """
     } else {
       "\n" + execute
+    }
+  }
+
+  /**
+   * Generates code to do null safe execution when accessing properties of complex
+   * ArrayData elements.
+   *
+   * @param nullElements used to decide whether the ArrayData might contain null or not.
+   * @param isNull a variable indicating whether the result will be evaluated to null or not.
+   * @param arrayData a variable name representing the ArrayData.
+   * @param execute the code that should be executed only if the ArrayData doesn't contain
+   *                any null.
+   */
+  def nullArrayElementsSaveExec(
+      nullElements: Boolean,
+      isNull: String,
+      arrayData: String)(
+      execute: String): String = {
+    val i = freshName("idx")
+    if (nullElements) {
+      s"""
+         |for (int $i = 0; !$isNull && $i < $arrayData.numElements(); $i++) {
+         |  $isNull |= $arrayData.isNullAt($i);
+         |}
+         |if (!$isNull) {
+         |  $execute
+         |}
+       """.stripMargin
+    } else {
+      execute
     }
   }
 
@@ -830,12 +910,13 @@ class CodegenContext {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
+    val splitThreshold = SQLConf.get.methodSplitThreshold
     for (code <- expressions) {
       // We can't know how many bytecode will be generated, so use the length of source code
       // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
-      if (length > 1024) {
+      if (length > splitThreshold) {
         blocks += blockBuilder.toString()
         blockBuilder.clear()
         length = 0
@@ -921,14 +1002,12 @@ class CodegenContext {
       newSubExprEliminationExprs: Map[Expression, SubExprEliminationState])(
       f: => Seq[ExprCode]): Seq[ExprCode] = {
     val oldsubExprEliminationExprs = subExprEliminationExprs
-    subExprEliminationExprs.clear
-    newSubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    subExprEliminationExprs = newSubExprEliminationExprs
 
     val genCodes = f
 
     // Restore previous subExprEliminationExprs
-    subExprEliminationExprs.clear
-    oldsubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    subExprEliminationExprs = oldsubExprEliminationExprs
     genCodes
   }
 
@@ -942,7 +1021,7 @@ class CodegenContext {
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
     // Create a clear EquivalentExpressions and SubExprEliminationState mapping
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
-    val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+    val localSubExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree)
@@ -955,10 +1034,10 @@ class CodegenContext {
       // Generate the code for this expression tree.
       val eval = expr.genCode(this)
       val state = SubExprEliminationState(eval.isNull, eval.value)
-      e.foreach(subExprEliminationExprs.put(_, state))
-      eval.code.trim
+      e.foreach(localSubExprEliminationExprs.put(_, state))
+      eval.code.toString
     }
-    SubExprCodes(codes, subExprEliminationExprs.toMap)
+    SubExprCodes(codes, localSubExprEliminationExprs.toMap)
   }
 
   /**
@@ -984,7 +1063,7 @@ class CodegenContext {
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${eval.code.trim}
+           |  ${eval.code}
            |  $isNull = ${eval.isNull};
            |  $value = ${eval.value};
            |}
@@ -1005,8 +1084,10 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
-      e.foreach(subExprEliminationExprs.put(_, state))
+      val state = SubExprEliminationState(
+        JavaCode.isNullGlobal(isNull),
+        JavaCode.global(value, expr.dataType))
+      subExprEliminationExprs ++= e.map(_ -> state).toMap
     }
   }
 
@@ -1039,13 +1120,8 @@ class CodegenContext {
    def registerComment(
        text: => String,
        placeholderId: String = "",
-       force: Boolean = false): String = {
-    // By default, disable comments in generated code because computing the comments themselves can
-    // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
-    // inputs with wide schemas. For more details on the performance issues that motivated this
-    // flat, see SPARK-15680.
-    if (force ||
-      SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+       force: Boolean = false): Block = {
+    if (force || SQLConf.get.codegenComments) {
       val name = if (placeholderId != "") {
         assert(!placeHolderToComments.contains(placeholderId))
         placeholderId
@@ -1058,9 +1134,9 @@ class CodegenContext {
         s"// $text"
       }
       placeHolderToComments += (name -> comment)
-      s"/*$name*/"
+      code"/*$name*/"
     } else {
-      ""
+      EmptyBlock
     }
   }
 }
@@ -1128,7 +1204,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
 
-  // This is the value of HugeMethodLimit in the OpenJDK JVM settings
+  // This is the default value of HugeMethodLimit in the OpenJDK HotSpot JVM,
+  // beyond which methods will be rejected from JIT compilation
   final val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
 
   // The max valid length of method parameters in JVM.
@@ -1186,7 +1263,7 @@ object CodeGenerator extends Logging {
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
-    evaluator.setDefaultImports(Array(
+    evaluator.setDefaultImports(
       classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
@@ -1201,7 +1278,7 @@ object CodeGenerator extends Logging {
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName
-    ))
+    )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
     logDebug({
@@ -1228,7 +1305,7 @@ object CodeGenerator extends Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
-    (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
+    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
   }
 
   /**
@@ -1255,9 +1332,15 @@ object CodeGenerator extends Logging {
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val stats = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
+          method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
             val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
+
+            if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
+              logInfo("Generated method too long to be JIT compiled: " +
+                s"${cf.getThisClassName}.${method.getName} is $byteCodeSize bytes")
+            }
+
             byteCodeSize
           }
         }
@@ -1282,7 +1365,7 @@ object CodeGenerator extends Logging {
    * weak keys/values and thus does not respond to memory pressure.
    */
   private val cache = CacheBuilder.newBuilder()
-    .maximumSize(100)
+    .maximumSize(SQLConf.get.codegenCacheMaxEntries)
     .build(
       new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
         override def load(code: CodeAndComment): (GeneratedClass, Int) = {
@@ -1339,6 +1422,59 @@ object CodeGenerator extends Logging {
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
       case _ => s"($jt)$input.get($ordinal, null)"
     }
+  }
+
+  /**
+   * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
+   * given parameters.
+   *
+   * @param arrayName name of the array to create
+   * @param elementType data type of the elements in source array
+   * @param numElements code representing the number of elements the array should contain
+   * @param additionalErrorMessage string to include in the error message
+   *
+   * @return code representing the allocation of [[ArrayData]]
+   */
+  def createArrayData(
+      arrayName: String,
+      elementType: DataType,
+      numElements: String,
+      additionalErrorMessage: String): String = {
+    val elementSize = if (CodeGenerator.isPrimitiveType(elementType)) {
+      elementType.defaultSize
+    } else {
+      -1
+    }
+    s"""
+       |ArrayData $arrayName = ArrayData.allocateArrayData(
+       |  $elementSize, $numElements, "$additionalErrorMessage");
+     """.stripMargin
+  }
+
+  /**
+   * Generates assignment code for an [[ArrayData]]
+   *
+   * @param dstArray name of the array to be assigned
+   * @param elementType data type of the elements in destination and source arrays
+   * @param srcArray name of the array to be read
+   * @param needNullCheck value which shows whether a nullcheck is required for the returning
+   *                      assignment
+   * @param dstArrayIndex an index variable to access each element of destination array
+   * @param srcArrayIndex an index variable to access each element of source array
+   *
+   * @return code representing an assignment to each element of the [[ArrayData]], which requires
+   *         a pair of destination and source loop index variables
+   */
+  def createArrayAssignment(
+      dstArray: String,
+      elementType: DataType,
+      srcArray: String,
+      dstArrayIndex: String,
+      srcArrayIndex: String,
+      needNullCheck: Boolean): String = {
+    CodeGenerator.setArrayElement(dstArray, elementType, dstArrayIndex,
+      CodeGenerator.getValue(srcArray, elementType, srcArrayIndex),
+      if (needNullCheck) Some(s"$srcArray.isNullAt($srcArrayIndex)") else None)
   }
 
   /**
@@ -1410,6 +1546,34 @@ object CodeGenerator extends Logging {
   }
 
   /**
+   * Generates code of setter for an [[ArrayData]].
+   */
+  def setArrayElement(
+      array: String,
+      elementType: DataType,
+      i: String,
+      value: String,
+      isNull: Option[String] = None): String = {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+    if (isNull.isDefined && isPrimitiveType) {
+      s"""
+         |if (${isNull.get}) {
+         |  $array.setNullAt($i);
+         |} else {
+         |  $array.$setFunc($i, $value);
+         |}
+       """.stripMargin
+    } else {
+      s"$array.$setFunc($i, $value);"
+    }
+  }
+
+  /**
    * Returns the specialized code to set a given value in a column vector for a given `DataType`
    * that could potentially be nullable.
    */
@@ -1477,6 +1641,26 @@ object CodeGenerator extends Logging {
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
     case _ => "Object"
+  }
+
+  def javaClass(dt: DataType): Class[_] = dt match {
+    case BooleanType => java.lang.Boolean.TYPE
+    case ByteType => java.lang.Byte.TYPE
+    case ShortType => java.lang.Short.TYPE
+    case IntegerType | DateType => java.lang.Integer.TYPE
+    case LongType | TimestampType => java.lang.Long.TYPE
+    case FloatType => java.lang.Float.TYPE
+    case DoubleType => java.lang.Double.TYPE
+    case _: DecimalType => classOf[Decimal]
+    case BinaryType => classOf[Array[Byte]]
+    case StringType => classOf[UTF8String]
+    case CalendarIntervalType => classOf[CalendarInterval]
+    case _: StructType => classOf[InternalRow]
+    case _: ArrayType => classOf[ArrayData]
+    case _: MapType => classOf[MapData]
+    case udt: UserDefinedType[_] => javaClass(udt.sqlType)
+    case ObjectType(cls) => cls
+    case _ => classOf[Object]
   }
 
   /**

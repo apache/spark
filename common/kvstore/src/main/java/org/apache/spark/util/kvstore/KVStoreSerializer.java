@@ -54,11 +54,8 @@ public class KVStoreSerializer {
       return ((String) o).getBytes(UTF_8);
     } else {
       ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-      GZIPOutputStream out = new GZIPOutputStream(bytes);
-      try {
+      try (GZIPOutputStream out = new GZIPOutputStream(bytes)) {
         mapper.writeValue(out, o);
-      } finally {
-        out.close();
       }
       return bytes.toByteArray();
     }
@@ -69,11 +66,8 @@ public class KVStoreSerializer {
     if (klass.equals(String.class)) {
       return (T) new String(data, UTF_8);
     } else {
-      GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(data));
-      try {
+      try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(data))) {
         return mapper.readValue(in, klass);
-      } finally {
-        in.close();
       }
     }
   }

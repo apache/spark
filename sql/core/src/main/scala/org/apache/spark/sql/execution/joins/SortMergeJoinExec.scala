@@ -22,11 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport,
-ExternalAppendOnlyUnsafeRowArray, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
@@ -393,7 +394,7 @@ case class SortMergeJoinExec(
       input: Seq[Attribute]): Seq[ExprCode] = {
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    keys.map(BindReferences.bindReference(_, input).genCode(ctx))
+    bindReferences(keys, input).map(_.genCode(ctx))
   }
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
@@ -494,7 +495,7 @@ case class SortMergeJoinExec(
          |        $leftRow = null;
          |      } else {
          |        $matches.add((UnsafeRow) $rightRow);
-         |        $rightRow = null;;
+         |        $rightRow = null;
          |      }
          |    } while ($leftRow != null);
          |  }
@@ -522,7 +523,7 @@ case class SortMergeJoinExec(
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
         val code =
-          s"""
+          code"""
              |$isNull = $leftRow.isNullAt($i);
              |$value = $isNull ? $defaultValue : ($valueCode);
            """.stripMargin
@@ -531,11 +532,12 @@ case class SortMergeJoinExec(
              |boolean $isNull = false;
              |$javaType $value = $defaultValue;
            """.stripMargin
-        (ExprCode(code, isNull, value), leftVarsDecl)
+        (ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType)),
+          leftVarsDecl)
       } else {
-        val code = s"$value = $valueCode;"
+        val code = code"$value = $valueCode;"
         val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
-        (ExprCode(code, "false", value), leftVarsDecl)
+        (ExprCode(code, FalseLiteral, JavaCode.variable(value, a.dataType)), leftVarsDecl)
       }
     }.unzip
   }

@@ -179,6 +179,8 @@ class OrcDeserializer(
           i += 1
         }
 
+        // The ORC map will never have null or duplicated map keys, it's safe to create a
+        // ArrayBasedMapData directly here.
         updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
 
       case udt: UserDefinedType[_] => newWriter(udt.sqlType, updater)

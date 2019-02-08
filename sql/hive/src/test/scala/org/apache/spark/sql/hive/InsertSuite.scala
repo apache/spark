@@ -26,6 +26,7 @@ import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -747,6 +748,40 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           """.stripMargin)
 
         checkAnswer(spark.table("tab2"), Row("a", 3, "b"))
+      }
+    }
+  }
+
+  test("SPARK-26307: CTAS - INSERT a partitioned table using Hive serde") {
+    withTable("tab1") {
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        val df = Seq(("a", 100)).toDF("part", "id")
+        df.write.format("hive").partitionBy("part").mode("overwrite").saveAsTable("tab1")
+        df.write.format("hive").partitionBy("part").mode("append").saveAsTable("tab1")
+      }
+    }
+  }
+
+
+  Seq("LOCAL", "").foreach { local =>
+    Seq(true, false).foreach { caseSensitivity =>
+      Seq("orc", "parquet").foreach { format =>
+        test(s"SPARK-25389 INSERT OVERWRITE $local DIRECTORY ... STORED AS with duplicated names" +
+          s"(caseSensitivity=$caseSensitivity, format=$format)") {
+          withTempDir { dir =>
+            withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitivity") {
+              val m = intercept[AnalysisException] {
+                sql(
+                  s"""
+                     |INSERT OVERWRITE $local DIRECTORY '${dir.toURI}'
+                     |STORED AS $format
+                     |SELECT 'id', 'id2' ${if (caseSensitivity) "id" else "ID"}
+                   """.stripMargin)
+              }.getMessage
+              assert(m.contains("Found duplicate column(s) when inserting into"))
+            }
+          }
+        }
       }
     }
   }

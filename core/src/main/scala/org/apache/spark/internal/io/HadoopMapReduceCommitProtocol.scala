@@ -91,7 +91,7 @@ class HadoopMapReduceCommitProtocol(
   private def stagingDir = new Path(path, ".spark-staging-" + jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    val format = context.getOutputFormatClass.newInstance()
+    val format = context.getOutputFormatClass.getConstructor().newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
     format match {
       case c: Configurable => c.setConf(context.getConfiguration)
@@ -186,7 +186,17 @@ class HadoopMapReduceCommitProtocol(
         logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
         for (part <- partitionPaths) {
           val finalPartPath = new Path(path, part)
-          fs.delete(finalPartPath, true)
+          if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
+            // According to the official hadoop FileSystem API spec, delete op should assume
+            // the destination is no longer present regardless of return value, thus we do not
+            // need to double check if finalPartPath exists before rename.
+            // Also in our case, based on the spec, delete returns false only when finalPartPath
+            // does not exist. When this happens, we need to take action if parent of finalPartPath
+            // also does not exist(e.g. the scenario described on SPARK-23815), because
+            // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
+            // a parent that exists, otherwise we may get unexpected result on the rename.
+            fs.mkdirs(finalPartPath.getParent)
+          }
           fs.rename(new Path(stagingDir, part), finalPartPath)
         }
       }

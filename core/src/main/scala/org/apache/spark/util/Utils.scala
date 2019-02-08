@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.{Byte => JByte}
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
@@ -26,11 +27,11 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.GZIPInputStream
-import javax.net.ssl.HttpsURLConnection
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -44,6 +45,7 @@ import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.hash.HashCodes
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
@@ -56,8 +58,11 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.internal.config.Worker._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
@@ -79,6 +84,7 @@ private[spark] object Utils extends Logging {
   val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
+  @volatile private var cachedLocalDir: String = ""
 
   /**
    * Define a default value for driver memory here since this value is referenced across the code
@@ -89,52 +95,8 @@ private[spark] object Utils extends Logging {
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
-  /**
-   * The performance overhead of creating and logging strings for wide schemas can be large. To
-   * limit the impact, we bound the number of fields to include by default. This can be overridden
-   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv.
-   */
-  val DEFAULT_MAX_TO_STRING_FIELDS = 25
-
-  private def maxNumToStringFields = {
-    if (SparkEnv.get != null) {
-      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
-    } else {
-      DEFAULT_MAX_TO_STRING_FIELDS
-    }
-  }
-
-  /** Whether we have warned about plan string truncation yet. */
-  private val truncationWarningPrinted = new AtomicBoolean(false)
-
-  /**
-   * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
-   * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
-   *
-   * @return the trimmed and formatted string.
-   */
-  def truncatedString[T](
-      seq: Seq[T],
-      start: String,
-      sep: String,
-      end: String,
-      maxNumFields: Int = maxNumToStringFields): String = {
-    if (seq.length > maxNumFields) {
-      if (truncationWarningPrinted.compareAndSet(false, true)) {
-        logWarning(
-          "Truncated the string representation of a plan since it was too large. This " +
-          "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
-      }
-      val numFields = math.max(0, maxNumFields - 1)
-      seq.take(numFields).mkString(
-        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
-    } else {
-      seq.mkString(start, sep, end)
-    }
-  }
-
-  /** Shorthand for calling truncatedString() without start or end strings. */
-  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
+  /** Scheme used for files that are locally available on worker nodes in the cluster. */
+  val LOCAL_SCHEME = "local"
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -233,6 +195,19 @@ private[spark] object Utils extends Logging {
   def classForName(className: String): Class[_] = {
     Class.forName(className, true, getContextOrSparkClassLoader)
     // scalastyle:on classforname
+  }
+
+  /**
+   * Run a segment of code using a different context class loader in the current thread
+   */
+  def withContextClassLoader[T](ctxClassLoader: ClassLoader)(fn: => T): T = {
+    val oldClassLoader = Thread.currentThread().getContextClassLoader()
+    try {
+      Thread.currentThread().setContextClassLoader(ctxClassLoader)
+      fn
+    } finally {
+      Thread.currentThread().setContextClassLoader(oldClassLoader)
+    }
   }
 
   /**
@@ -431,7 +406,7 @@ private[spark] object Utils extends Logging {
     new URI("file:///" + rawFileName).getPath.substring(1)
   }
 
-    /**
+  /**
    * Download a file or directory to target directory. Supports fetching the file in a variety of
    * ways, including HTTP, Hadoop-compatible filesystems, and files on a standard filesystem, based
    * on the URL parameter. Fetching directories is only supported from Hadoop-compatible
@@ -458,7 +433,15 @@ private[spark] object Utils extends Logging {
     if (useCache && fetchCacheEnabled) {
       val cachedFileName = s"${url.hashCode}${timestamp}_cache"
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
-      val localDir = new File(getLocalDir(conf))
+      // Set the cachedLocalDir for the first time and re-use it later
+      if (cachedLocalDir.isEmpty) {
+        this.synchronized {
+          if (cachedLocalDir.isEmpty) {
+            cachedLocalDir = getLocalDir(conf)
+          }
+        }
+      }
+      val localDir = new File(cachedLocalDir)
       val lockFile = new File(localDir, lockFileName)
       val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
@@ -502,6 +485,14 @@ private[spark] object Utils extends Logging {
     }
 
     targetFile
+  }
+
+  /** Records the duration of running `body`. */
+  def timeTakenMs[T](body: => T): (T, Long) = {
+    val startTime = System.nanoTime()
+    val result = body
+    val endTime = System.nanoTime()
+    (result, math.max(NANOSECONDS.toMillis(endTime - startTime), 0))
   }
 
   /**
@@ -755,13 +746,17 @@ private[spark] object Utils extends Logging {
    *   - Otherwise, this will return java.io.tmpdir.
    *
    * Some of these configuration options might be lists of multiple paths, but this method will
-   * always return a single directory.
+   * always return a single directory. The return directory is chosen randomly from the array
+   * of directories it gets from getOrCreateLocalRootDirs.
    */
   def getLocalDir(conf: SparkConf): String = {
-    getOrCreateLocalRootDirs(conf).headOption.getOrElse {
+    val localRootDirs = getOrCreateLocalRootDirs(conf)
+    if (localRootDirs.isEmpty) {
       val configuredLocalDirs = getConfiguredLocalDirs(conf)
       throw new IOException(
         s"Failed to get a temp directory under [${configuredLocalDirs.mkString(",")}].")
+    } else {
+      localRootDirs(scala.util.Random.nextInt(localRootDirs.length))
     }
   }
 
@@ -797,27 +792,27 @@ private[spark] object Utils extends Logging {
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
-    val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+    val shuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
       // created the directories already, and that they are secured so that only the
       // user has access to them.
-      getYarnLocalDirs(conf).split(",")
+      randomizeInPlace(getYarnLocalDirs(conf).split(","))
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
-    } else if (conf.getenv("MESOS_DIRECTORY") != null && !shuffleServiceEnabled) {
+    } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
       // Mesos already creates a directory per Mesos task. Spark should use that directory
       // instead so all temporary files are automatically cleaned up when the Mesos task ends.
       // Note that we don't want this if the shuffle service is enabled because we want to
       // continue to serve shuffle files after the executors that wrote them have already exited.
-      Array(conf.getenv("MESOS_DIRECTORY"))
+      Array(conf.getenv("MESOS_SANDBOX"))
     } else {
-      if (conf.getenv("MESOS_DIRECTORY") != null && shuffleServiceEnabled) {
-        logInfo("MESOS_DIRECTORY available but not using provided Mesos sandbox because " +
-          "spark.shuffle.service.enabled is enabled.")
+      if (conf.getenv("MESOS_SANDBOX") != null && shuffleServiceEnabled) {
+        logInfo("MESOS_SANDBOX available but not using provided Mesos sandbox because " +
+          s"${config.SHUFFLE_SERVICE_ENABLED.key} is enabled.")
       }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
@@ -1048,7 +1043,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
    */
   def timeStringAsMs(str: String): Long = {
@@ -1103,41 +1098,41 @@ private[spark] object Utils extends Logging {
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of mebibytes.
    */
   def memoryStringToMb(str: String): Int = {
-    // Convert to bytes, rather than directly to MB, because when no units are specified the unit
+    // Convert to bytes, rather than directly to MiB, because when no units are specified the unit
     // is assumed to be bytes
     (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
   /**
-   * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in bytes to a human-readable string such as "4.0 MiB".
    */
   def bytesToString(size: Long): String = bytesToString(BigInt(size))
 
   def bytesToString(size: BigInt): String = {
-    val EB = 1L << 60
-    val PB = 1L << 50
-    val TB = 1L << 40
-    val GB = 1L << 30
-    val MB = 1L << 20
-    val KB = 1L << 10
+    val EiB = 1L << 60
+    val PiB = 1L << 50
+    val TiB = 1L << 40
+    val GiB = 1L << 30
+    val MiB = 1L << 20
+    val KiB = 1L << 10
 
-    if (size >= BigInt(1L << 11) * EB) {
+    if (size >= BigInt(1L << 11) * EiB) {
       // The number is too large, show it in scientific notation.
       BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
     } else {
       val (value, unit) = {
-        if (size >= 2 * EB) {
-          (BigDecimal(size) / EB, "EB")
-        } else if (size >= 2 * PB) {
-          (BigDecimal(size) / PB, "PB")
-        } else if (size >= 2 * TB) {
-          (BigDecimal(size) / TB, "TB")
-        } else if (size >= 2 * GB) {
-          (BigDecimal(size) / GB, "GB")
-        } else if (size >= 2 * MB) {
-          (BigDecimal(size) / MB, "MB")
-        } else if (size >= 2 * KB) {
-          (BigDecimal(size) / KB, "KB")
+        if (size >= 2 * EiB) {
+          (BigDecimal(size) / EiB, "EiB")
+        } else if (size >= 2 * PiB) {
+          (BigDecimal(size) / PiB, "PiB")
+        } else if (size >= 2 * TiB) {
+          (BigDecimal(size) / TiB, "TiB")
+        } else if (size >= 2 * GiB) {
+          (BigDecimal(size) / GiB, "GiB")
+        } else if (size >= 2 * MiB) {
+          (BigDecimal(size) / MiB, "MiB")
+        } else if (size >= 2 * KiB) {
+          (BigDecimal(size) / KiB, "KiB")
         } else {
           (BigDecimal(size), "B")
         }
@@ -1168,7 +1163,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a quantity in megabytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in megabytes to a human-readable string such as "4.0 MiB".
    */
   def megabytesToString(megabytes: Long): String = {
     bytesToString(megabytes * 1024L * 1024L)
@@ -1362,7 +1357,7 @@ private[spark] object Utils extends Logging {
         originalThrowable = cause
         try {
           logError("Aborting task", originalThrowable)
-          TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(originalThrowable)
+          TaskContext.get().markTaskFailed(originalThrowable)
           catchBlock
         } catch {
           case t: Throwable =>
@@ -1384,13 +1379,14 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  // A regular expression to match classes of the internal Spark API's
+  // that we want to skip when finding the call site of a method.
+  private val SPARK_CORE_CLASS_REGEX =
+    """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
+  private val SPARK_SQL_CLASS_REGEX = """^org\.apache\.spark\.sql.*""".r
+
   /** Default filtering function for finding call sites using `getCallSite`. */
   private def sparkInternalExclusionFunction(className: String): Boolean = {
-    // A regular expression to match classes of the internal Spark API's
-    // that we want to skip when finding the call site of a method.
-    val SPARK_CORE_CLASS_REGEX =
-      """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
-    val SPARK_SQL_CLASS_REGEX = """^org\.apache\.spark\.sql.*""".r
     val SCALA_CORE_CLASS_PREFIX = "scala"
     val isSparkClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined ||
       SPARK_SQL_CLASS_REGEX.findFirstIn(className).isDefined
@@ -1462,16 +1458,12 @@ private[spark] object Utils extends Logging {
     CallSite(shortForm, longForm)
   }
 
-  private val UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF =
-    "spark.worker.ui.compressedLogFileLengthCacheSize"
-  private val DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE = 100
   private var compressedLogFileLengthCache: LoadingCache[String, java.lang.Long] = null
   private def getCompressedLogFileLengthCache(
       sparkConf: SparkConf): LoadingCache[String, java.lang.Long] = this.synchronized {
     if (compressedLogFileLengthCache == null) {
-      val compressedLogFileLengthCacheSize = sparkConf.getInt(
-        UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF,
-        DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE)
+      val compressedLogFileLengthCacheSize = sparkConf.get(
+        UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF)
       compressedLogFileLengthCache = CacheBuilder.newBuilder()
         .maximumSize(compressedLogFileLengthCacheSize)
         .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
@@ -1818,7 +1810,7 @@ private[spark] object Utils extends Logging {
 
   /** Return the class name of the given object, removing all dollar signs */
   def getFormattedClassName(obj: AnyRef): String = {
-    obj.getClass.getSimpleName.replace("$", "")
+    getSimpleName(obj.getClass).replace("$", "")
   }
 
   /**
@@ -1854,7 +1846,7 @@ private[spark] object Utils extends Logging {
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
-    sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+    sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
   }
 
   /**
@@ -2026,6 +2018,30 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Implements the same logic as JDK `java.lang.String#trim` by removing leading and trailing
+   * non-printable characters less or equal to '\u0020' (SPACE) but preserves natural line
+   * delimiters according to [[java.util.Properties]] load method. The natural line delimiters are
+   * removed by JDK during load. Therefore any remaining ones have been specifically provided and
+   * escaped by the user, and must not be ignored
+   *
+   * @param str
+   * @return the trimmed value of str
+   */
+  private[util] def trimExceptCRLF(str: String): String = {
+    val nonSpaceOrNaturalLineDelimiter: Char => Boolean = { ch =>
+      ch > ' ' || ch == '\r' || ch == '\n'
+    }
+
+    val firstPos = str.indexWhere(nonSpaceOrNaturalLineDelimiter)
+    val lastPos = str.lastIndexWhere(nonSpaceOrNaturalLineDelimiter)
+    if (firstPos >= 0 && lastPos >= 0) {
+      str.substring(firstPos, lastPos + 1)
+    } else {
+      ""
+    }
+  }
+
   /** Load properties present in the given file. */
   def getPropertiesFromFile(filename: String): Map[String, String] = {
     val file = new File(filename)
@@ -2036,8 +2052,10 @@ private[spark] object Utils extends Logging {
     try {
       val properties = new Properties()
       properties.load(inReader)
-      properties.stringPropertyNames().asScala.map(
-        k => (k, properties.getProperty(k).trim)).toMap
+      properties.stringPropertyNames().asScala
+        .map { k => (k, trimExceptCRLF(properties.getProperty(k))) }
+        .toMap
+
     } catch {
       case e: IOException =>
         throw new SparkException(s"Failed when loading Spark properties from $filename", e)
@@ -2156,7 +2174,7 @@ private[spark] object Utils extends Logging {
    */
   def portMaxRetries(conf: SparkConf): Int = {
     val maxRetries = conf.getOption("spark.port.maxRetries").map(_.toInt)
-    if (conf.contains("spark.testing")) {
+    if (conf.contains(IS_TESTING)) {
       // Set a higher number of retries for tests...
       maxRetries.getOrElse(100)
     } else {
@@ -2212,7 +2230,7 @@ private[spark] object Utils extends Logging {
               s"${e.getMessage}: Service$serviceString failed after " +
                 s"$maxRetries retries (on a random free port)! " +
                 s"Consider explicitly setting the appropriate binding address for " +
-                s"the service$serviceString (for example spark.driver.bindAddress " +
+                s"the service$serviceString (for example ${DRIVER_BIND_ADDRESS.key} " +
                 s"for SparkDriver) to the correct binding address."
             } else {
               s"${e.getMessage}: Service$serviceString failed after " +
@@ -2264,7 +2282,10 @@ private[spark] object Utils extends Logging {
    * configure a new log4j level
    */
   def setLogLevel(l: org.apache.log4j.Level) {
-    org.apache.log4j.Logger.getRootLogger().setLevel(l)
+    val rootLogger = org.apache.log4j.Logger.getRootLogger()
+    rootLogger.setLevel(l)
+    // Setting threshold to null as rootLevel will define log level for spark-shell
+    Logging.sparkShellThresholdLevel = null
   }
 
   /**
@@ -2302,16 +2323,20 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the value of a config either through the SparkConf or the Hadoop configuration
-   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
-   * if the key is not set in the Hadoop configuration.
+   * Return the value of a config either through the SparkConf or the Hadoop configuration.
+   * We Check whether the key is set in the SparkConf before look at any Hadoop configuration.
+   * If the key is set in SparkConf, no matter whether it is running on YARN or not,
+   * gets the value from SparkConf.
+   * Only when the key is not set in SparkConf and running on YARN,
+   * gets the value from Hadoop configuration.
    */
   def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
-    val sparkValue = conf.get(key, default)
-    if (conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") {
-      new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(conf)).get(key, sparkValue)
+    if (conf.contains(key)) {
+      conf.get(key, default)
+    } else if (conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") {
+      new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(conf)).get(key, default)
     } else {
-      sparkValue
+      default
     }
   }
 
@@ -2358,11 +2383,11 @@ private[spark] object Utils extends Logging {
 
   // Returns the groups to which the current user belongs.
   def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
-    val groupProviderClassName = sparkConf.get("spark.user.groups.mapping",
-      "org.apache.spark.security.ShellBasedGroupsMappingProvider")
+    val groupProviderClassName = sparkConf.get(USER_GROUPS_MAPPING)
     if (groupProviderClassName != "") {
       try {
-        val groupMappingServiceProvider = classForName(groupProviderClassName).newInstance.
+        val groupMappingServiceProvider = classForName(groupProviderClassName).
+          getConstructor().newInstance().
           asInstanceOf[org.apache.spark.security.GroupMappingServiceProvider]
         val currentUserGroups = groupMappingServiceProvider.getGroups(username)
         return currentUserGroups
@@ -2438,9 +2463,9 @@ private[spark] object Utils extends Logging {
    * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+    val dynamicAllocationEnabled = conf.get(DYN_ALLOCATION_ENABLED)
     dynamicAllocationEnabled &&
-      (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
+      (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
   }
 
   /**
@@ -2505,8 +2530,7 @@ private[spark] object Utils extends Logging {
    * has its own mechanism to distribute jars.
    */
   def getUserJars(conf: SparkConf): Seq[String] = {
-    val sparkJars = conf.getOption("spark.jars")
-    sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+    conf.get(JARS).filter(_.nonEmpty)
   }
 
   /**
@@ -2668,7 +2692,7 @@ private[spark] object Utils extends Logging {
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
-    val resolvedURL = masterScheme.toLowerCase match {
+    val resolvedURL = masterScheme.toLowerCase(Locale.ROOT) match {
       case "https" =>
         masterWithoutK8sPrefix
       case "http" =>
@@ -2684,6 +2708,133 @@ private[spark] object Utils extends Logging {
     }
 
     s"k8s://$resolvedURL"
+  }
+
+  /**
+   * Replaces all the {{EXECUTOR_ID}} occurrences with the Executor Id
+   * and {{APP_ID}} occurrences with the App Id.
+   */
+  def substituteAppNExecIds(opt: String, appId: String, execId: String): String = {
+    opt.replace("{{APP_ID}}", appId).replace("{{EXECUTOR_ID}}", execId)
+  }
+
+  /**
+   * Replaces all the {{APP_ID}} occurrences with the App Id.
+   */
+  def substituteAppId(opt: String, appId: String): String = {
+    opt.replace("{{APP_ID}}", appId)
+  }
+
+  def createSecret(conf: SparkConf): String = {
+    val bits = conf.get(AUTH_SECRET_BIT_LENGTH)
+    val rnd = new SecureRandom()
+    val secretBytes = new Array[Byte](bits / JByte.SIZE)
+    rnd.nextBytes(secretBytes)
+    HashCodes.fromBytes(secretBytes).toString()
+  }
+
+  /**
+   * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
+   * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
+   */
+  def getSimpleName(cls: Class[_]): String = {
+    try {
+      cls.getSimpleName
+    } catch {
+      // TODO: the value returned here isn't even quite right; it returns simple names
+      // like UtilsSuite$MalformedClassObject$MalformedClass instead of MalformedClass
+      // The exact value may not matter much as it's used in log statements
+      case _: InternalError =>
+        stripDollars(stripPackages(cls.getName))
+    }
+  }
+
+  /**
+   * Remove the packages from full qualified class name
+   */
+  private def stripPackages(fullyQualifiedName: String): String = {
+    fullyQualifiedName.split("\\.").takeRight(1)(0)
+  }
+
+  /**
+   * Remove trailing dollar signs from qualified class name,
+   * and return the trailing part after the last dollar sign in the middle
+   */
+  private def stripDollars(s: String): String = {
+    val lastDollarIndex = s.lastIndexOf('$')
+    if (lastDollarIndex < s.length - 1) {
+      // The last char is not a dollar sign
+      if (lastDollarIndex == -1 || !s.contains("$iw")) {
+        // The name does not have dollar sign or is not an intepreter
+        // generated class, so we should return the full string
+        s
+      } else {
+        // The class name is intepreter generated,
+        // return the part after the last dollar sign
+        // This is the same behavior as getClass.getSimpleName
+        s.substring(lastDollarIndex + 1)
+      }
+    }
+    else {
+      // The last char is a dollar sign
+      // Find last non-dollar char
+      val lastNonDollarChar = s.reverse.find(_ != '$')
+      lastNonDollarChar match {
+        case None => s
+        case Some(c) =>
+          val lastNonDollarIndex = s.lastIndexOf(c)
+          if (lastNonDollarIndex == -1) {
+            s
+          } else {
+            // Strip the trailing dollar signs
+            // Invoke stripDollars again to get the simple name
+            stripDollars(s.substring(0, lastNonDollarIndex + 1))
+          }
+      }
+    }
+  }
+
+  /**
+   * Regular expression matching full width characters.
+   *
+   * Looked at all the 0x0000-0xFFFF characters (unicode) and showed them under Xshell.
+   * Found all the full width characters, then get the regular expression.
+   */
+  private val fullWidthRegex = ("""[""" +
+    // scalastyle:off nonascii
+    """\u1100-\u115F""" +
+    """\u2E80-\uA4CF""" +
+    """\uAC00-\uD7A3""" +
+    """\uF900-\uFAFF""" +
+    """\uFE10-\uFE19""" +
+    """\uFE30-\uFE6F""" +
+    """\uFF00-\uFF60""" +
+    """\uFFE0-\uFFE6""" +
+    // scalastyle:on nonascii
+    """]""").r
+
+  /**
+   * Return the number of half widths in a given string. Note that a full width character
+   * occupies two half widths.
+   *
+   * For a string consisting of 1 million characters, the execution of this method requires
+   * about 50ms.
+   */
+  def stringHalfWidth(str: String): Int = {
+    if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
+  }
+
+  def sanitizeDirName(str: String): String = {
+    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
+  }
+
+  def isClientMode(conf: SparkConf): Boolean = {
+    "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
+  }
+
+  /** Returns whether the URI is a "local:" URI. */
+  def isLocalUri(uri: String): Boolean = {
+    uri.startsWith(s"$LOCAL_SCHEME:")
   }
 }
 

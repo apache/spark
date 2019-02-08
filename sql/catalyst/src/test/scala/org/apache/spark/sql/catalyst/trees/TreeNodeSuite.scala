@@ -29,14 +29,14 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource, JarResource}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
-import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, Metadata, NullType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
@@ -564,7 +564,7 @@ class TreeNodeSuite extends SparkFunSuite {
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {
-    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr))
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr), true :: Nil)
     // Should not throw java.lang.StackOverflowError
     udf.toJSON
   }
@@ -573,5 +573,26 @@ class TreeNodeSuite extends SparkFunSuite {
     val left = JsonMethods.parse(leftJson)
     val right = JsonMethods.parse(rightJson)
     assert(left == right)
+  }
+
+  test("transform works on stream of children") {
+    val before = Coalesce(Stream(Literal(1), Literal(2)))
+    // Note it is a bit tricky to exhibit the broken behavior. Basically we want to create the
+    // situation in which the TreeNode.mapChildren function's change detection is not triggered. A
+    // stream's first element is typically materialized, so in order to not trip the TreeNode change
+    // detection logic, we should not change the first element in the sequence.
+    val result = before.transform {
+      case Literal(v: Int, IntegerType) if v != 1 =>
+        Literal(v + 1, IntegerType)
+    }
+    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    assert(result === expected)
+  }
+
+  test("withNewChildren on stream of children") {
+    val before = Coalesce(Stream(Literal(1), Literal(2)))
+    val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
+    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    assert(result === expected)
   }
 }
