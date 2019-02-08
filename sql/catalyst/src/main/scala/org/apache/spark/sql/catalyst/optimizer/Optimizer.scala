@@ -566,12 +566,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
       val usedRefs = p.references
       val prunedSerializer = s.serializer.filter(usedRefs.contains)
 
-      val fields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
+      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
 
-      if (SQLConf.get.serializerNestedSchemaPruningEnabled && fields.nonEmpty) {
+      if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
         // Prunes nested fields in serialzers.
         val prunedSchema = SchemaPruning.pruneDataSchema(
-          StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), fields)
+          StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
         val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
           SchemaPruning.pruneSerializer(serializer, prunedSchema(idx).dataType)
         }

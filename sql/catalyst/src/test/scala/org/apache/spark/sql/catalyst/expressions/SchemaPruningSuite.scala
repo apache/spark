@@ -25,32 +25,26 @@ import org.apache.spark.sql.types._
 class SchemaPruningSuite extends SparkFunSuite {
 
   test("collect struct types") {
-    val datatypes = Seq(
+    val dataTypes = Seq(
       IntegerType,
       ArrayType(IntegerType),
       StructType.fromDDL("a int, b int"),
       ArrayType(StructType.fromDDL("a int, b int, c string")),
-      StructType(
-        StructField("a", StructType.fromDDL("a int, b int")) ::
-          StructField("b", IntegerType) :: Nil)
+      StructType.fromDDL("a struct<a:int, b:int>, b int")
     )
 
-    val expected = Seq(
+    val expectedTypes = Seq(
       Seq.empty[StructType],
       Seq.empty[StructType],
       Seq(StructType.fromDDL("a int, b int")),
       Seq(StructType.fromDDL("a int, b int, c string")),
-      Seq(
-        StructType(
-          StructField("a", StructType.fromDDL("a int, b int")) ::
-            StructField("b", IntegerType) :: Nil),
+      Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
         StructType.fromDDL("a int, b int"))
-
     )
 
-    datatypes.zipWithIndex.foreach { case (dt, idx) =>
+    dataTypes.zipWithIndex.foreach { case (dt, idx) =>
       val structs = SchemaPruning.collectStructType(dt, ArrayBuffer.empty[StructType])
-      assert(structs === expected(idx))
+      assert(structs === expectedTypes(idx))
     }
   }
 }

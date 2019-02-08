@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, St
  * Parquet format. In Spark SQL, a root-level Parquet column corresponds to a
  * SQL column, and a nested Parquet column corresponds to a [[StructField]].
  */
-private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
+object ParquetSchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
   override def apply(plan: LogicalPlan): LogicalPlan =

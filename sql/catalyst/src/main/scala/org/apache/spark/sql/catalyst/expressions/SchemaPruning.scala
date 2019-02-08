@@ -22,12 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-private[sql] object SchemaPruning {
+object SchemaPruning {
 
   /**
    * Collects all struct types from given data type object, recursively. Supports struct and array
    * types for now.
-   * TODO: support map type.
+   * TODO(SPARK-26847): support map type.
    */
   def collectStructType(dt: DataType, structs: ArrayBuffer[StructType]): ArrayBuffer[StructType] = {
     dt match {
@@ -46,7 +46,7 @@ private[sql] object SchemaPruning {
    * given a serializer creating struct(a int, b int) and pruned data type struct(a int),
    * this method returns pruned serializer creating struct(a int). For now it supports to
    * prune nested fields in struct and array of struct.
-   * TODO: support to prune nested fields in key and value of map type.
+   * TODO(SPARK-26847): support to prune nested fields in key and value of map type.
    */
   def pruneSerializer(
       serializer: NamedExpression,
@@ -88,11 +88,12 @@ private[sql] object SchemaPruning {
   }
 
   /**
-   * Filters the schema from the given file by the requested fields.
-   * Schema field ordering from the file is preserved.
+   * Filters the schema by the requested fields. For example, if the schema is struct<a:int, b:int>,
+   * and given requested field are "a", the field "b" is pruned in the returned schema.
+   * Note that schema field ordering at original schema is still preserved in pruned schema.
    */
   def pruneDataSchema(
-      fileDataSchema: StructType,
+      dataSchema: StructType,
       requestedRootFields: Seq[RootField]): StructType = {
     // Merge the requested root fields into a single schema. Note the ordering of the fields
     // in the resulting schema may differ from their ordering in the logical relation's
@@ -100,12 +101,12 @@ private[sql] object SchemaPruning {
     val mergedSchema = requestedRootFields
       .map { case root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
-    val dataSchemaFieldNames = fileDataSchema.fieldNames.toSet
+    val dataSchemaFieldNames = dataSchema.fieldNames.toSet
     val mergedDataSchema =
       StructType(mergedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
-    sortLeftFieldsByRight(mergedDataSchema, fileDataSchema).asInstanceOf[StructType]
+    sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
   }
 
   /**
@@ -114,14 +115,14 @@ private[sql] object SchemaPruning {
    * right, recursively. That is, left is a "subschema" of right, ignoring order of
    * fields.
    */
-  def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
+  private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
         ArrayType(
           sortLeftFieldsByRight(leftElementType, rightElementType),
           containsNull)
       case (MapType(leftKeyType, leftValueType, containsNull),
-      MapType(rightKeyType, rightValueType, _)) =>
+          MapType(rightKeyType, rightValueType, _)) =>
         MapType(
           sortLeftFieldsByRight(leftKeyType, rightKeyType),
           sortLeftFieldsByRight(leftValueType, rightValueType),
@@ -139,9 +140,10 @@ private[sql] object SchemaPruning {
     }
 
   /**
-   * Returns the set of fields from the Parquet file that the query plan needs.
+   * Returns the set of fields from projection and filtering predicates that the query plan needs.
    */
-  def identifyRootFields(projects: Seq[NamedExpression],
+  def identifyRootFields(
+      projects: Seq[NamedExpression],
       filters: Seq[Expression]): Seq[RootField] = {
     val projectionRootFields = projects.flatMap(getRootFields)
     val filterRootFields = filters.flatMap(getRootFields)
@@ -182,7 +184,7 @@ private[sql] object SchemaPruning {
    * When expr is an [[Attribute]], construct a field around it and indicate that that
    * field was derived from an attribute.
    */
-  def getRootFields(expr: Expression): Seq[RootField] = {
+  private def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil

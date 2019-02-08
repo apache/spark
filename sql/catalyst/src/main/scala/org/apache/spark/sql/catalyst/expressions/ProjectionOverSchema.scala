@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
  * are adjusted to fit the schema. All other expressions are left as-is. This
  * class is motivated by columnar nested schema pruning.
  */
-private[sql] case class ProjectionOverSchema(schema: StructType) {
+case class ProjectionOverSchema(schema: StructType) {
   private val fieldNames = schema.fieldNames.toSet
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)

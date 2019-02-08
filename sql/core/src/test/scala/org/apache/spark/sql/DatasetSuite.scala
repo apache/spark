@@ -1681,7 +1681,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
 
-  test("SPARK-26837:Prune nested serializers") {
+  test("Prune nested serializers") {
     def testSerializer(df: DataFrame, structFields: Seq[Seq[String]]): Unit = {
       val serializer = df.queryExecution.optimizedPlan.collect {
         case s: SerializeFromObject => s
