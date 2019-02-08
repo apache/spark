@@ -81,6 +81,13 @@ class Evaluator(Params):
         """
         return True
 
+    def applyAbsoluteTransform(self):
+        """
+        Indicates whether the metric returned by :py:meth:`evaluate` should be transformed
+        to non-negative values (True) prior to testing for minimization or maximization,
+        or left unchanged (False, default). 
+        """
+        return False
 
 @inherit_doc
 class JavaEvaluator(JavaParams, Evaluator):
