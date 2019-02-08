@@ -43,7 +43,6 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
   private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
-  private final String SPARK_NETWORK_IO_CONSOLIDATEBUFS_THRESHOLD_KEY;
 
   private final ConfigProvider conf;
 
@@ -67,7 +66,6 @@ public class TransportConf {
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
     SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
-    SPARK_NETWORK_IO_CONSOLIDATEBUFS_THRESHOLD_KEY = getConfKey("io.consolidateBufsThreshold");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -94,23 +92,6 @@ public class TransportConf {
   /** If true, we will prefer allocating off-heap byte buffers within Netty. */
   public boolean preferDirectBufs() {
     return conf.getBoolean(SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY, true);
-  }
-
-  /** The threshold for consolidation, it is derived upon the memoryOverhead in yarn mode. */
-  public long consolidateBufsThreshold() {
-    boolean isDriver = conf.get("spark.executor.id").equals("driver");
-    final long MEMORY_OVERHEAD_MIN = 384L;
-    final double MEMORY_OVERHEAD_FACTOR = 0.1;
-    final double SHUFFLE_MEMORY_OVERHEAD_FACTOR = MEMORY_OVERHEAD_FACTOR * 0.6;
-    final double SHUFFLE_MEMORY_OVERHEAD_SAFE_FACTOR = SHUFFLE_MEMORY_OVERHEAD_FACTOR * 0.5;
-    long memory;
-    if (isDriver) {
-      memory = Math.max(JavaUtils.byteStringAsBytes(conf.get("spark.driver.memory")), MEMORY_OVERHEAD_MIN);
-    } else {
-      memory = Math.max(JavaUtils.byteStringAsBytes(conf.get("spark.executor.memory")), MEMORY_OVERHEAD_MIN);
-    }
-    long defaultConsolidateBufsThreshold = (long)(memory * SHUFFLE_MEMORY_OVERHEAD_SAFE_FACTOR);
-    return conf.getLong(SPARK_NETWORK_IO_CONSOLIDATEBUFS_THRESHOLD_KEY, defaultConsolidateBufsThreshold);
   }
 
   /** Connect timeout in milliseconds. Default 120 secs. */

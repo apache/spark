@@ -77,33 +77,40 @@ public class TransportFrameDecoderSuite {
   }
 
   @Test
-  public void testConsolidationPerf() {
-    TransportFrameDecoder decoder = new TransportFrameDecoder(300 * 1024 * 1024);
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-    List<ByteBuf> retained = new ArrayList<>();
-    when(ctx.fireChannelRead(any())).thenAnswer(in -> {
-      ByteBuf buf = (ByteBuf) in.getArguments()[0];
-      retained.add(buf);
-      return null;
-    });
+  public void testConsolidationPerf() throws Exception {
+    long[] testingConsolidateThresholds = new long[] { 1024 * 1024, 5 * 1024 * 1024, 10 * 1024 * 1024, 20 * 1024 * 1024,
+        30 * 1024 * 1024, 50 * 1024 * 1024, 64 * 1024 * 1024, 100 * 1024 * 1024, 300 * 1024 * 1024, 500 * 1024 * 1024, Long.MAX_VALUE };
+    for (long threshold : testingConsolidateThresholds) {
+      TransportFrameDecoder decoder = new TransportFrameDecoder(threshold);
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      List<ByteBuf> retained = new ArrayList<>();
+      when(ctx.fireChannelRead(any())).thenAnswer(in -> {
+        ByteBuf buf = (ByteBuf) in.getArguments()[0];
+        retained.add(buf);
+        return null;
+      });
 
-    ByteBuf buf = Unpooled.buffer(8);
-    try {
-      buf.writeLong(8 + 1024 * 1024 * 1000);
-      decoder.channelRead(ctx, buf);
-      for (int i = 0; i < 1000; i++) {
-        buf = Unpooled.buffer(1024 * 1024 * 2);
-        ByteBuf writtenBuf = Unpooled.buffer(1024 * 1024).writerIndex(1024 * 1024);
-        buf.writeBytes(writtenBuf);
-        writtenBuf.release();
+      try {
+        long start = System.currentTimeMillis();
+        ByteBuf buf = Unpooled.buffer(8);
+        buf.writeLong(8 + 1024 * 1024 * 1000);
         decoder.channelRead(ctx, buf);
-      }
-      assertEquals(1, retained.size());
-      assertEquals(1024 * 1024 * 1000, retained.get(0).capacity());
-      System.out.println("consolidated " + decoder.consolidatedCount + " times cost " + decoder.consolidatedTotalTime + " milis");
-    } catch (Exception e) {
-      if (buf != null) {
-        release(buf);
+        for (int i = 0; i < 1000; i++) {
+          buf = Unpooled.buffer(1024 * 1024 * 2);
+          ByteBuf writtenBuf = Unpooled.buffer(1024 * 1024).writerIndex(1024 * 1024);
+          buf.writeBytes(writtenBuf);
+          writtenBuf.release();
+          decoder.channelRead(ctx, buf);
+        }
+        assertEquals(1, retained.size());
+        assertEquals(1024 * 1024 * 1000, retained.get(0).capacity());
+        long costTime = System.currentTimeMillis() - start;
+        System.out.println("Build frame buf with consolidation threshold " + threshold
+            + " cost " + costTime + " milis");
+      } finally {
+        for (ByteBuf buf : retained) {
+          release(buf);
+        }
       }
     }
   }

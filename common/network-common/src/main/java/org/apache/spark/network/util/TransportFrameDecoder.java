@@ -19,6 +19,7 @@ package org.apache.spark.network.util;
 
 import java.util.LinkedList;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
@@ -48,24 +49,27 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
   private static final int LENGTH_SIZE = 8;
   private static final int MAX_FRAME_SIZE = Integer.MAX_VALUE;
   private static final int UNKNOWN_FRAME_SIZE = -1;
+  private static final long DEFAULT_CONSOLIDATE_FRAME_BUFS_DELTA_THRESHOLD = 20 * 1024 * 1024;
 
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
   private final ByteBuf frameLenBuf = Unpooled.buffer(LENGTH_SIZE, LENGTH_SIZE);
+  private CompositeByteBuf frameBuf = null;
+  private long consolidateFrameBufsDeltaThreshold;
+  private long consolidatedFrameBufSize = 0;
+  private int consolidatedNumComponents = 0;
 
   private long totalSize = 0;
   private long nextFrameSize = UNKNOWN_FRAME_SIZE;
+  private int frameRemainingBytes = UNKNOWN_FRAME_SIZE;
   private volatile Interceptor interceptor;
 
-  private long consolidateBufsThreshold = Long.MAX_VALUE;
-  long consolidatedCount = 0L;
-  long consolidatedTotalTime = 0L;
+  public TransportFrameDecoder() {
+    this(DEFAULT_CONSOLIDATE_FRAME_BUFS_DELTA_THRESHOLD);
+  }
 
-  public TransportFrameDecoder() {}
-
-  public TransportFrameDecoder(long consolidateBufsThreshold) {
-    if (consolidateBufsThreshold > 0) {
-      this.consolidateBufsThreshold = consolidateBufsThreshold;
-    }
+  @VisibleForTesting
+  TransportFrameDecoder(long consolidateFrameBufsDeltaThreshold) {
+    this.consolidateFrameBufsDeltaThreshold = consolidateFrameBufsDeltaThreshold;
   }
 
   @Override
@@ -135,41 +139,54 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
   private ByteBuf decodeNext() {
     long frameSize = decodeFrameSize();
-    if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
+    if (frameSize == UNKNOWN_FRAME_SIZE) {
       return null;
     }
 
-    // Reset size for next frame.
-    nextFrameSize = UNKNOWN_FRAME_SIZE;
+    if (frameBuf == null) {
+      Preconditions.checkArgument(frameSize < MAX_FRAME_SIZE,
+          "Too large frame: %s", frameSize);
+      Preconditions.checkArgument(frameSize > 0,
+          "Frame length should be positive: %s", frameSize);
+      frameRemainingBytes = (int) frameSize;
 
-    Preconditions.checkArgument(frameSize < MAX_FRAME_SIZE, "Too large frame: %s", frameSize);
-    Preconditions.checkArgument(frameSize > 0, "Frame length should be positive: %s", frameSize);
-
-    // If the first buffer holds the entire frame, return it.
-    int remaining = (int) frameSize;
-    if (buffers.getFirst().readableBytes() >= remaining) {
-      return nextBufferForFrame(remaining);
-    }
-
-    // Otherwise, create a composite buffer.
-    CompositeByteBuf frame = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
-    long lastConsolidatedCapacity = 0L;
-    while (remaining > 0) {
-      ByteBuf next = nextBufferForFrame(remaining);
-      remaining -= next.readableBytes();
-      frame.addComponent(next).writerIndex(frame.writerIndex() + next.readableBytes());
-      if (frame.capacity() - lastConsolidatedCapacity >= consolidateBufsThreshold) {
-        // Because the bytebuf created is far less than it's capacity in most cases,
-        // we can reduce memory consumption by consolidation
-        long start = System.currentTimeMillis();
-        frame.consolidate();
-        consolidatedCount += 1;
-        consolidatedTotalTime += System.currentTimeMillis() - start;
-        lastConsolidatedCapacity = frame.capacity();
+      // If buffers is empty, then return immediately for more input data. Otherwise, if the
+      // first buffer holds the entire frame, we attempt to build frame with it and return.
+      // Other cases, create a composite buffer to manage all the buffers.
+      if (buffers.isEmpty()) {
+        return null;
+      } else if (buffers.getFirst().readableBytes() >= frameRemainingBytes) {
+        // Reset buf and size for next frame.
+        frameBuf = null;
+        nextFrameSize = UNKNOWN_FRAME_SIZE;
+        return nextBufferForFrame(frameRemainingBytes);
+      } else {
+        frameBuf = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
       }
     }
-    assert remaining == 0;
-    return frame;
+
+    while (frameRemainingBytes > 0 && !buffers.isEmpty()) {
+      ByteBuf next = nextBufferForFrame(frameRemainingBytes);
+      frameRemainingBytes -= next.readableBytes();
+      frameBuf.addComponent(next).writerIndex(frameBuf.writerIndex() + next.readableBytes());
+    }
+    // If the delta size of frameBuf exceeds the threshold, then we do consolidation
+    // to reduce memory consumption.
+    if (frameBuf.capacity() - consolidatedFrameBufSize > consolidateFrameBufsDeltaThreshold) {
+      int newNumComponents = frameBuf.numComponents() - consolidatedNumComponents;
+      frameBuf.consolidate(consolidatedNumComponents, newNumComponents);
+      consolidatedFrameBufSize = frameBuf.capacity();
+      consolidatedNumComponents = frameBuf.numComponents();
+    }
+    if (frameRemainingBytes > 0) {
+      return null;
+    }
+
+    // Reset buf and size for next frame.
+    ByteBuf frameBufCopy = frameBuf.duplicate();
+    frameBuf = null;
+    nextFrameSize = UNKNOWN_FRAME_SIZE;
+    return frameBufCopy;
   }
 
   /**
