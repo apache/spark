@@ -228,7 +228,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
     val topics = mutable.ArrayBuffer[String]()
     // Track topics that have been deleted
     val deletedTopics = mutable.Set[String]()
-    while (System.nanoTime() - testTimeNs < startTimeNs) {
+    while (System.nanoTime() - startTimeNs < testTimeNs) {
       Random.nextInt(10) match {
         case 0 => // Create a new topic
           val topic = newTopic()
