@@ -124,6 +124,16 @@ private[kafka010] class KafkaOffsetReader(
     partitions.asScala.toSet
   }
 
+  def fetchOffsetsByTime(times: Map[TopicPartition, Long]):
+      Map[TopicPartition, Long] = runUninterruptibly {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+
+    consumer.offsetsForTimes(times.map{case (k, v) => k -> long2Long(v)}.asJava)
+      .asScala.map{case (k, v) =>
+        k -> (if (v != null) Long2long(v.offset()) else KafkaOffsetReader.EMPTY_OFFSET)
+    }.toMap
+  }
+
   /**
    * Resolves the specific offsets based on Kafka seek positions.
    * This method resolves offset value -1 to the latest and -2 to the
@@ -396,6 +406,8 @@ private[kafka010] class KafkaOffsetReader(
 }
 
 private[kafka010] object KafkaOffsetReader {
+  // offsets are not instances of Optional, we need special state for None
+  val EMPTY_OFFSET: Long = -100L
 
   def kafkaSchema: StructType = StructType(Seq(
     StructField("key", BinaryType),

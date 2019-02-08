@@ -237,6 +237,16 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     }
   }
 
+  def sendMessagesOverPartitions(topic: String, msgs: Range,
+      partitionCount: Int, timestamp: Int) : Unit = {
+    val elementsCount = math.ceil(msgs.size.asInstanceOf[Double] / partitionCount).toInt
+    val msgsPartitioned = msgs.grouped(elementsCount).toList
+    msgsPartitioned.zipWithIndex.foreach{ case(msgPerPartition, partitionIndex) =>
+      sendMessages(topic, msgPerPartition.map(_.toString).toArray,
+        Some(partitionIndex), Some(timestamp))
+    }
+  }
+
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
     sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
@@ -257,17 +267,22 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   def sendMessages(
       topic: String,
       messages: Array[String],
-      partition: Option[Int]): Seq[(String, RecordMetadata)] = {
+      partition: Option[Int],
+      timestamp: Option[Long] = None): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
+      val timestampJava: java.lang.Long = timestamp match {
+        case Some(ts) => ts
+        case _ => null
+      }
       messages.map { m =>
         val record = partition match {
-          case Some(p) => new ProducerRecord[String, String](topic, p, null, m)
-          case None => new ProducerRecord[String, String](topic, m)
+          case Some(p) => new ProducerRecord[String, String](topic, p, timestampJava, null, m)
+          case None => new ProducerRecord[String, String](topic, null, timestampJava, null, m)
         }
         val metadata =
           producer.send(record).get(10, TimeUnit.SECONDS)
-          logInfo(s"\tSent $m to partition ${metadata.partition}, offset ${metadata.offset}")
+        logInfo(s"\tSent $m to partition ${metadata.partition}, offset ${metadata.offset}")
         (m, metadata)
       }
     } finally {

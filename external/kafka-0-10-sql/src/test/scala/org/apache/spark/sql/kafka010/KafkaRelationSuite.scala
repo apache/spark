@@ -20,9 +20,6 @@ package org.apache.spark.sql.kafka010
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
-import scala.util.Random
-
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
@@ -44,6 +41,17 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
   }
 
+  private def buildOffsetRestriction(topic: String, offsetMap: Map[Int, Long]) = {
+    val startPartitionOffsets = offsetMap.map{case(k, v) => new TopicPartition(topic, k) -> v }
+    JsonUtils.partitionOffsets(startPartitionOffsets)
+  }
+
+  private def buildDDLOptions(topic: String, start: Map[Int, Long], end: Map[Int, Long]) = {
+    val startingOffsets: String = buildOffsetRestriction(topic, start)
+    val endingOffsets: String = buildOffsetRestriction(topic, end)
+    Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets)
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     testUtils = new KafkaTestUtils
@@ -51,12 +59,9 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
   }
 
   override def afterAll(): Unit = {
-    try {
-      if (testUtils != null) {
-        testUtils.teardown()
-        testUtils = null
-      }
-    } finally {
+    if (testUtils != null) {
+      testUtils.teardown()
+      testUtils = null
       super.afterAll()
     }
   }
@@ -65,6 +70,15 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       topic: String,
       withOptions: Map[String, String] = Map.empty[String, String],
       brokerAddress: Option[String] = None) = {
+    createKafkaDF(topic, withOptions, brokerAddress)
+      .selectExpr("CAST(value AS STRING)")
+  }
+
+
+  private def createKafkaDF(
+     topic: String,
+     withOptions: Map[String, String] = Map.empty[String, String],
+     brokerAddress: Option[String] = None) = {
     val df = spark
       .read
       .format("kafka")
@@ -74,9 +88,8 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     withOptions.foreach {
       case (key, value) => df.option(key, value)
     }
-    df.load().selectExpr("CAST(value AS STRING)")
+    df.load()
   }
-
 
   test("explicit earliest to latest offsets") {
     val topic = newTopic()
@@ -130,7 +143,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     )
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
     val df = createDF(topic,
-        withOptions = Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets))
+      withOptions = Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets))
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
     // static offset partition 2, nothing should change
@@ -161,9 +174,9 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     var kafkaUtils: KafkaTestUtils = null
     try {
       /**
-       * The following settings will ensure that all log entries
-       * are removed following a call to cleanupLogs
-       */
+        * The following settings will ensure that all log entries
+        * are removed following a call to cleanupLogs
+        */
       val brokerProps = Map[String, Object](
         "log.retention.bytes" -> 1.asInstanceOf[AnyRef], // retain nothing
         "log.retention.ms" -> 1.asInstanceOf[AnyRef]     // no wait time
@@ -240,26 +253,6 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testBadOptions("assign" -> "")("no topicpartitions to assign")
     testBadOptions("subscribe" -> "")("no topics to subscribe")
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
-  }
-
-  test("allow group.id overriding") {
-    // Tests code path KafkaSourceProvider.createRelation(.)
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 3)
-    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
-    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
-    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
-
-    val customGroupId = "id-" + Random.nextInt()
-    val df = createDF(topic, withOptions = Map("kafka.group.id" -> customGroupId))
-    checkAnswer(df, (1 to 30).map(_.toString).toDF())
-
-    val consumerGroups = testUtils.listConsumerGroups()
-    val validGroups = consumerGroups.valid().get()
-    val validGroupsId = validGroups.asScala.map(_.groupId())
-    assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
-      s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
-      s"expected group id: $customGroupId")
   }
 
   test("read Kafka transactional messages: read_committed") {
@@ -359,5 +352,290 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
       checkAnswer(df, (1 to 15).map(_.toString).toDF)
     }
+  }
+
+  test("specific columns projection") {
+    val topic = newTopic()
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    val df = createKafkaDF(topic)
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "topic")
+    checkAnswer(df, (0 to 9).map(x => (null, x.toString, topic)).toDF("key", "value", "topic"))
+  }
+
+  test("timestamp pushdown greaterThan") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 4)
+
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 24, 3, 5001001)
+    testUtils.sendMessagesOverPartitions(topic, 25 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 100000000)
+    // Lets leave partition 4 with no data > 5001
+    testUtils.sendMessages(topic, (100 to 110).map(_.toString).toArray, Some(3), Some(4000000))
+
+    val df = createDF(topic).where("timestamp > cast(5001 as TIMESTAMP)")
+    checkAnswer(df, (20 to 39).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown greaterThanEquals") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 100000000)
+
+    val df = createDF(topic).where("timestamp >= cast(5001 as TIMESTAMP)")
+    checkAnswer(df, (10 to 39).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown lessThan") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 4)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 14, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 15 to 19, 3, 5001999)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 100000000)
+    // Lets leave partition 4 with no data < 5002000
+    testUtils.sendMessages(topic, (100 to 110).map(_.toString).toArray, Some(3), Some(8000000))
+
+    val df = createDF(topic).where("timestamp < cast(5002 as TIMESTAMP)")
+    checkAnswer(df, (0 to 19).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown lessThanEquals") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 100000000)
+    val df = createDF(topic).where("timestamp <= cast(5002 as TIMESTAMP)")
+    checkAnswer(df, (0 to 29).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown lessThan and greaterThan") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 4)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 49, 3, 100000000)
+
+    // Lets leave partition 4 with missing data for the query
+    testUtils.sendMessages(topic, (110 to 119).map(_.toString).toArray, Some(3), Some(4000000))
+    val df = createDF(topic).where(
+      "timestamp > cast(5000 as TIMESTAMP) and timestamp < cast(5003 as TIMESTAMP)")
+    checkAnswer(df, (10 to 29).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown multiple conditions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 49, 3, 100000000)
+    val df = createDF(topic).where(
+      """timestamp > cast(4000 as TIMESTAMP) and
+        |timestamp < cast(8000 as TIMESTAMP) and
+        |timestamp > cast(5000 as TIMESTAMP) and
+        |timestamp < cast(5003 as TIMESTAMP) and
+        |timestamp < cast(5002 as TIMESTAMP)""".stripMargin)
+    checkAnswer(df, (10 to 19).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown with contradictory condition") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 49, 3, 100000000)
+    val df = createDF(topic).where(
+      """timestamp < cast(5002 as TIMESTAMP) and
+        |timestamp > cast(5002 as TIMESTAMP)""".stripMargin)
+    checkAnswer(df, spark.emptyDataFrame)
+  }
+
+  test("timestamp pushdown equals") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 49, 3, 100000000)
+    val df = createDF(topic).where("timestamp = cast(5002 as TIMESTAMP)")
+    checkAnswer(df, (20 to 29).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown on unevenly distributed partitions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 4)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0), Some(5000000))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1), Some(5005000))
+    testUtils.sendMessages(topic, (20 to 24).map(_.toString).toArray, Some(2), Some(5002000))
+    testUtils.sendMessages(topic, (30 to 34).map(_.toString).toArray, Some(3), Some(5003000))
+    testUtils.sendMessages(topic, (35 to 39).map(_.toString).toArray, Some(3), Some(5004000))
+    testUtils.sendMessages(topic, (40 to 49).map(_.toString).toArray, Some(0), Some(100000000))
+    // Equals operator doesn't find the last element of the partition => we need to add 1 msg on top
+    testUtils.sendMessages(topic, (25 to 25).map(_.toString).toArray, Some(2), Some(5003000))
+
+    val df = createDF(topic).where("timestamp = cast(5002 as TIMESTAMP)")
+    checkAnswer(df, (20 to 24).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown with specific lower bound DDL offset limit") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+
+    testUtils.sendMessagesOverPartitions(topic, 0 to 14, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 15 to 29, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 44, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 45 to 59, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 60 to 74, 3, 100000000)
+
+    val options = buildDDLOptions(topic,
+      Map(0 -> 15L, 1 -> 15L, 2 -> 15L),
+      Map(0 -> -1L, 1 -> -1L, 2 -> -1L) // latest
+    )
+    val df = createDF(topic, withOptions = options)
+      .where("timestamp > cast(5000 as TIMESTAMP) and timestamp < cast(5004 as TIMESTAMP)")
+    // 45 (15 offset * 3 partitions) to 59 (constrained by timestamp < 5004000)
+    checkAnswer(df, (45 to 59).map(_.toString).toDF())
+  }
+
+
+  test("timestamp pushdown on latest range") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+
+    testUtils.sendMessagesOverPartitions(topic, 0 to 14, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 15 to 29, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 44, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 45 to 59, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 60 to 74, 3, 100000000)
+    testUtils.sendMessagesOverPartitions(topic, 75 to 200, 3, 5005000)
+
+    val options = buildDDLOptions(topic,
+      Map(0 -> 10L, 1 -> 10L, 2 -> 10L),
+      Map(0 -> -1L, 1 -> -1L, 2 -> -1L) // latest
+    )
+    val df = createDF(topic, withOptions = options)
+      .where("timestamp > cast(5002 as TIMESTAMP)")
+    // 45 (by timestamp > 5002000) to 150 unbounded
+    checkAnswer(df, (45 to 200).map(_.toString).toDF())
+  }
+
+
+  test("timestamp pushdown with specific upper bound DDL offset limit") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 4)
+
+    val options = buildDDLOptions(topic,
+      Map(0 -> -2L, 1 -> -2L, 2 -> -2L, 3 -> -2L), // earliest
+      Map(0 -> 22L, 1 -> 22L, 2 -> 22L, 3 -> 22L)
+    )
+    val df = createDF(topic, withOptions = options)
+      .where("timestamp > cast(5001 as TIMESTAMP)")
+    testUtils.sendMessagesOverPartitions(topic, 0 to 19, 4, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 39, 4, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 59, 4, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 60 to 79, 4, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 80 to 99, 4, 100000000)
+    // from 40 (by timestamp > 5001000)
+    // to 79 (20 offset * 4 partitions) + 2 remaining offset from each partition
+    checkAnswer(df, ((40 to 79) ++ (80 to 81) ++ (85 to 86) ++ (90 to 91) ++ (95 to 96))
+      .map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown on earliest range") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 4)
+
+    val options = buildDDLOptions(topic,
+      Map(0 -> -2L, 1 -> -2L, 2 -> -2L, 3 -> -2L), // earliest
+      Map(0 -> 22L, 1 -> 22L, 2 -> 22L, 3 -> 22L)
+    )
+    val df = createDF(topic, withOptions = options)
+      .where("timestamp < cast(5003 as TIMESTAMP)")
+    testUtils.sendMessagesOverPartitions(topic, 0 to 19, 4, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 39, 4, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 59, 4, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 60 to 79, 4, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 80 to 99, 4, 100000000)
+    // earliest to 59 (by timestamp < 5003000)
+    checkAnswer(df, (0 to 59).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown with specific offsets upper & lower bound") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 4)
+    val options = buildDDLOptions(topic,
+      Map(0 -> 7, 1 -> 7, 2 -> 7, 3 -> 7),
+      Map(0 -> 18L, 1 -> 18L, 2 -> 18L, 3 -> 18L)
+    )
+    val df = createDF(topic, withOptions = options)
+      .where("timestamp > cast(5000 as TIMESTAMP) and timestamp < cast(5003 as TIMESTAMP)")
+    testUtils.sendMessagesOverPartitions(topic, 0 to 19, 4, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 39, 4, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 59, 4, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 60 to 79, 4, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 80 to 99, 4, 100000000)
+
+    // start with 3 from each partition (by offset) to 59 (by timestamp < 5003000)
+    checkAnswer(df, ((22 to 24) ++ (27 to 29) ++ (32 to 34) ++ (37 to 39) ++ (40 to 59))
+      .map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown out of offset range") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 4)
+    val options = buildDDLOptions(topic,
+      Map(0 -> 7, 1 -> 7, 2 -> 7, 3 -> 7),
+      Map(0 -> 18L, 1 -> 18L, 2 -> 18L, 3 -> 18L)
+    )
+    val df = createDF(topic, withOptions = options)
+      .where("timestamp > cast(5003 as TIMESTAMP) and timestamp < cast(5005 as TIMESTAMP)")
+    testUtils.sendMessagesOverPartitions(topic, 0 to 19, 4, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 39, 4, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 59, 4, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 60 to 79, 4, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 80 to 99, 4, 100000000)
+
+    checkAnswer(df, spark.emptyDataFrame)
+  }
+
+  test("where query on partition condition") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 8, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 9 to 17, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 18 to 26, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 27 to 35, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 36 to 44, 3, 100000000)
+    createKafkaDF(topic).selectExpr("CAST(value AS STRING)", "partition", "offset", "timestamp")
+      .show(100)
+    val df = createDF(topic).where("timestamp > cast(5001 as TIMESTAMP) and partition = 0")
+    // first 3 elements from each batch
+    checkAnswer(df, ((18 to 20) ++ (27 to 29) ++ (36 to 38)).map(_.toString).toDF())
+  }
+
+  test("where query on offset condition") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 8, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 9 to 17, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 18 to 26, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 27 to 35, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 36 to 44, 3, 100000000)
+    val df = createDF(topic).where("offset = 7")
+    checkAnswer(df, ((19 to 19) ++ (22 to 22) ++ (25 to 25)).map(_.toString).toDF())
   }
 }
