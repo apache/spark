@@ -21,7 +21,6 @@ import scala.language.existentials
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
@@ -38,7 +37,6 @@ private[spark] class KafkaDelegationTokenProvider
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
       sparkConf: SparkConf,
-      fileSystems: Set[FileSystem],
       creds: Credentials): Option[Long] = {
     try {
       logDebug("Attempting to fetch Kafka security token.")

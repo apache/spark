@@ -144,7 +144,7 @@ private[spark] class HadoopDelegationTokenManager(
   def obtainDelegationTokens(creds: Credentials): Long = {
     delegationTokenProviders.values.flatMap { provider =>
       if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
-        provider.obtainDelegationTokens(hadoopConf, sparkConf, fileSystemsToAccess(), creds)
+        provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
@@ -179,14 +179,6 @@ private[spark] class HadoopDelegationTokenManager(
       .getOption(key)
       .map(_.toBoolean)
       .getOrElse(isEnabledDeprecated)
-  }
-
-  /**
-   * List of file systems for which to obtain delegation tokens. The base implementation
-   * returns just the default file system in the given Hadoop configuration.
-   */
-  protected def fileSystemsToAccess(): Set[FileSystem] = {
-    Set(FileSystem.get(hadoopConf))
   }
 
   private def scheduleRenewal(delay: Long): Unit = {

@@ -520,10 +520,6 @@ for:
   filesystem if `spark.yarn.stagingDir` is not set);
 - if Hadoop federation is enabled, all the federated filesystems in the configuration.
 
-If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
-explicitly provided to Spark at launch time. This is done by listing them in the
-`spark.yarn.access.hadoopFileSystems` property, described in the configuration section below.
-
 The YARN integration also supports custom delegation token providers using the Java Services
 mechanism (see `java.util.ServiceLoader`). Implementations of
 `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider` can be made available to Spark
@@ -555,18 +551,6 @@ providers can be disabled individually by setting `spark.security.credentials.{s
   <code>--principal</code> command line argument.
 
   <br /> (Works also with the "local" master.)
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.access.hadoopFileSystems</code></td>
-  <td>(none)</td>
-  <td>
-    A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
-    example, <code>spark.yarn.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
-    webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
-    and Kerberos must be properly configured to be able to access them (either in the same realm
-    or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
-    the Spark application can access those remote Hadoop filesystems.
   </td>
 </tr>
 <tr>
@@ -674,7 +658,7 @@ spark.security.credentials.hive.enabled   false
 spark.security.credentials.hbase.enabled  false
 ```
 
-The configuration option `spark.yarn.access.hadoopFileSystems` must be unset.
+The configuration option `spark.kerberos.access.hadoopFileSystems` must be unset.
 
 # Using the Spark History Server to replace the Spark Web UI
 
