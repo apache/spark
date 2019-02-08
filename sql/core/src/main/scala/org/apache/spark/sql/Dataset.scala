@@ -1928,7 +1928,6 @@ class Dataset[T] private[sql](
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
    * of the given [[Dataset]].
-   * @note This is NOT guaranteed that new [[Dataset]] always consist of the same rows.
    *
    * @group typedrel
    * @since 2.3.0
@@ -1945,7 +1944,6 @@ class Dataset[T] private[sql](
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
    * of the given [[Dataset]].
-   * @note This is NOT guaranteed that new [[Dataset]] always consist of the same rows.
    *
    * @group typedrel
    * @since 2.3.0
@@ -1963,7 +1961,6 @@ class Dataset[T] private[sql](
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
    * of the given [[Dataset]].
-   * @note This is NOT guaranteed that new [[Dataset]] always consist of the same rows.
    *
    * @group typedrel
    * @since 1.6.0
@@ -1982,7 +1979,6 @@ class Dataset[T] private[sql](
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the total count
    * of the given [[Dataset]].
-   * @note This is NOT guaranteed that new [[Dataset]] always consist of the same rows.
    *
    * @group typedrel
    * @since 1.6.0
