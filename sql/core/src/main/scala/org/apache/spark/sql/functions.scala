@@ -3305,6 +3305,7 @@ object functions {
 
   /**
    * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements unless specified otherwise.
    *
    * @group collection_funcs
    * @since 1.3.0
@@ -3322,6 +3323,7 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column names `col` for elements and `pos` for position unless specified otherwise.
    *
    * @group collection_funcs
    * @since 2.1.0
