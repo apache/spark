@@ -22,7 +22,7 @@ from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol, \
-    HasFeaturesCol
+    HasFeaturesCol, HasWeightCol
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
@@ -257,7 +257,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
 
 
 @inherit_doc
-class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
                                         JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
@@ -279,6 +279,17 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
     >>> str(evaluator2.getPredictionCol())
     'prediction'
+    >>> scoreAndLabelsAndWeight = [(0.0, 0.0, 1.0), (0.0, 1.0, 1.0), (0.0, 0.0, 1.0),
+    ...     (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0),
+    ...     (2.0, 2.0, 1.0), (2.0, 0.0, 1.0)]
+    >>> dataset = spark.createDataFrame(scoreAndLabelsAndWeight, ["prediction", "label", "weight"])
+    ...
+    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction",
+    ...     weightCol="weight")
+    >>> evaluator.evaluate(dataset)
+    0.66...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
+    0.66...
 
     .. versionadded:: 1.5.0
     """
@@ -289,10 +300,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="f1"):
+                 metricName="f1", weightCol=None):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="f1")
+                 metricName="f1", weightCol=None)
         """
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -318,10 +329,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     @keyword_only
     @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="f1"):
+                  metricName="f1", weightCol=None):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="f1")
+                  metricName="f1", weightCol=None)
         Sets params for multiclass classification evaluator.
         """
         kwargs = self._input_kwargs
