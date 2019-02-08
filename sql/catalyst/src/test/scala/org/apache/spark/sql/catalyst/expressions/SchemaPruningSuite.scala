@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
 class SchemaPruningSuite extends SparkFunSuite {
+  import SchemaPruning._
 
   test("collect struct types") {
     val dataTypes = Seq(
@@ -43,8 +44,47 @@ class SchemaPruningSuite extends SparkFunSuite {
     )
 
     dataTypes.zipWithIndex.foreach { case (dt, idx) =>
-      val structs = SchemaPruning.collectStructType(dt, ArrayBuffer.empty[StructType])
+      val structs = collectStructType(dt, ArrayBuffer.empty[StructType])
       assert(structs === expectedTypes(idx))
     }
+  }
+
+  test("prune schema by the requested fields") {
+    def testPrunedSchema(
+        schema: StructType,
+        requestedFields: StructField*): Unit = {
+      val requestedRootFields = requestedFields.map { f =>
+        // `derivedFromAtt` doesn't affect the result of pruned schema.
+        RootField(field = f, derivedFromAtt = true)
+      }
+      val expectedSchema = pruneDataSchema(schema, requestedRootFields)
+      assert(expectedSchema == StructType(requestedFields))
+    }
+
+    testPrunedSchema(StructType.fromDDL("a int, b int"), StructField("a", IntegerType))
+    testPrunedSchema(StructType.fromDDL("a int, b int"), StructField("b", IntegerType))
+
+    val structOfStruct = StructType.fromDDL("a struct<a:int, b:int>, b int")
+    testPrunedSchema(structOfStruct, StructField("a", StructType.fromDDL("a int, b int")))
+    testPrunedSchema(structOfStruct, StructField("b", IntegerType))
+    testPrunedSchema(structOfStruct, StructField("a", StructType.fromDDL("b int")))
+
+    val arrayOfStruct = StructField("a", ArrayType(StructType.fromDDL("a int, b int, c string")))
+    val mapOfStruct = StructField("d", MapType(StructType.fromDDL("a int, b int, c string"),
+      StructType.fromDDL("d int, e int, f string")))
+
+    val complexStruct = StructType(
+      arrayOfStruct :: StructField("b", structOfStruct) :: StructField("c", IntegerType) ::
+        mapOfStruct :: Nil)
+
+    testPrunedSchema(complexStruct, StructField("a", ArrayType(StructType.fromDDL("b int"))),
+      StructField("b", StructType.fromDDL("a int")))
+    testPrunedSchema(complexStruct,
+      StructField("a", ArrayType(StructType.fromDDL("b int, c string"))),
+      StructField("b", StructType.fromDDL("b int")))
+
+    val selectFieldInMap = StructField("d", MapType(StructType.fromDDL("a int, b int"),
+      StructType.fromDDL("e int, f string")))
+    testPrunedSchema(complexStruct, StructField("c", IntegerType), selectFieldInMap)
   }
 }
