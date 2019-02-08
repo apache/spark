@@ -78,8 +78,10 @@ public class TransportFrameDecoderSuite {
 
   @Test
   public void testConsolidationPerf() throws Exception {
-    long[] testingConsolidateThresholds = new long[] { 1024 * 1024, 5 * 1024 * 1024, 10 * 1024 * 1024, 20 * 1024 * 1024,
-        30 * 1024 * 1024, 50 * 1024 * 1024, 64 * 1024 * 1024, 100 * 1024 * 1024, 300 * 1024 * 1024, 500 * 1024 * 1024, Long.MAX_VALUE };
+    long[] testingConsolidateThresholds = new long[] {
+        1024 * 1024, 5 * 1024 * 1024, 10 * 1024 * 1024, 20 * 1024 * 1024,
+        30 * 1024 * 1024, 50 * 1024 * 1024, 80 * 1024 * 1024, 100 * 1024 * 1024,
+        300 * 1024 * 1024, 500 * 1024 * 1024, Long.MAX_VALUE };
     for (long threshold : testingConsolidateThresholds) {
       TransportFrameDecoder decoder = new TransportFrameDecoder(threshold);
       ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
