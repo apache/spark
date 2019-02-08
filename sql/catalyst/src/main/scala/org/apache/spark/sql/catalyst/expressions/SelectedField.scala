@@ -52,7 +52,7 @@ import org.apache.spark.sql.types._
  * is "name" and its data type is a [[org.apache.spark.sql.types.StructType]] with a single string
  * field named "first".
  */
-private[sql] object SelectedField {
+object SelectedField {
   def unapply(expr: Expression): Option[StructField] = {
     // If this expression is an alias, work on its child instead
     val unaliased = expr match {
