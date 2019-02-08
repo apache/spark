@@ -47,7 +47,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     checkAnswer(
       data.sample(withReplacement = false, 0.05, seed = 13),
-      Seq(3, 17, 27, 58, 62).map(Row(_))
+      Seq(37, 8, 90).map(Row(_))
     )
   }
 
@@ -371,7 +371,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
-      Seq(Row(0, 6), Row(1, 11)))
+      Seq(Row(0, 1), Row(1, 6)))
   }
 
   test("sampleBy one column") {
@@ -379,7 +379,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val sampled = df.stat.sampleBy($"key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
-      Seq(Row(0, 6), Row(1, 11)))
+      Seq(Row(0, 1), Row(1, 6)))
   }
 
   test("sampleBy multiple columns") {
@@ -389,7 +389,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       struct($"name", $"key"), Map(Row("Foo", 0) -> 0.1, Row("Foo", 1) -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
-      Seq(Row(0, 6), Row(1, 11)))
+      Seq(Row(0, 1), Row(1, 6)))
   }
 
   // This test case only verifies that `DataFrame.countMinSketch()` methods do return
