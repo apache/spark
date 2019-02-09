@@ -67,12 +67,27 @@ object XORShiftRandomBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
+  def nextGaussian(numIters: Int, valuesPerIteration: Int): Unit = {
+    val benchmark = new Benchmark("nextGaussian", valuesPerIteration, output = output)
+
+    benchmark.addCase("java.util.Random", numIters) { _ =>
+      times(valuesPerIteration) { javaRand.nextGaussian() }
+    }
+
+    benchmark.addCase("XORShiftRandom", numIters) { _ =>
+      times(valuesPerIteration) { xorRand.nextGaussian() }
+    }
+
+    benchmark.run()
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     val valuesPerIteration = 100000000
     runBenchmark("Pseudo random") {
       nextInt(numIters, valuesPerIteration)
       nextDouble(numIters, valuesPerIteration)
+      nextGaussian(numIters, valuesPerIteration)
     }
   }
 }
