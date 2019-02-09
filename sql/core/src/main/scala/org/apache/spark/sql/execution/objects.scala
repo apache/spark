@@ -485,15 +485,16 @@ case class FlatMapGroupsInRWithArrowExec(
       //
       //    JVM side                        R side
       //
-      // 1. Grouped internal rows --------> Arrow record natches
-      // 2. Grouped keys          --------> Regular serialized keys
-      // 3.                                 Converts each Arrow record batch to each R data frame
-      // 4.                                 Deserializes keys
-      // 5.                                 Maps each key and each R Data frame
-      // 4.                                 Computes vectorized operations by each R data frame
-      // 5.                                 Converts all R data frames to Arrow record batches
-      // 6. Columnar batches      <-------- Arrow record batches
-      // 7. Each row from batch
+      // 1. Group internal rows
+      // 2. Grouped internal rows    --------> Arrow record natches
+      // 3. Grouped keys             --------> Regular serialized keys
+      // 4.                                    Converts each Arrow record batch to each R data frame
+      // 5.                                    Deserializes keys
+      // 6.                                    Maps each key to each R Data frame
+      // 7.                                    Computes vectorized operations by each R data frame
+      // 8.                                    Converts all R data frames to Arrow record batches
+      // 9. Columnar batches         <-------- Arrow record batches
+      // 10. Each row from each batch
       //
       // Note that, unlike Python vectorization implementation, R side sends Arrow formatted
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
