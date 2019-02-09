@@ -206,9 +206,8 @@ if (isEmpty != 0) {
         if (deserializer == "arrow") {
           requireNamespace("arrow", quietly = TRUE)
           # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
-          # Using matrix with rbind is almost the fastest and minimzed way to
-          # concatenate data frames.
-          combined_output <- as.data.frame(do.call("rbind", lapply(outputs, as.matrix)))
+          # rbind.fill might be an anternative to make it faster if plyr is installed.
+          combined_output <- do.call("rbind", outputs)
 
           # Likewise, there looks no way to send each batch in streaming format via socket
           # connection. See ARROW-4512.
