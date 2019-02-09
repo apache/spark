@@ -724,15 +724,16 @@ private[spark] class Executor(
         }
 
         if (!taskRunner.isFinished && timeoutExceeded()) {
+          val killTimeoutMs = TimeUnit.NANOSECONDS.toMillis(killTimeoutNs)
           if (isLocal) {
-            logError(s"Killed task $taskId could not be stopped within $killTimeoutNs ns; " +
+            logError(s"Killed task $taskId could not be stopped within $killTimeoutMs ms; " +
               "not killing JVM because we are running in local mode.")
           } else {
             // In non-local-mode, the exception thrown here will bubble up to the uncaught exception
             // handler and cause the executor JVM to exit.
             throw new SparkException(
               s"Killing executor JVM because killed task $taskId could not be stopped within " +
-                s"$killTimeoutNs ns.")
+                s"$killTimeoutMs ms.")
           }
         }
       } finally {

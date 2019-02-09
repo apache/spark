@@ -272,9 +272,9 @@ class CheckpointWriter(
           }
 
           // All done, print success
-          val finishTimeNs = System.nanoTime()
           logInfo(s"Checkpoint for time $checkpointTime saved to file '$checkpointFile'" +
-            s", took ${bytes.length} bytes and ${finishTimeNs - startTimeNs} ns")
+            s", took ${bytes.length} bytes and " +
+            s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
           jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
@@ -309,9 +309,8 @@ class CheckpointWriter(
     if (!terminated) {
       executor.shutdownNow()
     }
-    val endTimeNs = System.nanoTime()
     logInfo(s"CheckpointWriter executor terminated? $terminated," +
-      s" waited for ${endTimeNs - startTimeNs} ns.")
+      s" waited for ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms.")
     stopped = true
   }
 }
