@@ -488,7 +488,7 @@ def parse_opts():
         prog="run-tests"
     )
     parser.add_argument(
-        "-p", "--parallelism", type="int", default=8,
+        "-p", "--parallelism", type=int, default=8,
         help="The number of suites to test in parallel (default %(default)d)"
     )
 
