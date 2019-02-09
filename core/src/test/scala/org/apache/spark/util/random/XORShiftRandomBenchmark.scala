@@ -39,7 +39,7 @@ object XORShiftRandomBenchmark extends BenchmarkBase {
   val javaRand = new JavaRandom(seed)
   val xorRand = new XORShiftRandom(seed)
 
-  def nextInt(numIters: Int, valuesPerIteration: Int): Unit = {
+  private def nextInt(numIters: Int, valuesPerIteration: Int): Unit = {
     val benchmark = new Benchmark("nextInt", valuesPerIteration, output = output)
 
     benchmark.addCase("java.util.Random", numIters) { _ =>
@@ -53,7 +53,7 @@ object XORShiftRandomBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  def nextLong(numIters: Int, valuesPerIteration: Int): Unit = {
+  private def nextLong(numIters: Int, valuesPerIteration: Int): Unit = {
     val benchmark = new Benchmark("nextLong", valuesPerIteration, output = output)
 
     benchmark.addCase("java.util.Random", numIters) { _ =>
@@ -67,7 +67,7 @@ object XORShiftRandomBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  def nextDouble(numIters: Int, valuesPerIteration: Int): Unit = {
+  private def nextDouble(numIters: Int, valuesPerIteration: Int): Unit = {
     val benchmark = new Benchmark("nextDouble", valuesPerIteration, output = output)
 
     benchmark.addCase("java.util.Random", numIters) { _ =>
@@ -81,7 +81,7 @@ object XORShiftRandomBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  def nextGaussian(numIters: Int, valuesPerIteration: Int): Unit = {
+  private def nextGaussian(numIters: Int, valuesPerIteration: Int): Unit = {
     val benchmark = new Benchmark("nextGaussian", valuesPerIteration, output = output)
 
     benchmark.addCase("java.util.Random", numIters) { _ =>
@@ -95,8 +95,8 @@ object XORShiftRandomBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  def hashSeed(numIters: Int, valuesPerIteration: Int): Unit = {
-    val benchmark = new Benchmark("Hashing seed", valuesPerIteration, output = output)
+  private def hashSeed(numIters: Int, valuesPerIteration: Int): Unit = {
+    val benchmark = new Benchmark("Hash seed", valuesPerIteration, output = output)
 
     benchmark.addCase("XORShiftRandom.hashSeed", numIters) { _ =>
       var i = 0
