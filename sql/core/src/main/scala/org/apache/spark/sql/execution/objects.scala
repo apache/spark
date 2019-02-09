@@ -491,7 +491,7 @@ case class FlatMapGroupsInRWithArrowExec(
       // 4.                                    Converts each Arrow record batch to each R data frame
       // 5.                                    Deserializes keys
       // 6.                                    Maps each key to each R Data frame
-      // 7.                                    Computes vectorized operations by each R data frame
+      // 7.                                    Computes R native function on each key/R data frame
       // 8.                                    Converts all R data frames to Arrow record batches
       // 9. Columnar batches         <-------- Arrow record batches
       // 10. Each row from each batch
