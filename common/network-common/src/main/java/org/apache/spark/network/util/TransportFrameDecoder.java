@@ -53,8 +53,9 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
   private final ByteBuf frameLenBuf = Unpooled.buffer(LENGTH_SIZE, LENGTH_SIZE);
+  private final long consolidateFrameBufsDeltaThreshold;
+
   private CompositeByteBuf frameBuf = null;
-  private long consolidateFrameBufsDeltaThreshold;
   private long consolidatedFrameBufSize = 0;
   private int consolidatedNumComponents = 0;
 
@@ -150,19 +151,20 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
           "Frame length should be positive: %s", frameSize);
       frameRemainingBytes = (int) frameSize;
 
-      // If buffers is empty, then return immediately for more input data. Otherwise, if the
-      // first buffer holds the entire frame, we attempt to build frame with it and return.
-      // Other cases, create a composite buffer to manage all the buffers.
+      // If buffers is empty, then return immediately for more input data.
       if (buffers.isEmpty()) {
         return null;
-      } else if (buffers.getFirst().readableBytes() >= frameRemainingBytes) {
+      }
+      // Otherwise, if the first buffer holds the entire frame, we attempt to
+      // build frame with it and return.
+      if (buffers.getFirst().readableBytes() >= frameRemainingBytes) {
         // Reset buf and size for next frame.
         frameBuf = null;
         nextFrameSize = UNKNOWN_FRAME_SIZE;
         return nextBufferForFrame(frameRemainingBytes);
-      } else {
-        frameBuf = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
       }
+      // Other cases, create a composite buffer to manage all the buffers.
+      frameBuf = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
     }
 
     while (frameRemainingBytes > 0 && !buffers.isEmpty()) {
@@ -183,10 +185,10 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     }
 
     // Reset buf and size for next frame.
-    ByteBuf frameBufCopy = frameBuf.duplicate();
+    ByteBuf frame = frameBuf;
     frameBuf = null;
     nextFrameSize = UNKNOWN_FRAME_SIZE;
-    return frameBufCopy;
+    return frame;
   }
 
   /**

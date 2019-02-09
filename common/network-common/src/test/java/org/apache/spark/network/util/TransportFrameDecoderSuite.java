@@ -27,11 +27,15 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import org.junit.AfterClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 public class TransportFrameDecoderSuite {
 
+  private static final Logger logger = LoggerFactory.getLogger(TransportFrameDecoderSuite.class);
   private static Random RND = new Random();
 
   @AfterClass
@@ -79,9 +83,17 @@ public class TransportFrameDecoderSuite {
   @Test
   public void testConsolidationPerf() throws Exception {
     long[] testingConsolidateThresholds = new long[] {
-        1024 * 1024, 5 * 1024 * 1024, 10 * 1024 * 1024, 20 * 1024 * 1024,
-        30 * 1024 * 1024, 50 * 1024 * 1024, 80 * 1024 * 1024, 100 * 1024 * 1024,
-        300 * 1024 * 1024, 500 * 1024 * 1024, Long.MAX_VALUE };
+        ByteUnit.MiB.toBytes(1),
+        ByteUnit.MiB.toBytes(5),
+        ByteUnit.MiB.toBytes(10),
+        ByteUnit.MiB.toBytes(20),
+        ByteUnit.MiB.toBytes(30),
+        ByteUnit.MiB.toBytes(50),
+        ByteUnit.MiB.toBytes(80),
+        ByteUnit.MiB.toBytes(100),
+        ByteUnit.MiB.toBytes(300),
+        ByteUnit.MiB.toBytes(500),
+        Long.MAX_VALUE };
     for (long threshold : testingConsolidateThresholds) {
       TransportFrameDecoder decoder = new TransportFrameDecoder(threshold);
       ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
@@ -95,20 +107,24 @@ public class TransportFrameDecoderSuite {
       try {
         long start = System.currentTimeMillis();
         ByteBuf buf = Unpooled.buffer(8);
-        buf.writeLong(8 + 1024 * 1024 * 1000);
+        long targetBytes = ByteUnit.GiB.toBytes(1);
+        int pieceBytes = (int)ByteUnit.KiB.toBytes(32);
+        long writtenBytes = 0;
+        buf.writeLong(8 + ByteUnit.GiB.toBytes(1));
         decoder.channelRead(ctx, buf);
-        for (int i = 0; i < 1000; i++) {
-          buf = Unpooled.buffer(1024 * 1024 * 2);
-          ByteBuf writtenBuf = Unpooled.buffer(1024 * 1024).writerIndex(1024 * 1024);
+        while (writtenBytes < targetBytes) {
+          buf = Unpooled.buffer(pieceBytes * 2);
+          ByteBuf writtenBuf = Unpooled.buffer(pieceBytes).writerIndex(pieceBytes);
           buf.writeBytes(writtenBuf);
           writtenBuf.release();
           decoder.channelRead(ctx, buf);
+          writtenBytes += pieceBytes;
         }
+        long elapsedTime = System.currentTimeMillis() - start;
+        logger.info("Writing 1GiB frame buf with consolidation of threshold " + threshold
+            + " took " + elapsedTime + " milis");
         assertEquals(1, retained.size());
-        assertEquals(1024 * 1024 * 1000, retained.get(0).capacity());
-        long costTime = System.currentTimeMillis() - start;
-        System.out.println("Build frame buf with consolidation threshold " + threshold
-            + " cost " + costTime + " milis");
+        assertEquals(targetBytes, retained.get(0).capacity());
       } finally {
         for (ByteBuf buf : retained) {
           release(buf);
