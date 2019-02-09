@@ -254,54 +254,6 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
-  test("supports setting fetcher cache") {
-    setScheduler(Map("spark.mesos.fetcherCache.enable" -> "true"))
-
-    val mem = 1000
-    val cpu = 1
-
-    val response = scheduler.submitDriver(
-      new MesosDriverDescription("d1", "jar", mem, cpu, true,
-        command,
-        Map("spark.mesos.executor.home" -> "test",
-          "spark.app.name" -> "test"),
-        "s1",
-        new Date()))
-
-    assert(response.success)
-
-    val offer = Utils.createOffer("o1", "s1", mem, cpu)
-    scheduler.resourceOffers(driver, List(offer).asJava)
-
-    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
-    val uris = launchedTasks.head.getCommand.getUrisList
-    assert(uris.stream().allMatch(_.getCache))
-  }
-
-  test("supports disabling fetcher cache") {
-    setScheduler(Map("spark.mesos.fetcherCache.enable" -> "false"))
-
-    val mem = 1000
-    val cpu = 1
-
-    val response = scheduler.submitDriver(
-      new MesosDriverDescription("d1", "jar", mem, cpu, true,
-        command,
-        Map("spark.mesos.executor.home" -> "test",
-          "spark.app.name" -> "test"),
-        "s1",
-        new Date()))
-
-    assert(response.success)
-
-    val offer = Utils.createOffer("o1", "s1", mem, cpu)
-    scheduler.resourceOffers(driver, List(offer).asJava)
-
-    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
-    val uris = launchedTasks.head.getCommand.getUrisList
-    assert(uris.stream().allMatch(!_.getCache))
-  }
-
   test("accept/decline offers with driver constraints") {
     setScheduler()
 
