@@ -7,7 +7,7 @@ SELECT rand(0)
 -- !query 0 schema
 struct<rand(0):double>
 -- !query 0 output
-0.8446490682263027
+0.7604953758285915
 
 
 -- !query 1
@@ -15,7 +15,7 @@ SELECT rand(cast(3 / 7 AS int))
 -- !query 1 schema
 struct<rand(CAST((CAST(3 AS DOUBLE) / CAST(7 AS DOUBLE)) AS INT)):double>
 -- !query 1 output
-0.8446490682263027
+0.7604953758285915
 
 
 -- !query 2
@@ -23,7 +23,7 @@ SELECT rand(NULL)
 -- !query 2 schema
 struct<rand(CAST(NULL AS INT)):double>
 -- !query 2 output
-0.8446490682263027
+0.7604953758285915
 
 
 -- !query 3
@@ -31,7 +31,7 @@ SELECT rand(cast(NULL AS int))
 -- !query 3 schema
 struct<rand(CAST(NULL AS INT)):double>
 -- !query 3 output
-0.8446490682263027
+0.7604953758285915
 
 
 -- !query 4
@@ -48,7 +48,7 @@ SELECT randn(0L)
 -- !query 5 schema
 struct<randn(0):double>
 -- !query 5 output
-1.1164209726833079
+1.6034991609278433
 
 
 -- !query 6
@@ -56,7 +56,7 @@ SELECT randn(cast(3 / 7 AS long))
 -- !query 6 schema
 struct<randn(CAST((CAST(3 AS DOUBLE) / CAST(7 AS DOUBLE)) AS BIGINT)):double>
 -- !query 6 output
-1.1164209726833079
+1.6034991609278433
 
 
 -- !query 7
@@ -64,7 +64,7 @@ SELECT randn(NULL)
 -- !query 7 schema
 struct<randn(CAST(NULL AS INT)):double>
 -- !query 7 output
-1.1164209726833079
+1.6034991609278433
 
 
 -- !query 8
@@ -72,7 +72,7 @@ SELECT randn(cast(NULL AS long))
 -- !query 8 schema
 struct<randn(CAST(NULL AS BIGINT)):double>
 -- !query 8 output
-1.1164209726833079
+1.6034991609278433
 
 
 -- !query 9
