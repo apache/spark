@@ -172,17 +172,17 @@ def parse_opts():
         prog="run-tests"
     )
     parser.add_argument(
-        "--python-executables", type="string", default=','.join(get_default_python_executables()),
-        help="A comma-separated list of Python executables to test against (default: %default)"
+        "--python-executables", type=str, default=','.join(get_default_python_executables()),
+        help="A comma-separated list of Python executables to test against (default: %(default)s)"
     )
     parser.add_argument(
-        "--modules", type="string",
+        "--modules", type=str,
         default=",".join(sorted(python_modules.keys())),
-        help="A comma-separated list of Python modules to test (default: %default)"
+        help="A comma-separated list of Python modules to test (default: %(default)s)"
     )
     parser.add_argument(
-        "-p", "--parallelism", type="int", default=4,
-        help="The number of suites to test in parallel (default %default)"
+        "-p", "--parallelism", type=int, default=4,
+        help="The number of suites to test in parallel (default %(default)d)"
     )
     parser.add_argument(
         "--verbose", action="store_true",
@@ -191,7 +191,7 @@ def parse_opts():
 
     group = parser.add_argument_group("Developer Options")
     group.add_argument(
-        "--testnames", type="string",
+        "--testnames", type=str,
         default=None,
         help=(
             "A comma-separated list of specific modules, classes and functions of doctest "
@@ -202,9 +202,9 @@ def parse_opts():
             "'--modules' option is ignored if they are given.")
     )
 
-    args = parser.parse_args()
-    if args:
-        parser.error("Unsupported arguments: %s" % ' '.join(args))
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
     if args.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
     return args
