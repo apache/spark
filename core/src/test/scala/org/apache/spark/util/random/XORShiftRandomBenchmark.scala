@@ -95,14 +95,34 @@ object XORShiftRandomBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
+  def hashSeed(numIters: Int, valuesPerIteration: Int): Unit = {
+    val benchmark = new Benchmark("Hashing seed", valuesPerIteration, output = output)
+
+    benchmark.addCase("XORShiftRandom.hashSeed", numIters) { _ =>
+      var i = 0
+      while (i < valuesPerIteration) {
+        XORShiftRandom.hashSeed(seed + 9876543210L + i)
+        i += 1
+      }
+    }
+
+    benchmark.run()
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
-    val valuesPerIteration = 100000000
     runBenchmark("Pseudo random") {
+      val valuesPerIteration = 100000000
+
       nextInt(numIters, valuesPerIteration)
       nextLong(numIters, valuesPerIteration)
       nextDouble(numIters, valuesPerIteration)
       nextGaussian(numIters, valuesPerIteration)
+    }
+    runBenchmark("hash seed") {
+      val valuesPerIteration = 10000000
+
+      hashSeed(numIters, valuesPerIteration)
     }
   }
 }
