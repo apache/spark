@@ -483,7 +483,7 @@ case class FlatMapGroupsInRWithArrowExec(
 
       // The communication mechanism is as follows:
       //
-      //    JVM side                        R side
+      //    JVM side                           R side
       //
       // 1. Group internal rows
       // 2. Grouped internal rows    --------> Arrow record natches
