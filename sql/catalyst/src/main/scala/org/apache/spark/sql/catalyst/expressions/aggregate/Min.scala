@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the minimum value of `expr`.",
   examples = """
     Examples:
-      > SELECT _FUNC(col) FROM VALUES (10), (-1), (20) AS tab(col);
+      > SELECT _FUNC_(col) FROM VALUES (10), (-1), (20) AS tab(col);
        -1
   """,
   since = "1.3.0")

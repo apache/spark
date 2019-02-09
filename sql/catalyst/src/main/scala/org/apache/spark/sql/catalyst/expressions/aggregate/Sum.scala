@@ -27,11 +27,11 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
   examples = """
     Examples:
-      > SELECT _FUNC(col) FROM VALUES (5), (10), (15) AS tab(col);
+      > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);
        30
-      > SELECT _FUNC(col) FROM VALUES (NULL), (10), (15) AS tab(col);
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (10), (15) AS tab(col);
        25
-      > SELECT _FUNC(col) FROM VALUES (NULL), (NULL) AS tab(col);
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
        NULL
   """,
   since = "1.3.0")

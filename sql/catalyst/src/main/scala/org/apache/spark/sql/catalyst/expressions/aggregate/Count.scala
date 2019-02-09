@@ -32,11 +32,11 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
-      > SELECT _FUNC(*) FROM VALUES (NULL), (5), (5), (20) AS tab(col)
+      > SELECT _FUNC_(*) FROM VALUES (NULL), (5), (5), (20) AS tab(col);
        4
-      > SELECT _FUNC(col) FROM VALUES (NULL), (5), (5), (20) AS tab(col)
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (5), (5), (20) AS tab(col);
        3
-      > SELECT _FUNC(DISTINCT col) FROM VALUES (NULL), (5), (5), (10) AS tab(col)
+      > SELECT _FUNC_(DISTINCT col) FROM VALUES (NULL), (5), (5), (10) AS tab(col);
        2
   """,
   since = "1.3.0")

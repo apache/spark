@@ -36,11 +36,11 @@ import org.apache.spark.sql.types._
       If `isIgnoreNull` is true, returns only non-null values""",
   examples = """
     Examples:
-      > SELECT _FUNC(col) FROM VALUES (10), (5), (20) AS tab(col);
+      > SELECT _FUNC_(col) FROM VALUES (10), (5), (20) AS tab(col);
        20
-      > SELECT _FUNC(col) FROM VALUES (10), (5), (NULL) AS tab(col);
+      > SELECT _FUNC_(col) FROM VALUES (10), (5), (NULL) AS tab(col);
        NULL
-      > SELECT _FUNC(col, true) FROM VALUES (10), (5), (NULL) AS tab(col);
+      > SELECT _FUNC_(col, true) FROM VALUES (10), (5), (NULL) AS tab(col);
        5
   """,
   since = "2.0.0")
