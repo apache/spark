@@ -207,12 +207,12 @@ if (isEmpty != 0) {
           requireNamespace("arrow", quietly = TRUE)
           # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
           # rbind.fill might be an anternative to make it faster if plyr is installed.
-          combined_output <- do.call("rbind", outputs)
+          combined <- do.call("rbind", outputs)
 
           # Likewise, there looks no way to send each batch in streaming format via socket
           # connection. See ARROW-4512.
           # So, it writes the whole Arrow streaming-formatted binary at once for now.
-          SparkR:::writeRaw(outputCon, arrow::write_arrow(combined_output, raw()))
+          SparkR:::writeRaw(outputCon, arrow::write_arrow(combined, raw()))
         }
       }
     } else {
