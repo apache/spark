@@ -64,7 +64,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
 
   // Offer constraints
   private[this] val slaveOfferConstraints =
-    parseConstraintString(sc.conf.get(mesosConfig.SLAVE_OFFER_CONSTRAINTS))
+    parseConstraintString(sc.conf.get(mesosConfig.CONSTRAINTS))
 
   // reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =

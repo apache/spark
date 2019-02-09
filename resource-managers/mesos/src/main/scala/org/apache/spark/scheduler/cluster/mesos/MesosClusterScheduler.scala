@@ -419,13 +419,10 @@ private[spark] class MesosClusterScheduler(
 
   private def isContainerLocalAppJar(desc: MesosDriverDescription): Boolean = {
     val isLocalJar = desc.jarUrl.startsWith("local://")
-    val isContainerLocal = desc.conf.get(config.APPLICATION_JAR_LOCAL_RESOLUTION_MODE).exists {
+    val isContainerLocal = desc.conf.get(config.APP_JAR_LOCAL_RESOLUTION_MODE) match {
       case "container" => true
       case "host" => false
-      case other =>
-        logWarning(s"Unknown ${config.APPLICATION_JAR_LOCAL_RESOLUTION_MODE} $other, using host.")
-        false
-      }
+    }
     isLocalJar && isContainerLocal
   }
 

@@ -59,8 +59,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos supports killing and limiting executors") {
     setBackend()
-    sparkConf.set(DRIVER_HOST_ADDRESS.key, "driverHost")
-    sparkConf.set(DRIVER_PORT.key, "1234")
+    sparkConf.set(DRIVER_HOST_ADDRESS, "driverHost")
+    sparkConf.set(DRIVER_PORT, 1234)
 
     val minMem = backend.executorMemory(sc)
     val minCpu = 4
@@ -180,7 +180,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
 
   test("mesos declines offers that violate attribute constraints") {
-    setBackend(Map(mesosConfig.SLAVE_OFFER_CONSTRAINTS.key -> "x:true"))
+    setBackend(Map(mesosConfig.CONSTRAINTS.key -> "x:true"))
     offerResources(List(Resources(backend.executorMemory(sc), 4)))
     verifyDeclinedOffer(driver, createOfferId("o1"), true)
   }

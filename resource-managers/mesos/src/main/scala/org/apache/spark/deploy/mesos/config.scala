@@ -58,21 +58,26 @@ package object config {
 
   private[spark] val CREDENTIAL_PRINCIPAL =
     ConfigBuilder("spark.mesos.principal")
+      .doc("Name of the Kerberos principal to authenticate Spark to Mesos.")
       .stringConf
       .createOptional
 
   private[spark] val CREDENTIAL_PRINCIPAL_FILE =
     ConfigBuilder("spark.mesos.principal.file")
+      .doc("The path of file which contains the name of the Kerberos principal " +
+        "to authenticate Spark to Mesos.")
       .stringConf
       .createOptional
 
   private[spark] val CREDENTIAL_SECRET =
     ConfigBuilder("spark.mesos.secret")
+      .doc("The secret value to authenticate Spark to Mesos.")
       .stringConf
       .createOptional
 
   private[spark] val CREDENTIAL_SECRET_FILE =
     ConfigBuilder("spark.mesos.secret.file")
+      .doc("The path of file which contains the secret value to authenticate Spark to Mesos.")
       .stringConf
       .createOptional
 
@@ -160,6 +165,7 @@ package object config {
   private[spark] val COARSE_SHUTDOWN_TIMEOUT =
     ConfigBuilder("spark.mesos.coarse.shutdownTimeout")
       .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ >= 0, s"spark.mesos.coarse.shutdownTimeout must be >= 0")
       .createWithDefaultString("10s")
 
   private[spark] val MAX_DRIVERS =
@@ -178,10 +184,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val APPLICATION_JAR_LOCAL_RESOLUTION_MODE =
+  private[spark] val APP_JAR_LOCAL_RESOLUTION_MODE =
     ConfigBuilder("spark.mesos.appJar.local.resolution.mode")
       .stringConf
-      .createOptional
+      .checkValues(Set("host", "container"))
+      .createWithDefault("host")
 
   private[spark] val REJECT_OFFER_DURATION =
     ConfigBuilder("spark.mesos.rejectOfferDuration")
@@ -262,7 +269,7 @@ package object config {
       .stringConf
       .createWithDefault("")
 
-  private[spark] val SLAVE_OFFER_CONSTRAINTS =
+  private[spark] val CONSTRAINTS =
     ConfigBuilder("spark.mesos.constraints")
       .stringConf
       .createWithDefault("")
@@ -270,6 +277,7 @@ package object config {
   private[spark] val CONTAINERIZER =
     ConfigBuilder("spark.mesos.containerizer")
       .stringConf
+      .checkValues(Set("docker", "mesos"))
       .createWithDefault("docker")
 
   private[spark] val ROLE =

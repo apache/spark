@@ -82,8 +82,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val taskLabels = conf.get(TASK_LABELS)
 
-  private[this] val shutdownTimeoutMS =
-    conf.get(COARSE_SHUTDOWN_TIMEOUT).ensuring(_ >= 0, s"$COARSE_SHUTDOWN_TIMEOUT must be >= 0")
+  private[this] val shutdownTimeoutMS = conf.get(COARSE_SHUTDOWN_TIMEOUT)
 
   // Synchronization protected by stateLock
   private[this] var stopCalled: Boolean = false
@@ -147,7 +146,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   // Offer constraints
   private val slaveOfferConstraints =
-    parseConstraintString(sc.conf.get(SLAVE_OFFER_CONSTRAINTS))
+    parseConstraintString(sc.conf.get(CONSTRAINTS))
 
   // Reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =
