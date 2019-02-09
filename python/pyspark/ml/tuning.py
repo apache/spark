@@ -308,9 +308,9 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
 
             validation.unpersist()
             train.unpersist()
-           
+
         if eva.applyAbsoluteTransform():
-            metrics = np.absolute(metrics) 
+            metrics = np.absolute(metrics)
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
