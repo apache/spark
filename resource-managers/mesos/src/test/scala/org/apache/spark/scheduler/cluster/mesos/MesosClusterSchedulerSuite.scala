@@ -276,7 +276,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
     val uris = launchedTasks.head.getCommand.getUrisList
-    assert(uris.stream().allMatch(_.getCache))
+    assert(uris.asScala.forall(_.getCache))
   }
 
   test("supports disabling fetcher cache") {
@@ -300,7 +300,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
     val uris = launchedTasks.head.getCommand.getUrisList
-    assert(uris.stream().allMatch(!_.getCache))
+    assert(uris.asScala.forall(!_.getCache))
   }
 
   test("accept/decline offers with driver constraints") {
