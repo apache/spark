@@ -493,8 +493,7 @@ case class FlatMapGroupsInRWithArrowExec(
       // 4.                                 Computes vectorized operations by each R data frame
       // 5.                                 Converts all R data frames to Arrow record batches
       // 6. Columnar batches      <-------- Arrow record batches
-      // 7. Read each row from
-      //    batch's row view.
+      // 7. Each row from batch
       //
       // Note that, unlike Python vectorization implementation, R side sends Arrow formatted
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
