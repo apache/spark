@@ -242,7 +242,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
 
-  override protected def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
+  override private[spark] def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
     if (this.references.contains(invalidAttr)) {
       UnknownPartitioning(numPartitions)
     } else {
@@ -299,7 +299,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     }
   }
 
-  override protected def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
+  override private[spark] def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
     if (this.references.contains(invalidAttr)) {
       val validExprs = this.children.takeWhile(!_.references.contains(invalidAttr))
       if (validExprs.isEmpty) {
