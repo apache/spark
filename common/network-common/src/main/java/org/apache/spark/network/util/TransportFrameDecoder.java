@@ -49,11 +49,11 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
   private static final int LENGTH_SIZE = 8;
   private static final int MAX_FRAME_SIZE = Integer.MAX_VALUE;
   private static final int UNKNOWN_FRAME_SIZE = -1;
-  private static final long DEFAULT_CONSOLIDATE_FRAME_BUFS_DELTA_THRESHOLD = 20 * 1024 * 1024;
+  private static final long CONSOLIDATE_THRESHOLD = 20 * 1024 * 1024;
 
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
   private final ByteBuf frameLenBuf = Unpooled.buffer(LENGTH_SIZE, LENGTH_SIZE);
-  private final long consolidateFrameBufsDeltaThreshold;
+  private final long consolidateThreshold;
 
   private CompositeByteBuf frameBuf = null;
   private long consolidatedFrameBufSize = 0;
@@ -65,12 +65,12 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
   private volatile Interceptor interceptor;
 
   public TransportFrameDecoder() {
-    this(DEFAULT_CONSOLIDATE_FRAME_BUFS_DELTA_THRESHOLD);
+    this(CONSOLIDATE_THRESHOLD);
   }
 
   @VisibleForTesting
-  TransportFrameDecoder(long consolidateFrameBufsDeltaThreshold) {
-    this.consolidateFrameBufsDeltaThreshold = consolidateFrameBufsDeltaThreshold;
+  TransportFrameDecoder(long consolidateThreshold) {
+    this.consolidateThreshold = consolidateThreshold;
   }
 
   @Override
@@ -174,7 +174,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     }
     // If the delta size of frameBuf exceeds the threshold, then we do consolidation
     // to reduce memory consumption.
-    if (frameBuf.capacity() - consolidatedFrameBufSize > consolidateFrameBufsDeltaThreshold) {
+    if (frameBuf.capacity() - consolidatedFrameBufSize > consolidateThreshold) {
       int newNumComponents = frameBuf.numComponents() - consolidatedNumComponents;
       frameBuf.consolidate(consolidatedNumComponents, newNumComponents);
       consolidatedFrameBufSize = frameBuf.capacity();
