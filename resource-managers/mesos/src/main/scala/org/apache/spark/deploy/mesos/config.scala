@@ -251,7 +251,7 @@ package object config {
         "is being run, each Mesos executor will occupy the number of cores configured here. " +
         "The value can be a floating point number.")
       .doubleConf
-      .createWithDefault(1)
+      .createWithDefault(1.0)
 
   private[spark] val EXTRA_CORES_PER_EXECUTOR =
     ConfigBuilder("spark.mesos.extra.cores")
