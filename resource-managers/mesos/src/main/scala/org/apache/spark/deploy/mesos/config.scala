@@ -334,17 +334,7 @@ package object config {
     ConfigBuilder("spark.mesos.constraints")
       .doc("Attribute-based constraints on mesos resource offers. By default, all resource " +
         "offers will be accepted. This setting applies only to executors. Refer to Mesos " +
-        "Attributes & Resources doc for more information on attributes. " +
-        "* Scalar constraints are matched with \"less than equal\" semantics i.e. value in the " +
-        "constraint must be less than or equal to the value in the resource offer. " +
-        "* Range constraints are matched with \"contains\" semantics i.e. value in the " +
-        "constraint must be within the resource offer's value. " +
-        "* Set constraints are matched with \"subset of\" semantics i.e. value in the constraint " +
-        "must be a subset of the resource offer's value. " +
-        "* Text constraints are matched with \"equality\" semantics i.e. value in the constraint " +
-        "must be exactly equal to the resource offer's value. " +
-        "* In case there is no value present as a part of the constraint any offer with the " +
-        "corresponding attribute will be accepted (without value check).")
+        "Attributes & Resources doc for more information on attributes.")
       .stringConf
       .createWithDefault("")
 
