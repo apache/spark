@@ -19,7 +19,7 @@
 
 from __future__ import print_function
 import itertools
-from optparse import OptionParser
+from argparse import ArgumentParser
 import os
 import random
 import re
@@ -484,20 +484,20 @@ def run_sparkr_tests():
 
 
 def parse_opts():
-    parser = OptionParser(
+    parser = ArgumentParser(
         prog="run-tests"
     )
-    parser.add_option(
-        "-p", "--parallelism", type="int", default=8,
-        help="The number of suites to test in parallel (default %default)"
+    parser.add_argument(
+        "-p", "--parallelism", type=int, default=8,
+        help="The number of suites to test in parallel (default %(default)d)"
     )
 
-    (opts, args) = parser.parse_args()
-    if args:
-        parser.error("Unsupported arguments: %s" % ' '.join(args))
-    if opts.parallelism < 1:
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+    if args.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
-    return opts
+    return args
 
 
 def main():
@@ -635,6 +635,7 @@ def _test():
     failure_count = doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()
