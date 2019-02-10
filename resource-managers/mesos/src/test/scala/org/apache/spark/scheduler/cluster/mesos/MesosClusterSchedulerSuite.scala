@@ -254,7 +254,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
-  test("supports setting fetcher cache") {
+  test("SPARK-26082 supports setting fetcher cache") {
     setScheduler(Map("spark.mesos.fetcherCache.enable" -> "true"))
 
     val mem = 1000
@@ -278,7 +278,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(uris.asScala.forall(_.getCache))
   }
 
-  test("supports disabling fetcher cache") {
+  test("SPARK-26082 supports disabling fetcher cache") {
     setScheduler(Map("spark.mesos.fetcherCache.enable" -> "false"))
 
     val mem = 1000
