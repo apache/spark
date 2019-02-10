@@ -135,7 +135,7 @@ private[ml] object TreeEnsembleModel {
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree to sum to 1.
+   *     - Normalize importances for tree to sum to 1 (if necessary).
    *  - Normalize feature importance vector to sum to 1.
    *
    *  References:
@@ -147,18 +147,19 @@ private[ml] object TreeEnsembleModel {
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances[M <: DecisionTreeModel](trees: Array[M], numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel](trees: Array[M], numFeatures: Int,
+                                                 normalizePerTree: Boolean = true): Vector = {
     val totalImportances = new OpenHashMap[Int, Double]()
     trees.foreach { tree =>
       // Aggregate feature importance vector for this tree
       val importances = new OpenHashMap[Int, Double]()
       computeFeatureImportance(tree.rootNode, importances)
-      // Normalize importance vector for this tree, and add it to total.
+      // Normalize importance vector for this tree (if necessary), and add it to total.
       // TODO: In the future, also support normalizing by tree.rootNode.impurityStats.count?
       val treeNorm = importances.map(_._2).sum
       if (treeNorm != 0) {
         importances.foreach { case (idx, impt) =>
-          val normImpt = impt / treeNorm
+          val normImpt = impt / (if (normalizePerTree) treeNorm else 1)
           totalImportances.changeValue(idx, normImpt, _ + normImpt)
         }
       }

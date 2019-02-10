@@ -345,7 +345,8 @@ class GBTClassificationModel private[ml](
    * See `DecisionTreeClassificationModel.featureImportances`
    */
   @Since("2.0.0")
-  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures,
+    normalizePerTree = false)
 
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {

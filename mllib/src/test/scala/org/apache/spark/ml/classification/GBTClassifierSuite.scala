@@ -356,14 +356,12 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
     val importances = gbt.fit(df).featureImportances
-    val mostImportantFeature = importances.argmax
-    assert(mostImportantFeature === 1)
+    assert(importances.numNonzeros === 1)
 
     // GBT with different featureSubsetStrategy
     val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
-    val mostIF = importanceFeatures.argmax
-    assert(mostImportantFeature !== mostIF)
+    assert(importanceFeatures.numNonzeros === 3)
   }
 
   test("model evaluateEachIteration") {
