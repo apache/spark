@@ -1,5 +1,9 @@
+package others;
+
+// 3. Longest Substring Without Repeating Characters
 public class LengthOfLongestSubstring {
 
+  // 不含有重复字符的最长子串
   public static int lengthOfLongestSubstring(String s) {
     if (null == s || s.length() == 0) {
       return 0;

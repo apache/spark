@@ -1,3 +1,6 @@
+package others;
+
+// 19. Remove Nth Node From End of List
 public class RemoveNthFromEnd {
   //  1, and n =1 => null;
   //  1,2, and n =1 => 1|2,  1 -> null;
