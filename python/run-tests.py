@@ -19,7 +19,7 @@
 
 from __future__ import print_function
 import logging
-from optparse import OptionParser, OptionGroup
+from argparse import ArgumentParser
 import os
 import re
 import shutil
@@ -168,30 +168,30 @@ def get_default_python_executables():
 
 
 def parse_opts():
-    parser = OptionParser(
+    parser = ArgumentParser(
         prog="run-tests"
     )
-    parser.add_option(
-        "--python-executables", type="string", default=','.join(get_default_python_executables()),
-        help="A comma-separated list of Python executables to test against (default: %default)"
+    parser.add_argument(
+        "--python-executables", type=str, default=','.join(get_default_python_executables()),
+        help="A comma-separated list of Python executables to test against (default: %(default)s)"
     )
-    parser.add_option(
-        "--modules", type="string",
+    parser.add_argument(
+        "--modules", type=str,
         default=",".join(sorted(python_modules.keys())),
-        help="A comma-separated list of Python modules to test (default: %default)"
+        help="A comma-separated list of Python modules to test (default: %(default)s)"
     )
-    parser.add_option(
-        "-p", "--parallelism", type="int", default=4,
-        help="The number of suites to test in parallel (default %default)"
+    parser.add_argument(
+        "-p", "--parallelism", type=int, default=4,
+        help="The number of suites to test in parallel (default %(default)d)"
     )
-    parser.add_option(
+    parser.add_argument(
         "--verbose", action="store_true",
         help="Enable additional debug logging"
     )
 
-    group = OptionGroup(parser, "Developer Options")
-    group.add_option(
-        "--testnames", type="string",
+    group = parser.add_argument_group("Developer Options")
+    group.add_argument(
+        "--testnames", type=str,
         default=None,
         help=(
             "A comma-separated list of specific modules, classes and functions of doctest "
@@ -201,14 +201,13 @@ def parse_opts():
             "'pyspark.sql.tests FooTests.test_foo' to run the specific unittest in the class. "
             "'--modules' option is ignored if they are given.")
     )
-    parser.add_option_group(group)
 
-    (opts, args) = parser.parse_args()
-    if args:
-        parser.error("Unsupported arguments: %s" % ' '.join(args))
-    if opts.parallelism < 1:
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+    if args.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
-    return opts
+    return args
 
 
 def _check_coverage(python_exec):
