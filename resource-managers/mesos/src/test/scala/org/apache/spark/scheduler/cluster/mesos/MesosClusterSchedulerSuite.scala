@@ -314,8 +314,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       Utils.createTextAttribute("c2", "b"))
     val offers = List(
       Utils.createOffer("o1", "s1", mem, cpu, None, 0),
-      Utils.createOffer("o2", "s2", mem, cpu, None, 0, s2Attributes),
-      Utils.createOffer("o3", "s3", mem, cpu, None, 0, s3Attributes))
+      Utils.createOffer("o2", "s2", mem, cpu, None, 0, None, s2Attributes),
+      Utils.createOffer("o3", "s3", mem, cpu, None, 0, None, s3Attributes))
 
     def submitDriver(driverConstraints: String): Unit = {
       val response = scheduler.submitDriver(

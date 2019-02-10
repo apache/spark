@@ -180,6 +180,10 @@ trait MesosSchedulerUtils extends Logging {
     res.asScala.filter(_.getName == name).map(_.getScalar.getValue).sum
   }
 
+  def resourceExists(res: JList[Resource], name: String): Boolean = {
+    res.asScala.exists(_.getName == name)
+  }
+
   /**
    * Transforms a range resource to a list of ranges
    *

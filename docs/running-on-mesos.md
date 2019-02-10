@@ -702,7 +702,16 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
     since this configuration is just an upper limit and not a guaranteed amount.
   </td>
-  </tr>
+</tr>
+<tr>
+  <td><code>spark.mesos.disk</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the amount of disk to acquire for this job. You might need to set this value depending on the type of disk isolation set up in Mesos.
+    For instance, setting an amount of disk is required when XFS isolator is enabled with hard limit enforced otherwise the isolator will kill
+    the Mesos executor when downloading the Spark executor archive.
+  </td>
+</tr>
 <tr>
   <td><code>spark.mesos.network.name</code></td>
   <td><code>(none)</code></td>

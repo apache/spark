@@ -321,6 +321,16 @@ package object config {
       .intConf
       .createWithDefault(0)
 
+  private[spark] val EXECUTOR_DISK =
+    ConfigBuilder("spark.mesos.disk")
+      .doc("Set the amount of disk to acquire for this job. You might need to set this value " +
+        "depending on the type of disk isolation set up in Mesos. For instance, setting an " +
+        "amount of disk is required when XFS isolator is enabled with hard limit enforced " +
+        "otherwise the isolator will kill the Mesos executor when downloading the Spark executor " +
+        "archive.")
+      .intConf
+      .createOptional
+
   private[spark] val TASK_LABELS =
     ConfigBuilder("spark.mesos.task.labels")
       .doc("Set the Mesos labels to add to each task. Labels are free-form key-value pairs. " +

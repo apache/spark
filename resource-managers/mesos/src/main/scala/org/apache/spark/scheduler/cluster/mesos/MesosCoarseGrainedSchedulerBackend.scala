@@ -79,6 +79,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private val useFetcherCache = conf.get(ENABLE_FETCHER_CACHE)
 
   private val maxGpus = conf.get(MAX_GPUS)
+  private val diskPerExecutor = conf.get(EXECUTOR_DISK)
 
   private val taskLabels = conf.get(TASK_LABELS)
 
@@ -399,6 +400,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       val offerMem = getResource(offer.getResourcesList, "mem")
       val offerCpus = getResource(offer.getResourcesList, "cpus")
       val offerPorts = getRangeResource(offer.getResourcesList, "ports")
+      val offerDisk = getResource(offer.getResourcesList, "disk")
       val offerReservationInfo = offer
         .getResourcesList
         .asScala
@@ -411,7 +413,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         logDebug(s"Accepting offer: $id with attributes: $offerAttributes " +
           offerReservationInfo.map(resInfo =>
             s"reservation info: ${resInfo.getReservation.toString}").getOrElse("") +
-          s"mem: $offerMem cpu: $offerCpus ports: $offerPorts " +
+          s"mem: $offerMem cpu: $offerCpus ports: $offerPorts disk: $offerDisk " +
           s"resources: ${offer.getResourcesList.asScala.mkString(",")}." +
           s"  Launching ${offerTasks.size} Mesos tasks.")
 
@@ -419,10 +421,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           val taskId = task.getTaskId
           val mem = getResource(task.getResourcesList, "mem")
           val cpus = getResource(task.getResourcesList, "cpus")
+          val disk = getResource(task.getResourcesList, "disk")
           val ports = getRangeResource(task.getResourcesList, "ports").mkString(",")
 
           logDebug(s"Launching Mesos task: ${taskId.getValue} with mem: $mem cpu: $cpus" +
-            s" ports: $ports" + s" on slave with slave id: ${task.getSlaveId.getValue} ")
+            s" disk: $disk ports: $ports on slave with slave id: ${task.getSlaveId.getValue} ")
         }
 
         driver.launchTasks(
@@ -497,11 +500,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
           val taskCPUs = executorCores(offerCPUs)
           val taskMemory = executorMemory(sc)
+          val taskDisk = diskPerExecutor
 
           slaves.getOrElseUpdate(slaveId, new Slave(offer.getHostname)).taskIDs.add(taskId)
 
           val (resourcesLeft, resourcesToUse) =
-            partitionTaskResources(resources, taskCPUs, taskMemory, taskGPUs)
+            partitionTaskResources(resources, taskCPUs, taskMemory, taskGPUs, taskDisk)
 
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
@@ -534,7 +538,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       resources: JList[Resource],
       taskCPUs: Int,
       taskMemory: Int,
-      taskGPUs: Int)
+      taskGPUs: Int,
+      taskDisk: Option[Int])
     : (List[Resource], List[Resource]) = {
 
     // partition cpus & mem
@@ -550,14 +555,24 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val (nonPortResources, portResourcesToUse) =
       partitionPortResources(nonZeroPortValuesFromConfig(sc.conf), afterGPUResources)
 
-    (nonPortResources,
+    var (remainingResources, resourcesToUse) = (nonPortResources,
       cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse ++ gpuResourcesToUse)
+
+    if (taskDisk.isDefined) {
+      val (afterDiskResources, diskResourcesToUse) =
+        partitionResources(remainingResources.asJava, "disk", taskDisk.get)
+
+      remainingResources = afterDiskResources
+      resourcesToUse ++= diskResourcesToUse
+    }
+    (remainingResources, resourcesToUse)
   }
 
   private def canLaunchTask(slaveId: String, offerHostname: String,
                             resources: JList[Resource]): Boolean = {
     val offerMem = getResource(resources, "mem")
     val offerCPUs = getResource(resources, "cpus").toInt
+    val offerDisk = getResource(resources, "disk").toInt
     val cpus = executorCores(offerCPUs)
     val mem = executorMemory(sc)
     val ports = getRangeResource(resources, "ports")
@@ -568,6 +583,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
       numExecutors < executorLimit &&
+      diskPerExecutor.fold(true)(_ <= offerDisk) &&
       slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)

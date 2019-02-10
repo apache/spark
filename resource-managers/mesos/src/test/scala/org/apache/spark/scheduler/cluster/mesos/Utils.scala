@@ -50,6 +50,7 @@ object Utils {
                    cpus: Int,
                    ports: Option[(Long, Long)] = None,
                    gpus: Int = 0,
+                   disk: Option[Int] = None,
                    attributes: List[Attribute] = List.empty): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
@@ -72,6 +73,12 @@ object Utils {
         .setName("gpus")
         .setType(Value.Type.SCALAR)
         .setScalar(Scalar.newBuilder().setValue(gpus))
+    }
+    if (disk.isDefined) {
+      builder.addResourcesBuilder()
+        .setName("disk")
+        .setType(Value.Type.SCALAR)
+        .setScalar(Scalar.newBuilder().setValue(disk.get))
     }
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()

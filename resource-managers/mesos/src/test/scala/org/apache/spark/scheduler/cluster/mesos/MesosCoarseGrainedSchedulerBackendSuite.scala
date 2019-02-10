@@ -136,6 +136,46 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(cpus == offerCores)
   }
 
+  test("mesos supports spark.mesos.disk") {
+    val claimedDisk = 40
+    setBackend(Map("spark.mesos.disk" -> claimedDisk.toString))
+
+    val executorMemory = backend.executorMemory(sc)
+    val offers = List(Resources(executorMemory, 1, 0, Some(100)))
+    offerResources(offers)
+
+    val taskInfos = verifyTaskLaunched(driver, "o1")
+    assert(taskInfos.length == 1)
+
+    val taskDisk = backend.getResource(taskInfos.head.getResourcesList, "disk")
+    assert(taskDisk == claimedDisk)
+  }
+
+  test("mesos supports unset spark.mesos.disk") {
+    setBackend()
+
+    val executorMemory = backend.executorMemory(sc)
+    val offers = List(Resources(executorMemory, 1, 0, Some(100)))
+    offerResources(offers)
+
+    val taskInfos = verifyTaskLaunched(driver, "o1")
+    assert(taskInfos.length == 1)
+
+    val taskDiskExist = backend.resourceExists(taskInfos.head.getResourcesList, "disk")
+    assert(!taskDiskExist)
+  }
+
+  test("mesos declines offer if not enough disk available") {
+    val claimedDisk = 400
+    setBackend(Map("spark.mesos.disk" -> claimedDisk.toString))
+
+    val executorMemory = backend.executorMemory(sc)
+    val offers = List(Resources(executorMemory, 1, 0, Some(100)))
+    offerResources(offers)
+
+    verifyDeclinedOffer(driver, createOfferId("o1"))
+  }
+
   test("mesos does not acquire more than spark.cores.max") {
     val maxCores = 10
     setBackend(Map(CORES_MAX.key -> maxCores.toString))
@@ -686,7 +726,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched(driver, "o1")
   }
 
-  private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)
+  private case class Resources(mem: Int, cpus: Int, gpus: Int = 0, disk: Option[Int] = None)
 
   private def registerMockExecutor(executorId: String, slaveId: String, cores: Integer) = {
     val mockEndpointRef = mock[RpcEndpointRef]
@@ -709,7 +749,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   private def offerResources(offers: List[Resources], startId: Int = 1): Unit = {
     val mesosOffers = offers.zipWithIndex.map {case (offer, i) =>
-      createOffer(s"o${i + startId}", s"s${i + startId}", offer.mem, offer.cpus, None, offer.gpus)}
+      createOffer(s"o${i + startId}", s"s${i + startId}", offer.mem, offer.cpus, None, offer.gpus,
+        offer.disk)}
 
     backend.resourceOffers(driver, mesosOffers.asJava)
   }
