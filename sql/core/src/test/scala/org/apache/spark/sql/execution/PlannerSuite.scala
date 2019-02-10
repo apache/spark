@@ -782,10 +782,54 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("SPARK-26812: wrong nullability for complex datatypes in union") {
-    val testRelation1 = LocalRelation('a.map(MapType(StringType, StringType, true)))
-    val testRelation2 = LocalRelation('a.map(MapType(StringType, StringType, false)))
-    val query = Union(testRelation2, testRelation1)
-    assert(query.output.head.dataType == MapType(StringType, StringType, true))
+    def testUnionOutputType(input1: DataType, input2: DataType, output: DataType): Unit = {
+      val query = Union(
+        LocalRelation(StructField("a", input1)), LocalRelation(StructField("a", input2)))
+      assert(query.output.head.dataType == output)
+    }
+
+    // Map
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = true))
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = true))
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = false))
+
+    // Array
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = true),
+      ArrayType(StringType, containsNull = true))
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = true),
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = true))
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = false))
+
+    // Struct
+    testUnionOutputType(
+      StructType(Seq(
+        StructField("f1", StringType, nullable = false),
+        StructField("f2", StringType, nullable = true),
+        StructField("f3", StringType, nullable = false))),
+      StructType(Seq(
+        StructField("f1", StringType, nullable = true),
+        StructField("f2", StringType, nullable = false),
+        StructField("f3", StringType, nullable = false))),
+      StructType(Seq(
+        StructField("f1", StringType, nullable = true),
+        StructField("f2", StringType, nullable = true),
+        StructField("f3", StringType, nullable = false))))
   }
 }
 

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -239,7 +240,10 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
       } catch {
         // This should never happen, since `output` is called only when the plan is `resolved`, so
         // all the data types have been checked to be the same.
-        case _: SparkException => firstAttr
+        case e: SparkException if !Utils.isTesting =>
+          logError("[BUG] Error in determinin Union output (for more details see the stacktrace" +
+            " below). Please open a JIRA ticket to report it with the full error message.", e)
+          firstAttr
       }
       outAttr.withNullability(attrs.exists(_.nullable))
     }
