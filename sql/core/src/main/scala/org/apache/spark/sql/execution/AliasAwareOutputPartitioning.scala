@@ -50,56 +50,54 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
  */
 trait AliasAwareOutputPartitioning extends UnaryExecNode {
 
+  /**
+   * `Seq` of `Expression`s which define the ouput of the node.
+   */
   protected def outputExpressions: Seq[NamedExpression]
 
-  private def hasAlias(exprs: Seq[NamedExpression]): Boolean =
-    exprs.exists(_.collectFirst { case _: Alias => true }.isDefined)
-
+  /**
+   * Returns the valid `Partitioning`s for the node w.r.t its output and its expressions.
+   */
   final override def outputPartitioning: Partitioning = {
-    if (hasAlias(outputExpressions)) {
-      // Returns the valid `Partitioning`s for the node w.r.t its output and its expressions.
-      child.outputPartitioning match {
-        case partitioning: Expression =>
-          val exprToEquiv = partitioning.references.map { attr =>
-            attr -> outputExpressions.filter(e =>
-              CleanupAliases.trimAliases(e).semanticEquals(attr))
-          }.filterNot { case (attr, exprs) =>
-            exprs.size == 1 && exprs.forall(_ == attr)
-          }
-          val initValue = partitioning match {
-            case PartitioningCollection(partitionings) => partitionings
-            case other => Seq(other)
-          }
-          val validPartitionings = exprToEquiv.foldLeft(initValue) {
-            case (partitionings, (toReplace, equivalents)) =>
-              if (equivalents.isEmpty) {
-                partitionings.map(_.pruneInvalidAttribute(toReplace))
-              } else {
-                partitionings.flatMap {
-                  case p: Expression if p.references.contains(toReplace) =>
-                    equivalents.map { equiv =>
-                      p.transformDown {
-                        case e if e == toReplace => equiv.toAttribute
-                      }.asInstanceOf[Partitioning]
-                    }
-                  case other => Seq(other)
-                }
+    child.outputPartitioning match {
+      case partitioning: Expression =>
+        val exprToEquiv = partitioning.references.map { attr =>
+          attr -> outputExpressions.filter(e =>
+            CleanupAliases.trimAliases(e).semanticEquals(attr))
+        }.filterNot { case (attr, exprs) =>
+          exprs.size == 1 && exprs.forall(_ == attr)
+        }
+        val initValue = partitioning match {
+          case PartitioningCollection(partitionings) => partitionings
+          case other => Seq(other)
+        }
+        val validPartitionings = exprToEquiv.foldLeft(initValue) {
+          case (partitionings, (toReplace, equivalents)) =>
+            if (equivalents.isEmpty) {
+              partitionings.map(_.pruneInvalidAttribute(toReplace))
+            } else {
+              partitionings.flatMap {
+                case p: Expression if p.references.contains(toReplace) =>
+                  equivalents.map { equiv =>
+                    p.transformDown {
+                      case e if e == toReplace => equiv.toAttribute
+                    }.asInstanceOf[Partitioning]
+                  }
+                case other => Seq(other)
               }
-          }.distinct
-          if (validPartitionings.size == 1) {
-            validPartitionings.head
-          } else {
-            validPartitionings.filterNot(_.isInstanceOf[UnknownPartitioning]) match {
-              case Seq() => PartitioningCollection(validPartitionings)
-              case Seq(knownPartitioning) => knownPartitioning
-              case knownPartitionings => PartitioningCollection(knownPartitionings)
             }
-
+        }.distinct
+        if (validPartitionings.size == 1) {
+          validPartitionings.head
+        } else {
+          validPartitionings.filterNot(_.isInstanceOf[UnknownPartitioning]) match {
+            case Seq() => PartitioningCollection(validPartitionings)
+            case Seq(knownPartitioning) => knownPartitioning
+            case knownPartitionings => PartitioningCollection(knownPartitionings)
           }
-        case other => other
-      }
-    } else {
-      child.outputPartitioning
+
+        }
+      case other => other
     }
   }
 }
