@@ -189,55 +189,7 @@ trait Partitioning {
   /**
    * Returns a version of this [[Partitioning]] amended by the invalid [[Attribute]].
    */
-  protected def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = this
-
-  /**
-   * Returns the valid `Partitioning`s for the node w.r.t its output and its expressions.
-   */
-  final def updatePartitioningWithNewOutput(
-      expressions: Seq[NamedExpression],
-      outputSet: AttributeSet): Partitioning = {
-    this match {
-      case partitioning: Expression =>
-        val exprToEquiv = partitioning.references.map { attr =>
-          attr -> expressions.filter(e =>
-            CleanupAliases.trimAliases(e).semanticEquals(attr))
-        }.filterNot { case (attr, exprs) =>
-          exprs.size == 1 && exprs.forall(_ == attr)
-        }
-        val initValue = partitioning match {
-          case PartitioningCollection(partitionings) => partitionings
-          case other => Seq(other)
-        }
-        val validPartitionings = exprToEquiv.foldLeft(initValue) {
-          case (partitionings, (toReplace, equivalents)) =>
-            if (equivalents.isEmpty) {
-              partitionings.map(_.pruneInvalidAttribute(toReplace))
-            } else {
-              partitionings.flatMap {
-                case p: Expression if p.references.contains(toReplace) =>
-                  equivalents.map { equiv =>
-                    p.transformDown {
-                      case e if e == toReplace => equiv.toAttribute
-                    }.asInstanceOf[Partitioning]
-                  }
-                case other => Seq(other)
-              }
-            }
-        }.distinct
-        if (validPartitionings.size == 1) {
-          validPartitionings.head
-        } else {
-          validPartitionings.filterNot(_.isInstanceOf[UnknownPartitioning]) match {
-            case Seq() => PartitioningCollection(validPartitionings)
-            case Seq(knownPartitioning) => knownPartitioning
-            case knownPartitionings => PartitioningCollection(knownPartitionings)
-          }
-
-        }
-      case other => other
-    }
-  }
+  private[spark] def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = this
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
