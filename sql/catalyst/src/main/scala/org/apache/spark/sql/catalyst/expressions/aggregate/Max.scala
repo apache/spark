@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col) FROM VALUES (10), (50), (20) AS tab(col);
        50
   """,
-  since = "1.3.0")
+  since = "1.0.0")
 case class Max(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil

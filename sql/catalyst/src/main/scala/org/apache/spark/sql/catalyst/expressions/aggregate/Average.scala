@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
        1.5
   """,
-  since = "1.3.0")
+  since = "1.0.0")
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def prettyName: String = "avg"
