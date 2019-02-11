@@ -544,8 +544,7 @@ object CatalogColumnStat extends Logging {
         avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
         maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
         histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize),
-        version = map.get(s"${colName}.${KEY_VERSION}").map(_.toInt)
-          .getOrElse(CatalogColumnStat.VERSION)
+        version = map(s"${colName}.${KEY_VERSION}").toInt
       ))
     } catch {
       case NonFatal(e) =>
