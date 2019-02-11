@@ -2357,11 +2357,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
 
         // Use a bad udf to generate failed inputs.
-        import org.apache.spark.sql.functions.udf
-        val badUDF = udf({x: Int =>
+        val badUDF = org.apache.spark.sql.functions.udf((x: Int) => {
           if (x < 1) x
           else throw new RuntimeException("Failed to produce data.")
-          })
+        })
         spark
           .range(5)
           .select(badUDF('id).as("a"))
