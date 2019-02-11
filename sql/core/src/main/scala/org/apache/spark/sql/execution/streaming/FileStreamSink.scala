@@ -55,18 +55,19 @@ object FileStreamSink extends Logging {
 
   def checkEscapedMetadataPath(fs: FileSystem, metadataPath: Path, sqlConf: SQLConf): Unit = {
     if (sqlConf.getConf(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
-        && metadataPath.toUri != new Path(metadataPath.toUri.toString).toUri) {
-      val oldMetadataPath = new Path(metadataPath.toUri.toString)
-      if (fs.exists(oldMetadataPath)) {
-        throw new SparkException(s"Found $oldMetadataPath. In Spark 2.4 or prior, the " +
-          s"file sink metadata will be written to $oldMetadataPath when using " +
-          s"$metadataPath as the output path. We detected that $oldMetadataPath exists " +
-          s"but not sure whether we should resume your query using this metadata path. " +
-          s"If you would like to resume from $oldMetadataPath, please *move* all files " +
-          s"in $oldMetadataPath to $metadataPath and rerun your codes. If " +
-          s"$oldMetadataPath is not related to the query, you can set SQL conf " +
-          s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to " +
-          s"turn off this check, or delete $oldMetadataPath.")
+        && StreamExecution.containsSpecialCharsInPath(metadataPath)) {
+      val legacyMetadataPath = new Path(metadataPath.toUri.toString)
+      if (fs.exists(legacyMetadataPath)) {
+        throw new SparkException(s"Found $legacyMetadataPath. In Spark 2.4 and earlier, the " +
+          s"file sink metadata is written to $legacyMetadataPath when using $metadataPath as " +
+          s"the output path. We detected that $legacyMetadataPath exists but not sure " +
+          s"whether we should ignore this directory and start your query using $metadataPath " +
+          s"directly. If you would like to recover your query from $legacyMetadataPath, please " +
+          s"*move* all files in $legacyMetadataPath to $metadataPath and rerun your codes. If " +
+          s"$legacyMetadataPath is not related to the query or you have already moved the files " +
+          s"to $metadataPath, you can either set SQL conf " +
+          s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
+          s"off this check, or just remove $legacyMetadataPath.")
       }
     }
   }
