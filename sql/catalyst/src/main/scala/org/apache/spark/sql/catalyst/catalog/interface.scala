@@ -416,7 +416,7 @@ case class CatalogColumnStat(
     avgLen: Option[Long] = None,
     maxLen: Option[Long] = None,
     histogram: Option[Histogram] = None,
-    version: Option[Int] = Some(CatalogColumnStat.VERSION)) {
+    version: Int = CatalogColumnStat.VERSION) {
 
   /**
    * Returns a map from string to string that can be used to serialize the column stats.
@@ -483,13 +483,12 @@ object CatalogColumnStat extends Logging {
   /**
    * Converts from string representation of data type to the corresponding Catalyst data type.
    */
-  def fromExternalString(s: String, name: String, dataType: DataType, version: Option[Int]): Any = {
-    def useLocalTimeZone = version.map(_ == 1).getOrElse(true)
+  def fromExternalString(s: String, name: String, dataType: DataType, version: Int): Any = {
     dataType match {
       case BooleanType => s.toBoolean
-      case DateType if useLocalTimeZone => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
+      case DateType if version == 1 => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
       case DateType => DateFormatter().parse(s)
-      case TimestampType if useLocalTimeZone =>
+      case TimestampType if version == 1 =>
         DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
       case TimestampType => getTimestampFormatter().parse(s)
       case ByteType => s.toByte
@@ -546,6 +545,7 @@ object CatalogColumnStat extends Logging {
         maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
         histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize),
         version = map.get(s"${colName}.${KEY_VERSION}").map(_.toInt)
+          .getOrElse(CatalogColumnStat.VERSION)
       ))
     } catch {
       case NonFatal(e) =>

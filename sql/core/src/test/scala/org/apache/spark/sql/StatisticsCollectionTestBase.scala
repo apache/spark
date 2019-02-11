@@ -69,32 +69,22 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   )
 
   /** A mapping from column to the stats collected. */
-  private val optVersion = Some(CatalogColumnStat.VERSION)
   protected val stats = mutable.LinkedHashMap(
-    "cbool" -> CatalogColumnStat(Some(2), Some("false"), Some("true"), Some(1), Some(1), Some(1),
-      version = optVersion),
-    "cbyte" -> CatalogColumnStat(Some(2), Some("1"), Some("2"), Some(1), Some(1), Some(1),
-      version = optVersion),
-    "cshort" -> CatalogColumnStat(Some(2), Some("1"), Some("3"), Some(1), Some(2), Some(2),
-      version = optVersion),
-    "cint" -> CatalogColumnStat(Some(2), Some("1"), Some("4"), Some(1), Some(4), Some(4),
-      version = optVersion),
-    "clong" -> CatalogColumnStat(Some(2), Some("1"), Some("5"), Some(1), Some(8), Some(8),
-      version = optVersion),
-    "cdouble" -> CatalogColumnStat(Some(2), Some("1.0"), Some("6.0"), Some(1), Some(8), Some(8),
-      version = optVersion),
-    "cfloat" -> CatalogColumnStat(Some(2), Some("1.0"), Some("7.0"), Some(1), Some(4), Some(4),
-      version = optVersion),
+    "cbool" -> CatalogColumnStat(Some(2), Some("false"), Some("true"), Some(1), Some(1), Some(1)),
+    "cbyte" -> CatalogColumnStat(Some(2), Some("1"), Some("2"), Some(1), Some(1), Some(1)),
+    "cshort" -> CatalogColumnStat(Some(2), Some("1"), Some("3"), Some(1), Some(2), Some(2)),
+    "cint" -> CatalogColumnStat(Some(2), Some("1"), Some("4"), Some(1), Some(4), Some(4)),
+    "clong" -> CatalogColumnStat(Some(2), Some("1"), Some("5"), Some(1), Some(8), Some(8)),
+    "cdouble" -> CatalogColumnStat(Some(2), Some("1.0"), Some("6.0"), Some(1), Some(8), Some(8)),
+    "cfloat" -> CatalogColumnStat(Some(2), Some("1.0"), Some("7.0"), Some(1), Some(4), Some(4)),
     "cdecimal" -> CatalogColumnStat(Some(2), Some(dec1.toString), Some(dec2.toString), Some(1),
-      Some(16), Some(16), version = optVersion),
-    "cstring" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3),
-      version = optVersion),
-    "cbinary" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3),
-      version = optVersion),
+      Some(16), Some(16)),
+    "cstring" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
+    "cbinary" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
     "cdate" -> CatalogColumnStat(Some(2), Some(d1Str), Some(d2Str),
-      Some(1), Some(4), Some(4), version = optVersion),
+      Some(1), Some(4), Some(4)),
     "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1Str),
-      Some(t2Str), Some(1), Some(8), Some(8), version = optVersion)
+      Some(t2Str), Some(1), Some(8), Some(8))
   )
 
   /**

@@ -100,7 +100,7 @@ case class ColumnStat(
     avgLen: Option[Long] = None,
     maxLen: Option[Long] = None,
     histogram: Option[Histogram] = None,
-    version: Option[Int] = Some(CatalogColumnStat.VERSION)) {
+    version: Int = CatalogColumnStat.VERSION) {
 
   // Are distinctCount and nullCount statistics defined?
   val hasCountStats = distinctCount.isDefined && nullCount.isDefined
