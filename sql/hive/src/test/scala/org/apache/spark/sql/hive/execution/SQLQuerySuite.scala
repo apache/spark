@@ -2356,27 +2356,29 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-25158: " +
     "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
-    withSQLConf("hive.script.recordwriter" ->
-      classOf[NonWritableRecordWriter].getCanonicalName) {
-      val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
-      try {
-        val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
-        Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
-        spark
-          .range(5)
-          .selectExpr("id AS a")
-          .createOrReplaceTempView("test")
-        val scriptFilePath = getTestResourcePath("data")
-        val e = intercept[SparkException] {
-          sql(
-            s"""FROM test SELECT TRANSFORM(a)
-               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+    withTempView("test") {
+      withSQLConf("hive.script.recordwriter" ->
+        classOf[NonWritableRecordWriter].getCanonicalName) {
+        val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
+        try {
+          val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
+          Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
+          spark
+            .range(5)
+            .selectExpr("id AS a")
+            .createOrReplaceTempView("test")
+          val scriptFilePath = getTestResourcePath("data")
+          val e = intercept[SparkException] {
+            sql(
+              s"""FROM test SELECT TRANSFORM(a)
+                 |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
              """.stripMargin).collect()
+          }
+          assert(e.getMessage.contains("Failure to write data."))
+          assert(uncaughtExceptionHandler.exception.isEmpty)
+        } finally {
+          Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
         }
-        assert(e.getMessage.contains("Failure to write data."))
-        assert(uncaughtExceptionHandler.exception.isEmpty)
-      } finally {
-        Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
       }
     }
   }
