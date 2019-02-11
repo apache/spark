@@ -235,10 +235,10 @@ gapplyInternal <- function(x, func, schema) {
     # Also, it does not support explicit float type set by users.
     if (inherits(schema, "structType")) {
       if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
-        stop("Arrow optimization with gapply[Collect] does not support FloatType yet.")
+        stop("Arrow optimization with gapply and gapplyCollect do not support FloatType yet.")
       }
       if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "BinaryType"))) {
-        stop("Arrow optimization with gapply[Collect] does not support BinaryType yet.")
+        stop("Arrow optimization with gapply and gapplyCollect do not support BinaryType yet.")
       }
     }
   }
