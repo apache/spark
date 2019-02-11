@@ -224,7 +224,7 @@ class PartitioningSuite extends SparkFunSuite {
     testPartitioning(
       Seq(attr1),
       planRangePartitioned2Attr,
-      simpleRangePartitioning(Seq(attr1), 10))
+      simpleRangePartitioning(Seq(attr1, attr2), 10))
   }
 
   test("RangePartitioning without renaming") {

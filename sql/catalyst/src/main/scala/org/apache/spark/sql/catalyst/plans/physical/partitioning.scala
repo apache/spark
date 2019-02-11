@@ -306,14 +306,14 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     }
   }
 
+  /**
+   * Returns `UnknownPartitioning` if the first ordering expressions is not valid anymore,
+   * otherwise it performs no modification because pruning the invalid expressions may cause
+   * errors when comparing with `ClusteredDistribution`s.
+   */
   override private[spark] def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
-    if (this.references.contains(invalidAttr)) {
-      val validExprs = ordering.takeWhile(!_.references.contains(invalidAttr))
-      if (validExprs.isEmpty) {
-        UnknownPartitioning(numPartitions)
-      } else {
-        RangePartitioning(validExprs, numPartitions)
-      }
+    if (ordering.headOption.forall(_.references.contains(invalidAttr))) {
+      UnknownPartitioning(numPartitions)
     } else {
       this
     }
