@@ -222,12 +222,14 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }.getOrElse {
       if (useTempCheckpointLocation) {
         deleteCheckpointOnStop = true
-        val tempDir = Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+        val tempDir = System.getProperty("java.io.tmpdir")
+        val cpTempDir = new Path("file://" + tempDir + "/temporary-"
+          + UUID.randomUUID.toString).toString
         logWarning("Temporary checkpoint location created which is deleted normally when" +
-          s" the query didn't fail: $tempDir. If it's required to delete it under any" +
+          s" the query didn't fail: $cpTempDir. If it's required to delete it under any" +
           s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
           s" true. Important to know deleting temp checkpoint folder is best effort.")
-        tempDir
+        cpTempDir
       } else {
         throw new AnalysisException(
           "checkpointLocation must be specified either " +

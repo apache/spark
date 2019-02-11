@@ -90,7 +90,9 @@ abstract class StreamExecution(
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    fs.mkdirs(checkpointPath)
+    if (!fs.isDirectory(checkpointPath) && !fs.mkdirs(checkpointPath)) {
+      throw new SparkException(s"Failed to create checkpoint path $checkpointPath")
+    }
     checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
   }
   logInfo(s"Checkpoint root $checkpointRoot resolved to $resolvedCheckpointRoot.")
