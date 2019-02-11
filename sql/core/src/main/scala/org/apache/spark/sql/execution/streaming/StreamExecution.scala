@@ -89,14 +89,13 @@ abstract class StreamExecution(
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
-        && StreamExecution.containsSpecialCharsInPath(checkpointDir)) {
+        && StreamExecution.containsSpecialCharsInPath(checkpointPath)) {
       // In Spark 2.4 and earlier, the checkpoint path is escaped 3 times (3 `Path.toUri.toString`
       // calls). If this legacy checkpoint path exists, we will throw an error to tell the user how
       // to migrate.
       val legacyCheckpointDir =
-        new Path(new Path(checkpointDir.toUri.toString).toUri.toString).toUri.toString
+        new Path(new Path(checkpointPath.toUri.toString).toUri.toString).toUri.toString
       val legacyCheckpointDirExists =
         try {
           fs.exists(new Path(legacyCheckpointDir))
@@ -108,17 +107,18 @@ abstract class StreamExecution(
         }
       if (legacyCheckpointDirExists) {
         throw new SparkException(s"Found $legacyCheckpointDir. In Spark 2.4 and earlier, the " +
-          s"checkpoint data is written to $legacyCheckpointDir when using $checkpointDir as " +
+          s"checkpoint data is written to $legacyCheckpointDir when using $checkpointPath as " +
           s"the checkpoint location. We detected that $legacyCheckpointDir exists but not sure " +
-          s"whether we should ignore this directory and start your query using $checkpointDir " +
+          s"whether we should ignore this directory and start your query using $checkpointPath " +
           s"directly. If you would like to recover your query from $legacyCheckpointDir, please " +
-          s"*move* all files in $legacyCheckpointDir to $checkpointDir and rerun your codes. If " +
+          s"*move* all files in $legacyCheckpointDir to $checkpointPath and rerun your codes. If " +
           s"$legacyCheckpointDir is not related to the query or you have already moved the files " +
-          s"to $checkpointDir, you can either set SQL conf " +
+          s"to $checkpointPath, you can either set SQL conf " +
           s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
           s"off this check, or just remove $legacyCheckpointDir.")
       }
     }
+    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     fs.mkdirs(checkpointDir)
     checkpointDir.toString
   }
