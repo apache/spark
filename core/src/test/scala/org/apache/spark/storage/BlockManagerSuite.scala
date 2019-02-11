@@ -928,6 +928,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   Seq(
     "caching" -> StorageLevel.MEMORY_ONLY,
+    "caching, serialized" -> StorageLevel.MEMORY_ONLY_SER,
     "caching on disk" -> StorageLevel.DISK_ONLY
   ).foreach { case (name, storageLevel) =>
     encryptionTest(s"test putBlockDataAsStream with $name") { conf =>

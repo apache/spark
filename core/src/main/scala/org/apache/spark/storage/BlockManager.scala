@@ -298,7 +298,7 @@ private[spark] class BlockManager(
           val putSucceeded = if (level.deserialized) {
             saveDeserializedValuesToMemoryStore(blockData().toInputStream())
           } else {
-            saveSerializedValuesToMemoryStore(readToByteBuffer)
+            saveSerializedValuesToMemoryStore(readToByteBuffer())
           }
           if (!putSucceeded && level.useDisk) {
             logWarning(s"Persisting block $blockId to disk instead.")
@@ -372,8 +372,6 @@ private[spark] class BlockManager(
       keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock) {
 
-    private var isTempFileMoved = false
-
     /**
      * Calling this method once leads to loading the content of the temporary file into the memory.
      */
@@ -387,16 +385,11 @@ private[spark] class BlockManager(
 
     override def blockData(): BlockData = diskStore.getBytes(tmpFile, blockSize)
 
-    override def saveToDiskStore(): Unit = {
-      diskStore.moveFileToBlock(tmpFile, blockSize, blockId)
-      isTempFileMoved = true
-    }
+    override def saveToDiskStore(): Unit = diskStore.moveFileToBlock(tmpFile, blockSize, blockId)
 
     override def save(): Boolean = {
       val res = super.save()
-      if (!isTempFileMoved) {
-        tmpFile.delete()
-      }
+      tmpFile.delete()
       res
     }
 
