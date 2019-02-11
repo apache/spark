@@ -43,15 +43,15 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       val result = plan transformDown {
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
         // Avoid reordering if a join hint is present.
-        case j @ Join(_, _, _: InnerLike, Some(cond), hint) if hint == JoinHint.NONE =>
+        case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
           reorder(j, j.output)
-        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), hint))
-          if projectList.forall(_.isInstanceOf[Attribute]) && hint == JoinHint.NONE =>
+        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
+          if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
       }
       // After reordering is finished, convert OrderedJoin back to Join.
       result transform {
-        case OrderedJoin(left, right, jt, cond, hint) => Join(left, right, jt, cond, hint)
+        case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond, JoinHint.NONE)
       }
     }
   }
@@ -77,13 +77,13 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
     plan match {
-      case Join(left, right, _: InnerLike, Some(cond), hint) if hint == JoinHint.NONE =>
+      case Join(left, right, _: InnerLike, Some(cond), JoinHint.NONE) =>
         val (leftPlans, leftConditions) = extractInnerJoins(left)
         val (rightPlans, rightConditions) = extractInnerJoins(right)
         (leftPlans ++ rightPlans, splitConjunctivePredicates(cond).toSet ++
           leftConditions ++ rightConditions)
-      case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), hint))
-        if projectList.forall(_.isInstanceOf[Attribute]) && hint == JoinHint.NONE =>
+      case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
+        if projectList.forall(_.isInstanceOf[Attribute]) =>
         extractInnerJoins(j)
       case _ =>
         (Seq(plan), Set())
@@ -91,11 +91,11 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def replaceWithOrderedJoin(plan: LogicalPlan): LogicalPlan = plan match {
-    case j @ Join(left, right, jt: InnerLike, Some(cond), hint) =>
+    case j @ Join(left, right, jt: InnerLike, Some(cond), JoinHint.NONE) =>
       val replacedLeft = replaceWithOrderedJoin(left)
       val replacedRight = replaceWithOrderedJoin(right)
-      OrderedJoin(replacedLeft, replacedRight, jt, Some(cond), hint)
-    case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), _)) =>
+      OrderedJoin(replacedLeft, replacedRight, jt, Some(cond))
+    case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE)) =>
       p.copy(child = replaceWithOrderedJoin(j))
     case _ =>
       plan
@@ -107,8 +107,7 @@ case class OrderedJoin(
     left: LogicalPlan,
     right: LogicalPlan,
     joinType: JoinType,
-    condition: Option[Expression],
-    hint: JoinHint) extends BinaryNode {
+    condition: Option[Expression]) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 }
 
