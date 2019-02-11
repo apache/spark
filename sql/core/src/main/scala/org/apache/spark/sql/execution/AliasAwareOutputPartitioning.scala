@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
  * exposed in the output of this plan. It can avoid the presence of redundant shuffles in queries
  * caused by the rename of an attribute among the partitioning ones, eg.
  *
- * spark.range(10).selectExpr("id AS key", "0").repartition($"key").write.saveAsTable("df1")
- * spark.range(10).selectExpr("id AS key", "0").repartition($"key").write.saveAsTable("df2")
+ * spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
+ * spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
+ * sql("set spark.sql.autoBroadcastJoinThreshold=-1")
  * sql("""
  *   SELECT * FROM
  *     (SELECT key AS k from df1) t1
@@ -38,15 +39,16 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
  * """).explain
  *
  * == Physical Plan ==
- * *SortMergeJoin [k#56L], [k#57L], Inner
- * :- *Sort [k#56L ASC NULLS FIRST], false, 0
- * :  +- Exchange hashpartitioning(k#56L, 200) // <--- Unnecessary shuffle operation
- * :     +- *Project [key#39L AS k#56L]
- * :        +- Exchange hashpartitioning(key#39L, 200)
- * :           +- *Project [id#36L AS key#39L]
+ * *SortMergeJoin [k#21L], [k#22L], Inner
+ * :- *Sort [k#21L ASC NULLS FIRST], false, 0
+ * :  +- Exchange hashpartitioning(k#21L, 200) // <--- Unnecessary shuffle operation
+ * :     +- *Project [key#2L AS k#21L]
+ * :        +- Exchange hashpartitioning(key#2L, 200)
+ * :           +- *Project [id#0L AS key#2L]
  * :              +- *Range (0, 10, step=1, splits=Some(4))
- * +- *Sort [k#57L ASC NULLS FIRST], false, 0
- *    +- ReusedExchange [k#57L], Exchange hashpartitioning(k#56L, 200)
+ * +- *(4) Sort [k#22L ASC NULLS FIRST], false, 0
+ *    +- *(4) Project [key#8L AS k#22L]
+ *       +- ReusedExchange [key#8L], Exchange hashpartitioning(key#2L, 200)
  */
 trait AliasAwareOutputPartitioning extends UnaryExecNode {
 
@@ -61,6 +63,13 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode {
   final override def outputPartitioning: Partitioning = {
     child.outputPartitioning match {
       case partitioning: Expression =>
+        // Creates a sequence of tuples where the first element is an `Attribute` referenced in the
+        // partitioning expression of the child and the second is a sequence of all its aliased
+        // occurrences in the node output. If there is no occurrence of an attribute in the output,
+        // the second element of the tuple for it will be an empty `Seq`. If the attribute,
+        // instead, is only present as is in the output, there will be no entry for it.
+        // Eg. if the partitioning is RangePartitioning('a) and the node output is "a, 'a as a1,
+        // a' as a2", then exprToEquiv will contain the tuple ('a, Seq('a, 'a as a1, 'a as a2)).
         val exprToEquiv = partitioning.references.map { attr =>
           attr -> outputExpressions.filter(e =>
             CleanupAliases.trimAliases(e).semanticEquals(attr))
@@ -71,9 +80,15 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode {
           case PartitioningCollection(partitionings) => partitionings
           case other => Seq(other)
         }
+        // Replace all the aliased expressions detected earlier with all their corresponding
+        // occurrences. This may produce many valid partitioning expressions from a single one.
+        // Eg. in the example above, this would produce a `Seq` of 3 `RangePartitioning`, namely:
+        // `RangePartitioning('a)`, `RangePartitioning('a1)`, `RangePartitioning('a2)`.
         val validPartitionings = exprToEquiv.foldLeft(initValue) {
           case (partitionings, (toReplace, equivalents)) =>
             if (equivalents.isEmpty) {
+              // Remove from the partitioning expression the attribute which is not present in the
+              // node output
               partitionings.map(_.pruneInvalidAttribute(toReplace))
             } else {
               partitionings.flatMap {

@@ -242,6 +242,13 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
 
+  /**
+   * If the HashPartitioning contains an attribute which is not present in the output expressions,
+   * the returned partitioning in `UnknownPartitioning` instead of the `HashPartitioning` of the
+   * remaining attributes which is wrong.
+   * Eg. `HashPartitioning('a, 'b)` with output expressions `'a as 'a1`, should produce
+   * `UnknownPartitioning` instead of `HashPartitioning('a1)`
+   */
   override private[spark] def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
     if (this.references.contains(invalidAttr)) {
       UnknownPartitioning(numPartitions)
@@ -301,7 +308,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
 
   override private[spark] def pruneInvalidAttribute(invalidAttr: Attribute): Partitioning = {
     if (this.references.contains(invalidAttr)) {
-      val validExprs = this.children.takeWhile(!_.references.contains(invalidAttr))
+      val validExprs = ordering.takeWhile(!_.references.contains(invalidAttr))
       if (validExprs.isEmpty) {
         UnknownPartitioning(numPartitions)
       } else {
