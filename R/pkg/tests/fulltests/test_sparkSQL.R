@@ -307,7 +307,7 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame Arrow optimization", {
+test_that("createDataFrame/collect Arrow optimization", {
   skip_if_not_installed("arrow")
 
   conf <- callJMethod(sparkSession, "conf")
@@ -332,7 +332,7 @@ test_that("createDataFrame Arrow optimization", {
   })
 })
 
-test_that("createDataFrame Arrow optimization - type specification", {
+test_that("createDataFrame/collect Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
   rdf <- data.frame(list(list(a = 1,
                               b = "a",
