@@ -96,18 +96,17 @@ private[spark] class DiskStore(
   }
 
   def getBytes(blockId: BlockId): BlockData = {
-    val file = diskManager.getFile(blockId.name)
-    val blockSize = getSize(blockId)
+    getBytes(diskManager.getFile(blockId.name), getSize(blockId))
+  }
 
-    securityManager.getIOEncryptionKey() match {
-      case Some(key) =>
-        // Encrypted blocks cannot be memory mapped; return a special object that does decryption
-        // and provides InputStream / FileRegion implementations for reading the data.
-        new EncryptedBlockData(file, blockSize, conf, key)
+  def getBytes(f: File, blockSize: Long): BlockData = securityManager.getIOEncryptionKey() match {
+    case Some(key) =>
+      // Encrypted blocks cannot be memory mapped; return a special object that does decryption
+      // and provides InputStream / FileRegion implementations for reading the data.
+      new EncryptedBlockData(f, blockSize, conf, key)
 
-      case _ =>
-        new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, file, blockSize)
-    }
+    case _ =>
+      new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, f, blockSize)
   }
 
   def remove(blockId: BlockId): Boolean = {

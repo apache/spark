@@ -236,15 +236,14 @@ private[spark] class BlockManager(
      *  Reads the block content into the memory. If the update of the block store is based on a
      *  temporary file this could lead to loading the whole file into a ChunkedByteBuffer.
      */
-    protected def readToByteBuffer: ChunkedByteBuffer
+    protected def readToByteBuffer(): ChunkedByteBuffer
 
-    protected def getInputStream(): InputStream
+    protected def blockData(): BlockData
 
     protected def saveToDiskStore(): Unit
 
-    private def saveDeserializedValuesToMemoryStore(inputStream: InputStream) = {
-      val values =
-        serializerManager.dataDeserializeStream(blockId, inputStream)(classTag)
+    private def saveDeserializedValuesToMemoryStore(inputStream: InputStream): Boolean = {
+      val values = serializerManager.dataDeserializeStream(blockId, inputStream)(classTag)
       memoryStore.putIteratorAsValues(blockId, values, classTag) match {
         case Right(_) => true
         case Left(iter) =>
@@ -256,7 +255,7 @@ private[spark] class BlockManager(
       }
     }
 
-    private def saveSerializedValuesToMemoryStore(bytes: ChunkedByteBuffer) = {
+    private def saveSerializedValuesToMemoryStore(bytes: ChunkedByteBuffer): Boolean = {
       val memoryMode = level.memoryMode
       memoryStore.putBytes(blockId, blockSize, memoryMode, () => {
         if (memoryMode == MemoryMode.OFF_HEAP && bytes.chunks.exists(!_.isDirect)) {
@@ -282,18 +281,13 @@ private[spark] class BlockManager(
       doPut(blockId, level, classTag, tellMaster, keepReadLock) { info =>
         val startTimeNs = System.nanoTime()
 
-        // lazy as for a storage level which only targets disk (without any replication)
-        // this val won't be used at all
-        lazy val byteBuffer = readToByteBuffer
-
         // Since we're storing bytes, initiate the replication before storing them locally.
         // This is faster as data is already serialized and ready to send.
         val replicationFuture = if (level.replication > 1) {
           Future {
             // This is a blocking action and should run in futureExecutionContext which is a cached
-            // thread pool. The ByteBufferBlockData wrapper is not disposed of to avoid releasing
-            // buffers that are owned by the caller.
-            replicate(blockId, new ByteBufferBlockData(byteBuffer, false), level, classTag)
+            // thread pool.
+            replicate(blockId, blockData(), level, classTag)
           }(futureExecutionContext)
         } else {
           null
@@ -302,19 +296,9 @@ private[spark] class BlockManager(
           // Put it in memory first, even if it also has useDisk set to true;
           // We will drop it to disk later if the memory store can't hold it.
           val putSucceeded = if (level.deserialized) {
-            // trying to save memory by choosing the right input stream
-            val inputStream = if (level.replication > 1) {
-              // the bytebuffer is already used for replication so the block is in the memory
-              byteBuffer.toInputStream()
-            } else {
-              // if the update of the block store is based on a temporary file and replication is
-              // not requested then an InputStream constructed for the file directly can be used
-              // (reading the whole file into a ChunkedByteBuffer can be avoided)
-              getInputStream()
-            }
-            saveDeserializedValuesToMemoryStore(inputStream)
+            saveDeserializedValuesToMemoryStore(blockData().toInputStream())
           } else {
-            saveSerializedValuesToMemoryStore(byteBuffer)
+            saveSerializedValuesToMemoryStore(readToByteBuffer)
           }
           if (!putSucceeded && level.useDisk) {
             logWarning(s"Persisting block $blockId to disk instead.")
@@ -366,11 +350,15 @@ private[spark] class BlockManager(
       keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock) {
 
-    override def readToByteBuffer: ChunkedByteBuffer = bytes
+    override def readToByteBuffer(): ChunkedByteBuffer = bytes
+
+    /**
+     * The ByteBufferBlockData wrapper is not disposed of to avoid releasing buffers that are
+     * owned by the caller.
+     */
+    override def blockData(): BlockData = new ByteBufferBlockData(bytes, false)
 
     override def saveToDiskStore(): Unit = diskStore.putBytes(blockId, bytes)
-
-    override protected def getInputStream(): InputStream = bytes.toInputStream()
 
   }
 
@@ -389,27 +377,15 @@ private[spark] class BlockManager(
     /**
      * Calling this method once leads to loading the content of the temporary file into the memory.
      */
-    override def readToByteBuffer: ChunkedByteBuffer = securityManager.getIOEncryptionKey() match {
-      case Some(key) =>
-        // we need to pass in the size of the unencrypted block
-        val allocator = level.memoryMode match {
-          case MemoryMode.ON_HEAP => ByteBuffer.allocate _
-          case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
-        }
-        new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
-
-      case None =>
-        ChunkedByteBuffer.fromFile(tmpFile)
+    override def readToByteBuffer(): ChunkedByteBuffer = {
+      val allocator = level.memoryMode match {
+        case MemoryMode.ON_HEAP => ByteBuffer.allocate _
+        case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
+      }
+      blockData().toChunkedByteBuffer(allocator)
     }
 
-    override def getInputStream(): InputStream = securityManager.getIOEncryptionKey() match {
-        case Some(key) =>
-          // we need to pass in the size of the unencrypted block
-          new EncryptedBlockData(tmpFile, blockSize, conf, key).toInputStream()
-
-        case None =>
-          new FileInputStream(tmpFile)
-      }
+    override def blockData(): BlockData = diskStore.getBytes(tmpFile, blockSize)
 
     override def saveToDiskStore(): Unit = {
       diskStore.moveFileToBlock(tmpFile, blockSize, blockId)
