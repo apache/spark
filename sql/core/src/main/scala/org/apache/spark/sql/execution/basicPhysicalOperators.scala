@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
@@ -599,9 +599,22 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
  * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
 case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val outAttr = try {
+        firstAttr.withDataType(attrs.map(_.dataType).reduce(StructType.merge))
+      } catch {
+        // This should never happen
+        case e: SparkException if !Utils.isTesting =>
+          logError("[BUG] Error in determinin Union output (for more details see the stacktrace" +
+            " below). Please open a JIRA ticket to report it with the full error message.", e)
+          firstAttr
+      }
+      outAttr.withNullability(attrs.exists(_.nullable))
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
