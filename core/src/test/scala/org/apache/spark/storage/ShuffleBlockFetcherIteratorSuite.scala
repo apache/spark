@@ -25,7 +25,6 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-import org.apache.commons.io.IOUtils
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -454,31 +453,31 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   test("big blocks are also checked for corruption") {
     val streamLength = 10000L
     val blockManager = mock(classOf[BlockManager])
+    val localBlockManagerId = BlockManagerId("local-client", "local-client", 1)
+    doReturn(localBlockManagerId).when(blockManager).blockManagerId
 
     // This stream will throw IOException when the first byte is read
-    val localBuffer = mockCorruptBuffer(streamLength, 0)
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-    doReturn(localBuffer).when(blockManager).getBlockData(ShuffleBlockId(0, 0, 0))
-    val localShuffleBlockId = ShuffleBlockId(0, 0, 0)
-    val localBlockLengths = Seq[Tuple2[BlockId, Long]](
-      localShuffleBlockId -> localBuffer.size()
+    val corruptBuffer1 = mockCorruptBuffer(streamLength, 0)
+    val blockManagerId1 = BlockManagerId("remote-client-1", "remote-client-1", 1)
+    val shuffleBlockId1 = ShuffleBlockId(0, 1, 0)
+    val blockLengths1 = Seq[Tuple2[BlockId, Long]](
+      shuffleBlockId1 -> corruptBuffer1.size()
     )
 
     val streamNotCorruptTill = 8 * 1024
     // This stream will throw exception after streamNotCorruptTill bytes are read
-    val remoteBuffer = mockCorruptBuffer(streamLength, streamNotCorruptTill)
-    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
-    val remoteShuffleBlockId = ShuffleBlockId(0, 1, 0)
-    val remoteBlockLengths = Seq[Tuple2[BlockId, Long]](
-      remoteShuffleBlockId -> remoteBuffer.size()
+    val corruptBuffer2 = mockCorruptBuffer(streamLength, streamNotCorruptTill)
+    val blockManagerId2 = BlockManagerId("remote-client-2", "remote-client-2", 2)
+    val shuffleBlockId2 = ShuffleBlockId(0, 2, 0)
+    val blockLengths2 = Seq[Tuple2[BlockId, Long]](
+      shuffleBlockId2 -> corruptBuffer2.size()
     )
 
     val transfer = createMockTransfer(
-      Map(localShuffleBlockId -> localBuffer, remoteShuffleBlockId -> remoteBuffer))
+      Map(shuffleBlockId1 -> corruptBuffer1, shuffleBlockId2 -> corruptBuffer2))
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
-      (localBmId, localBlockLengths),
-      (remoteBmId, remoteBlockLengths)
+      (blockManagerId1, blockLengths1),
+      (blockManagerId2, blockLengths2)
     ).toIterator
     val taskContext = TaskContext.empty()
     val maxBytesInFlight = 3 * 1024
@@ -497,9 +496,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
     // Only one block should be returned which has corruption after maxBytesInFlight/3 because the
-    // other block will be re-fetched
+    // other block will detect corruption on first fetch, and then get added to the queue again for
+    // a retry
     val (id, st) = iterator.next()
-    assert(id === remoteShuffleBlockId)
+    assert(id === shuffleBlockId2)
 
     // The other block will throw a FetchFailedException
     intercept[FetchFailedException] {
@@ -513,14 +513,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     // Following will fail as it reads the remaining part of the stream which is corrupt
     intercept[FetchFailedException] { st.read() }
-    intercept[FetchFailedException] { st.read(new Array[Byte](1024)) }
-    intercept[FetchFailedException] { st.read(new Array[Byte](1024), 0, 1024) }
-    intercept[FetchFailedException] { st.skip(1024) }
 
-    IOUtils.closeQuietly(st)
     // Buffers are mocked and they return the original input corrupt streams
-    assert(localBuffer.createInputStream().asInstanceOf[CorruptStream].closed)
-    assert(remoteBuffer.createInputStream().asInstanceOf[CorruptStream].closed)
+    assert(corruptBuffer1.createInputStream().asInstanceOf[CorruptStream].closed)
+    assert(corruptBuffer2.createInputStream().asInstanceOf[CorruptStream].closed)
   }
 
   test("ensure big blocks available as a concatenated stream can be read") {

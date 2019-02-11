@@ -341,7 +341,8 @@ private[spark] object Utils extends Logging {
   /**
    * Copy all data from an InputStream to an OutputStream upto maxSize and
    * close the input stream if all data is read.
-    * @return A combined stream of read data and any remaining data
+   * @return A tuple of boolean, which is whether the stream was fully copied, and an InputStream,
+   *         which is a combined stream of read data and any remaining data
    */
   def copyStreamUpTo(in: InputStream, maxSize: Long): (Boolean, InputStream) = {
     var count = 0L

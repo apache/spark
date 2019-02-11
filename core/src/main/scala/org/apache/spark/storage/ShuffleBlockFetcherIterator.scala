@@ -25,6 +25,8 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
+import org.apache.commons.io.IOUtils
+
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -32,7 +34,6 @@ import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
-import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -613,6 +614,7 @@ private class BufferReleasingInputStream(
       delegate.read()
     } catch {
       case e: IOException if streamCompressedOrEncrypted =>
+        IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }
   }
@@ -634,6 +636,7 @@ private class BufferReleasingInputStream(
       delegate.skip(n)
     } catch {
       case e: IOException if streamCompressedOrEncrypted =>
+        IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }
   }
@@ -645,6 +648,7 @@ private class BufferReleasingInputStream(
       delegate.read(b)
     } catch {
       case e: IOException if streamCompressedOrEncrypted =>
+        IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }
   }
@@ -654,6 +658,7 @@ private class BufferReleasingInputStream(
       delegate.read(b, off, len)
     } catch {
       case e: IOException if streamCompressedOrEncrypted =>
+        IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }
   }
