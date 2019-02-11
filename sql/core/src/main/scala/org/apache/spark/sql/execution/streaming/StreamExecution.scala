@@ -97,7 +97,16 @@ abstract class StreamExecution(
       // to migrate.
       val legacyCheckpointDir =
         new Path(new Path(checkpointDir.toUri.toString).toUri.toString).toUri.toString
-      if (fs.exists(new Path(legacyCheckpointDir))) {
+      val legacyCheckpointDirExists =
+        try {
+          fs.exists(new Path(legacyCheckpointDir))
+        } catch {
+          case NonFatal(e) =>
+            // We may not have access to this directory. Don't fail the query if that happens.
+            logWarning(e.getMessage, e)
+            false
+        }
+      if (legacyCheckpointDirExists) {
         throw new SparkException(s"Found $legacyCheckpointDir. In Spark 2.4 and earlier, the " +
           s"checkpoint data is written to $legacyCheckpointDir when using $checkpointDir as " +
           s"the checkpoint location. We detected that $legacyCheckpointDir exists but not sure " +

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -57,7 +59,16 @@ object FileStreamSink extends Logging {
     if (sqlConf.getConf(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
         && StreamExecution.containsSpecialCharsInPath(metadataPath)) {
       val legacyMetadataPath = new Path(metadataPath.toUri.toString)
-      if (fs.exists(legacyMetadataPath)) {
+      val legacyMetadataPathExists =
+        try {
+          fs.exists(legacyMetadataPath)
+        } catch {
+          case NonFatal(e) =>
+            // We may not have access to this directory. Don't fail the query if that happens.
+            logWarning(e.getMessage, e)
+            false
+        }
+      if (legacyMetadataPathExists) {
         throw new SparkException(s"Found $legacyMetadataPath. In Spark 2.4 and earlier, the " +
           s"file sink metadata is written to $legacyMetadataPath when using $metadataPath as " +
           s"the output path. We detected that $legacyMetadataPath exists but not sure " +
