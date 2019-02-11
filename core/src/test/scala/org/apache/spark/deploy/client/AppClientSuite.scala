@@ -131,26 +131,25 @@ class AppClientSuite
 
       // Send request to kill executor, verify request was made
       whenReady(
-        whenReady(
-          ci.client.killExecutors(Seq(executorId)),
-          timeout(10.seconds),
-          interval(10.millis)) { acknowledged =>
-          assert(acknowledged)
-        }
+        ci.client.killExecutors(Seq(executorId)),
+        timeout(10.seconds),
+        interval(10.millis)) { acknowledged =>
+        assert(acknowledged)
+      }
 
-        // Verify that asking for executors on the decommissioned workers fails
-        whenReady(
-          ci.client.requestTotalExecutors(numExecutorsRequested),
-          timeout(10.seconds),
-          interval(10.millis)) { acknowledged =>
-          assert(acknowledged)
-        }
-          assert(getApplications().head.executors.size === 0)
+      // Verify that asking for executors on the decommissioned workers fails
+      whenReady(
+        ci.client.requestTotalExecutors(numExecutorsRequested),
+        timeout(10.seconds),
+        interval(10.millis)) { acknowledged =>
+        assert(acknowledged)
+      }
+      assert(getApplications().head.executors.size === 0)
 
-        // Issue stop command for Client to disconnect from Master
-        ci.client.stop()
+      // Issue stop command for Client to disconnect from Master
+      ci.client.stop()
 
-        // Verify Client is marked dead and unregistered from Master
+      // Verify Client is marked dead and unregistered from Master
       eventually(timeout(10.seconds), interval(10.millis)) {
         val apps = getApplications()
         assert(ci.listener.deadReasonList.size === 1, "client should have been marked dead")
