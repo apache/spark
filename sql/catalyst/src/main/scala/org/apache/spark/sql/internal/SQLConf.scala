@@ -1108,7 +1108,7 @@ object SQLConf {
 
   val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
-      .doc("Whether to detect a streaming query may have a potential escaped checkpoint path due " +
+      .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
         "to SPARK-26824.")
       .internal()
       .booleanConf

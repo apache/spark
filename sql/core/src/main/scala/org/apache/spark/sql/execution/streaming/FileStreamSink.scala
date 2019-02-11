@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -39,14 +37,14 @@ object FileStreamSink extends Logging {
    * Returns true if there is a single path that has a metadata log indicating which files should
    * be read.
    */
-  def hasMetadata(path: Seq[String], hadoopConf: Configuration): Boolean = {
+  def hasMetadata(path: Seq[String], hadoopConf: Configuration, sqlConf: SQLConf): Boolean = {
     path match {
       case Seq(singlePath) =>
         val hdfsPath = new Path(singlePath)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         if (fs.isDirectory(hdfsPath)) {
           val metadataPath = new Path(hdfsPath, metadataDir)
-          checkEscapedMetadataPath(fs, metadataPath)
+          checkEscapedMetadataPath(fs, metadataPath, sqlConf)
           fs.exists(metadataPath)
         } else {
           false
@@ -55,8 +53,9 @@ object FileStreamSink extends Logging {
     }
   }
 
-  def checkEscapedMetadataPath(fs: FileSystem, metadataPath: Path): Unit = {
-    if (metadataPath.toUri != new Path(metadataPath.toUri.toString).toUri) {
+  def checkEscapedMetadataPath(fs: FileSystem, metadataPath: Path, sqlConf: SQLConf): Unit = {
+    if (sqlConf.getConf(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
+        && metadataPath.toUri != new Path(metadataPath.toUri.toString).toUri) {
       val oldMetadataPath = new Path(metadataPath.toUri.toString)
       if (fs.exists(oldMetadataPath)) {
         throw new SparkException(s"Found $oldMetadataPath. In Spark 2.4 or prior, the " +
@@ -111,21 +110,8 @@ class FileStreamSink(
   private val basePath = new Path(path)
   private val logPath = {
     val metadataDir = new Path(basePath, FileStreamSink.metadataDir)
-    if (metadataDir.toUri != new Path(metadataDir.toUri.toString).toUri) {
-      val oldMetadataDir = new Path(metadataDir.toUri.toString)
-      val fs = oldMetadataDir.getFileSystem(sparkSession.sessionState.newHadoopConf())
-      if (fs.exists(oldMetadataDir)) {
-        throw new SparkException(s"Found $oldMetadataDir. In Spark 2.4 or prior, the " +
-          s"file sink metadata will be written to $oldMetadataDir when using $metadataDir as " +
-          s"the output path. We detected that $oldMetadataDir exists but not sure " +
-          s"whether we should resume your query using this metadata path. If you would like to " +
-          s"resume from $oldMetadataDir, please *move* all files in $oldMetadataDir to " +
-          s"$metadataDir and rerun your codes. If $oldMetadataDir is not related to the " +
-          s"query, you can set SQL conf " +
-          s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
-          s"off this check, or delete $oldMetadataDir.")
-      }
-    }
+    val fs = metadataDir.getFileSystem(hadoopConf)
+    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sparkSession.sessionState.conf)
     metadataDir
   }
   private val fileLog =

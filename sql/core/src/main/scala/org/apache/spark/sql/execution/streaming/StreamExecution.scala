@@ -90,23 +90,28 @@ abstract class StreamExecution(
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     fs.mkdirs(checkpointPath)
-    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
-    if (new Path(checkpointDir).toUri != new Path(new Path(checkpointDir).toUri.toString).toUri) {
-      val oldCheckpointDir =
-        new Path(new Path(new Path(checkpointDir).toUri.toString).toUri.toString).toUri.toString
-      if (fs.exists(new Path(oldCheckpointDir))) {
-        throw new SparkException(s"Found $oldCheckpointDir. In Spark 2.4 or prior, the " +
-          s"checkpoint data will be written to $oldCheckpointDir when using $checkpointDir as " +
-          s"the checkpoint location. We detected that $oldCheckpointDir exists but not sure " +
-          s"whether we should recover your query using this checkpoint. If you would like to " +
-          s"recover from $oldCheckpointDir, please *move* all files in $oldCheckpointDir to " +
-          s"$checkpointDir and rerun your codes. If $oldCheckpointDir is not related to the " +
-          s"query, you can set SQL conf " +
+    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
+        && StreamExecution.containsSpecialCharsInPath(checkpointDir)) {
+      // In Spark 2.4 and earlier, the checkpoint path is escaped 3 times (3 `Path.toUri.toString`
+      // calls). If this legacy checkpoint path exists, we will throw an error to tell the user how
+      // to migrate.
+      val legacyCheckpointDir =
+        new Path(new Path(checkpointDir.toUri.toString).toUri.toString).toUri.toString
+      if (fs.exists(new Path(legacyCheckpointDir))) {
+        throw new SparkException(s"Found $legacyCheckpointDir. In Spark 2.4 and earlier, the " +
+          s"checkpoint data is written to $legacyCheckpointDir when using $checkpointDir as " +
+          s"the checkpoint location. We detected that $legacyCheckpointDir exists but not sure " +
+          s"whether we should ignore this directory and start your query using $checkpointDir " +
+          s"directly. If you would like to recover your query from $legacyCheckpointDir, please " +
+          s"*move* all files in $legacyCheckpointDir to $checkpointDir and rerun your codes. If " +
+          s"$legacyCheckpointDir is not related to the query or you have already moved the files " +
+          s"to $checkpointDir, you can either set SQL conf " +
           s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
-          s"off this check.")
+          s"off this check, or just remove $legacyCheckpointDir.")
       }
     }
-    checkpointDir
+    checkpointDir.toString
   }
 
   def logicalPlan: LogicalPlan
@@ -583,6 +588,11 @@ object StreamExecution {
       }
     case _ =>
       false
+  }
+
+  /** Whether the path contains special chars that will be escaped when converting to a `URI`. */
+  def containsSpecialCharsInPath(path: Path): Boolean = {
+    path.toUri != new Path(path.toUri.toString).toUri
   }
 }
 

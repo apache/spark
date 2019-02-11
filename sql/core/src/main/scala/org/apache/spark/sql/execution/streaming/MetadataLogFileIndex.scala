@@ -21,10 +21,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -43,21 +41,8 @@ class MetadataLogFileIndex(
 
   private val metadataDirectory = {
     val metadataDir = new Path(path, FileStreamSink.metadataDir)
-    if (metadataDir.toUri != new Path(metadataDir.toUri.toString).toUri) {
-      val oldMetadataDir = new Path(metadataDir.toUri.toString)
-      val fs = oldMetadataDir.getFileSystem(sparkSession.sessionState.newHadoopConf())
-      if (fs.exists(oldMetadataDir)) {
-        throw new SparkException(s"Found $oldMetadataDir. In Spark 2.4 or prior, the " +
-          s"file sink metadata will be written to $oldMetadataDir when using $metadataDir as " +
-          s"the output path. We detected that $oldMetadataDir exists but not sure " +
-          s"whether we should resume your query using this metadata path. If you would like to " +
-          s"resume from $oldMetadataDir, please *move* all files in $oldMetadataDir to " +
-          s"$metadataDir and rerun your codes. If $oldMetadataDir is not related to the " +
-          s"query, you can set SQL conf " +
-          s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
-          s"off this check, or delete $oldMetadataDir.")
-      }
-    }
+    val fs = metadataDir.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sparkSession.sessionState.conf)
     metadataDir
   }
 
