@@ -97,7 +97,7 @@ private[execution] object HashedRelation {
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Long.MaxValue,
-          Long.MaxValue,
+          Long.MaxValue / 2,
           1),
         0)
     }
@@ -230,7 +230,7 @@ private[joins] class UnsafeHashedRelation(
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Long.MaxValue,
-        Long.MaxValue,
+        Long.MaxValue / 2,
         1),
       0)
 
@@ -395,7 +395,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Long.MaxValue,
-          Long.MaxValue,
+          Long.MaxValue / 2,
           1),
         0),
       0)
@@ -413,7 +413,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
 
   private def init(): Unit = {
     if (mm != null) {
-      require(capacity < 512000000, "Cannot broadcast more than 512 millions rows")
+      require(capacity < 512000000, "Cannot broadcast 512 million or more rows")
       var n = 1
       while (n < capacity) n *= 2
       ensureAcquireMemory(n * 2L * 8 + (1 << 20))

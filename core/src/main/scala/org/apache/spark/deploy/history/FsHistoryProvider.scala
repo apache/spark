@@ -42,10 +42,11 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, History}
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -105,12 +106,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val logDir = conf.get(History.HISTORY_LOG_DIR)
 
-  private val HISTORY_UI_ACLS_ENABLE = conf.get(History.UI_ACLS_ENABLE)
-  private val HISTORY_UI_ADMIN_ACLS = conf.get(History.UI_ADMIN_ACLS)
-  private val HISTORY_UI_ADMIN_ACLS_GROUPS = conf.get(History.UI_ADMIN_ACLS_GROUPS)
-  logInfo(s"History server ui acls " + (if (HISTORY_UI_ACLS_ENABLE) "enabled" else "disabled") +
-    "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
-    "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
+  private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
+  private val historyUiAdminAcls = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
+  private val historyUiAdminAclsGroups = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS)
+  logInfo(s"History server ui acls " + (if (historyUiAclsEnable) "enabled" else "disabled") +
+    "; users with admin permissions: " + historyUiAdminAcls.mkString(",") +
+    "; groups with admin permissions" + historyUiAdminAclsGroups.mkString(","))
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   // Visible for testing
@@ -314,6 +315,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
+  /**
+   * Split a comma separated String, filter out any empty items, and return a Sequence of strings
+   */
+  private def stringToSeq(list: String): Seq[String] = {
+    list.split(',').map(_.trim).filter(!_.isEmpty)
+  }
+
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     val app = try {
       load(appId)
@@ -330,13 +338,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val conf = this.conf.clone()
     val secManager = new SecurityManager(conf)
 
-    secManager.setAcls(HISTORY_UI_ACLS_ENABLE)
+    secManager.setAcls(historyUiAclsEnable)
     // make sure to set admin acls before view acls so they are properly picked up
-    secManager.setAdminAcls(HISTORY_UI_ADMIN_ACLS + "," + attempt.adminAcls.getOrElse(""))
-    secManager.setViewAcls(attempt.info.sparkUser, attempt.viewAcls.getOrElse(""))
-    secManager.setAdminAclsGroups(HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
-      attempt.adminAclsGroups.getOrElse(""))
-    secManager.setViewAclsGroups(attempt.viewAclsGroups.getOrElse(""))
+    secManager.setAdminAcls(historyUiAdminAcls ++ stringToSeq(attempt.adminAcls.getOrElse("")))
+    secManager.setViewAcls(attempt.info.sparkUser, stringToSeq(attempt.viewAcls.getOrElse("")))
+    secManager.setAdminAclsGroups(historyUiAdminAclsGroups ++
+      stringToSeq(attempt.adminAclsGroups.getOrElse("")))
+    secManager.setViewAclsGroups(stringToSeq(attempt.viewAclsGroups.getOrElse("")))
 
     val kvstore = try {
       diskManager match {
@@ -351,10 +359,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         return None
     }
 
-    val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
-      HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
-      attempt.info.startTime.getTime(),
-      attempt.info.appSparkVersion)
+    val ui = SparkUI.create(None, new HistoryAppStatusStore(conf, kvstore), conf, secManager,
+      app.info.name, HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
+      attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
     loadPlugins().foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
@@ -1187,11 +1194,16 @@ private[history] class AppListingListener(
     // Only parse the first env update, since any future changes don't have any effect on
     // the ACLs set for the UI.
     if (!gotEnvUpdate) {
+      def emptyStringToNone(strOption: Option[String]): Option[String] = strOption match {
+        case Some("") => None
+        case _ => strOption
+      }
+
       val allProperties = event.environmentDetails("Spark Properties").toMap
-      attempt.viewAcls = allProperties.get("spark.ui.view.acls")
-      attempt.adminAcls = allProperties.get("spark.admin.acls")
-      attempt.viewAclsGroups = allProperties.get("spark.ui.view.acls.groups")
-      attempt.adminAclsGroups = allProperties.get("spark.admin.acls.groups")
+      attempt.viewAcls = emptyStringToNone(allProperties.get(UI_VIEW_ACLS.key))
+      attempt.adminAcls = emptyStringToNone(allProperties.get(ADMIN_ACLS.key))
+      attempt.viewAclsGroups = emptyStringToNone(allProperties.get(UI_VIEW_ACLS_GROUPS.key))
+      attempt.adminAclsGroups = emptyStringToNone(allProperties.get(ADMIN_ACLS_GROUPS.key))
 
       gotEnvUpdate = true
       checkProgress()

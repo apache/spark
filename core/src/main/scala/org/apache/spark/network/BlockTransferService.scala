@@ -107,10 +107,14 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
             case e: EncryptedManagedBuffer =>
               result.success(e)
             case _ =>
-              val ret = ByteBuffer.allocate(data.size.toInt)
-              ret.put(data.nioByteBuffer())
-              ret.flip()
-              result.success(new NioManagedBuffer(ret))
+              try {
+                val ret = ByteBuffer.allocate(data.size.toInt)
+                ret.put(data.nioByteBuffer())
+                ret.flip()
+                result.success(new NioManagedBuffer(ret))
+              } catch {
+                case e: Throwable => result.failure(e)
+              }
           }
         }
       }, tempFileManager)

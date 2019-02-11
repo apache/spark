@@ -20,11 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{Instant, ZoneId}
 import java.util.Locale
 
-import scala.util.Try
-
-import org.apache.commons.lang3.time.FastDateFormat
-
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToDays
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
@@ -44,11 +40,7 @@ class Iso8601DateFormatter(
     toInstantWithZoneId(temporalAccessor, UTC)
   }
 
-  override def parse(s: String): Int = {
-    val seconds = toInstant(s).getEpochSecond
-    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
-    days.toInt
-  }
+  override def parse(s: String): Int = instantToDays(toInstant(s))
 
   override def format(days: Int): String = {
     val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)
@@ -56,43 +48,15 @@ class Iso8601DateFormatter(
   }
 }
 
-class LegacyDateFormatter(pattern: String, locale: Locale) extends DateFormatter {
-  @transient
-  private lazy val format = FastDateFormat.getInstance(pattern, locale)
-
-  override def parse(s: String): Int = {
-    val milliseconds = format.parse(s).getTime
-    DateTimeUtils.millisToDays(milliseconds)
-  }
-
-  override def format(days: Int): String = {
-    val date = DateTimeUtils.toJavaDate(days)
-    format.format(date)
-  }
-}
-
-class LegacyFallbackDateFormatter(
-    pattern: String,
-    locale: Locale) extends LegacyDateFormatter(pattern, locale) {
-  override def parse(s: String): Int = {
-    Try(super.parse(s)).orElse {
-      // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-      // compatibility.
-      Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(s).getTime))
-    }.getOrElse {
-      // In Spark 1.5.0, we store the data as number of days since epoch in string.
-      // So, we just convert it to Int.
-      s.toInt
-    }
-  }
-}
-
 object DateFormatter {
+  val defaultPattern: String = "yyyy-MM-dd"
+  val defaultLocale: Locale = Locale.US
+
   def apply(format: String, locale: Locale): DateFormatter = {
-    if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackDateFormatter(format, locale)
-    } else {
-      new Iso8601DateFormatter(format, locale)
-    }
+    new Iso8601DateFormatter(format, locale)
   }
+
+  def apply(format: String): DateFormatter = apply(format, defaultLocale)
+
+  def apply(): DateFormatter = apply(defaultPattern)
 }

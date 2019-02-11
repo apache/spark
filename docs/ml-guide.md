@@ -110,6 +110,15 @@ and the migration guide below will explain all changes between releases.
 
 * `OneHotEncoder` which is deprecated in 2.3, is removed in 3.0 and `OneHotEncoderEstimator` is now renamed to `OneHotEncoder`.
 
+### Changes of behavior
+
+* [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215):
+ In Spark 2.4 and previous versions, when specifying `frequencyDesc` or `frequencyAsc` as
+ `stringOrderType` param in `StringIndexer`, in case of equal frequency, the order of
+ strings is undefined. Since Spark 3.0, the strings with equal frequency are further
+ sorted by alphabet. And since Spark 3.0, `StringIndexer` supports encoding multiple
+ columns.
+
 ## From 2.2 to 2.3
 
 ### Breaking changes

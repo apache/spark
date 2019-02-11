@@ -29,10 +29,8 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, MicroBatchReadSupportProvider}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -173,60 +171,27 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case _ => None
     }
     ds match {
-      case s: MicroBatchReadSupportProvider =>
+      case provider: TableProvider =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = s, conf = sparkSession.sessionState.conf)
+          ds = provider, conf = sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
-        val dataSourceOptions = new DataSourceOptions(options.asJava)
-        var tempReadSupport: MicroBatchReadSupport = null
-        val schema = try {
-          val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
-          tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.createMicroBatchReadSupport(
-              userSpecifiedSchema.get, tmpCheckpointPath, dataSourceOptions)
-          } else {
-            s.createMicroBatchReadSupport(tmpCheckpointPath, dataSourceOptions)
-          }
-          tempReadSupport.fullSchema()
-        } finally {
-          // Stop tempReader to avoid side-effect thing
-          if (tempReadSupport != null) {
-            tempReadSupport.stop()
-            tempReadSupport = null
-          }
+        val dsOptions = new DataSourceOptions(options.asJava)
+        val table = userSpecifiedSchema match {
+          case Some(schema) => provider.getTable(dsOptions, schema)
+          case _ => provider.getTable(dsOptions)
         }
-        Dataset.ofRows(
-          sparkSession,
-          StreamingRelationV2(
-            s, source, options,
-            schema.toAttributes, v1Relation)(sparkSession))
-      case s: ContinuousReadSupportProvider =>
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = s, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
-        val dataSourceOptions = new DataSourceOptions(options.asJava)
-        var tempReadSupport: ContinuousReadSupport = null
-        val schema = try {
-          val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
-          tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.createContinuousReadSupport(
-              userSpecifiedSchema.get, tmpCheckpointPath, dataSourceOptions)
-          } else {
-            s.createContinuousReadSupport(tmpCheckpointPath, dataSourceOptions)
-          }
-          tempReadSupport.fullSchema()
-        } finally {
-          // Stop tempReader to avoid side-effect thing
-          if (tempReadSupport != null) {
-            tempReadSupport.stop()
-            tempReadSupport = null
-          }
+        table match {
+          case _: SupportsMicroBatchRead | _: SupportsContinuousRead =>
+            Dataset.ofRows(
+              sparkSession,
+              StreamingRelationV2(
+                provider, source, table, options, table.schema.toAttributes, v1Relation)(
+                sparkSession))
+
+          // fallback to v1
+          case _ => Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
         }
-        Dataset.ofRows(
-          sparkSession,
-          StreamingRelationV2(
-            s, source, options,
-            schema.toAttributes, v1Relation)(sparkSession))
+
       case _ =>
         // Code path for data source v1.
         Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))

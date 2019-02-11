@@ -153,7 +153,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
  */
 class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
 
-  val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
+  val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024)
   val random = new Random(0)
   random.nextBytes(randomBuffer)
 
@@ -166,7 +166,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   private val conf = new SparkConf
 
-  val LOCALITY_WAIT_MS = conf.getTimeAsMs("spark.locality.wait", "3s")
+  val LOCALITY_WAIT_MS = conf.get(config.LOCALITY_WAIT)
   val MAX_TASK_FAILURES = 4
 
   var sched: FakeTaskScheduler = null
@@ -429,7 +429,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       set(config.BLACKLIST_ENABLED, true).
       set(config.BLACKLIST_TIMEOUT_CONF, rescheduleDelay).
       // don't wait to jump locality levels in this test
-      set("spark.locality.wait", "0")
+      set(config.LOCALITY_WAIT.key, "0")
 
     sc = new SparkContext("local", "test", conf)
     // two executors on same host, one on different.
@@ -680,7 +680,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("[SPARK-13931] taskSetManager should not send Resubmitted tasks after being a zombie") {
-    val conf = new SparkConf().set("spark.speculation", "true")
+    val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
 
     sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
@@ -747,12 +747,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
 
   test("[SPARK-22074] Task killed by other attempt task should not be resubmitted") {
-    val conf = new SparkConf().set("spark.speculation", "true")
+    val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set("spark.speculation.multiplier", "0.0")
-    sc.conf.set("spark.speculation.quantile", "0.5")
-    sc.conf.set("spark.speculation", "true")
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
 
     var killTaskCalled = false
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
@@ -1013,8 +1013,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set("spark.speculation.multiplier", "0.0")
-    sc.conf.set("spark.speculation", "true")
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -1070,9 +1070,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(5)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set("spark.speculation.multiplier", "0.0")
-    sc.conf.set("spark.speculation.quantile", "0.6")
-    sc.conf.set("spark.speculation", "true")
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.6)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -1366,12 +1366,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("[SPARK-24677] Avoid NoSuchElementException from MedianHeap") {
-    val conf = new SparkConf().set("spark.speculation", "true")
+    val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set("spark.speculation.multiplier", "0.0")
-    sc.conf.set("spark.speculation.quantile", "0.1")
-    sc.conf.set("spark.speculation", "true")
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.1)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
 
     sched = new FakeTaskScheduler(sc)
     sched.initialize(new FakeSchedulerBackend())
@@ -1416,13 +1416,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
 
   test("SPARK-24755 Executor loss can cause task to not be resubmitted") {
-    val conf = new SparkConf().set("spark.speculation", "true")
+    val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set("spark.speculation.multiplier", "0.0")
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
 
-    sc.conf.set("spark.speculation.quantile", "0.5")
-    sc.conf.set("spark.speculation", "true")
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
 
     var killTaskCalled = false
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
@@ -1538,8 +1538,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set("spark.speculation.multiplier", "0.0")
-    sc.conf.set("spark.speculation", "true")
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>

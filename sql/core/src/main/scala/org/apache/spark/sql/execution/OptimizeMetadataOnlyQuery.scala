@@ -72,6 +72,11 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             })
           }
           if (isAllDistinctAgg) {
+            logWarning("Since configuration `spark.sql.optimizer.metadataOnly` is enabled, " +
+              "Spark will scan partition-level metadata without scanning data files. " +
+              "This could result in wrong results when the partition metadata exists but the " +
+              "inclusive data files are empty."
+            )
             a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, rel, filters)))
           } else {
             a

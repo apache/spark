@@ -38,10 +38,43 @@ import org.apache.spark.util.Utils
 abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
 
-  // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
-  // still resolved after the execution of each rule.
+  // Check for structural integrity of the plan in test mode.
+  // Currently we check after the execution of each rule if a plan:
+  // - is still resolved
+  // - only host special expressions in supported operators
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || plan.resolved
+    !Utils.isTesting || (plan.resolved && checkSpecialExpressionIntegrity(plan))
+  }
+
+  /**
+   * Check if all operators in this plan hold structural integrity with regards to hosting special
+   * expressions.
+   * Returns true when all operators are integral.
+   */
+  private def checkSpecialExpressionIntegrity(plan: LogicalPlan): Boolean = {
+    plan.find(specialExpressionInUnsupportedOperator).isEmpty
+  }
+
+  /**
+   * Check if there's any expression in this query plan operator that is
+   * - A WindowExpression but the plan is not Window
+   * - An AggregateExpresion but the plan is not Aggregate or Window
+   * - A Generator but the plan is not Generate
+   * Returns true when this operator breaks structural integrity with one of the cases above.
+   */
+  private def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Boolean = {
+    val exprs = plan.expressions
+    exprs.flatMap { root =>
+      root.find {
+        case e: WindowExpression
+          if !plan.isInstanceOf[Window] => true
+        case e: AggregateExpression
+          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => true
+        case e: Generator
+          if !plan.isInstanceOf[Generate] => true
+        case _ => false
+      }
+    }.nonEmpty
   }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
@@ -560,6 +593,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from child of `DeserializeToObject`
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
+
+    case p @ Project(_, s: SerializeFromObject) if p.references != s.outputSet =>
+      val usedRefs = p.references
+      val prunedSerializer = s.serializer.filter(usedRefs.contains)
+      p.copy(child = SerializeFromObject(prunedSerializer, s.child))
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
     case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>

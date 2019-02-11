@@ -89,7 +89,7 @@ private[spark] class PeriodicRDDCheckpointer[T](
     }
   }
 
-  override protected def unpersist(data: RDD[T]): Unit = data.unpersist(blocking = false)
+  override protected def unpersist(data: RDD[T]): Unit = data.unpersist()
 
   override protected def getCheckpointFiles(data: RDD[T]): Iterable[String] = {
     data.getCheckpointFile.map(x => x)

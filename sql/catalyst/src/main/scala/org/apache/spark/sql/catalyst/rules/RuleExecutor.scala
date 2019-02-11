@@ -88,6 +88,13 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     val planChangeLogger = new PlanChangeLogger()
     val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
 
+    // Run the structural integrity checker against the initial input
+    if (!isPlanIntegral(plan)) {
+      val message = "The structural integrity of the input plan is broken in " +
+        s"${this.getClass.getName.stripSuffix("$")}."
+      throw new TreeNodeException(plan, message, null)
+    }
+
     batches.foreach { batch =>
       val batchStartPlan = curPlan
       var iteration = 1

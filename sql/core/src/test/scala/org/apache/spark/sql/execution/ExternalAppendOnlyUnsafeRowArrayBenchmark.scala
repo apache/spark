@@ -45,8 +45,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
   private val conf = new SparkConf(false)
     // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
     // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
-    .set("spark.serializer.objectStreamReset", "1")
-    .set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
+    .set(config.SERIALIZER_OBJECT_STREAM_RESET, 1)
+    .set(config.SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
 
   private def withFakeTaskContext(f: => Unit): Unit = {
     val sc = new SparkContext("local", "test", conf)

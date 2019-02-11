@@ -27,6 +27,7 @@ import scala.xml.{Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
@@ -63,7 +64,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
   // TODO: We should consider increasing the number of this parameter over time
   // if we find that it's okay.
-  private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
+  private val MAX_TIMELINE_TASKS = parent.conf.get(UI_TIMELINE_TASKS_MAXIMUM)
 
   private def getLocalitySummaryString(localitySummary: Map[String, Long]): String = {
     val names = Map(
@@ -856,8 +857,13 @@ private[spark] object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
-    (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
+    // Some jobs have only 0 partitions.
+    if (job.stageIds.isEmpty) {
+      ("", job.name)
+    } else {
+      val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
+      (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
+    }
   }
 
 }
