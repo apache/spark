@@ -22,7 +22,9 @@ import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable
 
+import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.lang3.RandomStringUtils
+import org.apache.hadoop.fs.Path
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -932,6 +934,102 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       } finally {
         q.stop()
       }
+    }
+  }
+
+  test("detect escaped path and report the migration guide") {
+    val input = getClass.getResource("/structured-streaming/escaped-path-2.4.0")
+    assert(input != null, "cannot find test resource '/structured-streaming/escaped-path-2.4.0'")
+    val inputDir = new File(input.toURI)
+    withTempDir { tempDir =>
+      // Copy test files to tempDir so that we won't modify the original data.
+      FileUtils.copyDirectory(inputDir, tempDir)
+
+      // Here are the paths we will use to create the query
+      val outputDir = new File(tempDir, "output %@#output")
+      val checkpointDir = new File(tempDir, "chk %@#chk")
+      val sparkMetadataDir = new File(tempDir, "output %@#output/_spark_metadata")
+
+      // The escaped paths used by Spark 2.4-
+      // Spark 2.4- escaped the checkpoint path three times
+      val oldCheckpointDir = new File(
+        tempDir,
+        new Path(new Path(new Path("chk %@#chk").toUri.toString).toUri.toString).toUri.toString)
+      // Spark 2.4- escaped the _spark_metadata path once
+      val oldSparkMetadataDir = new File(
+        tempDir,
+        new Path("output %@#output/_spark_metadata").toUri.toString)
+
+      // Check the _spark_ metadata path migration error message when running a batch query to read
+      // a file sink output.
+      val e = intercept[SparkException] {
+        spark.read.load(outputDir.getCanonicalPath).as[Int]
+      }
+      Seq("spark.sql.streaming.checkpoint.escapedPathCheck.enabled",
+        sparkMetadataDir.getCanonicalPath,
+        oldSparkMetadataDir.getCanonicalPath).foreach { msg =>
+        assert(e.getMessage.contains(msg))
+      }
+
+      // Check the checkpoint path migration error message
+      val inputData = MemoryStream[Int]
+      val e2 = intercept[SparkException] {
+        inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start(outputDir.getCanonicalPath)
+      }
+      e2.printStackTrace()
+      Seq("spark.sql.streaming.checkpoint.escapedPathCheck.enabled",
+        sparkMetadataDir.getCanonicalPath,
+        oldSparkMetadataDir.getCanonicalPath).foreach { msg =>
+        assert(e2.getMessage.contains(msg))
+      }
+
+      // Migrate from old _spark_metadata directory to the new _spark_metadata directory.
+      // Ideally we should copy "_spark_metadata" directly like what the user is supposed to do to
+      // migrate to new version. However, in our test, "tempDir" will be different in each run and
+      // we need to fix the absolute path in the metadata base on the "tempDir" value. Hence,
+      val sparkMetadata = FileUtils.readFileToString(new File(oldSparkMetadataDir, "0"), "UTF-8")
+      FileUtils.write(
+        new File(sparkMetadataDir, "0"),
+        sparkMetadata.replaceAll("TEMPDIR", tempDir.getCanonicalPath),
+        "UTF-8")
+      FileUtils.deleteDirectory(oldSparkMetadataDir)
+
+      // Check the checkpoint path migration error message
+      val e3 = intercept[SparkException] {
+        inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start(outputDir.getCanonicalPath)
+      }
+      e3.printStackTrace()
+      Seq("spark.sql.streaming.checkpoint.escapedPathCheck.enabled",
+        checkpointDir.getCanonicalPath,
+        oldCheckpointDir.getCanonicalPath).foreach { msg =>
+        assert(e3.getMessage.contains(msg))
+      }
+
+      // Move the checkpoint data from the path used by Spark 2.4- to the path used by Spark 3.0+.
+      // Make sure the user can migrate the issue by copying files.
+      FileUtils.copyDirectory(oldCheckpointDir, checkpointDir)
+      FileUtils.deleteDirectory(oldCheckpointDir)
+
+      val q = inputData.toDF()
+        .writeStream
+        .format("parquet")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .start(outputDir.getCanonicalPath)
+      q.processAllAvailable()
+      // Check the query id to make sure it did use checkpoint
+      assert(q.id.toString == "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+
+      spark.read.load(outputDir.getCanonicalPath).as[Int].explain()
+      // Check the output data to make sure it did use _spark_metadata
+      checkDatasetUnorderly(spark.read.load(outputDir.getCanonicalPath).as[Int], 1, 2, 3)
     }
   }
 

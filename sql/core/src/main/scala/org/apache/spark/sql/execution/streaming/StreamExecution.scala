@@ -90,7 +90,23 @@ abstract class StreamExecution(
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     fs.mkdirs(checkpointPath)
-    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+    if (new Path(checkpointDir).toUri != new Path(new Path(checkpointDir).toUri.toString).toUri) {
+      val oldCheckpointDir =
+        new Path(new Path(new Path(checkpointDir).toUri.toString).toUri.toString).toUri.toString
+      if (fs.exists(new Path(oldCheckpointDir))) {
+        throw new SparkException(s"Found $oldCheckpointDir. In Spark 2.4 or prior, the " +
+          s"checkpoint data will be written to $oldCheckpointDir when using $checkpointDir as " +
+          s"the checkpoint location. We detected that $oldCheckpointDir exists but not sure " +
+          s"whether we should recover your query using this checkpoint. If you would like to " +
+          s"recover from $oldCheckpointDir, please *move* all files in $oldCheckpointDir to " +
+          s"$checkpointDir and rerun your codes. If $oldCheckpointDir is not related to the " +
+          s"query, you can set SQL conf " +
+          s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
+          s"off this check.")
+      }
+    }
+    checkpointDir
   }
 
   def logicalPlan: LogicalPlan

@@ -1106,6 +1106,14 @@ object SQLConf {
       .internal()
       .stringConf
 
+  val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
+      .doc("Whether to detect a streaming query may have a potential escaped checkpoint path due " +
+        "to SPARK-26824.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
