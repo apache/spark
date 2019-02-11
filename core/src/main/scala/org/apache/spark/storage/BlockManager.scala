@@ -33,6 +33,7 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
+import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
@@ -253,6 +254,7 @@ private[spark] class BlockManager(
           iter.close()
           false
       }
+      IOUtils.closeQuietly(inputStream)
     }
 
     private def saveSerializedValuesToMemoryStore(bytes: ChunkedByteBuffer): Boolean = {
