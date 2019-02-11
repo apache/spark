@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{File, IOException}
+import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
@@ -25,8 +25,6 @@ import java.util.{Locale, Set}
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.ql.exec.TextRecordWriter
-import org.apache.hadoop.io.Writable
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
@@ -62,10 +60,6 @@ case class Order(
     city: String,
     state: String,
     month: Int)
-
-private class NonWritableRecordWriter extends TextRecordWriter {
-  override def write(row: Writable): Unit = throw new IOException("Failure to write data.")
-}
 
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
@@ -2357,28 +2351,32 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-25158: " +
     "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
     withTempView("test") {
-      withSQLConf("hive.script.recordwriter" ->
-        classOf[NonWritableRecordWriter].getCanonicalName) {
-        val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
-        try {
-          val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
-          Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
-          spark
-            .range(5)
-            .selectExpr("id AS a")
-            .createOrReplaceTempView("test")
-          val scriptFilePath = getTestResourcePath("data")
-          val e = intercept[SparkException] {
-            sql(
-              s"""FROM test SELECT TRANSFORM(a)
-                 |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+      val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
+      try {
+        val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
+        Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
+
+        // Use a bad udf to generate failed inputs.
+        import org.apache.spark.sql.functions.udf
+        val badUDF = udf({x: Int =>
+          if (x < 1) x
+          else throw new RuntimeException("Failed to produce data.")
+          })
+        spark
+          .range(5)
+          .select(badUDF('id).as("a"))
+          .createOrReplaceTempView("test")
+        val scriptFilePath = getTestResourcePath("data")
+        val e = intercept[SparkException] {
+          sql(
+            s"""FROM test SELECT TRANSFORM(a)
+               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
              """.stripMargin).collect()
-          }
-          assert(e.getMessage.contains("Failure to write data."))
-          assert(uncaughtExceptionHandler.exception.isEmpty)
-        } finally {
-          Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
         }
+        assert(e.getMessage.contains("Failed to produce data."))
+        assert(uncaughtExceptionHandler.exception.isEmpty)
+      } finally {
+        Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
       }
     }
   }
