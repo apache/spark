@@ -1033,14 +1033,18 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         .format("parquet")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .start(outputDir.getCanonicalPath)
-      q.processAllAvailable()
-      // Check the query id to make sure it did use checkpoint
-      assert(q.id.toString == "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+      try {
+        q.processAllAvailable()
+        // Check the query id to make sure it did use checkpoint
+        assert(q.id.toString == "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
 
-      // Verify that the batch query can read "_spark_metadata" correctly after migration.
-      val df = spark.read.load(outputDir.getCanonicalPath)
-      assert(df.queryExecution.executedPlan.toString contains "MetadataLogFileIndex")
-      checkDatasetUnorderly(df.as[Int], 1, 2, 3)
+        // Verify that the batch query can read "_spark_metadata" correctly after migration.
+        val df = spark.read.load(outputDir.getCanonicalPath)
+        assert(df.queryExecution.executedPlan.toString contains "MetadataLogFileIndex")
+        checkDatasetUnorderly(df.as[Int], 1, 2, 3)
+      } finally {
+        q.stop()
+      }
     }
   }
 
@@ -1062,9 +1066,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           .format("parquet")
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .start(outputDir.getCanonicalPath)
-        q.processAllAvailable()
-        // Check the query id to make sure it ignores the legacy checkpoint
-        assert(q.id.toString != "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+        try {
+          q.processAllAvailable()
+          // Check the query id to make sure it ignores the legacy checkpoint
+          assert(q.id.toString != "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+        } finally {
+          q.stop()
+        }
       }
     }
   }
