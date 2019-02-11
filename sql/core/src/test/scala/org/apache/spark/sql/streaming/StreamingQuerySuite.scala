@@ -1077,6 +1077,30 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("containsSpecialCharsInPath") {
+    Seq("foo/b ar",
+        "/foo/b ar",
+        "file:/foo/b ar",
+        "file://foo/b ar",
+        "file:///foo/b ar",
+        "file://foo:bar@bar/foo/b ar").foreach { p =>
+      assert(StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
+    }
+    Seq("foo/bar",
+        "/foo/bar",
+        "file:/foo/bar",
+        "file://foo/bar",
+        "file:///foo/bar",
+        "file://foo:bar@bar/foo/bar",
+        // Special chars not in a path should not be considered as such urls won't hit the escaped
+        // path issue.
+        "file://foo:b ar@bar/foo/bar",
+        "file://foo:bar@b ar/foo/bar",
+        "file://f oo:bar@bar/foo/bar").foreach { p =>
+      assert(!StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
+    }
+  }
+
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
   private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
     require(!triggerDF.isStreaming)

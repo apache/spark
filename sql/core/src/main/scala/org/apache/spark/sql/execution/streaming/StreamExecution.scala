@@ -601,7 +601,7 @@ object StreamExecution {
 
   /** Whether the path contains special chars that will be escaped when converting to a `URI`. */
   def containsSpecialCharsInPath(path: Path): Boolean = {
-    path.toUri != new Path(path.toUri.toString).toUri
+    path.toUri.getPath != new Path(path.toUri.toString).toUri.getPath
   }
 }
 
