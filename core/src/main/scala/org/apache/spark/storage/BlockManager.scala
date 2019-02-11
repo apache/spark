@@ -604,7 +604,6 @@ private[spark] class BlockManager(
 
       override def onComplete(streamId: String): Unit = {
         logTrace(s"Done receiving block $blockId, now putting into local blockManager")
-        // Read the contents of the downloaded file as a buffer to put into the blockManager.
         // Note this is all happening inside the netty thread as soon as it reads the end of the
         // stream.
         channel.close()
