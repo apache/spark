@@ -89,7 +89,6 @@ abstract class StreamExecution(
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    fs.mkdirs(checkpointPath)
     val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
         && StreamExecution.containsSpecialCharsInPath(checkpointDir)) {
@@ -111,6 +110,7 @@ abstract class StreamExecution(
           s"off this check, or just remove $legacyCheckpointDir.")
       }
     }
+    fs.mkdirs(checkpointDir)
     checkpointDir.toString
   }
 
