@@ -29,6 +29,11 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RetrieveSparkAppConfig, SparkAppConfig}
 import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 
+/**
+ * Custom implementation of CoarseGrainedExecutorBackend for YARN resource manager.
+ * This class extracts executor log URLs and executor attributes from system environment which
+ * properties are available for container being set via YARN.
+ */
 private[spark] class YarnCoarseGrainedExecutorBackend(
     rpcEnv: RpcEnv,
     driverUrl: String,
