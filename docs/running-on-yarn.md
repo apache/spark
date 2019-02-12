@@ -520,13 +520,6 @@ for:
   filesystem if `spark.yarn.stagingDir` is not set);
 - if Hadoop federation is enabled, all the federated filesystems in the configuration.
 
-The YARN integration also supports custom delegation token providers using the Java Services
-mechanism (see `java.util.ServiceLoader`). Implementations of
-`org.apache.spark.deploy.yarn.security.ServiceCredentialProvider` can be made available to Spark
-by listing their names in the corresponding file in the jar's `META-INF/services` directory. These
-providers can be disabled individually by setting `spark.security.credentials.{service}.enabled` to
-`false`, where `{service}` is the name of the credential provider.
-
 ## YARN-specific Kerberos Configuration
 
 <table class="table">
