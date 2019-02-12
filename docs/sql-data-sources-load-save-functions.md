@@ -41,10 +41,10 @@ name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can al
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
 
-The available extra options are documented in the API documentation. For basic formats
-(like `json`, `parquet`, `jdbc`, `orc`, `csv`, `text`) you want to check the API documentation of
-`org.apache.spark.sql.DataFrameReader` and `org.apache.spark.sql.DataFrameWriter`. For other
-formats, refer to the API documentation of the particular format.
+Please refer the API documentation for available options of built-in sources, for example,
+`org.apache.spark.sql.DataFrameReader` and `org.apache.spark.sql.DataFrameWriter`. The
+options documented there should be applicable through non-Scala Spark APIs (e.g. PySpark)
+as well. For other formats, refer to the API documentation of the particular format.
 
 To load a JSON file you can use:
 
