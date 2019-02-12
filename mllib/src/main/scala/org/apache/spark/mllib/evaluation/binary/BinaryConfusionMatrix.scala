@@ -51,20 +51,22 @@ private[evaluation] case class BinaryConfusionMatrixImpl(
     totalCount: BinaryLabelCounter) extends BinaryConfusionMatrix {
 
   /** number of true positives */
-  override def weightedTruePositives: Double = count.numPositives
+  override def weightedTruePositives: Double = count.weightedNumPositives
 
   /** number of false positives */
-  override def weightedFalsePositives: Double = count.numNegatives
+  override def weightedFalsePositives: Double = count.weightedNumNegatives
 
   /** number of false negatives */
-  override def weightedFalseNegatives: Double = totalCount.numPositives - count.numPositives
+  override def weightedFalseNegatives: Double =
+    totalCount.weightedNumPositives - count.weightedNumPositives
 
   /** number of true negatives */
-  override def weightedTrueNegatives: Double = totalCount.numNegatives - count.numNegatives
+  override def weightedTrueNegatives: Double =
+    totalCount.weightedNumNegatives - count.weightedNumNegatives
 
   /** number of positives */
-  override def weightedPositives: Double = totalCount.numPositives
+  override def weightedPositives: Double = totalCount.weightedNumPositives
 
   /** number of negatives */
-  override def weightedNegatives: Double = totalCount.numNegatives
+  override def weightedNegatives: Double = totalCount.weightedNumNegatives
 }

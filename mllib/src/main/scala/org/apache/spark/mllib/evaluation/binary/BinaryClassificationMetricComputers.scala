@@ -28,10 +28,10 @@ private[evaluation] trait BinaryClassificationMetricComputer extends Serializabl
 private[evaluation] object Precision extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
     val totalPositives = c.weightedTruePositives + c.weightedFalsePositives
-    if (totalPositives == 0) {
+    if (totalPositives == 0.0) {
       1.0
     } else {
-      c.weightedTruePositives.toDouble / totalPositives
+      c.weightedTruePositives / totalPositives
     }
   }
 }
@@ -39,10 +39,10 @@ private[evaluation] object Precision extends BinaryClassificationMetricComputer 
 /** False positive rate. Defined as 0.0 when there are no negative examples. */
 private[evaluation] object FalsePositiveRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
-    if (c.weightedNegatives == 0) {
+    if (c.weightedNegatives == 0.0) {
       0.0
     } else {
-      c.weightedFalsePositives.toDouble / c.weightedNegatives
+      c.weightedFalsePositives / c.weightedNegatives
     }
   }
 }
@@ -50,10 +50,10 @@ private[evaluation] object FalsePositiveRate extends BinaryClassificationMetricC
 /** Recall. Defined as 0.0 when there are no positive examples. */
 private[evaluation] object Recall extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
-    if (c.weightedPositives == 0) {
+    if (c.weightedPositives == 0.0) {
       0.0
     } else {
-      c.weightedTruePositives.toDouble / c.weightedPositives
+      c.weightedTruePositives / c.weightedPositives
     }
   }
 }
