@@ -113,7 +113,7 @@ private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
       new YarnCoarseGrainedExecutorBackend(rpcEnv, driverUrl, executorId, hostname, cores,
         userClassPath, env)
     }
-    BaseCoarseGrainedExecutorBackend.run(driverUrl, executorId, hostname, cores, appId, workerUrl,
+    CoarseGrainedExecutorBackend.run(driverUrl, executorId, hostname, cores, appId, workerUrl,
       userClassPath, createFn)
     System.exit(0)
   }
