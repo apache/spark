@@ -26,7 +26,7 @@ buildscript {
     classpath 'com.palantir.baseline:gradle-baseline-java:0.41.0'
     classpath 'com.palantir.gradle.gitversion:gradle-git-version:0.11.0'
     classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4'
-    classpath 'com.netflix.nebula:nebula-publishing-plugin:9.2.0'
+    classpath 'com.netflix.nebula:nebula-publishing-plugin:9.5.0'
   }
 }
 
