@@ -286,11 +286,13 @@ package object config {
 
   private[spark] val DISK_STORE_BLACKLIST_TIMEOUT =
     ConfigBuilder("spark.diskStore.blacklist.timeoutMs")
+      .doc("The timeout in milliseconds to wait before moving blacklisted local directory " +
+        "out from the blacklist.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1d")
 
-  private[spark] val DISK_STORE_MAX_RETIRES =
-    ConfigBuilder("spark.diskStore.maxRetries")
+  private[spark] val DISK_STORE_MAX_ATTEMPTS =
+    ConfigBuilder("spark.diskStore.maxAttempts")
       .intConf
       .createWithDefault(3)
 

@@ -41,7 +41,7 @@ private[spark] class DiskBlockManager(conf: SparkConf,
   deleteFilesOnStop: Boolean, clock: Clock = new SystemClock()) extends Logging {
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
-  private[spark] val maxRetries = conf.get(config.DISK_STORE_MAX_RETIRES)
+  private[spark] val maxAttempts = conf.get(config.DISK_STORE_MAX_ATTEMPTS)
   private[spark] val blacklistTimeout = conf.get(config.DISK_STORE_BLACKLIST_TIMEOUT)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
@@ -91,7 +91,7 @@ private[spark] class DiskBlockManager(conf: SparkConf,
       } else {
         assert(!migratedDirIdIndex.contains(filename))
         var newDir: File = null
-        for (attempt <- 0 until maxRetries if newDir == null) {
+        for (attempt <- 0 until maxAttempts if newDir == null) {
           val goodDirId = badDirs.synchronized {
             val isBlacklisted = badDirs.contains(localDirs(dirId))
             if (isBlacklisted) {
