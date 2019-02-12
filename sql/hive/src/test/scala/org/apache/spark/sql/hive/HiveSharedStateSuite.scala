@@ -27,25 +27,28 @@ import org.apache.spark.util.Utils
 
 class HiveSharedStateSuite extends SparkFunSuite {
 
-  test("the catalog should be determined at the very first") {
+  test("enableHiveSupport has right to determine the catalog while using an existing sc") {
     val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
     val sc = SparkContext.getOrCreate(conf)
     val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
-    assert(ss.sharedState.externalCatalog.unwrapped.getClass.getName
-      .contains("HiveExternalCatalog"), "The catalog should be hive ")
+    assert(ss.sharedState.externalCatalog.unwrapped.isInstanceOf[HiveExternalCatalog],
+      "The catalog should be hive ")
 
     val ss2 = SparkSession.builder().getOrCreate()
-    assert(ss2.sharedState.externalCatalog.unwrapped.getClass.getName
-      .contains("HiveExternalCatalog"), "The catalog should be shared across sessions")
-
+    assert(ss2.sharedState.externalCatalog.unwrapped.isInstanceOf[HiveExternalCatalog],
+      "The catalog should be shared across sessions")
   }
 
-  test("using initial configs to generate SharedState") {
+  test("initial configs should be passed to SharedState but not SparkContext") {
     val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
     val sc = SparkContext.getOrCreate(conf)
     val invalidPath = "invalid/path"
     val metastorePath = Utils.createTempDir()
     val tmpDb = "tmp_db"
+
+    // The initial configs used to generate SharedState, none of these should affect the global
+    // shared SparkContext's configurations. Especially, all these configs are passed to the cloned
+    // confs inside SharedState except metastore warehouse dir.
     val initialConfigs = Map("spark.foo" -> "bar",
       WAREHOUSE_PATH.key -> invalidPath,
       ConfVars.METASTOREWAREHOUSE.varname -> invalidPath,
@@ -53,6 +56,7 @@ class HiveSharedStateSuite extends SparkFunSuite {
       ConfVars.METASTORECONNECTURLKEY.varname ->
         s"jdbc:derby:;databaseName=$metastorePath/metastore_db;create=true",
       GLOBAL_TEMP_DATABASE.key -> tmpDb)
+
     val state = new SharedState(sc, initialConfigs)
     assert(state.warehousePath !== invalidPath, "warehouse path can't determine by session options")
     assert(sc.conf.get(WAREHOUSE_PATH.key) !== invalidPath,
@@ -62,8 +66,14 @@ class HiveSharedStateSuite extends SparkFunSuite {
 
     assert(!state.sparkContext.conf.contains("spark.foo"),
       "static spark conf should not be affected by session")
-    assert(state.globalTempViewManager.database === tmpDb)
     assert(state.externalCatalog.unwrapped.isInstanceOf[HiveExternalCatalog],
       "Initial SparkSession options can determine the catalog")
+    val client = state.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+    assert(client.getConf("spark.foo", "") === "bar",
+      "session level conf should be passed to catalog")
+    assert(client.getConf(ConfVars.METASTOREWAREHOUSE.varname, invalidPath) !== invalidPath,
+      "session level conf should be passed to catalog except warehouse dir")
+
+    assert(state.globalTempViewManager.database === tmpDb)
   }
 }

@@ -83,7 +83,7 @@ private[sql] class SharedState(
   }
   logInfo(s"Warehouse path is '$warehousePath'.")
 
-  // This variable should be initiated after `warehousePath`, because in the first place we need
+  // These 2 variables should be initiated after `warehousePath`, because in the first place we need
   // to load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
   // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
   private val (conf, hadoopConf) = {
