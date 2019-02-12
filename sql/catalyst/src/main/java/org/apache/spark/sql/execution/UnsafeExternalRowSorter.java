@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 import java.util.function.Supplier;
 
-import scala.collection.AbstractIterator;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
@@ -169,7 +168,7 @@ public final class UnsafeExternalRowSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-      return new AbstractIterator<UnsafeRow>() {
+      return new UnsafeExternalRowIterator() {
 
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow(numFields);
@@ -202,6 +201,11 @@ public final class UnsafeExternalRowSorter {
             Platform.throwException(e);
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
+        }
+
+        @Override
+        public void close() {
+          cleanupResources();
         }
       };
     } catch (IOException e) {
