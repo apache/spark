@@ -308,12 +308,15 @@ private class ScriptTransformationWriterThread(
       }
       threwException = false
     } catch {
+      // SPARK-25158 Exception should not be thrown again, otherwise it will be captured by
+      // SparkUncaughtExceptionHandler, then Executor will exit because of this Uncaught Exception,
+      // so pass the exception to `ScriptTransformationExec` is enough.
       case t: Throwable =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        throw t
+        logError("Thread-ScriptTransformation-Feed exit cause by: ", t)
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())
