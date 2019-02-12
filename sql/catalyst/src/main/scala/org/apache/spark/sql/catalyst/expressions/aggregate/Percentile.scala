@@ -54,7 +54,15 @@ import org.apache.spark.util.collection.OpenHashMap
       of the percentage array must be between 0.0 and 1.0. The value of frequency should be
       positive integral
 
-      """)
+      """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
+       3.0
+      > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
+       [2.5,7.5]
+  """,
+  since = "2.1.0")
 case class Percentile(
     child: Expression,
     percentageExpression: Expression,
