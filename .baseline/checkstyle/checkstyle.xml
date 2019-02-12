@@ -19,7 +19,6 @@
         <property name="lineSeparator" value="lf"/>
     </module>
     <module name="Header">
-        <!--<property name="header" value="^/\*$\n^ \* Licensed to the Apache Software Foundation (ASF) under one or more$\n"/>-->
         <property name="headerFile" value="${config_loc}/header.txt"/>
         <property name="fileExtensions" value=".java,.ts"/>
     </module>
@@ -41,12 +40,17 @@
         <property name="message" value="Whitespace at end-of-line"/>
     </module>
     <module name="RegexpMultiline"> <!-- Java Style Guide: Vertical Whitespace -->
-	<property name="fileExtensions" value="java"/>
+        <property name="fileExtensions" value="java"/>
         <property name="format" value="^\n\n$"/>
         <property name="message" value="Two consecutive blank lines are not permitted."/>
     </module>
     <module name="SuppressionFilter"> <!-- baseline-gradle: README.md -->
         <property name="file" value="${config_loc}/checkstyle-suppressions.xml"/>
+    </module>
+    <module name="SuppressionFilter"> <!-- baseline-gradle: README.md -->
+        <!-- custom-suppressions.xml allows users to specify suppresions that will not be overriden by baselineUpdateConfig -->
+        <property name="file" value="${config_loc}/custom-suppressions.xml"/>
+        <property name="optional" value="true"/>
     </module>
     <module name="SuppressWarningsFilter"/> <!-- baseline-gradle: README.md -->
     <module name="TreeWalker">
@@ -128,6 +132,7 @@
             <message key="import.illegal" value="Must not import repackaged classes."/>
         </module>
         <module name="IllegalImport"> <!-- Java Coding Guidelines: Import the canonical package -->
+            <property name="id" value="BanShadedClasses"/>
             <property name="illegalPkgs" value=".*\.(repackaged|shaded|thirdparty)"/>
             <property name="regexp" value="true" />
             <message key="import.illegal" value="Must not import repackaged classes."/>
