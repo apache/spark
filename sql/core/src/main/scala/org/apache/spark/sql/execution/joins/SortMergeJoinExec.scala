@@ -1180,13 +1180,15 @@ private class FullOuterIterator(
 
 trait CloseableScanner {
   def closeIterator(iter: RowIterator): Unit = {
-    if (iter.isInstanceOf[RowIteratorFromScala]) {
-      val rowIter = iter.asInstanceOf[RowIteratorFromScala]
-      val underlyingIter = rowIter.toScala
-      if (underlyingIter.isInstanceOf[UnsafeExternalRowIterator]) {
-        val toClose = underlyingIter.asInstanceOf[UnsafeExternalRowIterator]
-        toClose.close()
-      }
+    iter match {
+      case rowIter: RowIteratorFromScala =>
+        val underlyingIter = rowIter.toScala
+        underlyingIter match {
+          case toClose: UnsafeExternalRowIterator =>
+            toClose.close()
+          case _ =>
+        }
+      case _ =>
     }
   }
 }

@@ -168,43 +168,12 @@ public final class UnsafeExternalRowSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-      return new UnsafeExternalRowIterator() {
-
-        private final int numFields = schema.length();
-        private UnsafeRow row = new UnsafeRow(numFields);
-
-        @Override
-        public boolean hasNext() {
-          return sortedIterator.hasNext();
-        }
-
-        @Override
-        public UnsafeRow next() {
-          try {
-            sortedIterator.loadNext();
-            row.pointTo(
-              sortedIterator.getBaseObject(),
-              sortedIterator.getBaseOffset(),
-              sortedIterator.getRecordLength());
-            if (!hasNext()) {
-              UnsafeRow copy = row.copy(); // so that we don't have dangling pointers to freed page
-              row = null; // so that we don't keep references to the base object
-              cleanupResources();
-              return copy;
-            } else {
-              return row;
-            }
-          } catch (IOException e) {
-            cleanupResources();
-            // Scala iterators don't declare any checked exceptions, so we need to use this hack
-            // to re-throw the exception:
-            Platform.throwException(e);
-          }
-          throw new RuntimeException("Exception should have been re-thrown in next()");
-        }
+      return new UnsafeExternalRowIterator(schema, sortedIterator) {
 
         @Override
         public void close() {
+          // Caller should clean up resources if the iterator is not consumed in it's entirety,
+          // for example, in a SortMergeJoin.
           cleanupResources();
         }
       };
