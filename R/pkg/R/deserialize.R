@@ -240,7 +240,8 @@ readDeserializeInArrow <- function(inputCon) {
     as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
 
     # Currently, there looks no way to read batch by batch by socket connection in R side,
-    # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once for now.
+    # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once
+    # for now.
     dataLen <- readInt(inputCon)
     arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
     batches <- RecordBatchStreamReader(arrowData)$batches()
