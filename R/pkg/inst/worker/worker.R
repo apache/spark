@@ -205,16 +205,19 @@ if (isEmpty != 0) {
         if (deserializer == "arrow") {
           # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
           requireNamespace1 <- requireNamespace
-          requireNamespace1("arrow", quietly = TRUE)
-          write_arrow <- get("write_arrow", envir = asNamespace("arrow"), inherits = FALSE)
-          # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
-          # rbind.fill might be an anternative to make it faster if plyr is installed.
-          combined <- do.call("rbind", outputs)
+          if (requireNamespace1("arrow", quietly = TRUE)) {
+            write_arrow <- get("write_arrow", envir = asNamespace("arrow"), inherits = FALSE)
+            # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
+            # rbind.fill might be an anternative to make it faster if plyr is installed.
+            combined <- do.call("rbind", outputs)
 
-          # Likewise, there looks no way to send each batch in streaming format via socket
-          # connection. See ARROW-4512.
-          # So, it writes the whole Arrow streaming-formatted binary at once for now.
-          SparkR:::writeRaw(outputCon, write_arrow(combined, raw()))
+            # Likewise, there looks no way to send each batch in streaming format via socket
+            # connection. See ARROW-4512.
+            # So, it writes the whole Arrow streaming-formatted binary at once for now.
+            SparkR:::writeRaw(outputCon, write_arrow(combined, raw()))
+          } else {
+            stop("'arrow' package should be installed.")
+          }
         }
       }
     } else {

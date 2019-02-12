@@ -486,7 +486,7 @@ case class FlatMapGroupsInRWithArrowExec(
       //    JVM side                           R side
       //
       // 1. Group internal rows
-      // 2. Grouped internal rows    --------> Arrow record natches
+      // 2. Grouped internal rows    --------> Arrow record batches
       // 3. Grouped keys             --------> Regular serialized keys
       // 4.                                    Converts each Arrow record batch to each R data frame
       // 5.                                    Deserializes keys
