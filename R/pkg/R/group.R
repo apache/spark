@@ -231,14 +231,18 @@ gapplyInternal <- function(x, func, schema) {
   }
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
   if (arrowEnabled) {
+    if (is.null(schema)) {
+      stop(paste0("Arrow optimization does not support gapplyCollect yet. Please use ",
+                  "'collect' and 'gapply' APIs instead."))
+    }
     # Currenty Arrow optimization does not support raw for now.
     # Also, it does not support explicit float type set by users.
     if (inherits(schema, "structType")) {
       if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
-        stop("Arrow optimization with gapply and gapplyCollect do not support FloatType yet.")
+        stop("Arrow optimization with gapply do not support FloatType yet.")
       }
       if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "BinaryType"))) {
-        stop("Arrow optimization with gapply and gapplyCollect do not support BinaryType yet.")
+        stop("Arrow optimization with gapply do not support BinaryType yet.")
       }
     }
   }
