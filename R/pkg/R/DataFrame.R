@@ -1181,6 +1181,10 @@ setMethod("collect",
             arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
             if (arrowEnabled) {
               useArrow <- tryCatch({
+                requireNamespace1 <- requireNamespace
+                if (!requireNamespace1("arrow", quietly = TRUE)) {
+                  stop("'arrow' package should be installed.")
+                }
                 # Currenty Arrow optimization does not support raw for now.
                 # Also, it does not support explicit float type set by users.
                 if (inherits(schema(x), "structType")) {
@@ -1196,8 +1200,7 @@ setMethod("collect",
                   }
                 }
                 TRUE
-              },
-              error = function(e) {
+              }, error = function(e) {
                 warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
                                "with Arrow optimization because ",
                                "'spark.sql.execution.arrow.enabled' is set to true; however, ",
@@ -1213,26 +1216,26 @@ setMethod("collect",
               # empty data.frame with 0 columns and 0 rows
               data.frame()
             } else if (useArrow) {
-              # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now.
-              # See ARROW-3204.
               requireNamespace1 <- requireNamespace
-              requireNamespace1("arrow", quietly = TRUE)
-              read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
-              as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+              if (requireNamespace1("arrow", quietly = TRUE)) {
+                read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
+                as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
 
-              portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
-              port <- portAuth[[1]]
-              authSecret <- portAuth[[2]]
-              conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
-              output <- tryCatch({
-                doServerAuth(conn, authSecret)
-                arrowTable <- read_arrow(readRaw(conn))
-                as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
-              },
-              finally = {
-                close(conn)
-              })
-              return(output)
+                portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
+                port <- portAuth[[1]]
+                authSecret <- portAuth[[2]]
+                conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
+                output <- tryCatch({
+                  doServerAuth(conn, authSecret)
+                  arrowTable <- read_arrow(readRaw(conn))
+                  as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                }, finally = {
+                  close(conn)
+                })
+                return(output)
+              } else {
+                stop("'arrow' package should be installed.")
+              }
             } else {
               # listCols is a list of columns
               listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
