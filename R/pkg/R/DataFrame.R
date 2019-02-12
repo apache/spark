@@ -1184,11 +1184,13 @@ setMethod("collect",
                 # Currenty Arrow optimization does not support raw for now.
                 # Also, it does not support explicit float type set by users.
                 if (inherits(schema(x), "structType")) {
-                  if (any(sapply(schema(x)$fields(), function(x) x$dataType.toString() == "FloatType"))) {
+                  if (any(sapply(schema(x)$fields(),
+                                 function(x) x$dataType.toString() == "FloatType"))) {
                     stop(paste0("Arrow optimization in the conversion from Spark DataFrame to R ",
                                 "DataFrame does not support FloatType yet."))
                   }
-                  if (any(sapply(schema(x)$fields(), function(x) x$dataType.toString() == "BinaryType"))) {
+                  if (any(sapply(schema(x)$fields(),
+                                 function(x) x$dataType.toString() == "BinaryType"))) {
                     stop(paste0("Arrow optimization in the conversion from Spark DataFrame to R ",
                                 "DataFrame does not support BinaryType yet."))
                   }
@@ -1197,8 +1199,8 @@ setMethod("collect",
               },
               error = function(e) {
                 warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
-                               "with Arrow optimization because 'spark.sql.execution.arrow.enabled' ",
-                               "is set to true; however, ",
+                               "with Arrow optimization because ",
+                               "'spark.sql.execution.arrow.enabled' is set to true; however, ",
                                "failed, attempting non-optimization. Reason: ",
                                e))
                 FALSE
@@ -1211,7 +1213,8 @@ setMethod("collect",
               # empty data.frame with 0 columns and 0 rows
               data.frame()
             } else if (useArrow) {
-              # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
+              # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now.
+              # See ARROW-3204.
               requireNamespace1 <- requireNamespace
               requireNamespace1("arrow", quietly = TRUE)
               read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
