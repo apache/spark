@@ -35,6 +35,8 @@ import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.types.DataTypes._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -296,6 +298,29 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
+      }
+    }
+  }
+
+  test("Adding columns in the middle doesn't break data") {
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+      withTempPath { path =>
+        val rdd = sparkContext.parallelize(Seq((1, 2, "abc"), (4, 5, "def"), (8, 9, null)))
+        val df = rdd.toDF("col1", "col2", "col3")
+        df.write.format("orc").save(path.getCanonicalPath)
+        val schemaTyped = new StructType()
+          .add("col1", "int")
+          .add("col4", createMapType(LongType, StringType))
+          .add("col2", "int")
+          .add("col3", "string")
+        checkAnswer(
+          spark.read.schema(schemaTyped).orc(path.getCanonicalPath),
+          Seq(
+            Row(1, null, 2, "abc"),
+            Row(4, null, 5, "def"),
+            Row(8, null, 9, null)
+          )
+        )
       }
     }
   }
