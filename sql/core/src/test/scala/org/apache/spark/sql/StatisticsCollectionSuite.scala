@@ -18,12 +18,15 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -425,6 +428,46 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           """.stripMargin)
         df2.createTempView("TBL2")
         sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
+      }
+    }
+  }
+
+  test("store and retrieve column stats in different time zones") {
+    val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
+
+    def checkTimestampStats(
+        t: DataType,
+        srcTimeZone: TimeZone,
+        dstTimeZone: TimeZone)(checker: ColumnStat => Unit): Unit = {
+      val table = "time_table"
+      val column = "T"
+      val original = TimeZone.getDefault
+      try {
+        withTable(table) {
+          TimeZone.setDefault(srcTimeZone)
+          spark.range(start, end)
+            .select('id.cast(TimestampType).cast(t).as(column))
+            .write.saveAsTable(table)
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
+
+          TimeZone.setDefault(dstTimeZone)
+          val stats = getCatalogTable(table)
+            .stats.get.colStats(column).toPlanStat(column, t)
+          checker(stats)
+        }
+      } finally {
+        TimeZone.setDefault(original)
+      }
+    }
+
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      checkTimestampStats(DateType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+        assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
+        assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
+      }
+      checkTimestampStats(TimestampType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+        assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
+        assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
       }
     }
   }

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -413,7 +413,8 @@ case class CatalogColumnStat(
     nullCount: Option[BigInt] = None,
     avgLen: Option[Long] = None,
     maxLen: Option[Long] = None,
-    histogram: Option[Histogram] = None) {
+    histogram: Option[Histogram] = None,
+    version: Int = CatalogColumnStat.VERSION) {
 
   /**
    * Returns a map from string to string that can be used to serialize the column stats.
@@ -427,7 +428,7 @@ case class CatalogColumnStat(
    */
   def toMap(colName: String): Map[String, String] = {
     val map = new scala.collection.mutable.HashMap[String, String]
-    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", "1")
+    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", CatalogColumnStat.VERSION.toString)
     distinctCount.foreach { v =>
       map.put(s"${colName}.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
     }
@@ -450,12 +451,13 @@ case class CatalogColumnStat(
       dataType: DataType): ColumnStat =
     ColumnStat(
       distinctCount = distinctCount,
-      min = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
-      max = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
+      min = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version)),
+      max = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version)),
       nullCount = nullCount,
       avgLen = avgLen,
       maxLen = maxLen,
-      histogram = histogram)
+      histogram = histogram,
+      version = version)
 }
 
 object CatalogColumnStat extends Logging {
@@ -470,14 +472,23 @@ object CatalogColumnStat extends Logging {
   private val KEY_MAX_LEN = "maxLen"
   private val KEY_HISTOGRAM = "histogram"
 
+  val VERSION = 2
+
+  private def getTimestampFormatter(): TimestampFormatter = {
+    TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", timeZone = DateTimeUtils.TimeZoneUTC)
+  }
+
   /**
    * Converts from string representation of data type to the corresponding Catalyst data type.
    */
-  def fromExternalString(s: String, name: String, dataType: DataType): Any = {
+  def fromExternalString(s: String, name: String, dataType: DataType, version: Int): Any = {
     dataType match {
       case BooleanType => s.toBoolean
-      case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
-      case TimestampType => DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
+      case DateType if version == 1 => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
+      case DateType => DateFormatter().parse(s)
+      case TimestampType if version == 1 =>
+        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
+      case TimestampType => getTimestampFormatter().parse(s)
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
@@ -499,8 +510,8 @@ object CatalogColumnStat extends Logging {
    */
   def toExternalString(v: Any, colName: String, dataType: DataType): String = {
     val externalValue = dataType match {
-      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
-      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
+      case DateType => DateFormatter().format(v.asInstanceOf[Int])
+      case TimestampType => getTimestampFormatter().format(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
@@ -530,7 +541,8 @@ object CatalogColumnStat extends Logging {
         nullCount = map.get(s"${colName}.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
         avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
         maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
-        histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize)
+        histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize),
+        version = map(s"${colName}.${KEY_VERSION}").toInt
       ))
     } catch {
       case NonFatal(e) =>

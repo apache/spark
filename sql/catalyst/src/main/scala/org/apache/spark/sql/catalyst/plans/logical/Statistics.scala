@@ -93,6 +93,7 @@ case class Statistics(
  * @param avgLen average length of the values. For fixed-length types, this should be a constant.
  * @param maxLen maximum length of the values. For fixed-length types, this should be a constant.
  * @param histogram histogram of the values
+ * @param version version of statistics saved to or retrieved from the catalog
  */
 case class ColumnStat(
     distinctCount: Option[BigInt] = None,
@@ -101,7 +102,8 @@ case class ColumnStat(
     nullCount: Option[BigInt] = None,
     avgLen: Option[Long] = None,
     maxLen: Option[Long] = None,
-    histogram: Option[Histogram] = None) {
+    histogram: Option[Histogram] = None,
+    version: Int = CatalogColumnStat.VERSION) {
 
   // Are distinctCount and nullCount statistics defined?
   val hasCountStats = distinctCount.isDefined && nullCount.isDefined
@@ -120,7 +122,8 @@ case class ColumnStat(
       nullCount = nullCount,
       avgLen = avgLen,
       maxLen = maxLen,
-      histogram = histogram)
+      histogram = histogram,
+      version = version)
 }
 
 /**
