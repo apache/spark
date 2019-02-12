@@ -302,19 +302,14 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("Adding columns in the middle doesn't break data") {
+  test("[SPARK-26859] Reading ORC files with explicit schema can result in wrong data") {
     withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
       withTempPath { path =>
         val rdd = sparkContext.parallelize(Seq((1, 2, "abc"), (4, 5, "def"), (8, 9, null)))
         val df = rdd.toDF("col1", "col2", "col3")
         df.write.format("orc").save(path.getCanonicalPath)
-        val schemaTyped = new StructType()
-          .add("col1", "int")
-          .add("col4", createMapType(LongType, StringType))
-          .add("col2", "int")
-          .add("col3", "string")
         checkAnswer(
-          spark.read.schema(schemaTyped).orc(path.getCanonicalPath),
+          spark.read.schema("col1 int, col4 int, col2 int, col3 string").orc(path.getCanonicalPath),
           Seq(
             Row(1, null, 2, "abc"),
             Row(4, null, 5, "def"),

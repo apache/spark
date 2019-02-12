@@ -47,8 +47,6 @@ class OrcDeserializer(
       }.toArray
   }
 
-  private val validColIds = requestedColIds.filterNot(_ == -1)
-
   def deserialize(orcStruct: OrcStruct): InternalRow = {
     var fieldWriterIndex = 0
     var targetColumnIndex = 0
