@@ -56,8 +56,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private val maxFailuresPerHost = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
 
-  private val initialBlacklistedNodes =
-    sparkConf.get(YARN_EXECUTOR_INITIAL_BLACKLISTED_NODES).toSet
+  private val excludeNodes = sparkConf.get(YARN_EXCLUDE_NODES).toSet
 
   private val allocatorBlacklist = new HashMap[String, Long]()
 
@@ -108,8 +107,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
-    val allBlacklistedNodes =
-      initialBlacklistedNodes ++ schedulerBlacklist ++ allocatorBlacklist.keySet
+    val allBlacklistedNodes = excludeNodes ++ schedulerBlacklist ++ allocatorBlacklist.keySet
     synchronizeBlacklistedNodeWithYarn(allBlacklistedNodes)
   }
 

@@ -463,11 +463,10 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.blacklist.initial.blacklisted.nodes</code></td>
-  <td>false</td>
+  <td><code>spark.yarn.exclude.nodes</code></td>
+  <td>(none)</td>
   <td>
-  Comma-separated list of strings used as initially blacklisted YARN nodes which stays always
-  backlisted and never will be used by Spark.
+  Comma-separated list of YARN node names which are excluded from resource allocation.
   </td>
 </tr>
 <tr>

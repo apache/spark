@@ -317,8 +317,7 @@ package object config {
       .createWithDefault(false)
 
   /* Initially blacklisted YARN nodes. */
-  private[spark] val YARN_EXECUTOR_INITIAL_BLACKLISTED_NODES =
-    ConfigBuilder("spark.yarn.blacklist.initial.blacklisted.nodes")
+  private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
