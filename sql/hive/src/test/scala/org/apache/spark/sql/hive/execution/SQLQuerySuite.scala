@@ -26,7 +26,7 @@ import java.util.{Locale, Set}
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
@@ -2348,4 +2348,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-25158: " +
+    "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
+    withTempView("test") {
+      val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
+      try {
+        val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
+        Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
+
+        // Use a bad udf to generate failed inputs.
+        val badUDF = org.apache.spark.sql.functions.udf((x: Int) => {
+          if (x < 1) x
+          else throw new RuntimeException("Failed to produce data.")
+        })
+        spark
+          .range(5)
+          .select(badUDF('id).as("a"))
+          .createOrReplaceTempView("test")
+        val scriptFilePath = getTestResourcePath("data")
+        val e = intercept[SparkException] {
+          sql(
+            s"""FROM test SELECT TRANSFORM(a)
+               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+             """.stripMargin).collect()
+        }
+        assert(e.getMessage.contains("Failed to produce data."))
+        assert(uncaughtExceptionHandler.exception.isEmpty)
+      } finally {
+        Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
+      }
+    }
+  }
 }
