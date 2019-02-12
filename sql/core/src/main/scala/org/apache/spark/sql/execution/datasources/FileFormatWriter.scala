@@ -98,7 +98,7 @@ object FileFormatWriter extends Logging {
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
     val dataSchema = dataColumns.toStructType
-    DataSourceUtils.verifyWriteSchema(fileFormat, dataSchema)
+    DataSourceUtils.verifySchema(fileFormat, dataSchema)
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
@@ -259,7 +259,7 @@ object FileFormatWriter extends Logging {
    * For every registered [[WriteJobStatsTracker]], call `processStats()` on it, passing it
    * the corresponding [[WriteTaskStats]] from all executors.
    */
-  private def processStats(
+  private[datasources] def processStats(
       statsTrackers: Seq[WriteJobStatsTracker],
       statsPerTask: Seq[Seq[WriteTaskStats]])
   : Unit = {

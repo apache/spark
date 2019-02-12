@@ -30,7 +30,7 @@ class UnpersistSuite extends SparkFunSuite with LocalSparkContext with TimeLimit
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
     rdd.count
     assert(sc.persistentRdds.isEmpty === false)
-    rdd.unpersist()
+    rdd.unpersist(blocking = true)
     assert(sc.persistentRdds.isEmpty === true)
 
     failAfter(Span(3000, Millis)) {

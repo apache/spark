@@ -23,12 +23,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -85,10 +83,6 @@ private[spark] class YARNHadoopDelegationTokenManager(
   // For testing.
   override def isProviderLoaded(serviceName: String): Boolean = {
     credentialProviders.contains(serviceName) || super.isProviderLoaded(serviceName)
-  }
-
-  override protected def fileSystemsToAccess(): Set[FileSystem] = {
-    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf)
   }
 
 }

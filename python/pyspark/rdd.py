@@ -244,13 +244,17 @@ class RDD(object):
         self._jrdd.persist(javaStorageLevel)
         return self
 
-    def unpersist(self):
+    def unpersist(self, blocking=False):
         """
         Mark the RDD as non-persistent, and remove all blocks for it from
         memory and disk.
+
+        .. versionchanged:: 3.0.0
+           Added optional argument `blocking` to specify whether to block until all
+           blocks are deleted.
         """
         self.is_cached = False
-        self._jrdd.unpersist()
+        self._jrdd.unpersist(blocking)
         return self
 
     def checkpoint(self):
@@ -2509,7 +2513,7 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
-        self.is_barrier = prev._is_barrier() or isFromBarrier
+        self.is_barrier = isFromBarrier or prev._is_barrier()
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()

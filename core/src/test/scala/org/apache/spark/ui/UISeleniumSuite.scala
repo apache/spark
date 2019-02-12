@@ -137,7 +137,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       val rddJson = getJson(ui, "storage/rdd/0")
       (rddJson  \ "storageLevel").extract[String] should be (StorageLevels.DISK_ONLY.description)
 
-      rdd.unpersist()
+      rdd.unpersist(blocking = true)
       rdd.persist(StorageLevels.MEMORY_ONLY).count()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(ui, "/storage")
@@ -172,7 +172,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       dist0.onHeapMemoryUsed should not be (Some(0L))
       dist0.offHeapMemoryUsed should be (Some(0L))
 
-      rdd.unpersist()
+      rdd.unpersist(blocking = true)
       rdd.persist(StorageLevels.OFF_HEAP).count()
       val updatedStorageJson1 = getJson(ui, "storage/rdd")
       updatedStorageJson1.children.length should be (1)
