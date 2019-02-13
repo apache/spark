@@ -176,7 +176,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("throw an exception for not support join type") {
+  test("throw an exception for not supported join types") {
     for (joinType <- unsupportedJoinTypes) {
       val e = intercept[AnalysisException] {
         val query = testRelationLeft.join(

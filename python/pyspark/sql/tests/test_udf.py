@@ -227,7 +227,7 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_not_supported_in_join_condition(self):
         # regression test for SPARK-25314
-        # test python udf is not supported in join type besides left_semi and inner join.
+        # test python udf is not supported in join type except inner join.
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
         f = udf(lambda a, b: a == b, BooleanType())
