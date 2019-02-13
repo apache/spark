@@ -2385,13 +2385,13 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> model = stringIndexer.fit(multiRowDf)
     >>> result = model.transform(multiRowDf)
     >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
-    ...      result.index2).collect()]), key=lambda x: x[0])
+    ...     result.index2).collect()]), key=lambda x: x[0])
     [(0, 0.0, 1.0), (1, 2.0, 0.0), (2, 1.0, 1.0), (3, 0.0, 0.0), (4, 0.0, 0.0), (5, 1.0, 0.0)]
-    >>> fromlabelsModel = StringIndexerModel.from_ArrayOfLabels([["a", "b", "c"], ["e", "f"]],
+    >>> fromlabelsModel = StringIndexerModel.from_arrays_of_labels([["a", "b", "c"], ["e", "f"]],
     ...     inputCols=inputs, outputCols=outputs)
     >>> result = fromlabelsModel.transform(multiRowDf)
     >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
-    ...      result.index2).collect()]), key=lambda x: x[0])
+    ...     result.index2).collect()]), key=lambda x: x[0])
     [(0, 0.0, 0.0), (1, 1.0, 1.0), (2, 2.0, 0.0), (3, 0.0, 1.0), (4, 0.0, 1.0), (5, 2.0, 1.0)]
 
     .. versionadded:: 1.4.0
@@ -2460,8 +2460,8 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
 
     @classmethod
     @since("3.0.0")
-    def from_ArrayOfLabels(cls, arrayOfLabels, inputCols, outputCols=None,
-                           handleInvalid=None):
+    def from_arrays_of_labels(cls, arrayOfLabels, inputCols, outputCols=None,
+                              handleInvalid=None):
         """
         Construct the model directly from an array of array of label strings,
         requires an active SparkContext.

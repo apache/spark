@@ -88,12 +88,15 @@ class JavaWrapper(object):
         """
         sc = SparkContext._active_spark_context
         java_array = None
+        # If pylist is a 2D array, then a 2D java array will be created.
+        # Currently, this is only used by StringIndexerModel.from_arrays_of_labels
         if len(pylist) > 0 and isinstance(pylist[0], list):
             inner_array_length = 0
             for i in xrange(len(pylist)):
                 inner_array_length = max(inner_array_length, len(pylist[i]))
             java_array = sc._gateway.new_array(java_class, len(pylist), inner_array_length)
             for i in xrange(len(pylist)):
+                java_array[i] = sc._gateway.new_array(java_class, len(pylist[i]))
                 for j in xrange(len(pylist[i])):
                     java_array[i][j] = pylist[i][j]
         else:
