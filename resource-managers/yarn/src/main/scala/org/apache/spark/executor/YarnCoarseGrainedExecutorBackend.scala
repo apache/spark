@@ -21,13 +21,11 @@ import java.net.URL
 
 import scala.collection.mutable
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RetrieveSparkAppConfig, SparkAppConfig}
-import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
+import org.apache.spark.util.YarnContainerInfoHelper
 
 /**
  * Custom implementation of CoarseGrainedExecutorBackend for YARN resource manager.
@@ -66,80 +64,17 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
-  def main(args: Array[String]) {
-    var driverUrl: String = null
-    var executorId: String = null
-    var hostname: String = null
-    var cores: Int = 0
-    var appId: String = null
-    var workerUrl: Option[String] = None
-    val userClassPath = new mutable.ListBuffer[URL]()
-
-    var argv = args.toList
-    while (!argv.isEmpty) {
-      argv match {
-        case ("--driver-url") :: value :: tail =>
-          driverUrl = value
-          argv = tail
-        case ("--executor-id") :: value :: tail =>
-          executorId = value
-          argv = tail
-        case ("--hostname") :: value :: tail =>
-          hostname = value
-          argv = tail
-        case ("--cores") :: value :: tail =>
-          cores = value.toInt
-          argv = tail
-        case ("--app-id") :: value :: tail =>
-          appId = value
-          argv = tail
-        case ("--worker-url") :: value :: tail =>
-          // Worker url is used in spark standalone mode to enforce fate-sharing with worker
-          workerUrl = Some(value)
-          argv = tail
-        case ("--user-class-path") :: value :: tail =>
-          userClassPath += new URL(value)
-          argv = tail
-        case Nil =>
-        case tail =>
-          // scalastyle:off println
-          System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
-          // scalastyle:on println
-          printUsageAndExit()
-      }
-    }
-
-    if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
-      appId == null) {
-      printUsageAndExit()
-    }
+  def main(args: Array[String]): Unit = {
+    val arguments = CoarseGrainedExecutorBackend.parseArguments(args,
+      this.getClass.getCanonicalName)
 
     val createFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend = { case (rpcEnv, env) =>
-      new YarnCoarseGrainedExecutorBackend(rpcEnv, driverUrl, executorId, hostname, cores,
-        userClassPath, env)
+      new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
+        arguments.hostname, arguments.cores, arguments.userClassPath, env)
     }
-    CoarseGrainedExecutorBackend.run(driverUrl, executorId, hostname, cores, appId, workerUrl,
-      userClassPath, createFn)
+    CoarseGrainedExecutorBackend.run(arguments.driverUrl, arguments.executorId, arguments.hostname,
+      arguments.cores, arguments.appId, arguments.workerUrl, arguments.userClassPath, createFn)
     System.exit(0)
-  }
-
-  private def printUsageAndExit() = {
-    // scalastyle:off println
-    System.err.println(
-      """
-        |Usage: YarnCoarseGrainedExecutorBackend [options]
-        |
-        | Options are:
-        |   --driver-url <driverUrl>
-        |   --executor-id <executorId>
-        |   --hostname <hostname>
-        |   --cores <cores>
-        |   --app-id <appid>
-        |   --worker-url <workerUrl>
-        |   --user-class-path <url>
-        |""".stripMargin)
-    // scalastyle:on println
-    System.exit(1)
   }
 
 }

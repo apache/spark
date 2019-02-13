@@ -181,6 +181,27 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
+  case class CoarseGrainedExecutorBackendArguments(
+      driverUrl: String,
+      executorId: String,
+      hostname: String,
+      cores: Int,
+      appId: String,
+      workerUrl: Option[String],
+      userClassPath: mutable.ListBuffer[URL])
+
+  def main(args: Array[String]): Unit = {
+    val arguments = parseArguments(args, this.getClass.getCanonicalName)
+
+    val createFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend = { case (rpcEnv, env) =>
+      new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
+        arguments.hostname, arguments.cores, arguments.userClassPath, env)
+    }
+    run(arguments.driverUrl, arguments.executorId, arguments.hostname, arguments.cores,
+      arguments.appId, arguments.workerUrl, arguments.userClassPath, createFn)
+    System.exit(0)
+  }
+
   def run(
       driverUrl: String,
       executorId: String,
@@ -189,7 +210,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       appId: String,
       workerUrl: Option[String],
       userClassPath: Seq[URL],
-      backendCreateFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend) {
+      backendCreateFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend): Unit = {
 
     Utils.initDaemon(log)
 
@@ -237,7 +258,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
   }
 
-  def main(args: Array[String]) {
+  def parseArguments(args: Array[String], classNameForEntry: String)
+    : CoarseGrainedExecutorBackendArguments = {
     var driverUrl: String = null
     var executorId: String = null
     var hostname: String = null
@@ -276,40 +298,35 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           // scalastyle:off println
           System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
           // scalastyle:on println
-          printUsageAndExit()
+          printUsageAndExit(classNameForEntry)
       }
     }
 
     if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
       appId == null) {
-      printUsageAndExit()
+      printUsageAndExit(classNameForEntry)
     }
 
-    val createFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend = { case (rpcEnv, env) =>
-      new CoarseGrainedExecutorBackend(rpcEnv, driverUrl, executorId, hostname, cores,
-        userClassPath, env)
-    }
-    run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath, createFn)
-    System.exit(0)
+    CoarseGrainedExecutorBackendArguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
+      userClassPath)
   }
 
-  private def printUsageAndExit() = {
+  private def printUsageAndExit(classNameForEntry: String): Unit = {
     // scalastyle:off println
     System.err.println(
-      """
-        |Usage: CoarseGrainedExecutorBackend [options]
-        |
-        | Options are:
-        |   --driver-url <driverUrl>
-        |   --executor-id <executorId>
-        |   --hostname <hostname>
-        |   --cores <cores>
-        |   --app-id <appid>
-        |   --worker-url <workerUrl>
-        |   --user-class-path <url>
-        |""".stripMargin)
+      s"""
+      |Usage: $classNameForEntry [options]
+      |
+      | Options are:
+      |   --driver-url <driverUrl>
+      |   --executor-id <executorId>
+      |   --hostname <hostname>
+      |   --cores <cores>
+      |   --app-id <appid>
+      |   --worker-url <workerUrl>
+      |   --user-class-path <url>
+      |""".stripMargin)
     // scalastyle:on println
     System.exit(1)
   }
-
 }
