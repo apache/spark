@@ -104,15 +104,8 @@ object DataSourceV2Strategy extends Strategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.newScanBuilder()
-      // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we do not need to
-      // worry about case sensitivity anymore.
-      val normalizedFilters = filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
-        e transform {
-          case a: AttributeReference =>
-            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
-        }
-      }
+
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, relation.output)
 
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.

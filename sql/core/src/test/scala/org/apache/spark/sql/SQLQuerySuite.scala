@@ -2967,11 +2967,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-26865 ORC filter pushdown should be case insensitive by default") {
-    spark.range(10).write.mode("overwrite").orc("/tmp/o1")
-    spark.read.schema("ID long").orc("/tmp/o1").filter("id > 5").show
-  }
-
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
     Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {

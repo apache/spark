@@ -219,6 +219,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         IsNotNull(attrInt))), None)
   }
 
+  test("SPARK-26865 DataSourceV2Strategy should push normalized filters") {
+    val attrInt = 'cint.int
+    DataSourceStrategy.normalizeFilters(Seq(IsNotNull(attrInt.withName("CiNt"))), Seq(attrInt))
+  }
+
   /**
    * Translate the given Catalyst [[Expression]] into data source [[sources.Filter]]
    * then verify against the given [[sources.Filter]].
