@@ -311,7 +311,7 @@ private[hive] case class HiveUDAFFunction(
     isUDAFBridgeRequired: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[GenericUDAFEvaluator.AggregationBuffer]
+  extends HiveTypedImperativeAggregate[GenericUDAFEvaluator.AggregationBuffer]
   with HiveInspectors
   with UserDefinedExpression {
 
@@ -403,6 +403,9 @@ private[hive] case class HiveUDAFFunction(
 
   override def createAggregationBuffer(): AggregationBuffer =
     partial1HiveEvaluator.evaluator.getNewAggregationBuffer
+
+  override def createPartial2ModeAggregationBuffer(): AggregationBuffer =
+    partial2ModeEvaluator.getNewAggregationBuffer
 
   @transient
   private lazy val inputProjection = UnsafeProjection.create(children)

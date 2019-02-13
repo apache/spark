@@ -59,7 +59,8 @@ class ObjectAggregationIterator(
   private[this] var aggBufferIterator: Iterator[AggregationBufferEntry] = _
 
   // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
-  private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
+  var (sortBasedAggExpressions, sortBasedAggFunctions): (
+    Seq[AggregateExpression], Array[AggregateFunction]) = {
     val newExpressions = aggregateExpressions.map {
       case agg @ AggregateExpression(_, Partial, _, _) =>
         agg.copy(mode = PartialMerge)
@@ -67,9 +68,12 @@ class ObjectAggregationIterator(
         agg.copy(mode = Final)
       case other => other
     }
-    val newFunctions = initializeAggregateFunctions(newExpressions, 0)
-    val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
-    generateProcessRow(newExpressions, newFunctions, newInputAttributes)
+    (newExpressions, initializeAggregateFunctions(newExpressions, 0))
+  }
+
+  private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
+    val newInputAttributes = sortBasedAggFunctions.flatMap(_.inputAggBufferAttributes)
+    generateProcessRow(sortBasedAggExpressions, sortBasedAggFunctions, newInputAttributes)
   }
 
   /**
@@ -93,7 +97,7 @@ class ObjectAggregationIterator(
    */
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     if (groupingExpressions.isEmpty) {
-      val defaultAggregationBuffer = createNewAggregationBuffer()
+      val defaultAggregationBuffer = createNewAggregationBuffer(aggregateFunctions)
       generateOutput(UnsafeRow.createFromByteArray(0, 0), defaultAggregationBuffer)
     } else {
       throw new IllegalStateException(
@@ -106,18 +110,20 @@ class ObjectAggregationIterator(
   //
   //  - when creating aggregation buffer for a new group in the hash map, and
   //  - when creating the re-used buffer for sort-based aggregation
-  private def createNewAggregationBuffer(): SpecificInternalRow = {
-    val bufferFieldTypes = aggregateFunctions.flatMap(_.aggBufferAttributes.map(_.dataType))
+  private def createNewAggregationBuffer(
+    functions: Array[AggregateFunction]): SpecificInternalRow = {
+    val bufferFieldTypes = functions.flatMap(_.aggBufferAttributes.map(_.dataType))
     val buffer = new SpecificInternalRow(bufferFieldTypes)
-    initAggregationBuffer(buffer)
+    initAggregationBuffer(buffer, functions)
     buffer
   }
 
-  private def initAggregationBuffer(buffer: SpecificInternalRow): Unit = {
+  private def initAggregationBuffer(
+    buffer: SpecificInternalRow, functions: Array[AggregateFunction]): Unit = {
     // Initializes declarative aggregates' buffer values
     expressionAggInitialProjection.target(buffer)(EmptyRow)
     // Initializes imperative aggregates' buffer values
-    aggregateFunctions.collect { case f: ImperativeAggregate => f }.foreach(_.initialize(buffer))
+    functions.collect { case f: ImperativeAggregate => f }.foreach(_.initialize(buffer))
   }
 
   private def getAggregationBufferByKey(
@@ -125,7 +131,7 @@ class ObjectAggregationIterator(
     var aggBuffer = hashMap.getAggregationBuffer(groupingKey)
 
     if (aggBuffer == null) {
-      aggBuffer = createNewAggregationBuffer()
+      aggBuffer = createNewAggregationBuffer(aggregateFunctions)
       hashMap.putAggregationBuffer(groupingKey.copy(), aggBuffer)
     }
 
@@ -183,7 +189,7 @@ class ObjectAggregationIterator(
           StructType.fromAttributes(groupingAttributes),
           processRow,
           mergeAggregationBuffers,
-          createNewAggregationBuffer())
+          createNewAggregationBuffer(sortBasedAggFunctions))
 
         while (inputRows.hasNext) {
           // NOTE: The input row is always UnsafeRow
