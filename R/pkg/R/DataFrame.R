@@ -1177,6 +1177,7 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "SparkDataFrame"),
           function(x, stringsAsFactors = FALSE) {
+            connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
             useArrow <- FALSE
             arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
             if (arrowEnabled) {
@@ -1224,7 +1225,8 @@ setMethod("collect",
                 portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
                 port <- portAuth[[1]]
                 authSecret <- portAuth[[2]]
-                conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
+                conn <- socketConnection(
+                  port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
                 output <- tryCatch({
                   doServerAuth(conn, authSecret)
                   arrowTable <- read_arrow(readRaw(conn))
