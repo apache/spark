@@ -46,6 +46,11 @@ case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
   override def output: Seq[Attribute] = Nil
 }
 
+/**
+ * Physical plan node for append into a v2 table.
+ *
+ * Rows in the output data set are appended.
+ */
 case class AppendDataExec(
     table: SupportsBatchWrite,
     writeOptions: DataSourceOptions,
@@ -63,9 +68,19 @@ case class AppendDataExec(
   }
 }
 
+/**
+ * Physical plan node for overwrite into a v2 table.
+ *
+ * Overwrites data in a table matched by a set of filters. Rows matching all of the filters will be
+ * deleted and rows in the output data set are appended.
+ *
+ * This plan is used to implement SaveMode.Overwrite. The behavior of SaveMode.Overwrite is to
+ * truncate the table -- delete all rows -- and append the output data set. This uses the filter
+ * AlwaysTrue to delete all rows.
+ */
 case class OverwriteByExpressionExec(
     table: SupportsBatchWrite,
-    filters: Array[Filter],
+    deleteWhere: Array[Filter],
     writeOptions: DataSourceOptions,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
@@ -75,14 +90,14 @@ case class OverwriteByExpressionExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val batchWrite = newWriteBuilder() match {
-      case builder: SupportsTruncate if isTruncate(filters) =>
+      case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         builder.truncate().buildForBatch()
 
-      case builder: SupportsOverwrite =>
-        builder.overwrite(filters).buildForBatch()
-
-      case builder: SupportsSaveMode =>
+      case builder: SupportsSaveMode if isTruncate(deleteWhere) =>
         builder.mode(SaveMode.Overwrite).buildForBatch()
+
+      case builder: SupportsOverwrite =>
+        builder.overwrite(deleteWhere).buildForBatch()
 
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
@@ -92,6 +107,15 @@ case class OverwriteByExpressionExec(
   }
 }
 
+/**
+ * Physical plan node for dynamic partition overwrite into a v2 table.
+ *
+ * Dynamic partition overwrite is the behavior of Hive INSERT OVERWRITE ... PARTITION queries, and
+ * Spark INSERT OVERWRITE queries when spark.sql.sources.partitionOverwriteMode=dynamic. Each
+ * partition in the output data set replaces the corresponding existing partition in the table or
+ * creates a new partition. Existing partitions for which there is no data in the output data set
+ * are not modified.
+ */
 case class OverwritePartitionsDynamicExec(
     table: SupportsBatchWrite,
     writeOptions: DataSourceOptions,

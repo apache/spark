@@ -29,6 +29,9 @@ import org.apache.spark.sql.sources.Filter;
 public interface SupportsOverwrite extends WriteBuilder, SupportsTruncate {
   /**
    * Configures a write to replace data matching the filters with data committed in the write.
+   * <p>
+   * Rows must be deleted from the data source if and only if all of the filters match. That is,
+   * filters must be interpreted as ANDed together.
    *
    * @param filters filters used to match data to overwrite
    * @return this write builder for method chaining
