@@ -179,6 +179,25 @@ class ExpressionParserSuite extends PlanTest {
       InSubquery(Seq('a), ListQuery(table("c").select('b))))
   }
 
+  test("any sub-query") {
+    assertEqual(
+      "a > any (select b from c)",
+      AnySubquery(Seq('a), GreaterThan, ListQuery(table("c").select('b))))
+
+    assertEqual(
+      "(a, b, c) != any (select d, e, f from g)",
+      AnySubquery(Seq('a, 'b, 'c), SubqueryPredicate.NotEqualTo, ListQuery(table("g").select('d, 'e, 'f))))
+
+    assertEqual(
+      "(a, b) = any (select c from d)",
+      AnySubquery(Seq('a, 'b), EqualTo, ListQuery(table("d").select('c))))
+
+    assertEqual(
+      "(a) <= any (select b from c)",
+      AnySubquery(Seq('a), LessThanOrEqual, ListQuery(table("c").select('b))))
+
+  }
+
   test("like expressions") {
     assertEqual("a like 'pattern%'", 'a like "pattern%")
     assertEqual("a not like 'pattern%'", !('a like "pattern%"))

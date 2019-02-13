@@ -1316,4 +1316,40 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(df3, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
     }
   }
+
+  test("SPARK-26854: support ANY subquery") {
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT a, b
+          |FROM l
+          |WHERE a > ANY (SELECT c
+          |               FROM r)
+        """.stripMargin
+      ),
+      Row(3, 3.0)::Row(6, null)::Nil
+    )
+
+    val df_any = sql(
+      """
+        |SELECT a, b
+        |FROM l
+        |WHERE a = ANY (SELECT c
+        |               FROM r)
+      """.stripMargin
+    )
+    val df_in = sql(
+      """
+        |SELECT a, b
+        |FROM l
+        |WHERE a IN (SELECT c
+        |            FROM r)
+      """.stripMargin
+    )
+    checkAnswer(df_any, Row(2, 1.0)::Row(2, 1.0)::Row(3, 3.0)::Row(6, null)::Nil)
+
+    // `IN` should be equivalent to `= ANY`.
+    checkAnswer(df_any, df_in)
+  }
 }

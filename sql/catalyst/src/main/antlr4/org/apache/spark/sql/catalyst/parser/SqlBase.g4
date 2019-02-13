@@ -571,6 +571,7 @@ predicate
     : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
+    | NOT? comparisonOperator kind=(ANY | SOME) '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
     | IS NOT? kind=DISTINCT FROM right=valueExpression

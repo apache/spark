@@ -444,12 +444,12 @@ object TypeCoercion {
   }
 
   /**
-   * Handles type coercion for both IN expression with subquery and IN
+   * Handles type coercion for both IN/ANY expression with subquery and IN
    * expressions without subquery.
    * 1. In the first case, find the common type by comparing the left hand side (LHS)
    *    expression types against corresponding right hand side (RHS) expression derived
    *    from the subquery expression's plan output. Inject appropriate casts in the
-   *    LHS and RHS side of IN expression.
+   *    LHS and RHS side of IN/ANY expression.
    *
    * 2. In the second case, convert the value and in list expressions to the
    *    common operator type by looking at all the argument types and finding
@@ -464,9 +464,9 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       // Handle type casting required between value expression and subquery output
-      // in IN subquery.
-      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _))
-          if !i.resolved && lhs.length == sub.output.length =>
+      // in IN/ANY subquery.
+      case s @ SubqueryPredicate(lhs, comparison, ListQuery(sub, children, exprId, _))
+          if !s.resolved && lhs.length == sub.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
         val rhs = sub.output
@@ -477,7 +477,7 @@ object TypeCoercion {
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
-        // IN subquery expression.
+        // IN/ANY subquery expression.
         if (commonTypes.length == lhs.length) {
           val castedRhs = rhs.zip(commonTypes).map {
             case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
@@ -489,9 +489,9 @@ object TypeCoercion {
           }
 
           val newSub = Project(castedRhs, sub)
-          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output))
+          SubqueryPredicate(s, newLhs, comparison, ListQuery(newSub, children, exprId, newSub.output))
         } else {
-          i
+          s
         }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>

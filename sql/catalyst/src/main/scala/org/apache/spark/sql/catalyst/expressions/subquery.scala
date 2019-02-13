@@ -117,10 +117,10 @@ object SubExprUtils extends PredicateHelper {
   def hasNullAwarePredicateWithinNot(condition: Expression): Boolean = {
     splitConjunctivePredicates(condition).exists {
       case _: Exists | Not(_: Exists) => false
-      case _: InSubquery | Not(_: InSubquery) => false
+      case _: SubqueryPredicate | Not(_: SubqueryPredicate) => false
       case e => e.find { x =>
         x.isInstanceOf[Not] && e.find {
-          case _: InSubquery => true
+          case _: SubqueryPredicate => true
           case _ => false
         }.isDefined
       }.isDefined

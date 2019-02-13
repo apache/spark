@@ -1477,12 +1477,12 @@ class Analyzer(
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _))
+        case p @SubqueryPredicate(values, comparison, l @ ListQuery(_, _, exprId, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
-          InSubquery(values, expr.asInstanceOf[ListQuery])
+          SubqueryPredicate(p, values, comparison, expr.asInstanceOf[ListQuery])
       }
     }
 

@@ -1125,6 +1125,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case other => Seq(other)
     }
 
+    def getComparisonOperator(o: Int): (Expression, Expression) => BinaryComparison = o match {
+      case SqlBaseParser.EQ =>
+        EqualTo
+      case SqlBaseParser.NSEQ =>
+        EqualNullSafe
+      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
+        SubqueryPredicate.NotEqualTo
+      case SqlBaseParser.LT =>
+        LessThan
+      case SqlBaseParser.LTE =>
+        LessThanOrEqual
+      case SqlBaseParser.GT =>
+        GreaterThan
+      case SqlBaseParser.GTE =>
+        GreaterThanOrEqual
+    }
+
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1148,6 +1165,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>
         Not(EqualNullSafe(e, expression(ctx.right)))
+      case SqlBaseParser.ANY | SqlBaseParser.SOME =>
+        invertIfNotDefined(AnySubquery(
+            getValueExpressions(e),
+            getComparisonOperator(
+              ctx.comparisonOperator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType),
+            ListQuery(plan(ctx.query))))
     }
   }
 
