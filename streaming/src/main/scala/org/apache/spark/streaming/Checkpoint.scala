@@ -218,7 +218,7 @@ class CheckpointWriter(
         latestCheckpointTime = checkpointTime
       }
       var attempts = 0
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       val tempFile = new Path(checkpointDir, "temp")
       // We will do checkpoint when generating a batch and completing a batch. When the processing
       // time of a batch is greater than the batch interval, checkpointing for completing an old
@@ -272,9 +272,9 @@ class CheckpointWriter(
           }
 
           // All done, print success
-          val finishTime = System.currentTimeMillis()
           logInfo(s"Checkpoint for time $checkpointTime saved to file '$checkpointFile'" +
-            s", took ${bytes.length} bytes and ${finishTime - startTime} ms")
+            s", took ${bytes.length} bytes and " +
+            s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
           jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
@@ -304,14 +304,13 @@ class CheckpointWriter(
     if (stopped) return
 
     executor.shutdown()
-    val startTime = System.currentTimeMillis()
+    val startTimeNs = System.nanoTime()
     val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
     if (!terminated) {
       executor.shutdownNow()
     }
-    val endTime = System.currentTimeMillis()
     logInfo(s"CheckpointWriter executor terminated? $terminated," +
-      s" waited for ${endTime - startTime} ms.")
+      s" waited for ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms.")
     stopped = true
   }
 }

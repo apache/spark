@@ -1005,9 +1005,10 @@ private[spark] object Utils extends Logging {
 
   /**
    * Return the string to tell how long has passed in milliseconds.
+   * @param startTimeNs - a timestamp in nanoseconds returned by `System.nanoTime`.
    */
-  def getUsedTimeMs(startTimeMs: Long): String = {
-    " " + (System.currentTimeMillis - startTimeMs) + " ms"
+  def getUsedTimeNs(startTimeNs: Long): String = {
+    s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms"
   }
 
   /**
@@ -1738,23 +1739,23 @@ private[spark] object Utils extends Logging {
    *
    * @param numIters number of iterations
    * @param f function to be executed. If prepare is not None, the running time of each call to f
-   *          must be an order of magnitude longer than one millisecond for accurate timing.
+   *          must be an order of magnitude longer than one nanosecond for accurate timing.
    * @param prepare function to be executed before each call to f. Its running time doesn't count.
-   * @return the total time across all iterations (not counting preparation time)
+   * @return the total time across all iterations (not counting preparation time) in nanoseconds.
    */
   def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
     if (prepare.isEmpty) {
-      val start = System.currentTimeMillis
+      val startNs = System.nanoTime()
       times(numIters)(f)
-      System.currentTimeMillis - start
+      System.nanoTime() - startNs
     } else {
       var i = 0
       var sum = 0L
       while (i < numIters) {
         prepare.get.apply()
-        val start = System.currentTimeMillis
+        val startNs = System.nanoTime()
         f
-        sum += System.currentTimeMillis - start
+        sum += System.nanoTime() - startNs
         i += 1
       }
       sum
