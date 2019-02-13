@@ -108,6 +108,40 @@ trait AddColumnTest extends ReadSchemaTest {
   }
 }
 
+trait AddColumnIntoTheMiddleTest extends ReadSchemaTest {
+  import testImplicits._
+
+  test("append column into middle") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df1 = Seq((1, 2, "abc"), (4, 5, "def"), (8, 9, null)).toDF("col1", "col2", "col3")
+      val df2 = Seq((10, null, 20, null), (40, "uvw", 50, "xyz"), (80, null, 90, null))
+        .toDF("col1", "col4", "col2", "col3")
+
+      val dir1 = s"$path${File.separator}part=one"
+      val dir2 = s"$path${File.separator}part=two"
+
+      df1.write.format(format).options(options).save(dir1)
+      df2.write.format(format).options(options).save(dir2)
+
+      val df = spark.read
+        .schema(df2.schema)
+        .format(format)
+        .options(options)
+        .load(path)
+
+      checkAnswer(df, Seq(
+        Row(1, null, 2, "abc", "one"),
+        Row(4, null, 5, "def", "one"),
+        Row(8, null, 9, null, "one"),
+        Row(10, null, 20, null, "two"),
+        Row(40, "uvw", 50, "xyz", "two"),
+        Row(80, null, 90, null, "two")))
+    }
+  }
+}
+
 /**
  * Hide column (Case 2-1).
  */
