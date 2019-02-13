@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -151,8 +152,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   @throws[StreamingQueryException]
   def awaitAnyTermination(timeoutMs: Long): Boolean = {
 
-    val startTime = System.currentTimeMillis
-    def isTimedout = System.currentTimeMillis - startTime >= timeoutMs
+    val startTime = System.nanoTime()
+    def isTimedout = {
+      System.nanoTime() - startTime >= TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+    }
 
     awaitTerminationLock.synchronized {
       while (!isTimedout && lastTerminatedQuery == null) {

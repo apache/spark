@@ -182,7 +182,7 @@ private[spark] abstract class Task[T](
   // context is not yet initialized when kill() is invoked.
   @volatile @transient private var _reasonIfKilled: String = null
 
-  protected var _executorDeserializeTime: Long = 0
+  protected var _executorDeserializeTimeNs: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
 
   /**
@@ -193,7 +193,7 @@ private[spark] abstract class Task[T](
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
-  def executorDeserializeTime: Long = _executorDeserializeTime
+  def executorDeserializeTimeNs: Long = _executorDeserializeTimeNs
   def executorDeserializeCpuTime: Long = _executorDeserializeCpuTime
 
   /**

@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
+import java.util.concurrent.TimeUnit
+
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
@@ -111,14 +113,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
-      val timeWhenStopStarted = System.currentTimeMillis()
+      val timeWhenStopStarted = System.nanoTime()
       val stopTimeoutMs = conf.getTimeAsMs(
         "spark.streaming.gracefulStopTimeout", s"${10 * ssc.graph.batchDuration.milliseconds}ms")
       val pollTime = 100
 
       // To prevent graceful stop to get stuck permanently
       def hasTimedOut: Boolean = {
-        val timedOut = (System.currentTimeMillis() - timeWhenStopStarted) > stopTimeoutMs
+        val diff = TimeUnit.NANOSECONDS.toMillis((System.nanoTime() - timeWhenStopStarted))
+        val timedOut = diff > stopTimeoutMs
         if (timedOut) {
           logWarning("Timed out while stopping the job generator (timeout = " + stopTimeoutMs + ")")
         }
