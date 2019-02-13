@@ -1249,6 +1249,20 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Disk Management
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.diskStore.blacklist.timeoutMs</code></td>
+  <td>1d</td>
+  <td>
+    How long that a bad local directory is blacklisted for the diskStore before is is unconditionally removed
+    from the blacklist to attempt storing new file.
+  </td>
+</tr>
+</table>
+
 ### Execution Behavior
 
 <table class="table">

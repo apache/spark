@@ -138,9 +138,9 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
         val file2 = diskBlockManager.getFile(blockId2)
         val rootDirOfFile2 = file2.getParentFile.getParentFile.getParentFile
         assert(file2 != null && file2.getParentFile.exists() && rootDirOfFile2 === goodDiskDir)
-        if (diskBlockManager.badDirs.nonEmpty) {
-          assert(diskBlockManager.badDirs.size === 1)
-          assert(diskBlockManager.badDirs.exists(_.getParentFile === badDiskDir))
+        if (diskBlockManager.blacklistedDirs.nonEmpty) {
+          assert(diskBlockManager.blacklistedDirs.size === 1)
+          assert(diskBlockManager.blacklistedDirs.exists(_.getParentFile === badDiskDir))
           assert(diskBlockManager.dirToBlacklistExpiryTime.size === 1)
           assert(diskBlockManager.dirToBlacklistExpiryTime.exists { case (f, expireTime) =>
             f.getParentFile === badDiskDir && expireTime === 20000
@@ -169,7 +169,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
       // Update blacklist when getting file for new block
       // Bad disk directory is fixed here, so blacklist should be empty
       assert(diskBlockManager.getFile(blockId3) != null)
-      assert(diskBlockManager.badDirs.isEmpty)
+      assert(diskBlockManager.blacklistedDirs.isEmpty)
       assert(diskBlockManager.dirToBlacklistExpiryTime.isEmpty)
       diskBlockManager.stop()
     }
