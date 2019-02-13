@@ -400,17 +400,23 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf()") {
-    val udf1 = udf((x: Long, y: Any) => x * 2 + (if (y == null) 1 else 0))
-    val df = spark.range(0, 3).toDF("a")
-      .withColumn("b", udf1($"a", lit(null)))
-      .withColumn("c", udf1(lit(null), $"a"))
+    val input = Seq(
+      (null, Integer.valueOf(1), "x"),
+      ("M", null, "y"),
+      ("N", Integer.valueOf(3), null)).toDF("a", "b", "c")
 
-    checkAnswer(
-      df,
-      Seq(
-        Row(0, 1, null),
-        Row(1, 3, null),
-        Row(2, 5, null)))
+    val udf1 = udf((a: String, b: Int, c: Any) => a + b + c)
+    val df = input.select(udf1('a, 'b, 'c))
+    checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
+
+    // test Java UDF. Java UDF can't have primitive inputs, as it's generic typed.
+    val udf2 = udf(new UDF3[String, Integer, Object, String] {
+      override def call(t1: String, t2: Integer, t3: Object): String = {
+        t1 + t2 + t3
+      }
+    }, StringType)
+    val df2 = input.select(udf2('a, 'b, 'c))
+    checkAnswer(df2, Seq(Row("null1x"), Row("Mnully"), Row("N3null")))
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf.register") {
@@ -420,6 +426,15 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       spark.udf.register("f", (a: String, b: Int, c: Any) => a + b + c)
       val df = spark.sql("SELECT f(a, b, c) FROM t")
       checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
+
+      // test Java UDF. Java UDF can't have primitive inputs, as it's generic typed.
+      spark.udf.register("f2", new UDF3[String, Integer, Object, String] {
+        override def call(t1: String, t2: Integer, t3: Object): String = {
+          t1 + t2 + t3
+        }
+      }, StringType)
+      val df2 = spark.sql("SELECT f2(a, b, c) FROM t")
+      checkAnswer(df2, Seq(Row("null1x"), Row("Mnully"), Row("N3null")))
     }
   }
 
