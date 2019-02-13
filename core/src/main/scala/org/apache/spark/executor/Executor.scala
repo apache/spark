@@ -658,7 +658,7 @@ private[spark] class Executor(
         }
 
         // If the count is zero, the stage is removed from activeStages
-        activeStages.compute((stageId, stageAttemptId), decrementCount)
+        activeStages.computeIfPresent((stageId, stageAttemptId), decrementCount)
 
         // If the stage has been removed from activeStages, remove it from stageMetricPeaks too
         def removeInactive(k: StageKey): Unit = {
