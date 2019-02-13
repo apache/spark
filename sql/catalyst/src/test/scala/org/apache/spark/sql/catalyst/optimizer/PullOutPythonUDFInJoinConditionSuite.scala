@@ -64,7 +64,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
     PythonEvalType.SQL_BATCHED_UDF,
     udfDeterministic = true)
 
-  val unsupportedJoinTypes = Seq(LeftOuter, RightOuter, FullOuter, LeftAnti)
+  val unsupportedJoinTypes = Seq(LeftOuter, RightOuter, FullOuter, LeftAnti, LeftSemi)
 
   private def comparePlanWithCrossJoinEnable(query: LogicalPlan, expected: LogicalPlan): Unit = {
     // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
@@ -95,25 +95,6 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
     val query2 = testRelationLeft.join(
       testRelationRight,
       joinType = Inner,
-      condition = Some(evaluableJoinCond))
-    comparePlans(Optimize.execute(query2), query2)
-  }
-
-  test("left semi join condition with python udf") {
-    val query1 = testRelationLeft.join(
-      testRelationRight,
-      joinType = LeftSemi,
-      condition = Some(unevaluableJoinCond))
-    val expected1 = testRelationLeft.join(
-      testRelationRight,
-      joinType = Inner,
-      condition = None).where(unevaluableJoinCond).select('a, 'b).analyze
-    comparePlanWithCrossJoinEnable(query1, expected1)
-
-    // evaluable PythonUDF will not be touched
-    val query2 = testRelationLeft.join(
-      testRelationRight,
-      joinType = LeftSemi,
       condition = Some(evaluableJoinCond))
     comparePlans(Optimize.execute(query2), query2)
   }
