@@ -26,7 +26,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for binary classification.
  *
- * @param scoreAndLabelsWithWeights an RDD of (score, (label, weight)) pairs.
+ * @param scoreAndLabelsWithOptWeight an RDD of (score, label, weight) tuples.
  * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
  *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
  *                This is useful because the curve contains a point for each distinct score
@@ -42,24 +42,19 @@ import org.apache.spark.sql.DataFrame
  */
 @Since("1.0.0")
 class BinaryClassificationMetrics @Since("3.0.0") (
-    val numBins: Int,
-    @Since("3.0.0") val scoreAndLabelsWithWeights: RDD[(Double, (Double, Double))])
+    @Since("1.3.0") val scoreAndLabelsWithOptWeight: RDD[_ <: Product],
+    @Since("1.3.0") val numBins: Int)
   extends Logging {
-
-  require(numBins >= 0, "numBins must be nonnegative")
-
-  /**
-   * Retrieves the score and labels (for binary compatibility).
-   * @return The score and labels.
-   */
-  @Since("1.3.0")
-  def scoreAndLabels: RDD[(Double, Double)] = {
-    scoreAndLabelsWithWeights.map(values => (values._1, values._2._1))
+  val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabelsWithOptWeight.map {
+    case (prediction: Double, label: Double, weight: Double) =>
+      (prediction, (label, weight))
+    case (prediction: Double, label: Double) =>
+      (prediction, (label, 1.0))
+    case other =>
+      throw new IllegalArgumentException(s"Expected tuples, got $other")
   }
 
-  @Since("1.3.0")
-  def this(@Since("1.3.0") scoreAndLabels: RDD[(Double, Double)], @Since("1.3.0") numBins: Int) =
-    this(numBins, scoreAndLabels.map(scoreAndLabel => (scoreAndLabel._1, (scoreAndLabel._2, 1.0))))
+  require(numBins >= 0, "numBins must be nonnegative")
 
   /**
    * Defaults `numBins` to 0.
@@ -162,7 +157,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
     // Create a bin for each distinct score value, count weighted positives and
     // negatives within each bin, and then sort by score values in descending order.
-    val counts = scoreAndLabelsWithWeights.combineByKey(
+    val counts = scoreLabelsWeight.combineByKey(
       createCombiner = (labelAndWeight: (Double, Double)) =>
         new BinaryLabelCounter(0.0, 0.0) += (labelAndWeight._1, labelAndWeight._2),
       mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>

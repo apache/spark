@@ -96,11 +96,11 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         else col($(weightCol)).cast(DoubleType))
         .rdd.map {
         case Row(rawPrediction: Vector, label: Double, weight: Double) =>
-          (rawPrediction(1), (label, weight))
+          (rawPrediction(1), label, weight)
         case Row(rawPrediction: Double, label: Double, weight: Double) =>
-          (rawPrediction, (label, weight))
+          (rawPrediction, label, weight)
       }
-    val metrics = new BinaryClassificationMetrics(defaultNumberOfBins, scoreAndLabelsWithWeights)
+    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights, defaultNumberOfBins)
     val metric = $(metricName) match {
       case "areaUnderROC" => metrics.areaUnderROC()
       case "areaUnderPR" => metrics.areaUnderPR()

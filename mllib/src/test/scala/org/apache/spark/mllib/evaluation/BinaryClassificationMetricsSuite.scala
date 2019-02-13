@@ -87,9 +87,9 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val w2 = 0.7
     val w3 = 0.4
     val scoreAndLabelsWithWeights = sc.parallelize(
-      Seq((0.1, (0.0, w1)), (0.1, (1.0, w2)), (0.4, (0.0, w1)), (0.6, (0.0, w3)),
-        (0.6, (1.0, w2)), (0.6, (1.0, w2)), (0.8, (1.0, w1))), 2)
-    val metrics = new BinaryClassificationMetrics(0, scoreAndLabelsWithWeights)
+      Seq((0.1, 0.0, w1), (0.1, 1.0, w2), (0.4, 0.0, w1), (0.6, 0.0, w3),
+        (0.6, 1.0, w2), (0.6, 1.0, w2), (0.8, 1.0, w1)), 2)
+    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights, 0)
     val thresholds = Seq(0.8, 0.6, 0.4, 0.1)
     val numTruePositives =
       Seq(1.0 * w1, 1.0 * w1 + 2.0 * w2, 1.0 * w1 + 2.0 * w2, 3.0 * w2 + 1.0 * w1)
