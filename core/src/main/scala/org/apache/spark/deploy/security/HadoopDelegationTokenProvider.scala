@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * ::DeveloperApi::
  * Hadoop delegation token provider.
  */
 @DeveloperApi
