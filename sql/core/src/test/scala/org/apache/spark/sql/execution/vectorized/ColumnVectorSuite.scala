@@ -108,6 +108,20 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
+  testVectors("date", 10, DateType) { testVector =>
+    (0 until 10).foreach { i =>
+      testVector.appendInt(i)
+    }
+
+    val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
+
+    (0 until 10).foreach { i =>
+      assert(array.get(i, DateType) === i)
+      assert(arrayCopy.get(i, DateType) === i)
+    }
+  }
+
   testVectors("long", 10, LongType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendLong(i)
@@ -119,6 +133,20 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     (0 until 10).foreach { i =>
       assert(array.get(i, LongType) === i)
       assert(arrayCopy.get(i, LongType) === i)
+    }
+  }
+
+  testVectors("timestamp", 10, TimestampType) { testVector =>
+    (0 until 10).foreach { i =>
+      testVector.appendLong(i)
+    }
+
+    val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
+
+    (0 until 10).foreach { i =>
+      assert(array.get(i, TimestampType) === i)
+      assert(arrayCopy.get(i, TimestampType) === i)
     }
   }
 
