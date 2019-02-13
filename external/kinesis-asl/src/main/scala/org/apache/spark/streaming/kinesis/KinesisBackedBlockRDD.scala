@@ -38,9 +38,13 @@ private[kinesis]
 case class SequenceNumberRange(
     streamName: String,
     shardId: String,
-    fromSeqNumber: String,
-    toSeqNumber: String,
+    fromSeqNumber: SequenceNumber,
+    toSeqNumber: SequenceNumber,
     recordCount: Int)
+
+private [kinesis]
+case class SequenceNumber(sequenceNumber: String, subSequenceNumber: Long)
+
 
 /** Class representing an array of Kinesis sequence number ranges */
 private[kinesis]
@@ -159,7 +163,7 @@ class KinesisSequenceRangeIterator(
 
         // If the internal iterator has not been initialized,
         // then fetch records from starting sequence number
-        internalIterator = getRecords(ShardIteratorType.AT_SEQUENCE_NUMBER, range.fromSeqNumber,
+        internalIterator = getRecords(ShardIteratorType.AT_SEQUENCE_NUMBER, range.fromSeqNumber.sequenceNumber,
           range.recordCount)
       } else if (!internalIterator.hasNext) {
 

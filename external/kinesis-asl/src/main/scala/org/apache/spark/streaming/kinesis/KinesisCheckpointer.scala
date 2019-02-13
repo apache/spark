@@ -45,7 +45,7 @@ private[kinesis] class KinesisCheckpointer(
   // a map from shardId's to checkpointers
   private val checkpointers = new ConcurrentHashMap[String, IRecordProcessorCheckpointer]()
 
-  private val lastCheckpointedSeqNums = new ConcurrentHashMap[String, String]()
+  private val lastCheckpointedSeqNums = new ConcurrentHashMap[String, SequenceNumber]()
 
   private val checkpointerThread: RecurringTimer = startCheckpointerThread()
 
@@ -89,9 +89,9 @@ private[kinesis] class KinesisCheckpointer(
           val lastSeqNum = lastCheckpointedSeqNums.get(shardId)
           // Kinesis sequence numbers are monotonically increasing strings, therefore we can do
           // safely do the string comparison
-          if (lastSeqNum == null || latestSeqNum > lastSeqNum) {
+          if (lastSeqNum == null || latestSeqNum.sequenceNumber > lastSeqNum.sequenceNumber) {
             /* Perform the checkpoint */
-            KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(latestSeqNum), 4, 100)
+            KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(latestSeqNum.sequenceNumber, latestSeqNum.subSequenceNumber), 4, 100)
             logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint at sequence number" +
               s" $latestSeqNum for shardId $shardId")
             lastCheckpointedSeqNums.put(shardId, latestSeqNum)

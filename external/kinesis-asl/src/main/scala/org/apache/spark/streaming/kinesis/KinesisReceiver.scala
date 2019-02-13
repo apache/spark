@@ -22,11 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{KinesisClientLibConfiguration, Worker}
+import com.amazonaws.services.kinesis.clientlibrary.types.UserRecord
 import com.amazonaws.services.kinesis.model.Record
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
@@ -137,7 +136,7 @@ private[kinesis] class KinesisReceiver[T](
   /**
    * Latest sequence number ranges that have been stored successfully.
    * This is used for checkpointing through KCL */
-  private val shardIdToLatestStoredSeqNum = new ConcurrentHashMap[String, String]
+  private val shardIdToLatestStoredSeqNum = new ConcurrentHashMap[String, SequenceNumber]
 
   /**
    * This is called when the KinesisReceiver starts and must be non-blocking.
@@ -232,8 +231,14 @@ private[kinesis] class KinesisReceiver[T](
   private[kinesis] def addRecords(shardId: String, records: java.util.List[Record]): Unit = {
     if (records.size > 0) {
       val dataIterator = records.iterator().asScala.map(messageHandler)
+      val fromSequenceNumber = SequenceNumber(
+        records.get(0).getSequenceNumber(),
+        records.get(0).asInstanceOf[UserRecord].getSubSequenceNumber)
+      val toSequenceNumber = SequenceNumber(
+        records.get(records.size() - 1).getSequenceNumber(),
+        records.get(0).asInstanceOf[UserRecord].getSubSequenceNumber)
       val metadata = SequenceNumberRange(streamName, shardId,
-        records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber(),
+        fromSequenceNumber, toSequenceNumber,
         records.size())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
     }
@@ -246,7 +251,7 @@ private[kinesis] class KinesisReceiver[T](
   }
 
   /** Get the latest sequence number for the given shard that can be checkpointed through KCL */
-  private[kinesis] def getLatestSeqNumToCheckpoint(shardId: String): Option[String] = {
+  private[kinesis] def getLatestSeqNumToCheckpoint(shardId: String): Option[SequenceNumber] = {
     Option(shardIdToLatestStoredSeqNum.get(shardId))
   }
 
