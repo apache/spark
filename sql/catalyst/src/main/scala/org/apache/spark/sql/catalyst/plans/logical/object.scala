@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode }
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -437,19 +438,30 @@ object FlatMapGroupsInR {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       child: LogicalPlan): LogicalPlan = {
-    val mapped = FlatMapGroupsInR(
-      func,
-      packageNames,
-      broadcastVars,
-      inputSchema,
-      schema,
-      UnresolvedDeserializer(keyDeserializer, groupingAttributes),
-      UnresolvedDeserializer(valueDeserializer, dataAttributes),
-      groupingAttributes,
-      dataAttributes,
-      CatalystSerde.generateObjAttr(RowEncoder(schema)),
-      child)
-    CatalystSerde.serialize(mapped)(RowEncoder(schema))
+    if (SQLConf.get.arrowEnabled) {
+      FlatMapGroupsInRWithArrow(
+        func,
+        packageNames,
+        broadcastVars,
+        inputSchema,
+        schema.toAttributes,
+        UnresolvedDeserializer(keyDeserializer, groupingAttributes),
+        groupingAttributes,
+        child)
+    } else {
+      CatalystSerde.serialize(FlatMapGroupsInR(
+        func,
+        packageNames,
+        broadcastVars,
+        inputSchema,
+        schema,
+        UnresolvedDeserializer(keyDeserializer, groupingAttributes),
+        UnresolvedDeserializer(valueDeserializer, dataAttributes),
+        groupingAttributes,
+        dataAttributes,
+        CatalystSerde.generateObjAttr(RowEncoder(schema)),
+        child))(RowEncoder(schema))
+    }
   }
 }
 
@@ -464,13 +476,34 @@ case class FlatMapGroupsInR(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer{
+    child: LogicalPlan) extends UnaryNode with ObjectProducer {
 
   override lazy val schema = outputSchema
 
   override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
     keyDeserializer, valueDeserializer, groupingAttributes, dataAttributes, outputObjAttr,
     child)
+}
+
+/**
+ * Similar with `FlatMapGroupsInR` but serializes and deserializes input/output in
+ * Arrow format.
+ * This is also somewhat similar with [[FlatMapGroupsInPandas]].
+ */
+case class FlatMapGroupsInRWithArrow(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
+    output: Seq[Attribute],
+    keyDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override protected def stringArgs: Iterator[Any] = Iterator(
+    inputSchema, StructType.fromAttributes(output), keyDeserializer, groupingAttributes, child)
+
+  override val producedAttributes = AttributeSet(output)
 }
 
 /** Factory for constructing new `CoGroup` nodes. */
