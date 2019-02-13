@@ -63,6 +63,15 @@ class BinaryClassificationMetrics @Since("3.0.0") (
   def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 
   /**
+    * Retrieves the score and labels (for binary compatibility).
+    * @return The score and labels.
+    */
+  @Since("1.0.0")
+  def scoreAndLabels: RDD[(Double, Double)] = {
+    scoreLabelsWeight.map(values => (values._1, values._2._1))
+  }
+
+  /**
    * An auxiliary constructor taking a DataFrame.
    * @param scoreAndLabels a DataFrame with two double columns: score and label
    */
