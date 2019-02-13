@@ -54,30 +54,23 @@ object ResolveHints {
 
     def resolver: Resolver = conf.resolver
 
-    private def namePartsWithDatabase(nameParts: Seq[String], database: String): Seq[String] = {
-      if (nameParts.size == 1) {
-        database +: nameParts
-      } else {
-        nameParts
-      }
-    }
-
+    // Name resolution in hints follows three rules below:
+    //
+    //  1. table name matches if the hint table name only has one part
+    //  2. table name and database name both match if the hint table name has two parts
+    //  3. no match happens if the hint table name has more than three parts
+    //
+    // This means, `SELECT /* BROADCAST(t) */ * FROM db1.t JOIN db2.t` will match both tables, and
+    // `SELECT /* BROADCAST(default.t) */ * FROM t` match no table.
     private def matchedTableIdentifier(
         nameParts: Seq[String],
-        tableIdent: IdentifierWithDatabase): Boolean = {
-      tableIdent.database match {
-        case Some(db) if resolver(catalog.globalTempViewManager.database, db) =>
-          val identifierList = db :: tableIdent.identifier :: Nil
-          namePartsWithDatabase(nameParts, catalog.globalTempViewManager.database)
-            .corresponds(identifierList)(resolver)
-        case None if catalog.getTempView(tableIdent.identifier).isDefined =>
-          nameParts.size == 1 && resolver(nameParts.head, tableIdent.identifier)
-        case _ =>
-          val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-          val identifierList = db :: tableIdent.identifier :: Nil
-          namePartsWithDatabase(nameParts, catalog.getCurrentDatabase)
-            .corresponds(identifierList)(resolver)
-      }
+        tableIdent: IdentifierWithDatabase): Boolean = nameParts match {
+      case Seq(tableName) =>
+        resolver(tableIdent.identifier, tableName)
+      case Seq(dbName, tableName) if tableIdent.database.isDefined =>
+        resolver(tableIdent.database.get, dbName) && resolver(tableIdent.identifier, tableName)
+      case _ =>
+        false
     }
 
     private def applyBroadcastHint(

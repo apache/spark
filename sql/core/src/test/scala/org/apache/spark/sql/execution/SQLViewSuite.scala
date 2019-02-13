@@ -738,8 +738,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           assert(broadcastData.head.identifier === "tv")
 
           val sparkPlan = df.queryExecution.executedPlan
-          val broadcastHashJoin = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
-          assert(broadcastHashJoin.size == 1)
+          val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+          assert(broadcastHashJoins.size == 1)
         }
       }
     }

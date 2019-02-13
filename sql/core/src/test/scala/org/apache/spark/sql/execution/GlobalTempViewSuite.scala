@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{Join, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
@@ -169,9 +169,10 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
             "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
             "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
           ).foreach { statement =>
-            val plan = sql(statement).queryExecution.optimizedPlan
-            assert(plan.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
-            assert(!plan.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+            sql(statement).queryExecution.optimizedPlan match {
+              case Join(_, _, _, _, JoinHint(Some(leftHint), None)) => assert(leftHint.broadcast)
+              case _ => fail("broadcast hint not found in a left-side table")
+            }
           }
         }
       }

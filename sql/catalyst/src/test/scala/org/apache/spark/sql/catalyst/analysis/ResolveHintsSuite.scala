@@ -156,7 +156,7 @@ class ResolveHintsSuite extends AnalysisTest {
       Seq(errMsgRepa))
   }
 
-  test("Supports multi-part table names for broadcast hint resolution") {
+  test("supports multi-part table names for broadcast hint resolution") {
     // local temp table
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"),

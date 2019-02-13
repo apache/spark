@@ -19,9 +19,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
@@ -195,43 +194,78 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size == 1)
   }
 
-  test("SPARK-25121 Supports multi-part names for broadcast hint resolution") {
+  test("SPARK-25121 supports multi-part names for broadcast hint resolution") {
     val (table1Name, table2Name) = ("t1", "t2")
+
     withTempDatabase { dbName =>
       withTable(table1Name, table2Name) {
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           spark.range(50).write.saveAsTable(s"$dbName.$table1Name")
           spark.range(100).write.saveAsTable(s"$dbName.$table2Name")
+
           // First, makes sure a join is not broadcastable
           val plan = sql(s"SELECT * FROM $dbName.$table1Name, $dbName.$table2Name " +
               s"WHERE $table1Name.id = $table2Name.id")
             .queryExecution.executedPlan
-          assert(plan.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+          assert(plan.collect { case p: BroadcastHashJoinExec => p }.isEmpty)
 
-          // Uses multi-part table names for broadcast hints
           def checkIfHintApplied(tableName: String, hintTableName: String): Unit = {
             val p = sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
                 s"FROM $tableName, $dbName.$table2Name " +
                 s"WHERE $tableName.id = $table2Name.id")
               .queryExecution.executedPlan
-            val broadcastHashJoin = p.collect { case p: BroadcastHashJoinExec => p }
-            assert(broadcastHashJoin.size == 1)
-            val broadcastExchange = broadcastHashJoin.head.collect {
+            val broadcastHashJoins = p.collect { case p: BroadcastHashJoinExec => p }
+            assert(broadcastHashJoins.size == 1)
+            val broadcastExchanges = broadcastHashJoins.head.collect {
               case p: BroadcastExchangeExec => p
             }
-            assert(broadcastExchange.size == 1)
-            val table = broadcastExchange.head.collect {
+            assert(broadcastExchanges.size == 1)
+            val tables = broadcastExchanges.head.collect {
               case FileSourceScanExec(_, _, _, _, _, _, Some(tableIdent)) => tableIdent
             }
-            assert(table.size == 1)
-            assert(table.head === TableIdentifier(table1Name, Some(dbName)))
+            assert(tables.size == 1)
+            assert(tables.head === TableIdentifier(table1Name, Some(dbName)))
+          }
+
+          def checkIfHintNotApplied(tableName: String, hintTableName: String): Unit = {
+            val p = sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
+                s"FROM $tableName, $dbName.$table2Name " +
+                s"WHERE $tableName.id = $table2Name.id")
+              .queryExecution.executedPlan
+            val broadcastHashJoins = p.collect { case p: BroadcastHashJoinExec => p }
+            assert(broadcastHashJoins.isEmpty)
           }
 
           sql(s"USE $dbName")
           checkIfHintApplied(table1Name, table1Name)
           checkIfHintApplied(s"$dbName.$table1Name", s"$dbName.$table1Name")
-          checkIfHintApplied(table1Name, s"$dbName.$table1Name")
           checkIfHintApplied(s"$dbName.$table1Name", table1Name)
+          checkIfHintNotApplied(table1Name, s"$dbName.$table1Name")
+          checkIfHintNotApplied(s"$dbName.$table1Name", s"$dbName.$table1Name.id")
+        }
+      }
+    }
+  }
+
+  test("SPARK-25121 the same table name exists in two databases for broadcast hint resolution") {
+     val (db1Name, db2Name) = ("db1", "db2")
+
+    withDatabase(db1Name, db2Name) {
+      withTable("t") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          sql(s"CREATE DATABASE $db1Name")
+          sql(s"CREATE DATABASE $db2Name")
+          spark.range(1).write.saveAsTable(s"$db1Name.t")
+          spark.range(1).write.saveAsTable(s"$db2Name.t")
+
+          // Checks if a broadcast hint applied in both sides
+          val statement = s"SELECT /*+ BROADCASTJOIN(t) */ * FROM $db1Name.t, $db2Name.t " +
+              s"WHERE $db1Name.t.id = $db2Name.t.id"
+          sql(statement).queryExecution.optimizedPlan match {
+            case Join(_, _, _, _, JoinHint(Some(leftHint), Some(rightHint))) =>
+              assert(leftHint.broadcast && rightHint.broadcast)
+            case _ => fail("broadcast hint not found in both tables")
+          }
         }
       }
     }
