@@ -56,9 +56,9 @@ public final class ColumnarArray extends ArrayData {
       return UnsafeArrayData.fromPrimitiveArray(toByteArray());
     } else if (dt instanceof ShortType) {
       return UnsafeArrayData.fromPrimitiveArray(toShortArray());
-    } else if (dt instanceof IntegerType) {
+    } else if (dt instanceof IntegerType || dt instanceof DateType) {
       return UnsafeArrayData.fromPrimitiveArray(toIntArray());
-    } else if (dt instanceof LongType) {
+    } else if (dt instanceof LongType || dt instanceof TimestampType) {
       return UnsafeArrayData.fromPrimitiveArray(toLongArray());
     } else if (dt instanceof FloatType) {
       return UnsafeArrayData.fromPrimitiveArray(toFloatArray());
