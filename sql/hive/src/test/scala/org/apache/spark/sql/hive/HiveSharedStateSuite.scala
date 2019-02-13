@@ -20,24 +20,11 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.Utils
 
 class HiveSharedStateSuite extends SparkFunSuite {
-
-  test("enableHiveSupport has right to determine the catalog while using an existing sc") {
-    val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
-    val sc = SparkContext.getOrCreate(conf)
-    val ss = SparkSession.builder().enableHiveSupport().getOrCreate()
-    assert(ss.sharedState.externalCatalog.unwrapped.isInstanceOf[HiveExternalCatalog],
-      "The catalog should be hive ")
-
-    val ss2 = SparkSession.builder().getOrCreate()
-    assert(ss2.sharedState.externalCatalog.unwrapped.isInstanceOf[HiveExternalCatalog],
-      "The catalog should be shared across sessions")
-  }
 
   test("initial configs should be passed to SharedState but not SparkContext") {
     val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
