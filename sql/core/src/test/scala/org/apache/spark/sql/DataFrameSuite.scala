@@ -30,13 +30,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
-import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -2111,29 +2109,5 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
       checkAnswer(res, Row("1-1", 6, 6))
     }
-  }
-
-  test("SPARK-26572: fix aggregate codegen result evaluation") {
-    val baseTable = Seq((1), (1)).toDF("idx")
-
-    // BroadcastHashJoinExec with a HashAggregateExec child containing no aggregate expressions
-    val distinctWithId = baseTable.distinct().withColumn("id", monotonically_increasing_id())
-      .join(baseTable, "idx")
-    assert(distinctWithId.queryExecution.executedPlan.collectFirst {
-      case BroadcastHashJoinExec(_, _, _, _, _, HashAggregateExec(_, _, Seq(), _, _, _, _), _) =>
-        true
-    }.isDefined)
-    checkAnswer(distinctWithId, Seq(Row(1, 25769803776L), Row(1, 25769803776L)))
-
-    // BroadcastHashJoinExec with a HashAggregateExec child containing a Final mode aggregate
-    // expression
-    val groupByWithId =
-      baseTable.groupBy("idx").sum().withColumn("id", monotonically_increasing_id())
-      .join(baseTable, "idx")
-    assert(groupByWithId.queryExecution.executedPlan.collectFirst {
-      case BroadcastHashJoinExec(_, _, _, _, _, HashAggregateExec(_, _, ae, _, _, _, _), _)
-        if ae.exists(_.mode == Final) => true
-    }.isDefined)
-    checkAnswer(groupByWithId, Seq(Row(1, 2, 25769803776L), Row(1, 2, 25769803776L)))
   }
 }
