@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
 import java.util.{Collections, List => JList}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.ReentrantLock
 
@@ -107,9 +108,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private var totalGpusAcquired = 0
 
   // The amount of time to wait for locality scheduling
-  private val localityWait = conf.get(config.LOCALITY_WAIT)
+  private val localityWaitNs = TimeUnit.MILLISECONDS.toNanos(conf.get(config.LOCALITY_WAIT))
   // The start of the waiting, for data local scheduling
-  private var localityWaitStartTime = System.currentTimeMillis()
+  private var localityWaitStartTimeNs = System.nanoTime()
   // If true, the scheduler is in the process of launching executors to reach the requested
   // executor limit
   private var launchingExecutors = false
@@ -357,7 +358,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       } else {
         if (!launchingExecutors) {
           launchingExecutors = true
-          localityWaitStartTime = System.currentTimeMillis()
+          localityWaitStartTimeNs = System.nanoTime()
         }
       }
 
@@ -591,7 +592,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // increase coverage.
     val remainingHosts = allDesiredHosts -- currentHosts
     if (!remainingHosts.contains(offerHostname) &&
-      (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
+      (System.nanoTime() - localityWaitStartTimeNs <= localityWaitNs)) {
       logDebug("Skipping host and waiting for locality. host: " + offerHostname)
       return false
     }
@@ -750,7 +751,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     logInfo("Capping the total amount of executors to " + requestedTotal)
     executorLimitOption = Some(requestedTotal)
     // Update the locality wait start time to continue trying for locality.
-    localityWaitStartTime = System.currentTimeMillis()
+    localityWaitStartTimeNs = System.nanoTime()
     true
   }
 
