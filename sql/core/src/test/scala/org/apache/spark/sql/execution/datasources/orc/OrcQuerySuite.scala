@@ -603,6 +603,15 @@ abstract class OrcQueryTest extends OrcTest {
       assert(m4.contains("Malformed ORC file"))
     }
   }
+
+  test("SPARK-26865: case insensitive filter pushdown") {
+    withTempPath { path =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        spark.range(2).write.orc(path.getCanonicalPath)
+        checkAnswer(spark.read.orc(path.getCanonicalPath).filter('ID > 0), Row(1))
+      }
+    }
+  }
 }
 
 class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {

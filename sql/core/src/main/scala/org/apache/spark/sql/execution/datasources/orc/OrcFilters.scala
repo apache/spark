@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.util.Locale
+
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
 import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{And, Filter}
 import org.apache.spark.sql.types._
 
@@ -81,17 +85,29 @@ private[sql] object OrcFilters {
    * Create ORC filter as a SearchArgument instance.
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+    val dataTypeMap = getNameToTypeMap(schema)
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- buildTree(convertibleFilters(schema, dataTypeMap, filters))
+      conjunction <- buildTree(convertibleFilters(dataTypeMap, filters))
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
     } yield builder.build()
   }
 
+  def getNameToTypeMap(schema: StructType): Map[String, DataType] = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      schema.map(f => f.name -> f.dataType).toMap
+    } else {
+      // Don't consider ambiguity here, i.e. more than one field is matched in case insensitive
+      // mode, just skip pushdown for these fields, they will trigger Exception when reading.
+      CaseInsensitiveMap(schema
+        .groupBy(_.name.toLowerCase(Locale.ROOT))
+        .filter(_._2.size == 1)
+        .mapValues(_.head.dataType))
+    }
+  }
+
   def convertibleFilters(
-      schema: StructType,
       dataTypeMap: Map[String, DataType],
       filters: Seq[Filter]): Seq[Filter] = {
     for {
