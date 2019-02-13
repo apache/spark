@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable.ListBuffer
 
@@ -61,7 +61,7 @@ private[spark] class DiskStore(
       throw new IllegalStateException(s"Block $blockId is already present in the disk store")
     }
     logDebug(s"Attempting to put block $blockId")
-    val startTime = System.currentTimeMillis
+    val startTimeNs = System.nanoTime()
     val file = diskManager.getFile(blockId)
     val out = new CountingWritableChannel(openForWrite(file))
     var threwException: Boolean = true
@@ -84,11 +84,8 @@ private[spark] class DiskStore(
         }
       }
     }
-    val finishTime = System.currentTimeMillis
-    logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName,
-      Utils.bytesToString(file.length()),
-      finishTime - startTime))
+    logDebug(s"Block ${file.getName} stored as ${Utils.bytesToString(file.length())} file" +
+      s" on disk in ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
   }
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
