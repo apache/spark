@@ -17,11 +17,8 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.concurrent.atomic.AtomicBoolean
-
-import scala.util.matching.Regex
-
 import org.apache.spark.SparkConf
+import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
 import org.apache.spark.status.AppStatusStore
@@ -33,8 +30,6 @@ private[spark] class HistoryAppStatusStore(
     store: KVStore)
   extends AppStatusStore(store, None) with Logging {
 
-  import HistoryAppStatusStore._
-
   private val logUrlPattern: Option[String] = {
     val appInfo = super.applicationInfo()
     val applicationCompleted = appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
@@ -45,7 +40,7 @@ private[spark] class HistoryAppStatusStore(
     }
   }
 
-  private val informedForMissingAttributes = new AtomicBoolean(false)
+  private val logUrlHandler = new ExecutorLogUrlHandler(logUrlPattern)
 
   override def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
     val execList = super.executorList(activeOnly)
@@ -64,54 +59,8 @@ private[spark] class HistoryAppStatusStore(
   }
 
   private def replaceLogUrls(exec: v1.ExecutorSummary, urlPattern: String): v1.ExecutorSummary = {
-    val attributes = exec.attributes
-
-    // Relation between pattern {{FILE_NAME}} and attribute {{LOG_FILES}}
-    // Given that HistoryAppStatusStore don't know which types of log files can be provided
-    // from resource manager, we require resource manager to provide available types of log
-    // files, which are encouraged to be same as types of log files provided in original log URLs.
-    // Once we get the list of log files, we need to expose them to end users as a pattern
-    // so that end users can compose custom log URL(s) including log file name(s).
-    val allPatterns = CUSTOM_URL_PATTERN_REGEX.findAllMatchIn(urlPattern).map(_.group(1)).toSet
-    val allPatternsExceptFileName = allPatterns.filter(_ != "FILE_NAME")
-    val allAttributeKeys = attributes.keySet
-    val allAttributeKeysExceptLogFiles = allAttributeKeys.filter(_ != "LOG_FILES")
-
-    if (allPatternsExceptFileName.diff(allAttributeKeysExceptLogFiles).nonEmpty) {
-      logFailToRenewLogUrls("some of required attributes are missing in app's event log.",
-        allPatternsExceptFileName, allAttributeKeys)
-      return exec
-    } else if (allPatterns.contains("FILE_NAME") && !allAttributeKeys.contains("LOG_FILES")) {
-      logFailToRenewLogUrls("'FILE_NAME' parameter is provided, but file information is " +
-        "missing in app's event log.", allPatternsExceptFileName, allAttributeKeys)
-      return exec
-    }
-
-    val updatedUrl = allPatternsExceptFileName.foldLeft(urlPattern) { case (orig, patt) =>
-      // we already checked the existence of attribute when comparing keys
-      orig.replace(s"{{$patt}}", attributes(patt))
-    }
-
-    val newLogUrlMap = if (allPatterns.contains("FILE_NAME")) {
-      // allAttributeKeys should contain "LOG_FILES"
-      attributes("LOG_FILES").split(",").map { file =>
-        file -> updatedUrl.replace("{{FILE_NAME}}", file)
-      }.toMap
-    } else {
-      Map("log" -> updatedUrl)
-    }
-
+    val newLogUrlMap = logUrlHandler.applyPattern(exec.executorLogs, exec.attributes)
     replaceExecutorLogs(exec, newLogUrlMap)
-  }
-
-  private def logFailToRenewLogUrls(
-      reason: String,
-      allPatterns: Set[String],
-      allAttributes: Set[String]): Unit = {
-    if (informedForMissingAttributes.compareAndSet(false, true)) {
-      logInfo(s"Fail to renew executor log urls: $reason. Required: $allPatterns / " +
-        s"available: $allAttributes. Falling back to show app's original log urls.")
-    }
   }
 
   private def replaceExecutorLogs(
@@ -126,8 +75,4 @@ private[spark] class HistoryAppStatusStore(
       source.blacklistedInStages, source.peakMemoryMetrics, source.attributes)
   }
 
-}
-
-private[spark] object HistoryAppStatusStore {
-  val CUSTOM_URL_PATTERN_REGEX: Regex = "\\{\\{([A-Za-z0-9_\\-]+)\\}\\}".r
 }

@@ -25,6 +25,27 @@ To view the web UI after the fact, set `spark.eventLog.enabled` to true before s
 application. This configures Spark to log Spark events that encode the information displayed
 in the UI to persisted storage.
 
+### Spark Web UI Configuration Options
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td>spark.ui.custom.executor.log.url</td>
+    <td>(none)</td>
+    <td>
+        Specifies custom spark executor log URL for supporting external log service instead of using cluster
+        managers' application log URLs in Spark UI. Spark will support some path variables via patterns
+        which can vary on cluster manager. Please check the documentation for your cluster manager to
+        see which patterns are supported, if any. <p/>
+        Please note that this configuration also replaces original log urls in event log,
+        which will be also effective when accessing the application on history server. The new log urls must be
+        permanent, otherwise you might have dead link for executor log urls.
+        <p/>
+        For now, only YARN mode supports this configuration
+    </td>
+  </tr>
+</table>
+
 ## Viewing After the Fact
 
 It is still possible to construct the UI of an application through Spark's history server, 
