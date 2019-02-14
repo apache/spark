@@ -23,9 +23,9 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
 
 
-// scalastyle:off
+// scalastyle:off: object.name
 object functions {
-// scalastyle:on
+// scalastyle:on: object.name
 
   /**
    * Converts a binary column of avro format into its corresponding catalyst value. The specified

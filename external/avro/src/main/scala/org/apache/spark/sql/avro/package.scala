@@ -39,25 +39,6 @@ package object avro {
     org.apache.spark.sql.avro.functions.from_avro(data, jsonFormatSchema)
 
   /**
-   * Converts a binary column of avro format into its corresponding catalyst value. The specified
-   * schema must match the read data, otherwise the behavior is undefined: it may fail or return
-   * arbitrary result.
-   *
-   * @param data the binary column.
-   * @param jsonFormatSchema the avro schema in JSON string format.
-   * @param options options to control how the Avro record is parsed.
-   *
-   * @since 3.0.0
-   */
-  @Experimental
-  @deprecated("Please use 'org.apache.spark.sql.avro.functions.from_avro' instead.", "3.0.0")
-  def from_avro(
-      data: Column,
-      jsonFormatSchema: String,
-      options: java.util.Map[String, String]): Column =
-    org.apache.spark.sql.avro.functions.from_avro(data, jsonFormatSchema, options)
-
-  /**
    * Converts a column into binary of avro format.
    *
    * @param data the data column.
@@ -66,6 +47,5 @@ package object avro {
    */
   @Experimental
   @deprecated("Please use 'org.apache.spark.sql.avro.functions.to_avro' instead.", "3.0.0")
-  def to_avro(data: Column): Column =
-    org.apache.spark.sql.avro.functions.to_avro(data)
+  def to_avro(data: Column): Column = org.apache.spark.sql.avro.functions.to_avro(data)
 }

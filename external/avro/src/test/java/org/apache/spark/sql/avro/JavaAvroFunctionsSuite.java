@@ -37,7 +37,6 @@ public class JavaAvroFunctionsSuite {
   @Before
   public void setUp() {
     spark = new TestSparkSession();
-    spark.loadTestData();
   }
 
   @After
@@ -46,8 +45,7 @@ public class JavaAvroFunctionsSuite {
   }
 
   private static void checkAnswer(Dataset<Row> actual, Dataset<Row> expected) {
-    String errorMessage = QueryTest$.MODULE$.checkAnswer(
-      actual, expected.collectAsList());
+    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected.collectAsList());
     if (errorMessage != null) {
       Assert.fail(errorMessage);
     }
