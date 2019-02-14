@@ -63,6 +63,11 @@ object TestHive
         // SPARK-8910
         .set(UI_ENABLED, false)
         .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
+        // Hive changed the default of hive.metastore.disallow.incompatible.col.type.changes
+        // From false to true. For details, see the JIRA HIVE-12320
+        .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
+        // To compatible with avatica-core:1.13.0
+        .set("spark.hadoop.hive.cbo.enable", "false")
         // Disable ConvertToLocalRelation for better test coverage. Test cases built on
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as

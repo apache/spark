@@ -48,6 +48,10 @@ class HiveSparkSubmitSuite
   with ResetSystemProperties {
 
   override protected val enableAutoThreadAudit = false
+  private val hiveContribJar =
+    if (HiveUtils.isHive2) "hive-contrib-2.3.4.jar" else "hive-contrib-0.13.1.jar"
+  private val hiveHcatalogCoreJar =
+    if (HiveUtils.isHive2) "hive-hcatalog-core-2.3.4.jar" else "hive-hcatalog-core-0.13.1.jar"
 
   override def beforeEach() {
     super.beforeEach()
@@ -108,8 +112,8 @@ class HiveSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
-    val jar3 = TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
-    val jar4 = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val jar3 = TestHive.getHiveFile(hiveContribJar).getCanonicalPath
+    val jar4 = TestHive.getHiveFile(hiveHcatalogCoreJar).getCanonicalPath
     val jarsString = Seq(jar1, jar2, jar3, jar4).map(j => j.toString).mkString(",")
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
@@ -314,7 +318,7 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
-      "--jars", TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath,
+      "--jars", TestHive.getHiveFile(hiveContribJar).getCanonicalPath,
       unusedJar.toString)
     runSparkSubmit(argsForCreateTable)
 
@@ -454,9 +458,12 @@ object TemporaryHiveUDFTest extends Logging {
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
 
+    val hiveContribJar =
+      if (HiveUtils.isHive2) "hive-contrib-2.3.4.jar" else "hive-contrib-0.13.1.jar"
+
     // Load a Hive UDF from the jar.
     logInfo("Registering a temporary Hive UDF provided in a jar.")
-    val jar = hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    val jar = hiveContext.getHiveFile(hiveContribJar).getCanonicalPath
     hiveContext.sql(
       s"""
          |CREATE TEMPORARY FUNCTION example_max
@@ -492,9 +499,12 @@ object PermanentHiveUDFTest1 extends Logging {
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
 
+    val hiveContribJar =
+      if (HiveUtils.isHive2) "hive-contrib-2.3.4.jar" else "hive-contrib-0.13.1.jar"
+
     // Load a Hive UDF from the jar.
     logInfo("Registering a permanent Hive UDF provided in a jar.")
-    val jar = hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    val jar = hiveContext.getHiveFile(hiveContribJar).getCanonicalPath
     hiveContext.sql(
       s"""
          |CREATE FUNCTION example_max
@@ -529,9 +539,13 @@ object PermanentHiveUDFTest2 extends Logging {
     conf.set(UI_ENABLED, false)
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
+
+    val hiveContribJar =
+      if (HiveUtils.isHive2) "hive-contrib-2.3.4.jar" else "hive-contrib-0.13.1.jar"
+
     // Load a Hive UDF from the jar.
     logInfo("Write the metadata of a permanent Hive UDF into metastore.")
-    val jar = hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    val jar = hiveContext.getHiveFile(hiveContribJar).getCanonicalPath
     val function = CatalogFunction(
       FunctionIdentifier("example_max"),
       "org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax",

@@ -42,8 +42,11 @@ public class SparkOrcNewRecordReader extends
 
   public SparkOrcNewRecordReader(Reader file, Configuration conf,
       long offset, long length) throws IOException {
-    List<OrcProto.Type> types = file.getTypes();
-    numColumns = (types.size() == 0) ? 0 : types.get(0).getSubtypesCount();
+    if (file.getTypes().size() == 0) {
+      numColumns = 0;
+    } else {
+      numColumns = file.getTypes().get(0).getSubtypesCount();
+    }
     value = new OrcStruct(numColumns);
     this.reader = OrcInputFormat.createReaderFromFile(file, conf, offset,
         length);

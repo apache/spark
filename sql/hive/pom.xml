@@ -37,7 +37,7 @@
   <dependencies>
     <!-- Added for Hive Parquet SerDe -->
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>${hive.parquet.group}</groupId>
       <artifactId>parquet-hadoop-bundle</artifactId>
     </dependency>
     <dependency>
@@ -77,44 +77,27 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
-<!--
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
-    </dependency>
--->
-<!--
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
     </dependency>
--->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
-<!--
-      <classifier>core</classifier>
--->
+      <classifier>${hive.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
     </dependency>
-    <!--
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-serde</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-shims</artifactId>
-        </dependency>
-    -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-serde</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-shims</artifactId>
+    </dependency>
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
     <dependency>
       <groupId>org.apache.avro</groupId>
@@ -133,7 +116,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
+      <artifactId>${calcite-avatica.artifactId}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.calcite</groupId>

@@ -190,6 +190,19 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
+            <id>add-scala-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>v${hive.version.short}/src/main/scala</source>
+                <source>v${hive.version.short}/src/main/java</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
             <id>add-scala-test-sources</id>
             <phase>generate-test-sources</phase>
             <goals>
@@ -197,6 +210,7 @@
             </goals>
             <configuration>
               <sources>
+                <source>v${hive.version.short}/src/test/scala</source>
                 <source>src/test/gen-java</source>
               </sources>
             </configuration>
