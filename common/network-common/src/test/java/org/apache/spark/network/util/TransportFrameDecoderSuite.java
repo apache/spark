@@ -52,7 +52,7 @@ public class TransportFrameDecoderSuite {
   }
 
   @Test
-  public void testConsolidationForDecodingNonFullyWrittenByteBuf() {
+  public void testConsolidationForDecodingNonFullyWrittenByteBuf() throws Exception {
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
     List<ByteBuf> retained = new ArrayList<>();
@@ -61,22 +61,24 @@ public class TransportFrameDecoderSuite {
       retained.add(buf);
       return null;
     });
-    ByteBuf data1 = Unpooled.buffer(1024 * 1024);
-    data1.writeLong(1024 * 1024 + 8);
-    data1.writeByte(127);
-    ByteBuf data2 = Unpooled.buffer(1024 * 1024);
-    for (int i = 0; i < 1024 * 1024 - 1; i++) {
-      data2.writeByte(128);
-    }
-    int orignalCapacity = data1.capacity() + data2.capacity();
+    int targetBytes = (int) ByteUnit.MiB.toBytes(50);
+    int piece1Bytes = RND.nextInt(50);
+    int piece2Bytes = targetBytes - piece1Bytes;
+    ByteBuf piece1 = Unpooled.buffer(piece1Bytes * 2);
+    piece1.writeLong(targetBytes + 8);
+    byte[] piece1Data = new byte[piece1Bytes];
+    piece1.writeBytes(piece1Data);
+    ByteBuf piece2 = Unpooled.buffer(piece2Bytes * 2);
+    byte[] piece2Data = new byte[piece2Bytes];
+    piece2.writeBytes(piece2Data);
     try {
-      decoder.channelRead(ctx, data1);
-      decoder.channelRead(ctx, data2);
+      decoder.channelRead(ctx, piece1);
+      decoder.channelRead(ctx, piece2);
       assertEquals(1, retained.size());
-      assert(retained.get(0).capacity() < orignalCapacity);
-    } catch (Exception e) {
-      release(data1);
-      release(data2);
+      assertEquals(targetBytes, retained.get(0).capacity());
+    } finally {
+      release(piece1);
+      release(piece2);
     }
   }
 
@@ -108,7 +110,7 @@ public class TransportFrameDecoderSuite {
         long start = System.currentTimeMillis();
         ByteBuf buf = Unpooled.buffer(8);
         long targetBytes = ByteUnit.GiB.toBytes(1);
-        int pieceBytes = (int)ByteUnit.KiB.toBytes(32);
+        int pieceBytes = (int) ByteUnit.KiB.toBytes(32);
         long writtenBytes = 0;
         buf.writeLong(8 + ByteUnit.GiB.toBytes(1));
         decoder.channelRead(ctx, buf);
