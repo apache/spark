@@ -127,7 +127,7 @@ class SparkSession private(
   @Unstable
   @transient
   lazy val sharedState: SharedState = {
-    existingSharedState.getOrElse(new SharedState(sparkContext))
+    existingSharedState.getOrElse(new SharedState(sparkContext, initialSessionOptions))
   }
 
   /**
