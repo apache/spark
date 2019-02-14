@@ -120,6 +120,8 @@ private[security] class HBaseDelegationTokenProvider
       confCreate.invoke(null, conf).asInstanceOf[Configuration]
     } catch {
       case NonFatal(e) =>
+        // Keep at debug level since this is executed even when HBase tokens are not needed.
+        // Avoids a noisy warning for users who don't care about HBase.
         logDebug("Unable to load HBaseConfiguration.", e)
         conf
     }
