@@ -19,10 +19,9 @@ package org.apache.spark.executor
 
 import java.net.URL
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.CoarseGrainedExecutorBackend.CoarseGrainedExecutorBackendArguments
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.YarnContainerInfoHelper
@@ -65,15 +64,14 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]): Unit = {
-    val arguments = CoarseGrainedExecutorBackend.parseArguments(args,
-      this.getClass.getCanonicalName)
-
-    val createFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend = { case (rpcEnv, env) =>
+    val createFn: (RpcEnv, CoarseGrainedExecutorBackendArguments, SparkEnv) =>
+      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
         arguments.hostname, arguments.cores, arguments.userClassPath, env)
     }
-    CoarseGrainedExecutorBackend.run(arguments.driverUrl, arguments.executorId, arguments.hostname,
-      arguments.cores, arguments.appId, arguments.workerUrl, arguments.userClassPath, createFn)
+    val backendArgs = CoarseGrainedExecutorBackend.parseArguments(args,
+      this.getClass.getCanonicalName)
+    CoarseGrainedExecutorBackend.run(backendArgs, createFn)
     System.exit(0)
   }
 

@@ -65,7 +65,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
-      // Always receive `true`. Just ignore it
+        // Always receive `true`. Just ignore it
       case Failure(e) =>
         exitExecutor(1, s"Cannot register with driver: $driverUrl", e, notifyDriver = false)
     }(ThreadUtils.sameThread)
@@ -191,45 +191,38 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       userClassPath: mutable.ListBuffer[URL])
 
   def main(args: Array[String]): Unit = {
-    val arguments = parseArguments(args, this.getClass.getCanonicalName)
-
-    val createFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend = { case (rpcEnv, env) =>
+    val createFn: (RpcEnv, CoarseGrainedExecutorBackendArguments, SparkEnv) =>
+      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
         arguments.hostname, arguments.cores, arguments.userClassPath, env)
     }
-    run(arguments.driverUrl, arguments.executorId, arguments.hostname, arguments.cores,
-      arguments.appId, arguments.workerUrl, arguments.userClassPath, createFn)
+    run(parseArguments(args, this.getClass.getCanonicalName), createFn)
     System.exit(0)
   }
 
   def run(
-      driverUrl: String,
-      executorId: String,
-      hostname: String,
-      cores: Int,
-      appId: String,
-      workerUrl: Option[String],
-      userClassPath: Seq[URL],
-      backendCreateFn: (RpcEnv, SparkEnv) => CoarseGrainedExecutorBackend): Unit = {
+      arguments: CoarseGrainedExecutorBackendArguments,
+      backendCreateFn: (RpcEnv, CoarseGrainedExecutorBackendArguments, SparkEnv) =>
+        CoarseGrainedExecutorBackend): Unit = {
 
     Utils.initDaemon(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
       // Debug code
-      Utils.checkHost(hostname)
+      Utils.checkHost(arguments.hostname)
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
-        hostname,
+        arguments.hostname,
         -1,
         executorConf,
         new SecurityManager(executorConf),
         clientMode = true)
-      val driver = fetcher.setupEndpointRefByURI(driverUrl)
+      val driver = fetcher.setupEndpointRefByURI(arguments.driverUrl)
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
-      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
+      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
@@ -247,11 +240,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
-      val env = SparkEnv.createExecutorEnv(
-        driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
+      val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.hostname,
+        arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
-      env.rpcEnv.setupEndpoint("Executor", backendCreateFn(env.rpcEnv, env))
-      workerUrl.foreach { url =>
+      env.rpcEnv.setupEndpoint("Executor", backendCreateFn(env.rpcEnv, arguments, env))
+      arguments.workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
