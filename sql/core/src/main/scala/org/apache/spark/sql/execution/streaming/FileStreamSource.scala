@@ -91,7 +91,7 @@ class FileStreamSource(
 
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
-  val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
+  val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly, sourceOptions.includeModifiedFiles)
 
   metadataLog.allFiles().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
@@ -278,7 +278,7 @@ object FileStreamSource {
    * To prevent the hash map from growing indefinitely, a purge function is available to
    * remove files "maxAgeMs" older than the latest file.
    */
-  class SeenFilesMap(maxAgeMs: Long, fileNameOnly: Boolean) {
+  class SeenFilesMap(maxAgeMs: Long, fileNameOnly: Boolean, includeModifiedFiles: Boolean = false) {
     require(maxAgeMs >= 0)
 
     /** Mapping from file to its timestamp. */
@@ -307,9 +307,14 @@ object FileStreamSource {
      * if it is new enough that we are still tracking, and we have not seen it before.
      */
     def isNewFile(path: String, timestamp: Timestamp): Boolean = {
+      val stripedPath = stripPathIfNecessary(path)
       // Note that we are testing against lastPurgeTimestamp here so we'd never miss a file that
       // is older than (latestTimestamp - maxAgeMs) but has not been purged yet.
-      timestamp >= lastPurgeTimestamp && !map.containsKey(stripPathIfNecessary(path))
+      if (includeModifiedFiles) {
+        timestamp >= lastPurgeTimestamp && timestamp > map.getOrDefault(stripedPath, 0)
+      } else {
+        timestamp >= lastPurgeTimestamp && !map.containsKey(stripedPath)
+      }
     }
 
     /** Removes aged entries and returns the number of files removed. */

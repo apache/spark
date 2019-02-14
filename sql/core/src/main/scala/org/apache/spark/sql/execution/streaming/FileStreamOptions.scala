@@ -74,6 +74,16 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
    */
   val fileNameOnly: Boolean = withBooleanParameter("fileNameOnly", false)
 
+  /**
+   * Whether to include modified files to be processed.
+   *
+   * The default behavior is `false` where only the filename is considered to determine if a file
+   * should be processed. When this is set to `true` the file timestamp is also tested if is greater
+   * than last time it was processed, as an indication that it's modified and have different
+   * content. It is useful when the source producer eventually overrides files with new content.
+   */
+  val includeModifiedFiles: Boolean = withBooleanParameter("includeModifiedFiles", false)
+
   private def withBooleanParameter(name: String, default: Boolean) = {
     parameters.get(name).map { str =>
       try {

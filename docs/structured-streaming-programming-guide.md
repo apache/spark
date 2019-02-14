@@ -524,6 +524,8 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>latestFirst</code>: whether to process the latest new files first, useful when there is a large backlog of files (default: false)
         <br/>
+        <code>includeModifiedFiles</code>: whether to include modified files to be processed, useful when the source producer eventually overrides files with new content (default:false)
+        <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
         <br/>
         "file:///dataset.txt"<br/>
