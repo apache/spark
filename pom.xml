@@ -131,7 +131,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
-    <parquet.version>1.12.0-palantir.1</parquet.version>
+    <parquet.version>1.12.0-palantir.4</parquet.version>
     <okhttp3.version>3.11.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.15.0</okio.version>
