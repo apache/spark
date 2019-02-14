@@ -101,7 +101,7 @@ abstract class FileStreamSourceTest
     }
   }
 
-  case class AppendTextFileData(content: String, file: File, src: File = null)
+  case class OverrideTextFileData(content: String, file: File, src: File = null)
     extends AddFileData {
 
     override def addData(source: FileStreamSource): Unit = {
@@ -553,15 +553,15 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       testStream(textStream)(
         // add data into the file, should process as usual
-        AppendTextFileData("a\nb", modifiedFile),
+        OverrideTextFileData("a\nb", modifiedFile),
         CheckAnswer("a", "b"),
 
         // Unfortunately since a lot of file system does not have modification time granularity
         // finer grained than 1 sec, we need to use 1 sec here.
         AssertOnQuery { _ => Thread.sleep(1000); true },
 
-        // modify the file, should consider the new content as well
-        AppendTextFileData("c\nd", modifiedFile),
+        // override the file, should consider the new content as well
+        OverrideTextFileData("c\nd", modifiedFile),
         CheckAnswer("a", "b", "c", "d")
       )
     }

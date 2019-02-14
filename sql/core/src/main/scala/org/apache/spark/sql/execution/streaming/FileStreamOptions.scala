@@ -81,6 +81,10 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
    * should be processed. When this is set to `true` the file timestamp is also tested if is greater
    * than last time it was processed, as an indication that it's modified and have different
    * content. It is useful when the source producer eventually overrides files with new content.
+   *
+   * Is important to note that the whole file content will be processed in case of modification. If
+   * the modification is an append and not an override, the previous processed content will be
+   * processed again, changing the semantics to "at-least-once".
    */
   val includeModifiedFiles: Boolean = withBooleanParameter("includeModifiedFiles", false)
 
