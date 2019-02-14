@@ -67,7 +67,8 @@ private[spark] object Minikube extends Logging {
       .withApiVersion("v1")
       .withMasterUrl(kubernetesMaster)
       .withCaCertFile(Paths.get(userHome, MINIKUBE_PATH, "ca.crt").toFile.getAbsolutePath)
-      .withClientCertFile(Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt").toFile.getAbsolutePath)
+      .withClientCertFile(
+        Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt").toFile.getAbsolutePath)
       .withClientKeyFile(Paths.get(userHome, MINIKUBE_PATH, "apiserver.key").toFile.getAbsolutePath)
       .build()
     new DefaultKubernetesClient(kubernetesConf)

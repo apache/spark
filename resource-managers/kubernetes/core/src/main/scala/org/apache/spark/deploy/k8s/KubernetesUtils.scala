@@ -66,26 +66,6 @@ private[spark] object KubernetesUtils extends Logging {
     opt2.foreach { _ => require(opt1.isEmpty, errMessage) }
   }
 
-  /**
-   * For the given collection of file URIs, resolves them as follows:
-   * - File URIs with scheme local:// resolve to just the path of the URI.
-   * - Otherwise, the URIs are returned as-is.
-   */
-  def resolveFileUrisAndPath(fileUris: Iterable[String]): Iterable[String] = {
-    fileUris.map { uri =>
-      resolveFileUri(uri)
-    }
-  }
-
-  def resolveFileUri(uri: String): String = {
-    val fileUri = Utils.resolveURI(uri)
-    val fileScheme = Option(fileUri.getScheme).getOrElse("file")
-    fileScheme match {
-      case "local" => fileUri.getPath
-      case _ => uri
-    }
-  }
-
   def loadPodFromTemplate(
       kubernetesClient: KubernetesClient,
       templateFile: File,

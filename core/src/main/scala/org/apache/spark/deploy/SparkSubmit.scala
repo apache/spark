@@ -526,6 +526,7 @@ private[spark] class SparkSubmit extends Logging {
         confKey = PRINCIPAL.key),
       OptionAssigner(args.keytab, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = KEYTAB.key),
+      OptionAssigner(args.pyFiles, ALL_CLUSTER_MGRS, CLUSTER, confKey = SUBMIT_PYTHON_FILES.key),
 
       // Propagate attributes for dependency resolution at the driver side
       OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.packages"),
@@ -700,9 +701,6 @@ private[spark] class SparkSubmit extends Logging {
         if (args.isPython) {
           childArgs ++= Array("--primary-py-file", args.primaryResource)
           childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
-          if (args.pyFiles != null) {
-            childArgs ++= Array("--other-py-files", args.pyFiles)
-          }
         } else if (args.isR) {
           childArgs ++= Array("--primary-r-file", args.primaryResource)
           childArgs ++= Array("--main-class", "org.apache.spark.deploy.RRunner")
@@ -750,7 +748,7 @@ private[spark] class SparkSubmit extends Logging {
     // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
     val pyFiles = sparkConf.get(SUBMIT_PYTHON_FILES)
     val resolvedPyFiles = Utils.resolveURIs(pyFiles.mkString(","))
-    val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
+    val formattedPyFiles = if (deployMode != CLUSTER) {
       PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
     } else {
       // Ignoring formatting python path in yarn and mesos cluster mode, these two modes

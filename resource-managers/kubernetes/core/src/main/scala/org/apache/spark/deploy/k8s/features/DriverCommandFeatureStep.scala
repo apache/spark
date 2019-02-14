@@ -37,8 +37,8 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
 
   override def configurePod(pod: SparkPod): SparkPod = {
     conf.mainAppResource match {
-      case JavaMainAppResource(_) =>
-        configureForJava(pod)
+      case JavaMainAppResource(res) =>
+        configureForJava(pod, res.getOrElse(SparkLauncher.NO_RESOURCE))
 
       case PythonMainAppResource(res) =>
         configureForPython(pod, res)
@@ -49,45 +49,33 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    conf.mainAppResource match {
-      case JavaMainAppResource(res) =>
-        res.map(additionalJavaProperties).getOrElse(Map.empty)
+    val appType = conf.mainAppResource match {
+      case JavaMainAppResource(_) =>
+        APP_RESOURCE_TYPE_JAVA
 
-      case PythonMainAppResource(res) =>
-        additionalPythonProperties(res)
+      case PythonMainAppResource(_) =>
+        APP_RESOURCE_TYPE_PYTHON
 
-      case RMainAppResource(res) =>
-        additionalRProperties(res)
+      case RMainAppResource(_) =>
+        APP_RESOURCE_TYPE_R
     }
+
+    Map(APP_RESOURCE_TYPE.key -> appType)
   }
 
-  private def configureForJava(pod: SparkPod): SparkPod = {
-    // The user application jar is merged into the spark.jars list and managed through that
-    // property, so use a "blank" resource for the Java driver.
-    val driverContainer = baseDriverContainer(pod, SparkLauncher.NO_RESOURCE).build()
+  private def configureForJava(pod: SparkPod, res: String): SparkPod = {
+    val driverContainer = baseDriverContainer(pod, res).build()
     SparkPod(pod.pod, driverContainer)
   }
 
   private def configureForPython(pod: SparkPod, res: String): SparkPod = {
-    val maybePythonFiles = if (conf.pyFiles.nonEmpty) {
-      // Delineation by ":" is to append the PySpark Files to the PYTHONPATH
-      // of the respective PySpark pod
-      val resolved = KubernetesUtils.resolveFileUrisAndPath(conf.pyFiles)
-      Some(new EnvVarBuilder()
-        .withName(ENV_PYSPARK_FILES)
-        .withValue(resolved.mkString(":"))
-        .build())
-    } else {
-      None
-    }
     val pythonEnvs =
       Seq(new EnvVarBuilder()
           .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
           .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
-        .build()) ++
-      maybePythonFiles
+        .build())
 
-    val pythonContainer = baseDriverContainer(pod, KubernetesUtils.resolveFileUri(res))
+    val pythonContainer = baseDriverContainer(pod, res)
       .addAllToEnv(pythonEnvs.asJava)
       .build()
 
@@ -95,7 +83,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   private def configureForR(pod: SparkPod, res: String): SparkPod = {
-    val rContainer = baseDriverContainer(pod, KubernetesUtils.resolveFileUri(res)).build()
+    val rContainer = baseDriverContainer(pod, res).build()
     SparkPod(pod.pod, rContainer)
   }
 
@@ -106,28 +94,5 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
       .addToArgs("--class", conf.mainClass)
       .addToArgs(resource)
       .addToArgs(conf.appArgs: _*)
-  }
-
-  private def additionalJavaProperties(resource: String): Map[String, String] = {
-    resourceType(APP_RESOURCE_TYPE_JAVA) ++ mergeFileList(JARS, Seq(resource))
-  }
-
-  private def additionalPythonProperties(resource: String): Map[String, String] = {
-    resourceType(APP_RESOURCE_TYPE_PYTHON) ++
-      mergeFileList(FILES, Seq(resource) ++ conf.pyFiles)
-  }
-
-  private def additionalRProperties(resource: String): Map[String, String] = {
-    resourceType(APP_RESOURCE_TYPE_R) ++ mergeFileList(FILES, Seq(resource))
-  }
-
-  private def mergeFileList(key: ConfigEntry[Seq[String]], filesToAdd: Seq[String])
-    : Map[String, String] = {
-    val existing = conf.get(key)
-    Map(key.key -> (existing ++ filesToAdd).distinct.mkString(","))
-  }
-
-  private def resourceType(resType: String): Map[String, String] = {
-    Map(APP_RESOURCE_TYPE.key -> resType)
   }
 }
