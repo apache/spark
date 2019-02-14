@@ -89,6 +89,9 @@ class Window(object):
         Creates a :class:`WindowSpec` with the frame boundaries defined,
         from `start` (inclusive) to `end` (inclusive).
 
+        Rows Between cares only about the order of rows, and takes fixed number of
+        preceding and following rows when computing frame.
+
         Both `start` and `end` are relative positions from the current row.
         For example, "0" means "current row", while "-1" means the row before
         the current row, and "5" means the fifth row after the current row.
@@ -117,7 +120,8 @@ class Window(object):
     def rangeBetween(start, end):
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
-        from `start` (inclusive) to `end` (inclusive).
+        from `start` (inclusive) to `end` (inclusive).Range Between considers values
+        when computing frame.
 
         Both `start` and `end` are relative from the current row. For example,
         "0" means "current row", while "-1" means one off before the current row,
