@@ -27,7 +27,6 @@ import scala.collection.immutable
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
-import org.tukaani.xz.LZMA2Options
 
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
@@ -36,6 +35,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -306,7 +306,7 @@ object SQLConf {
       "factor as the estimated data size, in case the data is compressed in the file and lead to" +
       " a heavily underestimated result.")
     .doubleConf
-    .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
+    .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
@@ -442,7 +442,8 @@ object SQLConf {
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. This configuration only has an effect when 'spark.sql.parquet.filterPushdown' " +
-      "is enabled.")
+      "is enabled and the vectorized reader is not used. You can ensure the vectorized reader " +
+      "is not used by setting 'spark.sql.parquet.enableVectorizedReader' to false.")
     .booleanConf
     .createWithDefault(false)
 
@@ -561,12 +562,14 @@ object SQLConf {
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
+    .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
-      "distinct semantics.")
+      "distinct semantics. By default the optimization is disabled, since it may return " +
+      "incorrect results when the files are empty.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
     .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
@@ -647,7 +650,7 @@ object SQLConf {
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed. Defaults to 100000")
     .intConf
-    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be larger than 0")
+    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
@@ -1115,7 +1118,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
+      .checkValue(num => num > 1, "The number of bins must be greater than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
@@ -1207,7 +1210,7 @@ object SQLConf {
       .doc("Threshold for number of rows guaranteed to be held in memory by the sort merge " +
         "join operator")
       .intConf
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
@@ -1441,7 +1444,7 @@ object SQLConf {
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
       .intConf
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"

@@ -146,11 +146,20 @@ private[spark] class AppStatusStore(
     // cheaper for disk stores (avoids deserialization).
     val count = {
       Utils.tryWithResource(
-        store.view(classOf[TaskDataWrapper])
-          .parent(stageKey)
-          .index(TaskIndexNames.EXEC_RUN_TIME)
-          .first(0L)
-          .closeableIterator()
+        if (store.isInstanceOf[InMemoryStore]) {
+          store.view(classOf[TaskDataWrapper])
+            .parent(stageKey)
+            .index(TaskIndexNames.STATUS)
+            .first("SUCCESS")
+            .last("SUCCESS")
+            .closeableIterator()
+        } else {
+          store.view(classOf[TaskDataWrapper])
+            .parent(stageKey)
+            .index(TaskIndexNames.EXEC_RUN_TIME)
+            .first(0L)
+            .closeableIterator()
+        }
       ) { it =>
         var _count = 0L
         while (it.hasNext()) {
@@ -219,30 +228,50 @@ private[spark] class AppStatusStore(
     // stabilize once the stage finishes. It's also slow, especially with disk stores.
     val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
+    // TODO: Summary metrics needs to display all the successful tasks' metrics (SPARK-26119).
+    // For InMemory case, it is efficient to find using the following code. But for diskStore case
+    // we need an efficient solution to avoid deserialization time overhead. For that, we need to
+    // rework on the way indexing works, so that we can index by specific metrics for successful
+    // and failed tasks differently (would be tricky). Also would require changing the disk store
+    // version (to invalidate old stores).
     def scanTasks(index: String)(fn: TaskDataWrapper => Long): IndexedSeq[Double] = {
-      Utils.tryWithResource(
-        store.view(classOf[TaskDataWrapper])
+      if (store.isInstanceOf[InMemoryStore]) {
+        val quantileTasks = store.view(classOf[TaskDataWrapper])
           .parent(stageKey)
           .index(index)
           .first(0L)
-          .closeableIterator()
-      ) { it =>
-        var last = Double.NaN
-        var currentIdx = -1L
-        indices.map { idx =>
-          if (idx == currentIdx) {
-            last
-          } else {
-            val diff = idx - currentIdx
-            currentIdx = idx
-            if (it.skip(diff - 1)) {
-              last = fn(it.next()).toDouble
+          .asScala
+          .filter { _.status == "SUCCESS"} // Filter "SUCCESS" tasks
+          .toIndexedSeq
+
+        indices.map { index =>
+          fn(quantileTasks(index.toInt)).toDouble
+        }.toIndexedSeq
+      } else {
+        Utils.tryWithResource(
+          store.view(classOf[TaskDataWrapper])
+            .parent(stageKey)
+            .index(index)
+            .first(0L)
+            .closeableIterator()
+        ) { it =>
+          var last = Double.NaN
+          var currentIdx = -1L
+          indices.map { idx =>
+            if (idx == currentIdx) {
               last
             } else {
-              Double.NaN
+              val diff = idx - currentIdx
+              currentIdx = idx
+              if (it.skip(diff - 1)) {
+                last = fn(it.next()).toDouble
+                last
+              } else {
+                Double.NaN
+              }
             }
-          }
-        }.toIndexedSeq
+          }.toIndexedSeq
+        }
       }
     }
 

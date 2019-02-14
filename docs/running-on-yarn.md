@@ -9,6 +9,11 @@ Support for running on [YARN (Hadoop
 NextGen)](http://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/YARN.html)
 was added to Spark in version 0.6.0, and improved in subsequent releases.
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # Launching Spark on YARN
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.

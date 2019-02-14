@@ -204,7 +204,7 @@ private[hive] class SparkExecuteStatementOperation(
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(OperationState.ERROR)
-          throw e
+          throw new HiveSQLException(e)
       }
     }
   }

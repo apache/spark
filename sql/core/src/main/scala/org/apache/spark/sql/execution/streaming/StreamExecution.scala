@@ -87,6 +87,7 @@ abstract class StreamExecution(
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    fs.mkdirs(checkpointPath)
     checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
   }
 
@@ -174,6 +175,9 @@ abstract class StreamExecution(
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
+
+  /** Isolated spark session to run the batches with. */
+  private val sparkSessionForStream = sparkSession.cloneSession()
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -264,8 +268,6 @@ abstract class StreamExecution(
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
 
-      // Isolated spark session to run the batches with.
-      val sparkSessionForStream = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
       sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
       // Disable cost-based join optimization as we do not want stateful operations to be rearranged

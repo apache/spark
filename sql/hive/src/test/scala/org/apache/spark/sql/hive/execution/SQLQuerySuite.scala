@@ -2276,4 +2276,36 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+
+  test("SPARK-26181 hasMinMaxStats method of ColumnStatsMap is not correct") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("all_null") {
+        sql("create table all_null (attr1 int, attr2 int)")
+        sql("insert into all_null values (null, null)")
+        sql("analyze table all_null compute statistics for columns attr1, attr2")
+        // check if the stats can be calculated without Cast exception.
+        sql("select * from all_null where attr1 < 1").queryExecution.stringWithStats
+        sql("select * from all_null where attr1 < attr2").queryExecution.stringWithStats
+      }
+    }
+  }
+
+  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
+    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+          sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+          if (enableOptimizeMetadataOnlyQuery) {
+            // The result is wrong if we enable the configuration.
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
+          } else {
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+          }
+          checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
+        }
+      }
+    }
+  }
+
 }

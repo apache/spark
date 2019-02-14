@@ -825,8 +825,11 @@ class JDBCSuite extends QueryTest
 
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val md = new MetadataBuilder().putLong("scale", 0)
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
+      Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     val errMsg = intercept[IllegalArgumentException] {
@@ -1348,9 +1351,13 @@ class JDBCSuite extends QueryTest
          |the partition columns using the supplied subquery alias to resolve any ambiguity.
          |Example :
          |spark.read.format("jdbc")
-         |        .option("dbtable", "(select c1, c2 from t1) as subq")
-         |        .option("partitionColumn", "subq.c1"
-         |        .load()
+         |  .option("url", jdbcUrl)
+         |  .option("dbtable", "(select c1, c2 from t1) as subq")
+         |  .option("partitionColumn", "c1")
+         |  .option("lowerBound", "1")
+         |  .option("upperBound", "100")
+         |  .option("numPartitions", "3")
+         |  .load()
      """.stripMargin
     val e5 = intercept[RuntimeException] {
       sql(

@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.Collections
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -24,6 +26,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
@@ -86,7 +89,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createAllocator(
       maxExecutors: Int = 5,
-      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
+      rmClient: AMRMClient[ContainerRequest] = rmClient,
+      additionalConfigs: Map[String, String] = Map()): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
       "--class", "SomeClass")
@@ -95,6 +99,11 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       .set("spark.executor.instances", maxExecutors.toString)
       .set("spark.executor.cores", "5")
       .set("spark.executor.memory", "2048")
+
+    for ((name, value) <- additionalConfigs) {
+      sparkConfClone.set(name, value)
+    }
+
     new YarnAllocator(
       "not used",
       mock(classOf[RpcEndpointRef]),
@@ -108,13 +117,28 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       clock)
   }
 
-  def createContainer(host: String): Container = {
-    // When YARN 2.6+ is required, avoid deprecation by using version with long second arg
-    val containerId = ContainerId.newInstance(appAttemptId, containerNum)
+  def createContainer(
+      host: String,
+      containerNumber: Int = containerNum,
+      resource: Resource = containerResource): Container = {
+    val  containerId: ContainerId = ContainerId.newContainerId(appAttemptId, containerNum)
     containerNum += 1
     val nodeId = NodeId.newInstance(host, 1000)
     Container.newInstance(containerId, nodeId, "", containerResource, RM_REQUEST_PRIORITY, null)
   }
+
+  def createContainers(hosts: Seq[String], containerIds: Seq[Int]): Seq[Container] = {
+    hosts.zip(containerIds).map{case (host, id) => createContainer(host, id)}
+  }
+
+  def createContainerStatus(
+      containerId: ContainerId,
+      exitStatus: Int,
+      containerState: ContainerState = ContainerState.COMPLETE,
+      diagnostics: String = "diagnostics"): ContainerStatus = {
+    ContainerStatus.newInstance(containerId, containerState, diagnostics, exitStatus)
+  }
+
 
   test("single container allocated") {
     // request a single container and receive it
@@ -399,5 +423,56 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     clock.advance(50 * 1000L)
     handler.getNumExecutorsFailed should be (0)
+  }
+
+  test("SPARK-26269: YarnAllocator should have same blacklist behaviour with YARN") {
+    val rmClientSpy = spy(rmClient)
+    val maxExecutors = 11
+
+    val handler = createAllocator(
+      maxExecutors,
+      rmClientSpy,
+      Map(
+        "spark.yarn.blacklist.executor.launch.blacklisting.enabled" -> "true",
+        "spark.blacklist.application.maxFailedExecutorsPerNode" -> "0"))
+    handler.updateResourceRequests()
+
+    val hosts = (0 until maxExecutors).map(i => s"host$i")
+    val ids = 0 to maxExecutors
+    val containers = createContainers(hosts, ids)
+
+    val nonBlacklistedStatuses = Seq(
+      ContainerExitStatus.SUCCESS,
+      ContainerExitStatus.PREEMPTED,
+      ContainerExitStatus.KILLED_EXCEEDED_VMEM,
+      ContainerExitStatus.KILLED_EXCEEDED_PMEM,
+      ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
+      ContainerExitStatus.KILLED_BY_APPMASTER,
+      ContainerExitStatus.KILLED_AFTER_APP_COMPLETION,
+      ContainerExitStatus.ABORTED,
+      ContainerExitStatus.DISKS_FAILED)
+
+    val nonBlacklistedContainerStatuses = nonBlacklistedStatuses.zipWithIndex.map {
+      case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+    }
+
+    val BLACKLISTED_EXIT_CODE = 1
+    val blacklistedStatuses = Seq(ContainerExitStatus.INVALID, BLACKLISTED_EXIT_CODE)
+
+    val blacklistedContainerStatuses = blacklistedStatuses.zip(9 until maxExecutors).map {
+      case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+    }
+
+    handler.handleAllocatedContainers(containers.slice(0, 9))
+    handler.processCompletedContainers(nonBlacklistedContainerStatuses)
+    verify(rmClientSpy, never())
+      .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
+
+    handler.handleAllocatedContainers(containers.slice(9, 11))
+    handler.processCompletedContainers(blacklistedContainerStatuses)
+    verify(rmClientSpy)
+      .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
+    verify(rmClientSpy)
+      .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
   }
 }

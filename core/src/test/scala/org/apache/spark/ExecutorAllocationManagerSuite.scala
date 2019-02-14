@@ -935,12 +935,7 @@ class ExecutorAllocationManagerSuite
 
     assert(maxNumExecutorsNeeded(manager) === 0)
     schedule(manager)
-    // Verify executor is timeout but numExecutorsTarget is not recalculated
-    assert(numExecutorsTarget(manager) === 3)
-
-    // Schedule again to recalculate the numExecutorsTarget after executor is timeout
-    schedule(manager)
-    // Verify that current number of executors should be ramp down when executor is timeout
+    // Verify executor is timeout,numExecutorsTarget is recalculated
     assert(numExecutorsTarget(manager) === 2)
   }
 
@@ -1145,6 +1140,25 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 1)
     // here's the important verify -- we did kill the executors, but did not adjust the target count
     verify(mockAllocationClient).killExecutors(Seq("executor-1"), false, false, false)
+  }
+
+  test("SPARK-26758 check executor target number after idle time out ") {
+    sc = createSparkContext(1, 5, 3)
+    val manager = sc.executorAllocationManager.get
+    val clock = new ManualClock(10000L)
+    manager.setClock(clock)
+    assert(numExecutorsTarget(manager) === 3)
+    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
+      clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
+      clock.getTimeMillis(), "executor-2", new ExecutorInfo("host1", 2, Map.empty)))
+    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
+      clock.getTimeMillis(), "executor-3", new ExecutorInfo("host1", 3, Map.empty)))
+    // make all the executors as idle, so that it will be killed
+    clock.advance(executorIdleTimeout * 1000)
+    schedule(manager)
+    // once the schedule is run target executor number should be 1
+    assert(numExecutorsTarget(manager) === 1)
   }
 
   private def createSparkContext(

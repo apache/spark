@@ -86,9 +86,9 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ExtractFiltersAndInnerJoins(input, conditions)
+    case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
+      val reordered = if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
@@ -99,6 +99,29 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         createOrderedJoin(input, conditions)
       }
+
+      if (sameOutput(p, reordered)) {
+        reordered
+      } else {
+        // Reordering the joins have changed the order of the columns.
+        // Inject a projection to make sure we restore to the expected ordering.
+        Project(p.output, reordered)
+      }
+  }
+
+  /**
+   * Returns true iff output of both plans are semantically the same, ie.:
+   *  - they contain the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   * NOTE: this is copied over from SPARK-25691 from master.
+   */
+  def sameOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    val output1 = plan1.output
+    val output2 = plan2.output
+    output1.length == output2.length && output1.zip(output2).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
+    }
   }
 }
 
@@ -155,21 +178,22 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * PythonUDF in join condition can not be evaluated, this rule will detect the PythonUDF
- * and pull them out from join condition. For python udf accessing attributes from only one side,
- * they are pushed down by operation push down rules. If not (e.g. user disables filter push
- * down rules), we need to pull them out in this rule too.
+ * PythonUDF in join condition can't be evaluated if it refers to attributes from both join sides.
+ * See `ExtractPythonUDFs` for details. This rule will detect un-evaluable PythonUDF and pull them
+ * out from join condition.
  */
 object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
-  def hasPythonUDF(expression: Expression): Boolean = {
-    expression.collectFirst { case udf: PythonUDF => udf }.isDefined
+
+  private def hasUnevaluablePythonUDF(expr: Expression, j: Join): Boolean = {
+    expr.find { e =>
+      PythonUDF.isScalarPythonUDF(e) && !canEvaluate(e, j.left) && !canEvaluate(e, j.right)
+    }.isDefined
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case j @ Join(_, _, joinType, condition)
-        if condition.isDefined && hasPythonUDF(condition.get) =>
-      if (!joinType.isInstanceOf[InnerLike]) {
-        // The current strategy supports only InnerLike join because for other types,
+    case j @ Join(_, _, joinType, Some(cond)) if hasUnevaluablePythonUDF(cond, j) =>
+      if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
+        // The current strategy only support InnerLike and LeftSemi join because for other type,
         // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
         // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
         // `requires attributes from more than one child`, we throw firstly here for better
@@ -179,10 +203,9 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
       }
       // If condition expression contains python udf, it will be moved out from
       // the new join conditions.
-      val (udf, rest) =
-        splitConjunctivePredicates(condition.get).partition(hasPythonUDF)
+      val (udf, rest) = splitConjunctivePredicates(cond).partition(hasUnevaluablePythonUDF(_, j))
       val newCondition = if (rest.isEmpty) {
-        logWarning(s"The join condition:$condition of the join plan contains PythonUDF only," +
+        logWarning(s"The join condition:$cond of the join plan contains PythonUDF only," +
           s" it will be moved out and the join plan will be turned to cross join.")
         None
       } else {

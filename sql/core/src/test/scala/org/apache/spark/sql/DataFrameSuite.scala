@@ -2590,4 +2590,36 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         Row ("abc", 1))
     }
   }
+
+  test("SPARK-25816 ResolveReferences works with nested extractors") {
+    val df = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("key", "map")
+    val swappedDf = df.select($"key".as("map"), $"map".as("key"))
+
+    checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
+  }
+
+  test("SPARK-26057: attribute deduplication on already analyzed plans") {
+    withTempView("a", "b", "v") {
+      val df1 = Seq(("1-1", 6)).toDF("id", "n")
+      df1.createOrReplaceTempView("a")
+      val df3 = Seq("1-1").toDF("id")
+      df3.createOrReplaceTempView("b")
+      spark.sql(
+        """
+          |SELECT a.id, n as m
+          |FROM a
+          |WHERE EXISTS(
+          |  SELECT 1
+          |  FROM b
+          |  WHERE b.id = a.id)
+        """.stripMargin).createOrReplaceTempView("v")
+      val res = spark.sql(
+        """
+          |SELECT a.id, n, m
+          |  FROM a
+          |  LEFT OUTER JOIN v ON v.id = a.id
+        """.stripMargin)
+      checkAnswer(res, Row("1-1", 6, 6))
+    }
+  }
 }

@@ -73,7 +73,7 @@ class KafkaContinuousReader(
     offset = start.orElse {
       val offsets = initialOffsets match {
         case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
-        case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets())
+        case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
       }
       logInfo(s"Initial offsets: $offsets")
@@ -128,7 +128,7 @@ class KafkaContinuousReader(
   }
 
   override def needsReconfiguration(): Boolean = {
-    knownPartitions != null && offsetReader.fetchLatestOffsets().keySet != knownPartitions
+    knownPartitions != null && offsetReader.fetchLatestOffsets(None).keySet != knownPartitions
   }
 
   override def toString(): String = s"KafkaSource[$offsetReader]"

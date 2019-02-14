@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.4.0</version>
+  <version>2.4.2-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -39,7 +39,7 @@
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:apache/spark.git</connection>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
+    <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
@@ -130,8 +130,8 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
-    <parquet.version>1.10.0</parquet.version>
-    <orc.version>1.5.2</orc.version>
+    <parquet.version>1.10.1</parquet.version>
+    <orc.version>1.5.4</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.3.24.v20180605</jetty.version>
@@ -1734,6 +1734,10 @@
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
           </exclusion>
@@ -1978,6 +1982,7 @@
         <groupId>com.thoughtworks.paranamer</groupId>
         <artifactId>paranamer</artifactId>
         <version>${paranamer.version}</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
@@ -2767,7 +2772,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.7</scala.version>
+        <scala.version>2.12.8</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>

@@ -190,6 +190,8 @@ of the most common options to set are:
     and it is up to the application to avoid exceeding the overhead memory space
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
+
+    NOTE: Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
   </td>
 </tr>
 <tr>
@@ -445,7 +447,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The directory which is used to dump the profile result before driver exiting.
     The results will be dumped as separated file for each RDD. They can be loaded
-    by ptats.Stats(). If this is specified, the profile result will not be displayed
+    by <code>pstats.Stats()</code>. If this is specified, the profile result will not be displayed
     automatically.
   </td>
 </tr>
@@ -928,6 +930,14 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.com.test.filter1.param.name1=foo</code>
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
   </td>
+</tr>
+<tr>
+  <td><code>spark.ui.requestHeaderSize</code></td>
+  <td>8k</td>
+  <td>
+    The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
+    This setting applies for the Spark History Server too.
+  <td>
 </tr>
 </table>
 
@@ -1597,6 +1607,14 @@ Apart from these, the following properties are also available, and may be useful
     Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
     value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
     driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
+  <td>120s</td>
+  <td>
+    The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
+    TaskSet which is unschedulable because of being completely blacklisted.
   </td>
 </tr>
 <tr>
