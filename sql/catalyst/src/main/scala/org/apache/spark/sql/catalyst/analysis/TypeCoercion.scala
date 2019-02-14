@@ -489,7 +489,8 @@ object TypeCoercion {
           }
 
           val newSub = Project(castedRhs, sub)
-          SubqueryPredicate(s, newLhs, comparison, ListQuery(newSub, children, exprId, newSub.output))
+          SubqueryPredicate(s, newLhs, comparison,
+            ListQuery(newSub, children, exprId, newSub.output))
         } else {
           s
         }
