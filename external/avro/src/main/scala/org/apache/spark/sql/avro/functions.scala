@@ -15,11 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.avro
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.Column
 
-package object avro {
+
+// scalastyle:off
+object functions {
+// scalastyle:on
 
   /**
    * Converts a binary column of avro format into its corresponding catalyst value. The specified
@@ -29,14 +35,14 @@ package object avro {
    * @param data the binary column.
    * @param jsonFormatSchema the avro schema in JSON string format.
    *
-   * @since 2.4.0
+   * @since 3.0.0
    */
   @Experimental
-  @deprecated("Please use 'org.apache.spark.sql.avro.functions.from_avro' instead.", "3.0.0")
   def from_avro(
       data: Column,
-      jsonFormatSchema: String): Column =
-    org.apache.spark.sql.avro.functions.from_avro(data, jsonFormatSchema)
+      jsonFormatSchema: String): Column = {
+    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, Map.empty))
+  }
 
   /**
    * Converts a binary column of avro format into its corresponding catalyst value. The specified
@@ -50,22 +56,22 @@ package object avro {
    * @since 3.0.0
    */
   @Experimental
-  @deprecated("Please use 'org.apache.spark.sql.avro.functions.from_avro' instead.", "3.0.0")
   def from_avro(
       data: Column,
       jsonFormatSchema: String,
-      options: java.util.Map[String, String]): Column =
-    org.apache.spark.sql.avro.functions.from_avro(data, jsonFormatSchema, options)
+      options: java.util.Map[String, String]): Column = {
+    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))
+  }
 
   /**
    * Converts a column into binary of avro format.
    *
    * @param data the data column.
    *
-   * @since 2.4.0
+   * @since 3.0.0
    */
   @Experimental
-  @deprecated("Please use 'org.apache.spark.sql.avro.functions.to_avro' instead.", "3.0.0")
-  def to_avro(data: Column): Column =
-    org.apache.spark.sql.avro.functions.to_avro(data)
+  def to_avro(data: Column): Column = {
+    new Column(CatalystDataToAvro(data.expr))
+  }
 }
