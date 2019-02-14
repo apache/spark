@@ -186,7 +186,9 @@ class ExpressionParserSuite extends PlanTest {
 
     assertEqual(
       "(a, b, c) != any (select d, e, f from g)",
-      AnySubquery(Seq('a, 'b, 'c), SubqueryPredicate.NotEqualTo, ListQuery(table("g").select('d, 'e, 'f))))
+      AnySubquery(Seq('a, 'b, 'c),
+      SubqueryPredicate.NotEqualTo,
+      ListQuery(table("g").select('d, 'e, 'f))))
 
     assertEqual(
       "(a, b) = any (select c from d)",
