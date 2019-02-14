@@ -273,11 +273,16 @@ class KubernetesSuite extends SparkFunSuite
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-                  resource.getStatus.getConditions().asScala
+                  val resourceStatus = resource.getStatus
+                  val conditions = resourceStatus.getConditions().asScala
+                  val result = conditions
                     .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
                     .headOption.getOrElse(false) shouldBe (true)
+                  println(s"Waiting on ${resource} status ${resourceStatus} with conditions ${conditions} result: ${result}")
+                  result
                 }
                 // Sleep a small interval to allow execution & downstream pod ready check to also catch up
+                println("Sleeping before killing pod.")
                 Thread.sleep(2000)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
@@ -316,7 +321,7 @@ class KubernetesSuite extends SparkFunSuite
     // If we're testing decomissioning we delete all the executors, but we should have
     // an executor at some point.
     Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-      println(s"This iteration is ${execPods.values.nonEmpty} with ${execPods}")
+      println(s"Driver podcheck iteration non empty: ${execPods.values.nonEmpty} with ${execPods}")
       execPods.values.nonEmpty should be (true)
     }
     // If decomissioning we need to wait and check the executors were removed
@@ -338,7 +343,7 @@ class KubernetesSuite extends SparkFunSuite
       Thread.sleep(3000)
       // Wait for the executors to be removed
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        println(s"Decom: This iteration is ${execPods.values.nonEmpty} with ${execPods}")
+        println(s"decom iteration pods non-empty ${execPods.values.nonEmpty} with ${execPods}")
         execPods.values.nonEmpty should be (false)
       }
     }
