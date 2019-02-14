@@ -69,7 +69,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       data: _*)
   }
 
-  test("toDF should compare map with byte array keys correctly") {
+  test("toDS should compare map with byte array keys correctly") {
     // Choose the order of arrays in such way, that sorting keys of different maps by _.toString
     // will not incidentally put equal keys together.
     val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.toString).toArray
