@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.security
+package org.apache.spark.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials

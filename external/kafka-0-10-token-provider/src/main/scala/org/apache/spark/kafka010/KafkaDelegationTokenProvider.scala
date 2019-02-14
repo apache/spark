@@ -25,9 +25,9 @@ import org.apache.hadoop.security.Credentials
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.security.HadoopDelegationTokenProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Kafka
+import org.apache.spark.security.HadoopDelegationTokenProvider
 
 private[spark] class KafkaDelegationTokenProvider
   extends HadoopDelegationTokenProvider with Logging {
