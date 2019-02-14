@@ -90,7 +90,7 @@ private[hive] class TestHiveExternalCatalog(
 private[hive] class TestHiveSharedState(
     sc: SparkContext,
     hiveClient: Option[HiveClient] = None)
-  extends SharedState(sc) {
+  extends SharedState(sc, initialConfigs = Map.empty[String, String]) {
 
   override lazy val externalCatalog: ExternalCatalogWithListener = {
     new ExternalCatalogWithListener(new TestHiveExternalCatalog(
