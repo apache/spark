@@ -21,7 +21,6 @@ import java.net.URL
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.CoarseGrainedExecutorBackend.CoarseGrainedExecutorBackendArguments
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.YarnContainerInfoHelper
@@ -64,13 +63,13 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, CoarseGrainedExecutorBackendArguments, SparkEnv) =>
+    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
         arguments.hostname, arguments.cores, arguments.userClassPath, env)
     }
     val backendArgs = CoarseGrainedExecutorBackend.parseArguments(args,
-      this.getClass.getCanonicalName)
+      this.getClass.getCanonicalName.stripSuffix("$"))
     CoarseGrainedExecutorBackend.run(backendArgs, createFn)
     System.exit(0)
   }

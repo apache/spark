@@ -181,7 +181,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
-  case class CoarseGrainedExecutorBackendArguments(
+  case class Arguments(
       driverUrl: String,
       executorId: String,
       hostname: String,
@@ -191,19 +191,18 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       userClassPath: mutable.ListBuffer[URL])
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, CoarseGrainedExecutorBackendArguments, SparkEnv) =>
+    val createFn: (RpcEnv, Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
         arguments.hostname, arguments.cores, arguments.userClassPath, env)
     }
-    run(parseArguments(args, this.getClass.getCanonicalName), createFn)
+    run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
   }
 
   def run(
-      arguments: CoarseGrainedExecutorBackendArguments,
-      backendCreateFn: (RpcEnv, CoarseGrainedExecutorBackendArguments, SparkEnv) =>
-        CoarseGrainedExecutorBackend): Unit = {
+      arguments: Arguments,
+      backendCreateFn: (RpcEnv, Arguments, SparkEnv) => CoarseGrainedExecutorBackend): Unit = {
 
     Utils.initDaemon(log)
 
@@ -251,8 +250,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
   }
 
-  def parseArguments(args: Array[String], classNameForEntry: String)
-    : CoarseGrainedExecutorBackendArguments = {
+  def parseArguments(args: Array[String], classNameForEntry: String): Arguments = {
     var driverUrl: String = null
     var executorId: String = null
     var hostname: String = null
@@ -300,7 +298,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       printUsageAndExit(classNameForEntry)
     }
 
-    CoarseGrainedExecutorBackendArguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
+    Arguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
       userClassPath)
   }
 
