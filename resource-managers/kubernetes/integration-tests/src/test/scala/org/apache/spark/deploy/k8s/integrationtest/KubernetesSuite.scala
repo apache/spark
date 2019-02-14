@@ -252,6 +252,22 @@ class KubernetesSuite extends SparkFunSuite
       appArgs = appArgs)
 
     val execPods = scala.collection.mutable.Map[String, Pod]()
+    def checkPodReady(name: String) = {
+      val execPod = kubernetesTestComponents.kubernetesClient
+        .pods()
+        .withLabel("name", name)
+        .list()
+        .getItems
+        .get(0)
+      val resourceStatus = execPod.getStatus
+      val conditions = resourceStatus.getConditions().asScala
+      val result = conditions
+        .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
+        .headOption.getOrElse(false)
+      println(s"Pod name ${name} with entry ${execPod} has status" +
+        s"${resourceStatus} with conditions ${conditions} result: ${result}")
+      result
+    }
     println("Creating watcher...")
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -274,23 +290,12 @@ class KubernetesSuite extends SparkFunSuite
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-                  val execPod = kubernetesTestComponents.kubernetesClient
-                    .pods()
-                    .withLabel("name", name)
-                    .list()
-                    .getItems
-                    .get(0)
-                  val resourceStatus = execPod.getStatus
-                  val conditions = resourceStatus.getConditions().asScala
-                  val result = conditions
-                    .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
-                    .headOption.getOrElse(false) shouldBe (true)
-                  println(s"Waiting on ${resource} status ${resourceStatus} with conditions ${conditions} result: ${result}")
-                  result
+                  val result = checkPodReady(name)
+                  result shouldBe (true)
                 }
                 // Sleep a small interval to allow execution & downstream pod ready check to also catch up
                 println("Sleeping before killing pod.")
-                Thread.sleep(2000)
+                Thread.sleep(100)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
@@ -337,14 +342,10 @@ class KubernetesSuite extends SparkFunSuite
       Thread.sleep(100)
       // Wait for the executors to become ready
       Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-        val resourceConditions = execPods.values.flatMap{
-          resource => resource.getStatus.getConditions().asScala}
-        val podsReady = (resourceConditions
-          .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
-          .headOption.getOrElse(false))
+        val podsReady = ! execPods.keys.filter(checkPodReady).isEmpty
         val podsEmpty = execPods.values.isEmpty
         assert(podsReady || podsEmpty,
-          s"The pods (${execPods.values}) did not become ready the resource conditions are ${resourceConditions}")
+          s"None of the pods in ${execPods} became ready")
       }
       // Sleep a small interval to allow execution
       Thread.sleep(3000)
