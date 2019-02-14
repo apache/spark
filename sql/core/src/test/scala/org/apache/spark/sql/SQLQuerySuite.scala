@@ -1477,7 +1477,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val e = intercept[AnalysisException] {
         df.write.json(f.getCanonicalPath)
       }
-      e.message.contains("JSON data source does not support calendarinterval data type.")
+      e.message.contains("Cannot save interval data type into external storage")
     })
 
     val e1 = intercept[AnalysisException] {
