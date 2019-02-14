@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
-import org.apache.spark.sql.functions.{avg, broadcast, col, lit, max}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -338,5 +338,33 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       .max("value")
 
     checkAnswer(df, Seq(Row(1, 3), Row(2, 3)))
+  }
+
+  test("SPARK-26572: evaluate non-deterministic expressions for aggregate results") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val baseTable = Seq(1, 1).toDF("idx")
+
+      // BroadcastHashJoinExec with a HashAggregateExec child containing no aggregate expressions
+      val distinctWithId = baseTable.distinct().withColumn("id", monotonically_increasing_id())
+        .join(baseTable, "idx")
+      assert(distinctWithId.queryExecution.executedPlan.collectFirst {
+        case WholeStageCodegenExec(
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _))) => true
+      }.isDefined)
+      checkAnswer(distinctWithId, Seq(Row(1, 0), Row(1, 0)))
+
+      // BroadcastHashJoinExec with a HashAggregateExec child containing a Final mode aggregate
+      // expression
+      val groupByWithId =
+        baseTable.groupBy("idx").sum().withColumn("id", monotonically_increasing_id())
+        .join(baseTable, "idx")
+      assert(groupByWithId.queryExecution.executedPlan.collectFirst {
+        case WholeStageCodegenExec(
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _))) => true
+      }.isDefined)
+      checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))
+    }
   }
 }
