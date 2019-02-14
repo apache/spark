@@ -253,14 +253,18 @@ class KubernetesSuite extends SparkFunSuite
 
     val execPods = scala.collection.mutable.Map[String, Pod]()
     def checkPodReady(name: String) = {
+      println(s"!!! doing ready check on pod $name")
       val execPod = kubernetesTestComponents.kubernetesClient
         .pods()
         .withLabel("name", name)
         .list()
         .getItems
         .get(0)
+      println(s"!!! god pod $execPod for $name")
       val resourceStatus = execPod.getStatus
+      println(s"!!! status $resourceStatus for $name")
       val conditions = resourceStatus.getConditions().asScala
+      println(s"!!! conditions $conditions for $name")
       val result = conditions
         .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
         .headOption.getOrElse(false)
@@ -344,8 +348,8 @@ class KubernetesSuite extends SparkFunSuite
       Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
         val podsReady = ! execPods.keys.filter(checkPodReady).isEmpty
         val podsEmpty = execPods.values.isEmpty
-        assert(podsReady || podsEmpty,
-          s"None of the pods in ${execPods} became ready")
+        val podsReadyOrDead = podsReady || podsEmpty
+        podsReadyOrDead shouldBe (true)
       }
       // Sleep a small interval to allow execution
       Thread.sleep(3000)
