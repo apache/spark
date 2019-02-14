@@ -29,6 +29,7 @@ ERRORS=$(echo -e "q\n" \
         -Phive-thriftserver \
         -Pspark-ganglia-lgpl \
         -Pdocker-integration-tests \
+	-Pkubernetes-integration-tests \
         scalastyle test:scalastyle \
     | awk '{if($1~/error/)print}' \
 )
