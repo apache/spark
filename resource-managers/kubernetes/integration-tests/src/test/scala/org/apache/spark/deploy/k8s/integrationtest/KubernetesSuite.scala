@@ -273,7 +273,13 @@ class KubernetesSuite extends SparkFunSuite
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-                  val resourceStatus = resource.getStatus
+                  val execPod = kubernetesTestComponents.kubernetesClient
+                    .pods()
+                    .withLabel("name", name)
+                    .list()
+                    .getItems
+                    .get(0)
+                  val resourceStatus = execPod.getStatus
                   val conditions = resourceStatus.getConditions().asScala
                   val result = conditions
                     .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
