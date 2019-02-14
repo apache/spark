@@ -170,7 +170,6 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     while (frameRemainingBytes > 0 && !buffers.isEmpty()) {
       ByteBuf next = nextBufferForFrame(frameRemainingBytes);
       frameRemainingBytes -= next.readableBytes();
-//      frameBuf.addComponent(next).writerIndex(frameBuf.writerIndex() + next.readableBytes());
       frameBuf.addComponent(true, next);
     }
     // If the delta size of frameBuf exceeds the threshold, then we do consolidation
