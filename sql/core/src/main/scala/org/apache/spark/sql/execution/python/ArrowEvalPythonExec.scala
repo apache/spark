@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.StructType
  * This is necessary because sometimes we cannot hold reference of input rows
  * because the some input rows are mutable and can be reused.
  */
-private class BatchIterator[T](iter: Iterator[T], batchSize: Int)
+private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
   extends Iterator[Iterator[T]] {
 
   override def hasNext: Boolean = iter.hasNext

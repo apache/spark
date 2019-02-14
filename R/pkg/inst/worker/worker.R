@@ -76,6 +76,8 @@ outputResult <- function(serializer, output, outputCon) {
     SparkR:::writeRawSerialize(outputCon, output)
   } else if (serializer == "row") {
     SparkR:::writeRowSerialize(outputCon, output)
+  } else if (serializer == "arrow") {
+    SparkR:::writeSerializeInArrow(outputCon, output)
   } else {
     # write lines one-by-one with flag
     lapply(output, function(line) SparkR:::writeString(outputCon, line))
@@ -172,9 +174,15 @@ if (isEmpty != 0) {
     } else if (deserializer == "row") {
       data <- SparkR:::readMultipleObjects(inputCon)
     } else if (deserializer == "arrow" && mode == 2) {
-      dataWithKeys <- SparkR:::readDeserializeInArrow(inputCon)
+      dataWithKeys <- SparkR:::readDeserializeWithKeysInArrow(inputCon)
       keys <- dataWithKeys$keys
       data <- dataWithKeys$data
+    } else if (deserializer == "arrow" && mode == 1) {
+      data <- SparkR:::readDeserializeInArrow(inputCon)
+      # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
+      # rbind.fill might be an anternative to make it faster if plyr is installed.
+      # Also, note that, 'dapply' applies a function to each partition.
+      data <- do.call("rbind", data)
     }
 
     # Timing reading input data for execution
@@ -192,7 +200,7 @@ if (isEmpty != 0) {
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],
                       colNames, computeFunc, data[[i]])
           computeElap <- elapsedSecs()
-          if (deserializer == "arrow") {
+          if (serializer == "arrow") {
             outputs[[length(outputs) + 1L]] <- output
           } else {
             outputResult(serializer, output, outputCon)
@@ -202,22 +210,11 @@ if (isEmpty != 0) {
           outputComputeElapsDiff <- outputComputeElapsDiff + (outputElap - computeElap)
         }
 
-        if (deserializer == "arrow") {
-          # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
-          requireNamespace1 <- requireNamespace
-          if (requireNamespace1("arrow", quietly = TRUE)) {
-            write_arrow <- get("write_arrow", envir = asNamespace("arrow"), inherits = FALSE)
-            # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
-            # rbind.fill might be an anternative to make it faster if plyr is installed.
-            combined <- do.call("rbind", outputs)
-
-            # Likewise, there looks no way to send each batch in streaming format via socket
-            # connection. See ARROW-4512.
-            # So, it writes the whole Arrow streaming-formatted binary at once for now.
-            SparkR:::writeRaw(outputCon, write_arrow(combined, raw()))
-          } else {
-            stop("'arrow' package should be installed.")
-          }
+        if (serializer == "arrow") {
+          # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
+          # rbind.fill might be an anternative to make it faster if plyr is installed.
+          combined <- do.call("rbind", outputs)
+          SparkR:::writeSerializeInArrow(outputCon, combined)
         }
       }
     } else {

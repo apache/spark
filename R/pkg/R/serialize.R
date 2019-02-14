@@ -220,3 +220,18 @@ writeArgs <- function(con, args) {
     }
   }
 }
+
+writeSerializeInArrow <- function(conn, df) {
+  # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
+  requireNamespace1 <- requireNamespace
+  if (requireNamespace1("arrow", quietly = TRUE)) {
+    write_arrow <- get("write_arrow", envir = asNamespace("arrow"), inherits = FALSE)
+
+    # There looks no way to send each batch in streaming format via socket
+    # connection. See ARROW-4512.
+    # So, it writes the whole Arrow streaming-formatted binary at once for now.
+    writeRaw(conn, write_arrow(df, raw()))
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}

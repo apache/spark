@@ -247,15 +247,19 @@ readDeserializeInArrow <- function(inputCon) {
     batches <- RecordBatchStreamReader(arrowData)$batches()
 
     # Read all groupped batches. Tibble -> data.frame is cheap.
-    data <- lapply(batches, function(batch) as.data.frame(as_tibble(batch)))
-
-    # Read keys to map with each groupped batch.
-    keys <- readMultipleObjects(inputCon)
-
-    list(keys = keys, data = data)
+    lapply(batches, function(batch) as.data.frame(as_tibble(batch)))
   } else {
     stop("'arrow' package should be installed.")
   }
+}
+
+readDeserializeWithKeysInArrow <- function(inputCon) {
+  data <- readDeserializeInArrow(inputCon)
+
+  keys <- readMultipleObjects(inputCon)
+
+  # Read keys to map with each groupped batch later.
+  list(keys = keys, data = data)
 }
 
 readRowList <- function(obj) {
