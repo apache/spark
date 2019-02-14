@@ -90,9 +90,4 @@ private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extend
 
 private[spark] object ExecutorLogUrlHandler {
   val CUSTOM_URL_PATTERN_REGEX: Regex = "\\{\\{([A-Za-z0-9_\\-]+)\\}\\}".r
-
-  case class FailedToApplyPattern(
-      reason: String,
-      allPatterns: Set[String],
-      allAttributes: Set[String]) extends RuntimeException(reason)
 }
