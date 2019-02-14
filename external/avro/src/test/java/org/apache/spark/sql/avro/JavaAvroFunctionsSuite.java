@@ -53,22 +53,22 @@ public class JavaAvroFunctionsSuite {
 
   @Test
   public void testToAvroFromAvro() {
-      Dataset<Long> rangeDf = spark.range(10);
-      Dataset<Row> df = rangeDf.select(
-        rangeDf.col("id"), rangeDf.col("id").cast("string").as("str"));
+    Dataset<Long> rangeDf = spark.range(10);
+    Dataset<Row> df = rangeDf.select(
+      rangeDf.col("id"), rangeDf.col("id").cast("string").as("str"));
 
-      Dataset<Row> avroDF =
-        df.select(
-          to_avro(df.col("id")).as("a"),
-          to_avro(df.col("str")).as("b"));
+    Dataset<Row> avroDF =
+      df.select(
+        to_avro(df.col("id")).as("a"),
+        to_avro(df.col("str")).as("b"));
 
-      String avroTypeLong = "{\"type\": \"int\", \"name\": \"id\"}";
-      String avroTypeStr = "{\"type\": \"string\", \"name\": \"str\"}";
+    String avroTypeLong = "{\"type\": \"int\", \"name\": \"id\"}";
+    String avroTypeStr = "{\"type\": \"string\", \"name\": \"str\"}";
 
-      Dataset<Row> actual = avroDF.select(
-        from_avro(avroDF.col("a"), avroTypeLong),
-        from_avro(avroDF.col("b"), avroTypeStr));
+    Dataset<Row> actual = avroDF.select(
+      from_avro(avroDF.col("a"), avroTypeLong),
+      from_avro(avroDF.col("b"), avroTypeStr));
 
-      checkAnswer(actual, df);
+    checkAnswer(actual, df);
   }
 }
