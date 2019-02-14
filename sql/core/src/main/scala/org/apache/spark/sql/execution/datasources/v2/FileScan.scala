@@ -39,7 +39,17 @@ abstract class FileScan(
    * Returns whether this format supports the given [[DataType]] in write path.
    * By default all data types are supported.
    */
-  def supportDataType(dataType: DataType): Boolean = true
+  def supportsDataType(dataType: DataType): Boolean = true
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def formatName(): String = "ORC"
+   * }}}
+   */
+  def formatName: String
 
   protected def partitions: Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
@@ -66,9 +76,9 @@ abstract class FileScan(
 
   override def toBatch: Batch = {
     readSchema.foreach { field =>
-      if (!supportDataType(field.dataType)) {
+      if (!supportsDataType(field.dataType)) {
         throw new AnalysisException(
-          s"$this data source does not support ${field.dataType.catalogString} data type.")
+          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
       }
     }
     this

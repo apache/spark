@@ -108,7 +108,17 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
    * Returns whether this format supports the given [[DataType]] in write path.
    * By default all data types are supported.
    */
-  def supportDataType(dataType: DataType): Boolean = true
+  def supportsDataType(dataType: DataType): Boolean = true
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def formatName(): String = "ORC"
+   * }}}
+   */
+  def formatName: String
 
   private def validateInputs(): Unit = {
     assert(schema != null, "Missing input data schema")
@@ -117,9 +127,9 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
     assert(options.paths().length == 1)
     DataSource.validateSchema(schema)
     schema.foreach { field =>
-      if (!supportDataType(field.dataType)) {
+      if (!supportsDataType(field.dataType)) {
         throw new AnalysisException(
-          s"$this data source does not support ${field.dataType.catalogString} data type.")
+          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
       }
     }
   }

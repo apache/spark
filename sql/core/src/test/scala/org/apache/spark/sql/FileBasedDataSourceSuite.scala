@@ -335,8 +335,12 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         } else {
           ""
         }
-        def errorMessage(format: String): String = {
-          s"$format data source does not support calendarinterval data type."
+        def errorMessage(format: String, isWrite: Boolean): String = {
+          if (isWrite && (useV1 || format != "orc")) {
+            "cannot save interval data type into external storage."
+          } else {
+            s"$format data source does not support calendarinterval data type."
+          }
         }
 
         withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> useV1List) {
@@ -345,13 +349,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
             var msg = intercept[AnalysisException] {
               sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format)))
-
-            msg = intercept[AnalysisException] {
-              spark.udf.register("testType", () => new IntervalData())
-              sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
-            }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format)))
+            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, true)))
           }
 
           // read path
@@ -361,14 +359,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
               spark.range(1).write.format(format).mode("overwrite").save(tempDir)
               spark.read.schema(schema).format(format).load(tempDir).collect()
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format)))
+            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, false)))
 
             msg = intercept[AnalysisException] {
               val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
               spark.range(1).write.format(format).mode("overwrite").save(tempDir)
               spark.read.schema(schema).format(format).load(tempDir).collect()
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format)))
+            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, false)))
           }
         }
       }

@@ -41,9 +41,9 @@ case class OrcScan(
       dataSchema, fileIndex.partitionSchema, readSchema)
   }
 
-  override def supportDataType(dataType: DataType): Boolean = {
-    OrcDataSourceV2.supportDataType(dataType)
+  override def supportsDataType(dataType: DataType): Boolean = {
+    OrcDataSourceV2.supportsDataType(dataType)
   }
 
-  override def toString: String = "ORC"
+  override def formatName: String = "ORC"
 }

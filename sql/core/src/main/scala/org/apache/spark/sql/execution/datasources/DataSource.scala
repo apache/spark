@@ -524,6 +524,9 @@ case class DataSource(
    * Returns a logical plan to write the given [[LogicalPlan]] out to this [[DataSource]].
    */
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
+    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
+      throw new AnalysisException("Cannot save interval data type into external storage.")
+    }
     providingClass.getConstructor().newInstance() match {
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
