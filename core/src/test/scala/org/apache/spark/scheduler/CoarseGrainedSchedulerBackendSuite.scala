@@ -100,10 +100,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         taskEnded.set(true)
       }
-
-      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-
-      }
     }
 
     try {
