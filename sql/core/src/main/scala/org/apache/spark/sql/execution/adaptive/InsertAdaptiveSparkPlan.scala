@@ -34,5 +34,6 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
     case _: ExecutedCommandExec => plan
     case _ if session.sessionState.conf.adaptiveExecutionEnabled =>
       AdaptiveSparkPlan(plan, session.cloneSession())
+    case _ => plan
   }
 }
