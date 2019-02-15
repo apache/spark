@@ -490,6 +490,9 @@ case class DataSource(
       outputColumnNames: Seq[String],
       physicalPlan: SparkPlan): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
+    if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
+      throw new AnalysisException("Cannot save interval data type into external storage.")
+    }
 
     providingClass.getConstructor().newInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -527,6 +530,7 @@ case class DataSource(
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
+
     providingClass.getConstructor().newInstance() match {
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
