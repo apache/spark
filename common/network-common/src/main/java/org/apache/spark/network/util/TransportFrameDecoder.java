@@ -187,6 +187,8 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     // Reset buf and size for next frame.
     ByteBuf frame = frameBuf;
     frameBuf = null;
+    consolidatedFrameBufSize = 0;
+    consolidatedNumComponents = 0;
     nextFrameSize = UNKNOWN_FRAME_SIZE;
     return frame;
   }
