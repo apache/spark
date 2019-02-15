@@ -648,9 +648,11 @@ abstract class HiveTypedImperativeAggregate[T] extends TypedImperativeAggregate[
 
   final override def update(buffer: InternalRow, input: InternalRow): Unit = {
     buffer(mutableAggBufferOffset) = update(getBufferObject(buffer), input)
+    partial2ModeBuffer = buffer.copy()
   }
 
   final override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
+    partial2ModeBuffer(mutableAggBufferOffset) = createPartial2ModeAggregationBuffer()
     val bufferObject = getBufferObject(partial2ModeBuffer)
     // The inputBuffer stores serialized aggregation buffer object produced by partial aggregate
     val inputObject = deserialize(inputBuffer.getBinary(inputAggBufferOffset))
