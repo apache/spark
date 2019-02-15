@@ -481,6 +481,18 @@ To use a custom metrics.properties for the application master and executors, upd
       <td>`http://` or `https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
     </tr>
     <tr>
+      <td>{{NM_HOST}}</td>
+      <td>The "host" of node where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{NM_PORT}}</td>
+      <td>The "port" of node manager where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{NM_HTTP_PORT}}</td>
+      <td>The "port" of node manager's http server where container was run.</td>
+    </tr>
+    <tr>
       <td>{{NM_HTTP_ADDRESS}}</td>
       <td>Http URI of the node on which the container is allocated.</td>
     </tr>
@@ -501,6 +513,12 @@ To use a custom metrics.properties for the application master and executors, upd
       <td>`stdout`, `stderr`.</td>
     </tr>
 </table>
+
+For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
+
+ `{{HTTP_SCHEME}}<JHS_HOST>:<JHS_PORT>/jobhistory/logs/{{NM_HOST}}:{{NM_PORT}}/{{CONTAINER_ID}}/{{CONTAINER_ID}}/{{USER}}/{{FILE_NAME}}?start=-4096`
+
+ NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
 
 # Important notes
 
