@@ -265,7 +265,7 @@ Each row in the source has the following schema:
 </tr>
 <tr>
   <td>timestamp</td>
-  <td>long</td>
+  <td>timestamp</td>
 </tr>
 <tr>
   <td>timestampType</td>
