@@ -37,28 +37,32 @@ class OrcDeserializer(
 
   private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
+  // `fieldWriters(index)` is
+  // - null if the respective source column is missing, since the output value
+  //   is always null in this case
+  // - a function that updates target column `index` otherwise.
   private val fieldWriters: Array[WritableComparable[_] => Unit] = {
     requiredSchema.zipWithIndex
-      // The value of missing columns are always null, do not need writers.
-      .filterNot { case (_, index) => requestedColIds(index) == -1 }
       .map { case (f, index) =>
-        val writer = newWriter(f.dataType, new RowUpdater(resultRow))
-        (value: WritableComparable[_]) => writer(index, value)
+        if (requestedColIds(index) == -1) {
+          null
+        } else {
+          val writer = newWriter(f.dataType, new RowUpdater(resultRow))
+          (value: WritableComparable[_]) => writer(index, value)
+        }
       }.toArray
   }
 
   def deserialize(orcStruct: OrcStruct): InternalRow = {
-    var fieldWriterIndex = 0
     var targetColumnIndex = 0
     while (targetColumnIndex < requestedColIds.length) {
-      if (requestedColIds(targetColumnIndex) != -1) {
-        val value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
+      if (fieldWriters(targetColumnIndex) != null) {
+        var value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
         if (value == null) {
           resultRow.setNullAt(targetColumnIndex)
         } else {
-          fieldWriters(fieldWriterIndex)(value)
+          fieldWriters(targetColumnIndex)(value)
         }
-        fieldWriterIndex += 1
       }
       targetColumnIndex += 1
     }
