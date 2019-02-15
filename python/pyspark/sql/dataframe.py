@@ -2107,14 +2107,13 @@ class DataFrame(object):
             # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.types import _check_dataframe_convert_date, \
+                    from pyspark.sql.types import _arrow_table_to_pandas, \
                         _check_dataframe_localize_timestamps
                     import pyarrow
                     batches = self._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
-                        pdf = table.to_pandas()
-                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        pdf = _arrow_table_to_pandas(table, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
