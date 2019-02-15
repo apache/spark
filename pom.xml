@@ -910,6 +910,10 @@
             <artifactId>junit</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>jsr311-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>com.sun.jersey</groupId>
             <artifactId>*</artifactId>
           </exclusion>
@@ -2823,9 +2827,9 @@
     <profile>
       <id>hadoop-3.1</id>
       <properties>
-        <hadoop.version>3.1.0</hadoop.version>
-        <curator.version>2.12.0</curator.version>
-        <zookeeper.version>3.4.9</zookeeper.version>
+        <hadoop.version>3.2.0</hadoop.version>
+        <curator.version>2.13.0</curator.version>
+        <zookeeper.version>3.4.13</zookeeper.version>
         <hive.group>org.apache.hive</hive.group>
         <hive.classifier>core</hive.classifier>
         <hive.version>2.3.4</hive.version>
@@ -2836,6 +2840,7 @@
         <calcite.version>1.10.0</calcite.version>
         <hive.parquet.group>org.apache.parquet</hive.parquet.group>
         <datanucleus-core.version>4.1.17</datanucleus-core.version>
+        <jetty.version>9.3.24.v20180605</jetty.version>
       </properties>
       <dependencies>
         <dependency>
