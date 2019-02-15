@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.Strategy
+import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition}
@@ -155,7 +154,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(deleteExpr).map {
         filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
-          throw new SparkException(s"Cannot translate expression to source filter: $filter"))
+          throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
 
       OverwriteByExpressionExec(
