@@ -79,13 +79,16 @@ class AvroFunctionsSuite extends QueryTest with SharedSQLContext with SQLTestUti
 
     intercept[SparkException] {
       avroStructDF.select(
-        from_avro('avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
+        org.apache.spark.sql.avro.functions.from_avro(
+          'avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
     }
 
     // For PERMISSIVE mode, the result should be row of null columns.
     val expected = (0 until count).map(_ => Row(Row(null, null)))
     checkAnswer(
-      avroStructDF.select(from_avro('avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
+      avroStructDF.select(
+        org.apache.spark.sql.avro.functions.from_avro(
+          'avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
       expected)
   }
 

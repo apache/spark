@@ -78,7 +78,7 @@ Both functions are currently only available in Scala and Java.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-import org.apache.spark.sql.avro._
+import org.apache.spark.sql.avro.functions._
 
 // `from_avro` requires Avro schema in JSON string format.
 val jsonFormatSchema = new String(Files.readAllBytes(Paths.get("./examples/src/main/resources/user.avsc")))
@@ -109,7 +109,8 @@ val query = output
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import org.apache.spark.sql.avro.*;
+import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.avro.functions.*;
 
 // `from_avro` requires Avro schema in JSON string format.
 String jsonFormatSchema = new String(Files.readAllBytes(Paths.get("./examples/src/main/resources/user.avsc")));
