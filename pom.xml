@@ -230,6 +230,8 @@
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
     <CodeCacheSize>512m</CodeCacheSize>
+    <!-- with the JDK11 profile, this will be replaces to open modules to reflective access -->
+    <jdk11.module.args></jdk11.module.args>
   </properties>
   <repositories>
     <repository>
@@ -2117,7 +2119,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${jdk11.module.args}</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2167,7 +2169,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${jdk11.module.args}</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -2654,6 +2656,29 @@
           <scope>compile</scope>
         </dependency>
       </dependencies>
+    </profile>
+
+    <profile>
+      <id>JDK11</id>
+      <dependencyManagement>
+        <dependencies>
+          <!-- see https://www.jesperdj.com/2018/09/30/jaxb-on-java-9-10-11-and-beyond/ -->
+          <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+            <version>2.3.1</version>
+          </dependency>
+          <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <version>2.3.1</version>
+            <scope>runtime</scope>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
+      <properties>
+        <jdk11.module.args>--add-opens java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.util.concurrent=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.invoke=ALL-UNNAMED --illegal-access=warn</jdk11.module.args>
+      </properties>
     </profile>
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->

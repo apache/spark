@@ -150,6 +150,21 @@
         </dependency>
       </dependencies>
     </profile>
+    <profile>
+      <id>JDK11</id>
+      <dependencies>
+        <!-- see https://www.jesperdj.com/2018/09/30/jaxb-on-java-9-10-11-and-beyond/ -->
+        <dependency>
+          <groupId>javax.xml.bind</groupId>
+          <artifactId>jaxb-api</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.glassfish.jaxb</groupId>
+          <artifactId>jaxb-runtime</artifactId>
+          <scope>runtime</scope>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 
   <build>
