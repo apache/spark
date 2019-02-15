@@ -2422,7 +2422,7 @@ def from_avro(col, jsonFormatSchema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> avroDf = df.select(to_avro(df.value).alias("avro"))
     >>> avroDf.collect()
-    [Row(avro=bytearray(b'\x00\x00\x04\x00\nAlice'))]
+    [Row(avro=bytearray(b'\\x00\\x00\\x04\\x00\\nAlice'))]
     >>> jsonFormatSchema = '''{"type":"record","name":"topLevelRecord","fields":
     ...     [{"name":"avro","type":[{"type":"record","name":"value","namespace":"topLevelRecord",
     ...     "fields":[{"name":"age","type":["long","null"]},
@@ -2452,7 +2452,7 @@ def to_avro(col):
     >>> data = [(1, Row(name='Alice', age=2))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_avro(df.value).alias("avro")).collect()
-    [Row(avro=bytearray(b'\x00\x00\x04\x00\nAlice'))]
+    [Row(avro=bytearray(b'\\x00\\x00\\x04\\x00\\nAlice'))]
     """
 
     sc = SparkContext._active_spark_context
