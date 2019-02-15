@@ -91,10 +91,11 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
     val scoreAndLabelsWithWeights =
-      dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType),
+      dataset.select(
+        col($(rawPredictionCol)),
+        col($(labelCol)).cast(DoubleType),
         if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0)
-        else col($(weightCol)).cast(DoubleType))
-        .rdd.map {
+        else col($(weightCol)).cast(DoubleType)).rdd.map {
         case Row(rawPrediction: Vector, label: Double, weight: Double) =>
           (rawPrediction(1), label, weight)
         case Row(rawPrediction: Double, label: Double, weight: Double) =>

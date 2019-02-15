@@ -63,12 +63,12 @@ class BinaryClassificationMetrics @Since("3.0.0") (
   def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 
   /**
-    * Retrieves the score and labels (for binary compatibility).
-    * @return The score and labels.
-    */
+   * Retrieves the score and labels (for binary compatibility).
+   * @return The score and labels.
+   */
   @Since("1.0.0")
   def scoreAndLabels: RDD[(Double, Double)] = {
-    scoreLabelsWeight.map(values => (values._1, values._2._1))
+    scoreLabelsWeight.map { case (prediction, (label, _)) => (prediction, label) }
   }
 
   /**
@@ -168,7 +168,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     // negatives within each bin, and then sort by score values in descending order.
     val counts = scoreLabelsWeight.combineByKey(
       createCombiner = (labelAndWeight: (Double, Double)) =>
-        new BinaryLabelCounter(0.0, 0.0) += (labelAndWeight._1, labelAndWeight._2),
+        new BinaryLabelCounter(labelAndWeight._1, labelAndWeight._2),
       mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>
         c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
