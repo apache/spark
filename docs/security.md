@@ -756,6 +756,11 @@ If an application needs to interact with other secure Hadoop filesystems, their 
 explicitly provided to Spark at launch time. This is done by listing them in the
 `spark.kerberos.access.hadoopFileSystems` property, described in the configuration section below.
 
+Spark also supports custom delegation token providers using the Java Services
+mechanism (see `java.util.ServiceLoader`). Implementations of
+`org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
+by listing their names in the corresponding file in the jar's `META-INF/services` directory.
+
 Delegation token support is currently only supported in YARN and Mesos modes. Consult the
 deployment-specific page for more information.
 

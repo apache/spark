@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.security.HadoopDelegationTokenProvider
 
 private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationTokenProvider {
   ExceptionThrowingDelegationTokenProvider.constructed = true
