@@ -69,7 +69,7 @@ trait ReadSchemaTest extends QueryTest with SQLTestUtils with SharedSQLContext {
 }
 
 /**
- * Add column (Case 1).
+ * Add column (Case 1-1).
  * This test suite assumes that the missing column should be `null`.
  */
 trait AddColumnTest extends ReadSchemaTest {
@@ -108,6 +108,9 @@ trait AddColumnTest extends ReadSchemaTest {
   }
 }
 
+/**
+ * Add column into the middle (Case 1-2).
+ */
 trait AddColumnIntoTheMiddleTest extends ReadSchemaTest {
   import testImplicits._
 
