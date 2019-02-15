@@ -178,7 +178,8 @@ public class TaskMemoryManager {
             if (released > 0) {
               logger.debug("Task {} released {} from {} for {}", taskAttemptId,
                 Utils.bytesToString(released), c, consumer);
-              got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
+              long memToAcquire = released < required - got ? released : required - got;
+              got += memoryManager.acquireExecutionMemory(memToAcquire, taskAttemptId, mode);
               if (got >= required) {
                 break;
               }
@@ -209,7 +210,8 @@ public class TaskMemoryManager {
           if (released > 0) {
             logger.debug("Task {} released {} from itself ({})", taskAttemptId,
               Utils.bytesToString(released), consumer);
-            got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
+            long memToAcquire = released < required - got ? released : required - got;
+            got += memoryManager.acquireExecutionMemory(memToAcquire, taskAttemptId, mode);
           }
         } catch (ClosedByInterruptException e) {
           // This called by user to kill a task (e.g: speculative task).
