@@ -632,7 +632,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
     val time = Utils.timeIt(2)({}, Some(prepare))
     require(cnt === 2, "prepare should be called twice")
-    require(time < 500, "preparation time should not count")
+    require(time < TimeUnit.MILLISECONDS.toNanos(500), "preparation time should not count")
   }
 
   test("fetch hcfs dir") {
@@ -907,7 +907,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
       // Start up a process that runs 'sleep 10'. Terminate the process and assert it takes
       // less time and the process is no longer there.
-      val startTimeMs = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       val process = new ProcessBuilder("sleep", "10").start()
       val pid = getPid(process)
       try {
@@ -915,8 +915,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         val terminated = Utils.terminateProcess(process, 5000)
         assert(terminated.isDefined)
         process.waitFor(5, TimeUnit.SECONDS)
-        val durationMs = System.currentTimeMillis() - startTimeMs
-        assert(durationMs < 5000)
+        val durationNs = System.nanoTime() - startTimeNs
+        assert(durationNs < TimeUnit.SECONDS.toNanos(5))
         assert(!pidExists(pid))
       } finally {
         // Forcibly kill the test process just in case.
@@ -943,12 +943,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(pidExists(pid))
         try {
           signal(pid, "SIGSTOP")
-          val start = System.currentTimeMillis()
+          val startNs = System.nanoTime()
           val terminated = Utils.terminateProcess(process, 5000)
           assert(terminated.isDefined)
           process.waitFor(5, TimeUnit.SECONDS)
-          val duration = System.currentTimeMillis() - start
-          assert(duration < 6000) // add a little extra time to allow a force kill to finish
+          val duration = System.nanoTime() - startNs
+          // add a little extra time to allow a force kill to finish
+          assert(duration < TimeUnit.SECONDS.toNanos(6))
           assert(!pidExists(pid))
         } finally {
           signal(pid, "SIGKILL")

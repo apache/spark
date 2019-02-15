@@ -31,7 +31,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.deploy.mesos.config._
+import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
@@ -59,8 +59,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos supports killing and limiting executors") {
     setBackend()
-    sparkConf.set("spark.driver.host", "driverHost")
-    sparkConf.set("spark.driver.port", "1234")
+    sparkConf.set(DRIVER_HOST_ADDRESS, "driverHost")
+    sparkConf.set(DRIVER_PORT, 1234)
 
     val minMem = backend.executorMemory(sc)
     val minCpu = 4
@@ -109,7 +109,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos supports spark.executor.cores") {
     val executorCores = 4
-    setBackend(Map("spark.executor.cores" -> executorCores.toString))
+    setBackend(Map(EXECUTOR_CORES.key -> executorCores.toString))
 
     val executorMemory = backend.executorMemory(sc)
     val offers = List(Resources(executorMemory * 2, executorCores + 1))
@@ -138,7 +138,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos does not acquire more than spark.cores.max") {
     val maxCores = 10
-    setBackend(Map("spark.cores.max" -> maxCores.toString))
+    setBackend(Map(CORES_MAX.key -> maxCores.toString))
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(Resources(executorMemory, maxCores + 1)))
@@ -166,7 +166,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos does not acquire more than spark.mesos.gpus.max") {
     val maxGpus = 5
-    setBackend(Map("spark.mesos.gpus.max" -> maxGpus.toString))
+    setBackend(Map(mesosConfig.MAX_GPUS.key -> maxGpus.toString))
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(Resources(executorMemory, 1, maxGpus + 1)))
@@ -180,14 +180,14 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
 
   test("mesos declines offers that violate attribute constraints") {
-    setBackend(Map("spark.mesos.constraints" -> "x:true"))
+    setBackend(Map(mesosConfig.CONSTRAINTS.key -> "x:true"))
     offerResources(List(Resources(backend.executorMemory(sc), 4)))
     verifyDeclinedOffer(driver, createOfferId("o1"), true)
   }
 
   test("mesos declines offers with a filter when reached spark.cores.max") {
     val maxCores = 3
-    setBackend(Map("spark.cores.max" -> maxCores.toString))
+    setBackend(Map(CORES_MAX.key -> maxCores.toString))
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(
@@ -202,8 +202,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val maxCores = 4
     val executorCores = 3
     setBackend(Map(
-      "spark.cores.max" -> maxCores.toString,
-      "spark.executor.cores" -> executorCores.toString
+      CORES_MAX.key -> maxCores.toString,
+      EXECUTOR_CORES.key -> executorCores.toString
     ))
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(
@@ -218,8 +218,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val maxCores = 4
     val executorCores = 2
     setBackend(Map(
-      "spark.cores.max" -> maxCores.toString,
-      "spark.executor.cores" -> executorCores.toString
+      CORES_MAX.key -> maxCores.toString,
+      EXECUTOR_CORES.key -> executorCores.toString
     ))
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(
@@ -235,8 +235,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("mesos assigns tasks round-robin on offers") {
     val executorCores = 4
     val maxCores = executorCores * 2
-    setBackend(Map("spark.executor.cores" -> executorCores.toString,
-      "spark.cores.max" -> maxCores.toString))
+    setBackend(Map(EXECUTOR_CORES.key -> executorCores.toString,
+      CORES_MAX.key -> maxCores.toString))
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(
@@ -249,7 +249,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos creates multiple executors on a single slave") {
     val executorCores = 4
-    setBackend(Map("spark.executor.cores" -> executorCores.toString))
+    setBackend(Map(EXECUTOR_CORES.key -> executorCores.toString))
 
     // offer with room for two executors
     val executorMemory = backend.executorMemory(sc)
@@ -370,7 +370,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("failover timeout is set in created scheduler driver") {
     val failoverTimeoutIn = 3600.0
-    initializeSparkConf(Map(DRIVER_FAILOVER_TIMEOUT.key -> failoverTimeoutIn.toString))
+    initializeSparkConf(Map(mesosConfig.DRIVER_FAILOVER_TIMEOUT.key -> failoverTimeoutIn.toString))
     sc = new SparkContext(sparkConf)
 
     val taskScheduler = mock[TaskSchedulerImpl]
@@ -404,7 +404,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("honors unset spark.mesos.containerizer") {
-    setBackend(Map("spark.mesos.executor.docker.image" -> "test"))
+    setBackend(Map(mesosConfig.EXECUTOR_DOCKER_IMAGE.key -> "test"))
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
@@ -417,8 +417,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("honors spark.mesos.containerizer=\"mesos\"") {
     setBackend(Map(
-      "spark.mesos.executor.docker.image" -> "test",
-      "spark.mesos.containerizer" -> "mesos"))
+      mesosConfig.EXECUTOR_DOCKER_IMAGE.key -> "test",
+      mesosConfig.CONTAINERIZER.key -> "mesos"))
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
@@ -431,10 +431,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("docker settings are reflected in created tasks") {
     setBackend(Map(
-      "spark.mesos.executor.docker.image" -> "some_image",
-      "spark.mesos.executor.docker.forcePullImage" -> "true",
-      "spark.mesos.executor.docker.volumes" -> "/host_vol:/container_vol:ro",
-      "spark.mesos.executor.docker.portmaps" -> "8080:80:tcp"
+      mesosConfig.EXECUTOR_DOCKER_IMAGE.key -> "some_image",
+      mesosConfig.EXECUTOR_DOCKER_FORCE_PULL_IMAGE.key -> "true",
+      mesosConfig.EXECUTOR_DOCKER_VOLUMES.key -> "/host_vol:/container_vol:ro",
+      mesosConfig.EXECUTOR_DOCKER_PORT_MAPS.key -> "8080:80:tcp"
     ))
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
@@ -469,7 +469,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("force-pull-image option is disabled by default") {
     setBackend(Map(
-      "spark.mesos.executor.docker.image" -> "some_image"
+      mesosConfig.EXECUTOR_DOCKER_IMAGE.key -> "some_image"
     ))
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
@@ -492,7 +492,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("mesos supports spark.executor.uri") {
     val url = "spark.spark.spark.com"
     setBackend(Map(
-      "spark.executor.uri" -> url
+      mesosConfig.EXECUTOR_URI.key -> url
     ), null)
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
@@ -507,8 +507,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("mesos supports setting fetcher cache") {
     val url = "spark.spark.spark.com"
     setBackend(Map(
-      "spark.mesos.fetcherCache.enable" -> "true",
-      "spark.executor.uri" -> url
+      mesosConfig.ENABLE_FETCHER_CACHE.key -> "true",
+      mesosConfig.EXECUTOR_URI.key -> url
     ), null)
     val offers = List(Resources(backend.executorMemory(sc), 1))
     offerResources(offers)
@@ -521,8 +521,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("mesos supports disabling fetcher cache") {
     val url = "spark.spark.spark.com"
     setBackend(Map(
-      "spark.mesos.fetcherCache.enable" -> "false",
-      "spark.executor.uri" -> url
+      mesosConfig.ENABLE_FETCHER_CACHE.key -> "false",
+      mesosConfig.EXECUTOR_URI.key -> url
     ), null)
     val offers = List(Resources(backend.executorMemory(sc), 1))
     offerResources(offers)
@@ -546,7 +546,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("mesos sets configurable labels on tasks") {
     val taskLabelsString = "mesos:test,label:test"
     setBackend(Map(
-      "spark.mesos.task.labels" -> taskLabelsString
+      mesosConfig.TASK_LABELS.key -> taskLabelsString
     ))
 
     // Build up the labels
@@ -568,8 +568,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos supports spark.mesos.network.name and spark.mesos.network.labels") {
     setBackend(Map(
-      "spark.mesos.network.name" -> "test-network-name",
-      "spark.mesos.network.labels" -> "key1:val1,key2:val2"
+      mesosConfig.NETWORK_NAME.key -> "test-network-name",
+      mesosConfig.NETWORK_LABELS.key -> "key1:val1,key2:val2"
     ))
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
@@ -590,7 +590,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("supports spark.scheduler.minRegisteredResourcesRatio") {
     val expectedCores = 1
     setBackend(Map(
-      "spark.cores.max" -> expectedCores.toString,
+      CORES_MAX.key -> expectedCores.toString,
       SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO.key -> "1.0"))
 
     val offers = List(Resources(backend.executorMemory(sc), expectedCores))
@@ -606,7 +606,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     setBackend(Map(
       DYN_ALLOCATION_ENABLED.key -> "true",
       DYN_ALLOCATION_TESTING.key -> "true",
-      "spark.locality.wait" -> "1s"))
+      LOCALITY_WAIT.key -> "1s"))
 
     assert(backend.getExecutorIds().isEmpty)
 
@@ -652,22 +652,26 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("Creates an env-based reference secrets.") {
-    val launchedTasks = launchExecutorTasks(configEnvBasedRefSecrets(executorSecretConfig))
+    val launchedTasks = launchExecutorTasks(
+      configEnvBasedRefSecrets(mesosConfig.executorSecretConfig))
     verifyEnvBasedRefSecrets(launchedTasks)
   }
 
   test("Creates an env-based value secrets.") {
-    val launchedTasks = launchExecutorTasks(configEnvBasedValueSecrets(executorSecretConfig))
+    val launchedTasks = launchExecutorTasks(
+      configEnvBasedValueSecrets(mesosConfig.executorSecretConfig))
     verifyEnvBasedValueSecrets(launchedTasks)
   }
 
   test("Creates file-based reference secrets.") {
-    val launchedTasks = launchExecutorTasks(configFileBasedRefSecrets(executorSecretConfig))
+    val launchedTasks = launchExecutorTasks(
+      configFileBasedRefSecrets(mesosConfig.executorSecretConfig))
     verifyFileBasedRefSecrets(launchedTasks)
   }
 
   test("Creates a file-based value secrets.") {
-    val launchedTasks = launchExecutorTasks(configFileBasedValueSecrets(executorSecretConfig))
+    val launchedTasks = launchExecutorTasks(
+      configFileBasedValueSecrets(mesosConfig.executorSecretConfig))
     verifyFileBasedValueSecrets(launchedTasks)
   }
 
@@ -687,7 +691,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private def registerMockExecutor(executorId: String, slaveId: String, cores: Integer) = {
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
-    val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty)
+    val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
+      Map.empty)
 
     backend.driverEndpoint.askSync[Boolean](message)
   }
@@ -769,7 +774,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     sparkConf = (new SparkConf)
       .setMaster("local[*]")
       .setAppName("test-mesos-dynamic-alloc")
-      .set("spark.mesos.driver.webui.url", "http://webui")
+      .set(mesosConfig.DRIVER_WEBUI_URL, "http://webui")
 
     if (home != null) {
       sparkConf.setSparkHome(home)

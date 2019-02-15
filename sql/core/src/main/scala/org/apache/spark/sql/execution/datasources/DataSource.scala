@@ -412,7 +412,7 @@ case class DataSource(
           hs.partitionSchema.map(_.name),
           "in the partition schema",
           equality)
-        DataSourceUtils.verifyReadSchema(hs.fileFormat, hs.dataSchema)
+        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
       case _ =>
         SchemaUtils.checkColumnNameDuplication(
           relation.schema.map(_.name),
@@ -763,7 +763,7 @@ object DataSource extends Logging {
    * supplied schema is not empty.
    * @param schema
    */
-  private def validateSchema(schema: StructType): Unit = {
+  def validateSchema(schema: StructType): Unit = {
     def hasEmptySchema(schema: StructType): Boolean = {
       schema.size == 0 || schema.find {
         case StructField(_, b: StructType, _, _) => hasEmptySchema(b)

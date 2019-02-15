@@ -147,15 +147,7 @@ object FileSourceStrategy extends Strategy with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
-      // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we do not need to
-      // worry about case sensitivity anymore.
-      val normalizedFilters = filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
-        e transform {
-          case a: AttributeReference =>
-            a.withName(l.output.find(_.semanticEquals(a)).get.name)
-        }
-      }
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, l.output)
 
       val partitionColumns =
         l.resolve(

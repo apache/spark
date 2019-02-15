@@ -907,6 +907,12 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
+      .doc("When true, enable temporary checkpoint locations force delete.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
     .internal()
     .doc("The minimum number of batches that must be retained and made recoverable.")
@@ -1436,6 +1442,14 @@ object SQLConf {
     .internal()
     .doc("A comma-separated list of data source short names or fully qualified data source" +
       " register class names for which data source V2 read paths are disabled. Reads from these" +
+      " sources will fall back to the V1 sources.")
+    .stringConf
+    .createWithDefault("")
+
+  val USE_V1_SOURCE_WRITER_LIST = buildConf("spark.sql.sources.write.useV1SourceList")
+    .internal()
+    .doc("A comma-separated list of data source short names or fully qualified data source" +
+      " register class names for which data source V2 write paths are disabled. Writes from these" +
       " sources will fall back to the V1 sources.")
     .stringConf
     .createWithDefault("")
@@ -2025,6 +2039,8 @@ class SQLConf extends Serializable with Logging {
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
   def userV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
+
+  def userV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 

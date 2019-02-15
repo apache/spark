@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{InputStream, IOException}
 import java.nio.ByteBuffer
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -31,7 +31,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
@@ -92,7 +92,7 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] var numBlocksProcessed = 0
 
-  private[this] val startTime = System.currentTimeMillis
+  private[this] val startTimeNs = System.nanoTime()
 
   /** Local blocks to fetch, excluding zero-sized blocks. */
   private[this] val localBlocks = scala.collection.mutable.LinkedHashSet[BlockId]()
@@ -160,6 +160,8 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
+  private[this] val onCompleteCallback = new ShuffleFetchCompletionListener(this)
+
   initialize()
 
   // Decrements the buffer reference count.
@@ -192,7 +194,7 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
    */
-  private[this] def cleanup() {
+  private[storage] def cleanup() {
     synchronized {
       isZombie = true
     }
@@ -248,7 +250,7 @@ final class ShuffleBlockFetcherIterator(
             logDebug("remainingBlocks: " + remainingBlocks)
           }
         }
-        logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+        logTrace(s"Got remote block $blockId after ${Utils.getUsedTimeNs(startTimeNs)}")
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
@@ -364,7 +366,7 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    context.addTaskCompletionListener[Unit](_ => cleanup())
+    context.addTaskCompletionListener(onCompleteCallback)
 
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()
@@ -378,11 +380,11 @@ final class ShuffleBlockFetcherIterator(
     fetchUpToMaxBytes()
 
     val numFetches = remoteRequests.size - fetchRequests.size
-    logInfo("Started " + numFetches + " remote fetches in" + Utils.getUsedTimeMs(startTime))
+    logInfo(s"Started $numFetches remote fetches in ${Utils.getUsedTimeNs(startTimeNs)}")
 
     // Get Local Blocks
     fetchLocalBlocks()
-    logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime))
+    logDebug(s"Got local blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
   }
 
   override def hasNext: Boolean = !isZombie && (numBlocksProcessed < numBlocksToFetch)
@@ -409,10 +411,10 @@ final class ShuffleBlockFetcherIterator(
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
     while (!isZombie && result == null) {
-      val startFetchWait = System.currentTimeMillis()
+      val startFetchWait = System.nanoTime()
       result = results.take()
-      val stopFetchWait = System.currentTimeMillis()
-      shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
+      val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
+      shuffleMetrics.incFetchWaitTime(fetchWaitTime)
 
       result match {
         case r @ SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
@@ -507,6 +509,11 @@ final class ShuffleBlockFetcherIterator(
     }
     currentResult = result.asInstanceOf[SuccessFetchResult]
     (currentResult.blockId, new BufferReleasingInputStream(input, this))
+  }
+
+  def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
+    CompletionIterator[(BlockId, InputStream), this.type](this,
+      onCompleteCallback.onComplete(context))
   }
 
   private def fetchUpToMaxBytes(): Unit = {
@@ -607,6 +614,27 @@ private class BufferReleasingInputStream(
   override def read(b: Array[Byte], off: Int, len: Int): Int = delegate.read(b, off, len)
 
   override def reset(): Unit = delegate.reset()
+}
+
+/**
+ * A listener to be called at the completion of the ShuffleBlockFetcherIterator
+ * @param data the ShuffleBlockFetcherIterator to process
+ */
+private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterator)
+  extends TaskCompletionListener {
+
+  override def onTaskCompletion(context: TaskContext): Unit = {
+    if (data != null) {
+      data.cleanup()
+      // Null out the referent here to make sure we don't keep a reference to this
+      // ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
+      // collected during GC. Otherwise we can hold metadata on block locations(blocksByAddress)
+      data = null
+    }
+  }
+
+  // Just an alias for onTaskCompletion to avoid confusing
+  def onComplete(context: TaskContext): Unit = this.onTaskCompletion(context)
 }
 
 private[storage]

@@ -45,7 +45,7 @@ private[spark] class RRunner[U](
     colNames: Array[String] = null,
     mode: Int = RRunnerModes.RDD)
   extends Logging {
-  private var bootTime: Double = _
+  protected var bootTime: Double = _
   private var dataStream: DataInputStream = _
   val readData = numPartitions match {
     case -1 =>
@@ -91,28 +91,70 @@ private[spark] class RRunner[U](
     }
 
     try {
-      return new Iterator[U] {
-        def next(): U = {
-          val obj = _nextObj
-          if (hasNext) {
-            _nextObj = read()
-          }
-          obj
-        }
-
-        var _nextObj = read()
-
-        def hasNext(): Boolean = {
-          val hasMore = (_nextObj != null)
-          if (!hasMore) {
-            dataStream.close()
-          }
-          hasMore
-        }
-      }
+      newReaderIterator(dataStream, errThread)
     } catch {
       case e: Exception =>
-        throw new SparkException("R computation failed with\n " + errThread.getLines())
+        throw new SparkException("R computation failed with\n " + errThread.getLines(), e)
+    }
+  }
+
+  protected def newReaderIterator(
+      dataStream: DataInputStream, errThread: BufferedStreamThread): Iterator[U] = {
+    new Iterator[U] {
+      def next(): U = {
+        val obj = _nextObj
+        if (hasNext()) {
+          _nextObj = read()
+        }
+        obj
+      }
+
+      private var _nextObj = read()
+
+      def hasNext(): Boolean = {
+        val hasMore = _nextObj != null
+        if (!hasMore) {
+          dataStream.close()
+        }
+        hasMore
+      }
+    }
+  }
+
+  protected def writeData(
+      dataOut: DataOutputStream,
+      printOut: PrintStream,
+      iter: Iterator[_]): Unit = {
+    def writeElem(elem: Any): Unit = {
+      if (deserializer == SerializationFormats.BYTE) {
+        val elemArr = elem.asInstanceOf[Array[Byte]]
+        dataOut.writeInt(elemArr.length)
+        dataOut.write(elemArr)
+      } else if (deserializer == SerializationFormats.ROW) {
+        dataOut.write(elem.asInstanceOf[Array[Byte]])
+      } else if (deserializer == SerializationFormats.STRING) {
+        // write string(for StringRRDD)
+        // scalastyle:off println
+        printOut.println(elem)
+        // scalastyle:on println
+      }
+    }
+
+    for (elem <- iter) {
+      elem match {
+        case (key, innerIter: Iterator[_]) =>
+          for (innerElem <- innerIter) {
+            writeElem(innerElem)
+          }
+          // Writes key which can be used as a boundary in group-aggregate
+          dataOut.writeByte('r')
+          writeElem(key)
+        case (key, value) =>
+          writeElem(key)
+          writeElem(value)
+        case _ =>
+          writeElem(elem)
+      }
     }
   }
 
@@ -171,37 +213,7 @@ private[spark] class RRunner[U](
 
           val printOut = new PrintStream(stream)
 
-          def writeElem(elem: Any): Unit = {
-            if (deserializer == SerializationFormats.BYTE) {
-              val elemArr = elem.asInstanceOf[Array[Byte]]
-              dataOut.writeInt(elemArr.length)
-              dataOut.write(elemArr)
-            } else if (deserializer == SerializationFormats.ROW) {
-              dataOut.write(elem.asInstanceOf[Array[Byte]])
-            } else if (deserializer == SerializationFormats.STRING) {
-              // write string(for StringRRDD)
-              // scalastyle:off println
-              printOut.println(elem)
-              // scalastyle:on println
-            }
-          }
-
-          for (elem <- iter) {
-            elem match {
-              case (key, innerIter: Iterator[_]) =>
-                for (innerElem <- innerIter) {
-                  writeElem(innerElem)
-                }
-                // Writes key which can be used as a boundary in group-aggregate
-                dataOut.writeByte('r')
-                writeElem(key)
-              case (key, value) =>
-                writeElem(key)
-                writeElem(value)
-              case _ =>
-                writeElem(elem)
-            }
-          }
+          writeData(dataOut, printOut, iter)
 
           stream.flush()
         } catch {
@@ -261,7 +273,7 @@ private[spark] class RRunner[U](
     }
   }
 
-  private def readByteArrayData(length: Int): Array[Byte] = {
+  protected def readByteArrayData(length: Int): Array[Byte] = {
     length match {
       case length if length > 0 =>
         val obj = new Array[Byte](length)
@@ -280,7 +292,7 @@ private[spark] class RRunner[U](
   }
 }
 
-private object SpecialLengths {
+private[spark] object SpecialLengths {
   val TIMING_DATA = -1
 }
 
@@ -290,7 +302,7 @@ private[spark] object RRunnerModes {
   val DATAFRAME_GAPPLY = 2
 }
 
-private[r] class BufferedStreamThread(
+private[spark] class BufferedStreamThread(
     in: InputStream,
     name: String,
     errBufferSize: Int) extends Thread(name) with Logging {

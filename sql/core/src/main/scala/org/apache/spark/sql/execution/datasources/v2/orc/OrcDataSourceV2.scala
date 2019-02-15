@@ -34,13 +34,11 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
 
   override def getTable(options: DataSourceOptions): Table = {
     val tableName = getTableName(options)
-    val fileIndex = getFileIndex(options, None)
-    OrcTable(tableName, sparkSession, fileIndex, None)
+    OrcTable(tableName, sparkSession, options, None)
   }
 
   override def getTable(options: DataSourceOptions, schema: StructType): Table = {
     val tableName = getTableName(options)
-    val fileIndex = getFileIndex(options, Some(schema))
-    OrcTable(tableName, sparkSession, fileIndex, Some(schema))
+    OrcTable(tableName, sparkSession, options, Some(schema))
   }
 }

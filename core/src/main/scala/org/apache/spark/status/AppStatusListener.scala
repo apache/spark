@@ -131,6 +131,7 @@ private[spark] class AppStatusListener(
         .orElse(liveExecutors.get(SparkContext.LEGACY_DRIVER_IDENTIFIER))
       driver.foreach { d =>
         d.executorLogs = logs.toMap
+        d.attributes = event.driverAttributes.getOrElse(Map.empty).toMap
         update(d, System.nanoTime())
       }
     }
@@ -190,6 +191,7 @@ private[spark] class AppStatusListener(
     exec.totalCores = event.executorInfo.totalCores
     exec.maxTasks = event.executorInfo.totalCores / coresPerTask
     exec.executorLogs = event.executorInfo.logUrlMap
+    exec.attributes = event.executorInfo.attributes
     liveUpdate(exec, System.nanoTime())
   }
 
@@ -319,7 +321,7 @@ private[spark] class AppStatusListener(
     }
 
     val lastStageInfo = event.stageInfos.sortBy(_.stageId).lastOption
-    val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
+    val jobName = lastStageInfo.map(_.name).getOrElse("")
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
     val sqlExecutionId = Option(event.properties)
@@ -327,7 +329,7 @@ private[spark] class AppStatusListener(
 
     val job = new LiveJob(
       event.jobId,
-      lastStageName,
+      jobName,
       if (event.time > 0) Some(new Date(event.time)) else None,
       event.stageIds,
       jobGroup,
@@ -827,6 +829,7 @@ private[spark] class AppStatusListener(
     event.blockUpdatedInfo.blockId match {
       case block: RDDBlockId => updateRDDBlock(event, block)
       case stream: StreamBlockId => updateStreamBlock(event, stream)
+      case broadcast: BroadcastBlockId => updateBroadcastBlock(event, broadcast)
       case _ =>
     }
   }
@@ -885,15 +888,7 @@ private[spark] class AppStatusListener(
     // Update the executor stats first, since they are used to calculate the free memory
     // on tracked RDD distributions.
     maybeExec.foreach { exec =>
-      if (exec.hasMemoryInfo) {
-        if (storageLevel.useOffHeap) {
-          exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, memoryDelta)
-        } else {
-          exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, memoryDelta)
-        }
-      }
-      exec.memoryUsed = addDeltaToValue(exec.memoryUsed, memoryDelta)
-      exec.diskUsed = addDeltaToValue(exec.diskUsed, diskDelta)
+      updateExecutorMemoryDiskInfo(exec, storageLevel, memoryDelta, diskDelta)
     }
 
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
@@ -993,6 +988,39 @@ private[spark] class AppStatusListener(
       kvstore.delete(classOf[StreamBlockData],
         Array(stream.name, event.blockUpdatedInfo.blockManagerId.executorId))
     }
+  }
+
+  private def updateBroadcastBlock(
+      event: SparkListenerBlockUpdated,
+      broadcast: BroadcastBlockId): Unit = {
+    val executorId = event.blockUpdatedInfo.blockManagerId.executorId
+    liveExecutors.get(executorId).foreach { exec =>
+      val now = System.nanoTime()
+      val storageLevel = event.blockUpdatedInfo.storageLevel
+
+      // Whether values are being added to or removed from the existing accounting.
+      val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
+      val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
+
+      updateExecutorMemoryDiskInfo(exec, storageLevel, memoryDelta, diskDelta)
+      maybeUpdate(exec, now)
+    }
+  }
+
+  private def updateExecutorMemoryDiskInfo(
+      exec: LiveExecutor,
+      storageLevel: StorageLevel,
+      memoryDelta: Long,
+      diskDelta: Long): Unit = {
+    if (exec.hasMemoryInfo) {
+      if (storageLevel.useOffHeap) {
+        exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, memoryDelta)
+      } else {
+        exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, memoryDelta)
+      }
+    }
+    exec.memoryUsed = addDeltaToValue(exec.memoryUsed, memoryDelta)
+    exec.diskUsed = addDeltaToValue(exec.diskUsed, diskDelta)
   }
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {

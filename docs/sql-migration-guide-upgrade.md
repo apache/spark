@@ -31,18 +31,14 @@ displayTitle: Spark SQL Upgrading Guide
 
   - In Spark version 2.4 and earlier, the `SET` command works without any warnings even if the specified key is for `SparkConf` entries and it has no effect because the command does not update `SparkConf`, but the behavior might confuse users. Since 3.0, the command fails if a `SparkConf` key is used. You can disable such a check by setting `spark.sql.legacy.setCommandRejectsSparkCoreConfs` to `false`.
 
-  - Since Spark 3.0, CSV/JSON datasources use java.time API for parsing and generating CSV/JSON content. In Spark version 2.4 and earlier, java.text.SimpleDateFormat is used for the same purpose with fallbacks to the parsing mechanisms of Spark 2.0 and 1.x. For example, `2018-12-08 10:39:21.123` with the pattern `yyyy-MM-dd'T'HH:mm:ss.SSS` cannot be parsed since Spark 3.0 because the timestamp does not match to the pattern but it can be parsed by earlier Spark versions due to a fallback to `Timestamp.valueOf`. To parse the same timestamp since Spark 3.0, the pattern should be `yyyy-MM-dd HH:mm:ss.SSS`.
-
   - In Spark version 2.4 and earlier, CSV datasource converts a malformed CSV string to a row with all `null`s in the PERMISSIVE mode. Since Spark 3.0, the returned row can contain non-`null` fields if some of CSV column values were parsed and converted to desired types successfully.
 
   - In Spark version 2.4 and earlier, JSON datasource and JSON functions like `from_json` convert a bad JSON record to a row with all `null`s in the PERMISSIVE mode when specified schema is `StructType`. Since Spark 3.0, the returned row can contain non-`null` fields if some of JSON column values were parsed and converted to desired types successfully.
 
-  - Since Spark 3.0, the `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_timestamp` functions use java.time API for parsing and formatting dates/timestamps from/to strings by using ISO chronology (https://docs.oracle.com/javase/8/docs/api/java/time/chrono/IsoChronology.html) based on Proleptic Gregorian calendar. In Spark version 2.4 and earlier, java.text.SimpleDateFormat and java.util.GregorianCalendar (hybrid calendar that supports both the Julian and Gregorian calendar systems, see https://docs.oracle.com/javase/7/docs/api/java/util/GregorianCalendar.html) is used for the same purpose. New implementation supports pattern formats as described here https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html and performs strict checking of its input. For example, the `2015-07-22 10:00:00` timestamp cannot be parse if pattern is `yyyy-MM-dd` because the parser does not consume whole input. Another example is the `31/01/2015 00:00` input cannot be parsed by the `dd/MM/yyyy hh:mm` pattern because `hh` supposes hours in the range `1-12`.
-
   - Since Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Set JSON option `inferTimestamp` to `false` to disable such type inferring.
 
   - In PySpark, when Arrow optimization is enabled, if Arrow version is higher than 0.11.0, Arrow can perform safe type conversion when converting Pandas.Series to Arrow array during serialization. Arrow will raise errors when detecting unsafe type conversion like overflow. Setting `spark.sql.execution.pandas.arrowSafeTypeConversion` to true can enable it. The default setting is false. PySpark's behavior for Arrow versions is illustrated in the table below:
-  <table class="table">
+    <table class="table">
         <tr>
           <th>
             <b>PyArrow version</b>
@@ -55,109 +51,113 @@ displayTitle: Spark SQL Upgrading Guide
           </th>
         </tr>
         <tr>
-          <th>
-            <b>version < 0.11.0</b>
-          </th>
-          <th>
-            <b>Raise error</b>
-          </th>
-          <th>
-            <b>Silently allows</b>
-          </th>
+          <td>
+            version < 0.11.0
+          </td>
+          <td>
+            Raise error
+          </td>
+          <td>
+            Silently allows
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>version > 0.11.0, arrowSafeTypeConversion=false</b>
-          </th>
-          <th>
-            <b>Silent overflow</b>
-          </th>
-          <th>
-            <b>Silently allows</b>
-          </th>
+          <td>
+            version > 0.11.0, arrowSafeTypeConversion=false
+          </td>
+          <td>
+            Silent overflow
+          </td>
+          <td>
+            Silently allows
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>version > 0.11.0, arrowSafeTypeConversion=true</b>
-          </th>
-          <th>
-            <b>Raise error</b>
-          </th>
-          <th>
-            <b>Raise error</b>
-          </th>
+          <td>
+            version > 0.11.0, arrowSafeTypeConversion=true
+          </td>
+          <td>
+            Raise error
+          </td>
+          <td>
+            Raise error
+          </td>
         </tr>
-  </table>
+    </table>
 
   - In Spark version 2.4 and earlier, if `org.apache.spark.sql.functions.udf(Any, DataType)` gets a Scala closure with primitive-type argument, the returned UDF will return null if the input values is null. Since Spark 3.0, the UDF will return the default value of the Java type if the input value is null. For example, `val f = udf((x: Int) => x, IntegerType)`, `f($"x")` will return null in Spark 2.4 and earlier if column `x` is null, and return 0 in Spark 3.0. This behavior change is introduced because Spark 3.0 is built with Scala 2.12 by default.
 
-  - Since Spark 3.0, the `weekofyear`, `weekday` and `dayofweek` functions use java.time API for calculation week number of year and day number of week based on Proleptic Gregorian calendar. In Spark version 2.4 and earlier, the hybrid calendar (Julian + Gregorian) is used for the same purpose. Results of the functions returned by Spark 3.0 and previous versions can be different for dates before October 15, 1582 (Gregorian).
+  - Since Spark 3.0, Proleptic Gregorian calendar is used in parsing, formatting, and converting dates and timestamps as well as in extracting sub-components like years, days and etc. Spark 3.0 uses Java 8 API classes from the java.time packages that based on ISO chronology (https://docs.oracle.com/javase/8/docs/api/java/time/chrono/IsoChronology.html). In Spark version 2.4 and earlier, those operations are performed by using the hybrid calendar (Julian + Gregorian, see https://docs.oracle.com/javase/7/docs/api/java/util/GregorianCalendar.html). The changes impact on the results for dates before October 15, 1582 (Gregorian) and affect on the following Spark 3.0 API:
 
-  - Since Spark 3.0, the JDBC options `lowerBound` and `upperBound` are converted to TimestampType/DateType values in the same way as casting strings to TimestampType/DateType values. The conversion is based on Proleptic Gregorian calendar, and time zone defined by the SQL config `spark.sql.session.timeZone`. In Spark version 2.4 and earlier, the conversion is based on the hybrid calendar (Julian + Gregorian) and on default system time zone.
+    - CSV/JSON datasources use java.time API for parsing and generating CSV/JSON content. In Spark version 2.4 and earlier, java.text.SimpleDateFormat is used for the same purpose with fallbacks to the parsing mechanisms of Spark 2.0 and 1.x. For example, `2018-12-08 10:39:21.123` with the pattern `yyyy-MM-dd'T'HH:mm:ss.SSS` cannot be parsed since Spark 3.0 because the timestamp does not match to the pattern but it can be parsed by earlier Spark versions due to a fallback to `Timestamp.valueOf`. To parse the same timestamp since Spark 3.0, the pattern should be `yyyy-MM-dd HH:mm:ss.SSS`.
 
-  - Since Spark 3.0, the `date_trunc`, `from_utc_timestamp`, `to_utc_timestamp`, and `unix_timestamp` functions use java.time API based on Proleptic Gregorian calendar. In Spark version 2.4 and earlier, the hybrid calendar (Julian + Gregorian) is used for the same purpose. Results of the functions returned by Spark 3.0 and previous versions can be different for dates before October 15, 1582 (Gregorian).
+    - The `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_timestamp` functions. New implementation supports pattern formats as described here https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html and performs strict checking of its input. For example, the `2015-07-22 10:00:00` timestamp cannot be parse if pattern is `yyyy-MM-dd` because the parser does not consume whole input. Another example is the `31/01/2015 00:00` input cannot be parsed by the `dd/MM/yyyy hh:mm` pattern because `hh` supposes hours in the range `1-12`.
+
+    - The `weekofyear`, `weekday`, `dayofweek`, `date_trunc`, `from_utc_timestamp`, `to_utc_timestamp`, and `unix_timestamp` functions use java.time API for calculation week number of year, day number of week as well for conversion from/to TimestampType values in UTC time zone.
+
+    - the JDBC options `lowerBound` and `upperBound` are converted to TimestampType/DateType values in the same way as casting strings to TimestampType/DateType values. The conversion is based on Proleptic Gregorian calendar, and time zone defined by the SQL config `spark.sql.session.timeZone`. In Spark version 2.4 and earlier, the conversion is based on the hybrid calendar (Julian + Gregorian) and on default system time zone.
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
-  <table class="table">
+    <table class="table">
         <tr>
           <th>
             <b>Query</b>
           </th>
           <th>
-            <b>Result Spark 2.3 or Prior</b>
+            <b>Spark 2.3 or Prior</b>
           </th>
           <th>
-            <b>Result Spark 2.4</b>
+            <b>Spark 2.4</b>
           </th>
           <th>
             <b>Remarks</b>
           </th>
         </tr>
         <tr>
-          <th>
-            <b>SELECT <br> array_contains(array(1), 1.34D);</b>
-          </th>
-          <th>
-            <b>true</b>
-          </th>
-          <th>
-            <b>false</b>
-          </th>
-          <th>
-            <b>In Spark 2.4, left and right parameters are  promoted to array(double) and double type respectively.</b>
-          </th>
+          <td>
+            <code>SELECT array_contains(array(1), 1.34D);</code>
+          </td>
+          <td>
+            <code>true</code>
+          </td>
+          <td>
+            <code>false</code>
+          </td>
+          <td>
+            In Spark 2.4, left and right parameters are promoted to array type of double type and double type respectively.
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>SELECT <br> array_contains(array(1), '1');</b>
-          </th>
-          <th>
-            <b>true</b>
-          </th>
-          <th>
-            <b>AnalysisException is thrown since integer type can not be promoted to string type in a loss-less manner.</b>
-          </th>
-          <th>
-            <b>Users can use explicit cast</b>
-          </th>
+          <td>
+            <code>SELECT array_contains(array(1), '1');</code>
+          </td>
+          <td>
+            <code>true</code>
+          </td>
+          <td>
+            <code>AnalysisException</code> is thrown.
+          </td>
+          <td>
+            Explicit cast can be used in arguments to avoid the exception. In Spark 2.4, <code>AnalysisException</code> is thrown since integer type can not be promoted to string type in a loss-less manner.
+          </td>
         </tr>
         <tr>
-          <th>
-            <b>SELECT <br> array_contains(array(1), 'anystring');</b>
-          </th>
-          <th>
-            <b>null</b>
-          </th>
-          <th>
-            <b>AnalysisException is thrown since integer type can not be promoted to string type in a loss-less manner.</b>
-          </th>
-          <th>
-            <b>Users can use explicit cast</b>
-          </th>
+          <td>
+            <code>SELECT array_contains(array(1), 'anystring');</code>
+          </td>
+          <td>
+            <code>null</code>
+          </td>
+          <td>
+            <code>AnalysisException</code> is thrown.
+          </td>
+          <td>
+            Explicit cast can be used in arguments to avoid the exception. In Spark 2.4, <code>AnalysisException</code> is thrown since integer type can not be promoted to string type in a loss-less manner.
+          </td>
         </tr>
-  </table>
+    </table>
 
   - Since Spark 2.4, when there is a struct field in front of the IN operator before a subquery, the inner query must contain a struct field as well. In previous versions, instead, the fields of the struct were compared to the output of the inner query. Eg. if `a` is a `struct(a string, b int)`, in Spark 2.4 `a in (select (1 as a, 'a' as b) from range(1))` is a valid query, while `a in (select 1, 'a' from range(1))` is not. In previous version it was the opposite.
 

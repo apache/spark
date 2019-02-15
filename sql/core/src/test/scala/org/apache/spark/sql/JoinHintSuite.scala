@@ -102,58 +102,60 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
   }
 
   test("hints prevent join reorder") {
-    withTempView("a", "b", "c") {
-      df1.createOrReplaceTempView("a")
-      df2.createOrReplaceTempView("b")
-      df3.createOrReplaceTempView("c")
-      verifyJoinHint(
-        sql("select /*+ broadcast(a, c)*/ * from a, b, c " +
-          "where a.a1 = b.b1 and b.b1 = c.c1"),
-        JoinHint(
-          None,
-          Some(HintInfo(broadcast = true))) ::
-          JoinHint(
-            Some(HintInfo(broadcast = true)),
-            None):: Nil
-      )
-      verifyJoinHint(
-        sql("select /*+ broadcast(a, c)*/ * from a, c, b " +
-          "where a.a1 = b.b1 and b.b1 = c.c1"),
-        JoinHint.NONE ::
-          JoinHint(
-            Some(HintInfo(broadcast = true)),
-            Some(HintInfo(broadcast = true))):: Nil
-      )
-      verifyJoinHint(
-        sql("select /*+ broadcast(b, c)*/ * from a, c, b " +
-          "where a.a1 = b.b1 and b.b1 = c.c1"),
-        JoinHint(
-          None,
-          Some(HintInfo(broadcast = true))) ::
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      withTempView("a", "b", "c") {
+        df1.createOrReplaceTempView("a")
+        df2.createOrReplaceTempView("b")
+        df3.createOrReplaceTempView("c")
+        verifyJoinHint(
+          sql("select /*+ broadcast(a, c)*/ * from a, b, c " +
+            "where a.a1 = b.b1 and b.b1 = c.c1"),
           JoinHint(
             None,
-            Some(HintInfo(broadcast = true))):: Nil
-      )
+            Some(HintInfo(broadcast = true))) ::
+            JoinHint(
+              Some(HintInfo(broadcast = true)),
+              None) :: Nil
+        )
+        verifyJoinHint(
+          sql("select /*+ broadcast(a, c)*/ * from a, c, b " +
+            "where a.a1 = b.b1 and b.b1 = c.c1"),
+          JoinHint.NONE ::
+            JoinHint(
+              Some(HintInfo(broadcast = true)),
+              Some(HintInfo(broadcast = true))) :: Nil
+        )
+        verifyJoinHint(
+          sql("select /*+ broadcast(b, c)*/ * from a, c, b " +
+            "where a.a1 = b.b1 and b.b1 = c.c1"),
+          JoinHint(
+            None,
+            Some(HintInfo(broadcast = true))) ::
+            JoinHint(
+              None,
+              Some(HintInfo(broadcast = true))) :: Nil
+        )
 
-      verifyJoinHint(
-        df1.join(df2, 'a1 === 'b1 && 'a1 > 5).hint("broadcast")
-          .join(df3, 'b1 === 'c1 && 'a1 < 10),
-        JoinHint(
-          Some(HintInfo(broadcast = true)),
-          None) ::
-          JoinHint.NONE:: Nil
-      )
-
-      verifyJoinHint(
-        df1.join(df2, 'a1 === 'b1 && 'a1 > 5).hint("broadcast")
-          .join(df3, 'b1 === 'c1 && 'a1 < 10)
-          .join(df, 'b1 === 'id),
-        JoinHint.NONE ::
+        verifyJoinHint(
+          df1.join(df2, 'a1 === 'b1 && 'a1 > 5).hint("broadcast")
+            .join(df3, 'b1 === 'c1 && 'a1 < 10),
           JoinHint(
             Some(HintInfo(broadcast = true)),
             None) ::
-          JoinHint.NONE:: Nil
-      )
+            JoinHint.NONE :: Nil
+        )
+
+        verifyJoinHint(
+          df1.join(df2, 'a1 === 'b1 && 'a1 > 5).hint("broadcast")
+            .join(df3, 'b1 === 'c1 && 'a1 < 10)
+            .join(df, 'b1 === 'id),
+          JoinHint.NONE ::
+            JoinHint(
+              Some(HintInfo(broadcast = true)),
+              None) ::
+            JoinHint.NONE :: Nil
+        )
+      }
     }
   }
 

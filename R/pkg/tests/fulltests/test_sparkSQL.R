@@ -1497,6 +1497,14 @@ test_that("column functions", {
   df5 <- createDataFrame(list(list(a = "010101")))
   expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
+  # Test months_between()
+  df <- createDataFrame(list(list(a = as.Date("1997-02-28"),
+                                  b = as.Date("1996-10-30"))))
+  result1 <- collect(select(df, alias(months_between(df[[1]], df[[2]]), "month")))[[1]]
+  expect_equal(result1, 3.93548387)
+  result2 <- collect(select(df, alias(months_between(df[[1]], df[[2]], FALSE), "month")))[[1]]
+  expect_equal(result2, 3.935483870967742)
+
   # Test array_contains(), array_max(), array_min(), array_position(), element_at() and reverse()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
   result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
@@ -1540,6 +1548,13 @@ test_that("column functions", {
   df <- createDataFrame(list(list(list("x", "y"), list(1, 2))), schema = c("k", "v"))
   result <- collect(select(df, map_from_arrays(df$k, df$v)))[[1]]
   expected_entries <- list(as.environment(list(x = 1, y = 2)))
+  expect_equal(result, expected_entries)
+
+  # Test map_from_entries()
+  df <- createDataFrame(list(list(list(listToStruct(list(c1 = "x", c2 = 1L)),
+                                       listToStruct(list(c1 = "y", c2 = 2L))))))
+  result <- collect(select(df, map_from_entries(df[[1]])))[[1]]
+  expected_entries <- list(as.environment(list(x = 1L, y = 2L)))
   expect_equal(result, expected_entries)
 
   # Test array_repeat()
@@ -1599,6 +1614,13 @@ test_that("column functions", {
                         list(list(list(5L, 6L), list(7L, 8L)))))
   result <- collect(select(df, flatten(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, 4L), list(5L, 6L, 7L, 8L)))
+
+  # Test map_concat
+  df <- createDataFrame(list(list(map1 = as.environment(list(x = 1, y = 2)),
+                                  map2 = as.environment(list(a = 3, b = 4)))))
+  result <- collect(select(df, map_concat(df[[1]], df[[2]])))[[1]]
+  expected_entries <- list(as.environment(list(x = 1, y = 2, a = 3, b = 4)))
+  expect_equal(result, expected_entries)
 
   # Test map_entries(), map_keys(), map_values() and element_at()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
@@ -3504,6 +3526,116 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   finally = {
     # Resetting the conf back to default value
     callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+  })
+})
+
+test_that("gapply() Arrow optimization", {
+  skip_if_not_installed("arrow")
+  df <- createDataFrame(mtcars)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    ret <- gapply(df,
+                 "gear",
+                 function(key, grouped) {
+                   if (length(key) > 0) {
+                     stopifnot(is.numeric(key[[1]]))
+                   }
+                   stopifnot(class(grouped) == "data.frame")
+                   grouped
+                 },
+                 schema(df))
+    expected <- collect(ret)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- gapply(df,
+                 "gear",
+                 function(key, grouped) {
+                   if (length(key) > 0) {
+                     stopifnot(is.numeric(key[[1]]))
+                   }
+                   stopifnot(class(grouped) == "data.frame")
+                   grouped
+                 },
+                 schema(df))
+    actual <- collect(ret)
+    expect_equal(actual, expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("gapply() Arrow optimization - type specification", {
+  skip_if_not_installed("arrow")
+  # Note that regular gapply() seems not supporting date and timestamps
+  # whereas Arrow-optimized gapply() does.
+  rdf <- data.frame(list(list(a = 1,
+                              b = "a",
+                              c = TRUE,
+                              d = 1.1,
+                              e = 1L)))
+  df <- createDataFrame(rdf)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    ret <- gapply(df,
+                 "a",
+                 function(key, grouped) { grouped }, schema(df))
+    expected <- collect(ret)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- gapply(df,
+                 "a",
+                 function(key, grouped) { grouped }, schema(df))
+    actual <- collect(ret)
+    expect_equal(actual, expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("gapply() Arrow optimization - type specification (date and timestamp)", {
+  skip_if_not_installed("arrow")
+  rdf <- data.frame(list(list(a = as.Date("1990-02-24"),
+                              b = as.POSIXct("1990-02-24 12:34:56"))))
+  df <- createDataFrame(rdf)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- gapply(df,
+                  "a",
+                  function(key, grouped) { grouped }, schema(df))
+    expect_equal(collect(ret), rdf)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
   })
 })
 

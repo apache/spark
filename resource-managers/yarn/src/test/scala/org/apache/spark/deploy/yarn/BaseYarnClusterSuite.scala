@@ -100,9 +100,9 @@ abstract class BaseYarnClusterSuite
     // This hack loops for a bit waiting for the port to change, and fails the test if it hasn't
     // done so in a timely manner (defined to be 10 seconds).
     val config = yarnCluster.getConfig()
-    val deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(10)
+    val startTimeNs = System.nanoTime()
     while (config.get(YarnConfiguration.RM_ADDRESS).split(":")(1) == "0") {
-      if (System.currentTimeMillis() > deadline) {
+      if (System.nanoTime() - startTimeNs > TimeUnit.SECONDS.toNanos(10)) {
         throw new IllegalStateException("Timed out waiting for RM to come up.")
       }
       logDebug("RM address still not set in configuration, waiting...")

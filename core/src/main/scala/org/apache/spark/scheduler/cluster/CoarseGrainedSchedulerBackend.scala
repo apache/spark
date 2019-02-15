@@ -63,9 +63,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     math.min(1, conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).getOrElse(0.0))
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
-  private val maxRegisteredWaitingTimeMs =
-    conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME)
-  private val createTime = System.currentTimeMillis()
+  private val maxRegisteredWaitingTimeNs = TimeUnit.MILLISECONDS.toNanos(
+    conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
+  private val createTimeNs = System.nanoTime()
 
   // Accessing `executorDataMap` in `DriverEndpoint.receive/receiveAndReply` doesn't need any
   // protection. But accessing `executorDataMap` out of `DriverEndpoint.receive/receiveAndReply`
@@ -183,7 +183,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
-      case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls) =>
+      case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls, attributes) =>
         if (executorDataMap.contains(executorId)) {
           executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
           context.reply(true)
@@ -207,7 +207,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val data = new ExecutorData(executorRef, executorAddress, hostname,
-            cores, cores, logUrls)
+            cores, cores, logUrls, attributes)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -401,12 +401,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     if (UserGroupInformation.isSecurityEnabled()) {
       delegationTokenManager = createTokenManager()
       delegationTokenManager.foreach { dtm =>
+        val ugi = UserGroupInformation.getCurrentUser()
         val tokens = if (dtm.renewalEnabled) {
           dtm.start()
-        } else {
-          val creds = UserGroupInformation.getCurrentUser().getCredentials()
+        } else if (ugi.hasKerberosCredentials()) {
+          val creds = ugi.getCredentials()
           dtm.obtainDelegationTokens(creds)
           SparkHadoopUtil.get.serialize(creds)
+        } else {
+          null
         }
         if (tokens != null) {
           updateDelegationTokens(tokens)
@@ -496,9 +499,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
     }
-    if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTimeMs) {
+    if ((System.nanoTime() - createTimeNs) >= maxRegisteredWaitingTimeNs) {
       logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
-        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTimeMs(ms)")
+        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTimeNs(ns)")
       return true
     }
     false

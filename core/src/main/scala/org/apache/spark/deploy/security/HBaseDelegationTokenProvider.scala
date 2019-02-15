@@ -39,7 +39,6 @@ private[security] class HBaseDelegationTokenProvider
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
       sparkConf: SparkConf,
-      fileSystems: Set[FileSystem],
       creds: Credentials): Option[Long] = {
     try {
       val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
@@ -121,7 +120,9 @@ private[security] class HBaseDelegationTokenProvider
       confCreate.invoke(null, conf).asInstanceOf[Configuration]
     } catch {
       case NonFatal(e) =>
-        logWarning("Fail to invoke HBaseConfiguration", e)
+        // Keep at debug level since this is executed even when HBase tokens are not needed.
+        // Avoids a noisy warning for users who don't care about HBase.
+        logDebug("Unable to load HBaseConfiguration.", e)
         conf
     }
   }
