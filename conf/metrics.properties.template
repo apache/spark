@@ -172,6 +172,14 @@
 # Unit of the polling period for the Slf4jSink
 #*.sink.slf4j.unit=minutes
 
+# Example configuration for Graphite sink
+#*.sink.graphite.class=org.apache.spark.metrics.sink.GraphiteSink
+#*.sink.graphite.host=<graphiteEndPoint_hostName>
+#*.sink.graphite.port=<listening_port>
+#*.sink.graphite.period=10
+#*.sink.graphite.unit=seconds
+#*.sink.graphite.prefix=<optional_value>
+
 # Enable JvmSource for instance master, worker, driver and executor
 #master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
@@ -180,3 +188,4 @@
 #driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
 #executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
