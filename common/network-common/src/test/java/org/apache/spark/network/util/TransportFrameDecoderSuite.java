@@ -52,37 +52,6 @@ public class TransportFrameDecoderSuite {
   }
 
   @Test
-  public void testConsolidationForDecodingNonFullyWrittenByteBuf() throws Exception {
-    TransportFrameDecoder decoder = new TransportFrameDecoder();
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-    List<ByteBuf> retained = new ArrayList<>();
-    when(ctx.fireChannelRead(any())).thenAnswer(in -> {
-      ByteBuf buf = (ByteBuf) in.getArguments()[0];
-      retained.add(buf);
-      return null;
-    });
-    int targetBytes = (int) ByteUnit.MiB.toBytes(50);
-    int piece1Bytes = RND.nextInt(50);
-    int piece2Bytes = targetBytes - piece1Bytes;
-    ByteBuf piece1 = Unpooled.buffer(piece1Bytes * 2);
-    piece1.writeLong(targetBytes + 8);
-    byte[] piece1Data = new byte[piece1Bytes];
-    piece1.writeBytes(piece1Data);
-    ByteBuf piece2 = Unpooled.buffer(piece2Bytes * 2);
-    byte[] piece2Data = new byte[piece2Bytes];
-    piece2.writeBytes(piece2Data);
-    try {
-      decoder.channelRead(ctx, piece1);
-      decoder.channelRead(ctx, piece2);
-      assertEquals(1, retained.size());
-      assertEquals(targetBytes, retained.get(0).capacity());
-    } finally {
-      release(piece1);
-      release(piece2);
-    }
-  }
-
-  @Test
   public void testConsolidationPerf() throws Exception {
     long[] testingConsolidateThresholds = new long[] {
         ByteUnit.MiB.toBytes(1),
