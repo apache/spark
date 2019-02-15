@@ -283,7 +283,7 @@ class KubernetesSuite extends SparkFunSuite
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
           println("Event received.")
           val name = resource.getMetadata.getName
-          val nameSpace = pod.getMetadata().getNamespace()
+          val namespace = resource.getMetadata().getNamespace()
           action match {
             case Action.ADDED | Action.MODIFIED =>
               println(s"Add or modification event received for $name.")
@@ -294,7 +294,7 @@ class KubernetesSuite extends SparkFunSuite
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-                  val result = checkPodReady(name)
+                  val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
                 // Sleep a small interval to allow execution & downstream pod ready check to also catch up
@@ -346,7 +346,10 @@ class KubernetesSuite extends SparkFunSuite
       Thread.sleep(100)
       // Wait for the executors to become ready
       Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-        val podsReady = ! execPods.keys.filter(checkPodReady).isEmpty
+        val podsReady = ! execPods.map{
+          case (name, resource) =>
+            (name, resource.getMetadata().getNamespace())
+        }.filter(case (name, namespace) => checkPodReady(namespace, name)).isEmpty
         val podsEmpty = execPods.values.isEmpty
         val podsReadyOrDead = podsReady || podsEmpty
         podsReadyOrDead shouldBe (true)
