@@ -334,23 +334,6 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       assert(version === SPARK_VERSION_SHORT)
     }
   }
-
-  test("SPARK-26859 Reading ORC files with explicit schema can result in wrong data") {
-    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-      withTempPath { path =>
-        val df = Seq((1, 2, "abc"), (4, 5, "def"), (8, 9, null)).toDF("col1", "col2", "col3")
-        df.write.orc(path.getCanonicalPath)
-        checkAnswer(
-          spark.read.schema("col1 int, col4 int, col2 int, col3 string").orc(path.getCanonicalPath),
-          Seq(
-            Row(1, null, 2, "abc"),
-            Row(4, null, 5, "def"),
-            Row(8, null, 9, null)
-          )
-        )
-      }
-    }
-  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {
