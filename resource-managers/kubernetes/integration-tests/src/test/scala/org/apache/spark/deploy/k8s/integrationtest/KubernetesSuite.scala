@@ -252,10 +252,11 @@ class KubernetesSuite extends SparkFunSuite
       appArgs = appArgs)
 
     val execPods = scala.collection.mutable.Map[String, Pod]()
-    def checkPodReady(name: String) = {
+    def checkPodReady(namespace: String, name: String) = {
       println(s"!!! doing ready check on pod $name")
       val execPod = kubernetesTestComponents.kubernetesClient
         .pods()
+        .inNamespace(namespace)
         .withName(name)
         .get()
       println(s"!!! god pod $execPod for $name")
@@ -282,6 +283,7 @@ class KubernetesSuite extends SparkFunSuite
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
           println("Event received.")
           val name = resource.getMetadata.getName
+          val nameSpace = pod.getMetadata().getNamespace()
           action match {
             case Action.ADDED | Action.MODIFIED =>
               println(s"Add or modification event received for $name.")
