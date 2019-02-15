@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Statistics}
 
 
@@ -52,7 +52,13 @@ object AggregateEstimation {
         outputRows.min(childStats.rowCount.get)
       }
 
-      val outputAttrStats = getOutputMap(childStats.attributeStats, agg.output)
+      val inputAttrStats = childStats.attributeStats
+      val aliasStats = agg.expressions.collect {
+        case alias @ Alias(attr: Attribute, _) if inputAttrStats.contains(attr) =>
+          alias.toAttribute -> inputAttrStats(attr)
+      }
+      val outputAttrStats = getOutputMap(
+        AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), agg.output)
       Some(Statistics(
         sizeInBytes = getOutputSize(agg.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
