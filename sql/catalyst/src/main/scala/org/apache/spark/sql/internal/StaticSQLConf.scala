@@ -133,7 +133,7 @@ object StaticSQLConf {
       .createWithDefault(1000)
 
   val BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD =
-    buildStaticConf("spark.sql.broadcastExchange.maxThreadNumber")
+    buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
       .doc("The maximum degree of parallelism to fetch and broadcast the table." +
         "If we encounter memory issue like frequently full GC or OOM when broadcast table " +
         "we can decrease this number in order to reduce memory usage." +
