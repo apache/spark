@@ -26,7 +26,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.internal.config._
-import org.apache.spark.util.ManualClock
 
 class DriverServiceFeatureStepSuite extends SparkFunSuite {
 
@@ -71,7 +70,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     val expectedServiceName = kconf.resourceNamePrefix + DriverServiceFeatureStep.DRIVER_SVC_POSTFIX
     val expectedHostName = s"$expectedServiceName.my-namespace.svc"
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
-    verifySparkConfHostNames(additionalProps, expectedHostName)
+    assert(additionalProps(DRIVER_HOST_ADDRESS.key) === expectedHostName)
   }
 
   test("Ports should resolve to defaults in SparkConf and in the service.") {
@@ -92,25 +91,22 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
   }
 
   test("Long prefixes should switch to using a generated name.") {
-    val clock = new ManualClock()
-    clock.setTime(10000)
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_NAMESPACE, "my-namespace")
-    val configurationStep = new DriverServiceFeatureStep(
-      KubernetesTestConf.createDriverConf(
-        sparkConf = sparkConf,
-        resourceNamePrefix = Some(LONG_RESOURCE_NAME_PREFIX),
-        labels = DRIVER_LABELS),
-      clock)
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      resourceNamePrefix = Some(LONG_RESOURCE_NAME_PREFIX),
+      labels = DRIVER_LABELS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
+
     val driverService = configurationStep
       .getAdditionalKubernetesResources()
       .head
       .asInstanceOf[Service]
-    val expectedServiceName = s"spark-10000${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}"
-    assert(driverService.getMetadata.getName === expectedServiceName)
-    val expectedHostName = s"$expectedServiceName.my-namespace.svc"
+    assert(!driverService.getMetadata.getName.startsWith(kconf.resourceNamePrefix))
+
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
-    verifySparkConfHostNames(additionalProps, expectedHostName)
+    assert(!additionalProps(DRIVER_HOST_ADDRESS.key).startsWith(kconf.resourceNamePrefix))
   }
 
   test("Disallow bind address and driver host to be set explicitly.") {
@@ -155,11 +151,5 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(driverServicePorts(1).getName === BLOCK_MANAGER_PORT_NAME)
     assert(driverServicePorts(1).getPort.intValue() === blockManagerPort)
     assert(driverServicePorts(1).getTargetPort.getIntVal === blockManagerPort)
-  }
-
-  private def verifySparkConfHostNames(
-      driverSparkConf: Map[String, String], expectedHostName: String): Unit = {
-    assert(driverSparkConf(
-      org.apache.spark.internal.config.DRIVER_HOST_ADDRESS.key) === expectedHostName)
   }
 }

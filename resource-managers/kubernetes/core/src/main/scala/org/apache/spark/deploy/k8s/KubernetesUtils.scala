@@ -17,17 +17,21 @@
 package org.apache.spark.deploy.k8s
 
 import java.io.File
+import java.security.SecureRandom
 
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 private[spark] object KubernetesUtils extends Logging {
+
+  private lazy val RNG = new SecureRandom()
 
   /**
    * Extract and parse Spark configuration properties with a given name prefix and
@@ -205,4 +209,23 @@ private[spark] object KubernetesUtils extends Logging {
   def formatTime(time: String): String = {
     if (time != null) time else "N/A"
   }
+
+  /**
+   * Generates a unique ID to be used as part of identifiers. The returned ID is a hex string
+   * of a 64-bit value containing the 40 LSBs from the current time + 24 random bits from a
+   * cryptographically strong RNG. (40 bits gives about 30 years worth of "unique" timestamps.)
+   *
+   * This avoids using a UUID for uniqueness (too long), and relying solely on the current time
+   * (not unique enough).
+   */
+  def uniqueID(): String = {
+    val random = new Array[Byte](3)
+    synchronized {
+      RNG.nextBytes(random)
+    }
+
+    val time = java.lang.Long.toHexString(System.currentTimeMillis() & 0xFFFFFFFFFFL)
+    Hex.encodeHexString(random) + time
+  }
+
 }
