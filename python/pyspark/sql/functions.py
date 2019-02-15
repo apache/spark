@@ -2424,14 +2424,16 @@ def from_avro(col, jsonFormatSchema, options={}):
     >>> avroDf.collect()
     [Row(avro=bytearray(b'\x00\x00\x04\x00\nAlice'))]
     >>> jsonFormatSchema = '''{"type":"record","name":"topLevelRecord","fields":
-    ...     [{"name":"avro","type":[{"type":"record","name":"value","namespace":"topLevelRecord","fields":
-    ...     [{"name":"age","type":["long","null"]},{"name":"name","type":["string","null"]}]},"null"]}]}'''
+    ...     [{"name":"avro","type":[{"type":"record","name":"value","namespace":"topLevelRecord",
+    ...     "fields":[{"name":"age","type":["long","null"]},
+    ...     {"name":"name","type":["string","null"]}]},"null"]}]}'''
     >>> avroDf.select(from_avro(avroDf.avro, jsonFormatSchema).alias("value")).collect()
     [Row(value=Row(avro=Row(age=2, name=u'Alice')))]
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(_to_java_column(col), jsonFormatSchema, options)
+    jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(_to_java_column(col),
+                                                               jsonFormatSchema, options)
     return Column(jc)
 
 
