@@ -178,7 +178,7 @@ public class TaskMemoryManager {
             if (released > 0) {
               logger.debug("Task {} released {} from {} for {}", taskAttemptId,
                 Utils.bytesToString(released), c, consumer);
-              long memToAcquire = released < required - got ? released : required - got;
+              long memToAcquire = Math.min(released, required - got);
               got += memoryManager.acquireExecutionMemory(memToAcquire, taskAttemptId, mode);
               if (got >= required) {
                 break;
@@ -210,7 +210,7 @@ public class TaskMemoryManager {
           if (released > 0) {
             logger.debug("Task {} released {} from itself ({})", taskAttemptId,
               Utils.bytesToString(released), consumer);
-            long memToAcquire = released < required - got ? released : required - got;
+            long memToAcquire = Math.min(released, required - got);
             got += memoryManager.acquireExecutionMemory(memToAcquire, taskAttemptId, mode);
           }
         } catch (ClosedByInterruptException e) {
