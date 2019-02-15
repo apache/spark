@@ -2892,6 +2892,7 @@
           <groupId>org.apache.hive</groupId>
           <artifactId>hive-llap-client</artifactId>
           <version>${hive.version}</version>
+          <scope>${hive.deps.scope}</scope>
           <exclusions>
             <exclusion>
               <groupId>${hive.group}</groupId>
