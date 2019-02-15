@@ -433,8 +433,14 @@ object DataSourceStrategy {
    */
   protected[sql] def normalizeFilters(
       filters: Seq[Expression],
-      attributes: Seq[AttributeReference]): Seq[Expression] = {
-    filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
+      attributes: Seq[AttributeReference],
+      keepSubqueryFilters: Boolean): Seq[Expression] = {
+    val usedFilters = if (keepSubqueryFilters) {
+      filters
+    } else {
+      filters.filterNot(SubqueryExpression.hasSubquery)
+    }
+    usedFilters.map { e =>
       e transform {
         case a: AttributeReference =>
           a.withName(attributes.find(_.semanticEquals(a)).get.name)

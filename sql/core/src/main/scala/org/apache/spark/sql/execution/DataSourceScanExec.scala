@@ -185,6 +185,13 @@ case class FileSourceScanExec(
     ret
   }
 
+  @transient private lazy val selectedPartitionsCount =
+    if (partitionFilters.exists(ExecSubqueryExpression.hasSubquery)) {
+      None
+    } else {
+      Some(selectedPartitions.size)
+    }
+
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
@@ -270,12 +277,14 @@ case class FileSourceScanExec(
         "PushedFilters" -> seqToString(pushedDownFilters),
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
-    val withOptPartitionCount =
-      relation.partitionSchemaOption.map { _ =>
-        metadata + ("PartitionCount" -> selectedPartitions.size.toString)
-      } getOrElse {
-        metadata
-      }
+    val withOptPartitionCount = {
+      for {
+        _ <- relation.partitionSchemaOption
+        count <- selectedPartitionsCount
+      } yield metadata + ("PartitionCount" -> count.toString)
+    } getOrElse {
+      metadata
+    }
 
     val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
       val numSelectedBuckets = optionalBucketSet.map { b =>

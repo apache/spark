@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
+import org.apache.spark.sql.execution.{ExecSubqueryExpression, FileSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -1278,6 +1279,21 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         case p => p.subqueries
       }.flatten
       assert(subqueries.length == 1)
+    }
+  }
+
+  test("SPARK-26893: Allow pushdown of partition pruning subquery filters to file source") {
+    withTable("a", "b") {
+      spark.range(4).selectExpr("id", "id % 2 AS p").write.partitionBy("p").saveAsTable("a")
+      spark.range(2).write.saveAsTable("b")
+
+      val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
+      assert(df.queryExecution.executedPlan match {
+        case WholeStageCodegenExec(FileSourceScanExec(_, _, _, partitionFilters, _, _, _))
+          if partitionFilters.exists(ExecSubqueryExpression.hasSubquery) => true
+        case _ => false
+      })
+      checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
     }
   }
 

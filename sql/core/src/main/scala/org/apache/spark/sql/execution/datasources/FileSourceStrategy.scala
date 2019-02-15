@@ -147,7 +147,7 @@ object FileSourceStrategy extends Strategy with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, l.output)
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, l.output, true)
 
       val partitionColumns =
         l.resolve(
@@ -159,9 +159,12 @@ object FileSourceStrategy extends Strategy with Logging {
 
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
+      val normalizedFiltersWithoutSubqueries =
+        normalizedFilters.filterNot(SubqueryExpression.hasSubquery)
+
       val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
       val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
-        genBucketSet(normalizedFilters, bucketSpec.get)
+        genBucketSet(normalizedFiltersWithoutSubqueries, bucketSpec.get)
       } else {
         None
       }
@@ -170,7 +173,7 @@ object FileSourceStrategy extends Strategy with Logging {
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
+      val dataFilters = normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
