@@ -2402,6 +2402,62 @@ def to_csv(col, options={}):
     return Column(jc)
 
 
+@since(3.0)
+def from_avro(col, jsonFormatSchema, options={}):
+    """
+    Converts a binary column of avro format into its corresponding catalyst value. The specified
+    schema must match the read data, otherwise the behavior is undefined: it may fail or return
+    arbitrary result.
+
+    Avro is built-in but external data source module since Spark 2.4. Please deploy the application
+    as per the deployment section of "Apache Avro Data Source Guide".
+
+    :param data: the binary column.
+    :param jsonFormatSchema: the avro schema in JSON string format.
+    :param options: options to control how the Avro record is parsed.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.functions import from_avro, to_avro
+    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> avroDf = df.select(to_avro(df.value).alias("avro"))
+    >>> avroDf.collect()
+    [Row(avro=bytearray(b'\x00\x00\x04\x00\nAlice'))]
+    >>> jsonFormatSchema = '''{"type":"record","name":"topLevelRecord","fields":
+    ...     [{"name":"avro","type":[{"type":"record","name":"value","namespace":"topLevelRecord","fields":
+    ...     [{"name":"age","type":["long","null"]},{"name":"name","type":["string","null"]}]},"null"]}]}'''
+    >>> avroDf.select(from_avro(avroDf.avro, jsonFormatSchema).alias("value")).collect()
+    [Row(value=Row(avro=Row(age=2, name=u'Alice')))]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(_to_java_column(col), jsonFormatSchema, options)
+    return Column(jc)
+
+
+@since(3.0)
+def to_avro(col):
+    """
+    Converts a column into binary of avro format.
+
+    Avro is built-in but external data source module since Spark 2.4. Please deploy the application
+    as per the deployment section of "Apache Avro Data Source Guide".
+
+    :param data: the data column.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.functions import to_avro
+    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_avro(df.value).alias("avro")).collect()
+    [Row(avro=bytearray(b'\x00\x00\x04\x00\nAlice'))]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(col))
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """
