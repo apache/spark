@@ -312,6 +312,14 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t3, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
 
     assertEqualPlans(originalPlan2, originalPlan2)
+
+    val originalPlan3 =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .join(t4).hint("broadcast")
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
+
+    assertEqualPlans(originalPlan3, originalPlan3)
   }
 
   test("reorder below and above the hint node") {
@@ -342,6 +350,23 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t4.hint("broadcast"))
 
     assertEqualPlans(originalPlan2, bestPlan2)
+
+    val originalPlan3 =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .hint("broadcast")
+        .join(t4, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
+
+    val bestPlan3 =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(outputsOf(t1, t2, t3): _*)
+        .hint("broadcast")
+        .join(t4, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
+
+    assertEqualPlans(originalPlan3, bestPlan3)
   }
 
   private def assertEqualPlans(
