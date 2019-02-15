@@ -256,10 +256,8 @@ class KubernetesSuite extends SparkFunSuite
       println(s"!!! doing ready check on pod $name")
       val execPod = kubernetesTestComponents.kubernetesClient
         .pods()
-        .withLabel("name", name)
-        .list()
-        .getItems
-        .get(0)
+        .withName(name)
+        .get()
       println(s"!!! god pod $execPod for $name")
       val resourceStatus = execPod.getStatus
       println(s"!!! status $resourceStatus for $name")
