@@ -1507,7 +1507,8 @@ abstract class RDD[T: ClassTag](
     val r = this.mapPartitions { iter =>
       val text = new Text()
       iter.map { x =>
-        text.set(x.toString)
+        val value = if (x != null) x.toString else "Null"
+        text.set(value)
         (NullWritable.get(), text)
       }
     }
@@ -1525,7 +1526,8 @@ abstract class RDD[T: ClassTag](
     val r = this.mapPartitions { iter =>
       val text = new Text()
       iter.map { x =>
-        text.set(x.toString)
+        val value = if (x != null) x.toString else "Null"
+        text.set(value)
         (NullWritable.get(), text)
       }
     }
