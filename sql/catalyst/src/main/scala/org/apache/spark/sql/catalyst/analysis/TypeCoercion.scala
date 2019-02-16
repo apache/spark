@@ -465,7 +465,7 @@ object TypeCoercion {
 
       // Handle type casting required between value expression and subquery output
       // in IN/ANY subquery.
-      case s @ SubqueryPredicate(lhs, comparison, ListQuery(sub, children, exprId, _))
+      case s @ PredicateSubquery(lhs, comparison, ListQuery(sub, children, exprId, _))
           if !s.resolved && lhs.length == sub.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
@@ -489,7 +489,7 @@ object TypeCoercion {
           }
 
           val newSub = Project(castedRhs, sub)
-          SubqueryPredicate(s, newLhs, comparison,
+          PredicateSubquery(s, newLhs, comparison,
             ListQuery(newSub, children, exprId, newSub.output))
         } else {
           s

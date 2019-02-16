@@ -1056,6 +1056,29 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Get the comparison expression. `NotEqualTo` should be rewrite later.
+   */
+  def getComparison(
+      operator: Int,
+      left: Expression,
+      right: Expression): BinaryComparison = operator match {
+    case SqlBaseParser.EQ =>
+      EqualTo(left, right)
+    case SqlBaseParser.NSEQ =>
+      EqualNullSafe(left, right)
+    case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
+      NotEqualTo(left, right)
+    case SqlBaseParser.LT =>
+      LessThan(left, right)
+    case SqlBaseParser.LTE =>
+      LessThanOrEqual(left, right)
+    case SqlBaseParser.GT =>
+      GreaterThan(left, right)
+    case SqlBaseParser.GTE =>
+      GreaterThanOrEqual(left, right)
+  }
+
+  /**
    * Create a comparison expression. This compares two expressions. The following comparison
    * operators are supported:
    * - Equal: '=' or '=='
@@ -1070,22 +1093,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val left = expression(ctx.left)
     val right = expression(ctx.right)
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
-    operator.getSymbol.getType match {
-      case SqlBaseParser.EQ =>
-        EqualTo(left, right)
-      case SqlBaseParser.NSEQ =>
-        EqualNullSafe(left, right)
-      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
+
+    getComparison(operator.getSymbol.getType, left, right) match {
+      case _: NotEqualTo =>
         Not(EqualTo(left, right))
-      case SqlBaseParser.LT =>
-        LessThan(left, right)
-      case SqlBaseParser.LTE =>
-        LessThanOrEqual(left, right)
-      case SqlBaseParser.GT =>
-        GreaterThan(left, right)
-      case SqlBaseParser.GTE =>
-        GreaterThanOrEqual(left, right)
+      case other =>
+        other
     }
+
   }
 
   /**
@@ -1108,6 +1123,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Add a predicate to the given expression. Supported expressions are:
    * - (NOT) BETWEEN
    * - (NOT) IN
+   * - (NOT) comparison ANY
    * - (NOT) LIKE
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
@@ -1123,23 +1139,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     def getValueExpressions(e: Expression): Seq[Expression] = e match {
       case c: CreateNamedStruct => c.valExprs
       case other => Seq(other)
-    }
-
-    def getComparisonOperator(o: Int): (Expression, Expression) => BinaryComparison = o match {
-      case SqlBaseParser.EQ =>
-        EqualTo
-      case SqlBaseParser.NSEQ =>
-        EqualNullSafe
-      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
-        SubqueryPredicate.NotEqualTo
-      case SqlBaseParser.LT =>
-        LessThan
-      case SqlBaseParser.LTE =>
-        LessThanOrEqual
-      case SqlBaseParser.GT =>
-        GreaterThan
-      case SqlBaseParser.GTE =>
-        GreaterThanOrEqual
     }
 
     // Create the predicate.
@@ -1167,10 +1166,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Not(EqualNullSafe(e, expression(ctx.right)))
       case SqlBaseParser.ANY | SqlBaseParser.SOME =>
         invertIfNotDefined(AnySubquery(
-            getValueExpressions(e),
-            getComparisonOperator(
-              ctx.comparisonOperator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType),
-            ListQuery(plan(ctx.query))))
+            getComparison(
+              ctx.comparisonOperator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType,
+              e,
+              ListQuery(plan(ctx.query)))))
     }
   }
 

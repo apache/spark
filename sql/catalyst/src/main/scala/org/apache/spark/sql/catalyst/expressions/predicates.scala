@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
-import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -27,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-
 
 
 object InterpretedPredicate {
@@ -147,37 +145,33 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
-
 /**
  * An [[Expression]] compares `values` with a `query`.
  *
- * Note: comparison can be `NotEqualTo` which should be rewrite as `Not(EqualTo)`.
+ * Note: `comparison` can be `NotEqualTo` which should be rewrite as `Not(EqualTo)`.
  *
  * TODO: support `ALL` subquery.
  */
-abstract class SubqueryPredicate(
-    val values: Seq[Expression],
-    val comparison: (Expression, Expression) => BinaryComparison,
-    val query: ListQuery)
+abstract class PredicateSubquery
   extends Predicate
   with Unevaluable {
 
-  @transient protected lazy val comparisonSymbol: String = comparison(null, null).symbol
+  val values: Seq[Expression]
 
-  @transient protected lazy val value: Expression = if (values.length > 1) {
-    CreateNamedStruct(values.zipWithIndex.flatMap {
-      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
-      case (v, idx) => Seq(Literal(s"_$idx"), v)
-    })
-  } else {
-    values.head
-  }
+  val comparison: BinaryComparison
 
+  val query: ListQuery
+
+  def predicateName: String
+
+  @transient protected lazy val value: Expression = PredicateSubquery.combineValues(values)
+
+  // scalastyle:off line.size.limit
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The number of columns in the left hand side of an $prettyName does not match the
+           |The number of columns in the left hand side of an $predicateName subquery does not match the
            |number of columns in the output of subquery.
            |#columns in left hand side: ${values.length}.
            |#columns in right hand side: ${query.childOutputs.length}.
@@ -195,7 +189,7 @@ abstract class SubqueryPredicate(
       }
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The data type of one or more elements in the left hand side of an $prettyName
+           |The data type of one or more elements in the left hand side of an $predicateName subquery
            |is not compatible with the data type of the output of the subquery
            |Mismatched columns:
            |[${mismatchedColumns.mkString(", ")}]
@@ -207,47 +201,66 @@ abstract class SubqueryPredicate(
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
     }
   }
-
+  // scalastyle:on line.size.limit
   override def children: Seq[Expression] = values :+ query
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 }
 
-object SubqueryPredicate {
-
-  /**
-   * Only be used in SubqueryPredicate, and will be rewrite as Not(EqualTo(left, right)).
-   */
-  case class NotEqualTo(left: Expression, right: Expression) extends BinaryComparison {
-
-    override def symbol: String = "!="
-  }
-
+object PredicateSubquery {
   /**
    * Rewrite `NotEqualTo` as `Not(EqualTo)` and reserve others.
    */
-  def getComparisonExpression[T <: BinaryComparison : ClassTag](
-      comparison: (Expression, Expression) => T)
-    : ((Expression, Expression)) => Expression = implicitly[ClassTag[T]] match {
-    case ClassTag(ne) if ne == classOf[NotEqualTo] =>
-      EqualTo.tupled.andThen(Not)
-    case _ =>
-      comparison.tupled
+  def rewritePredicate(cmp: BinaryComparison)
+  : (Expression, Expression) => Expression = cmp match {
+    case _: NotEqualTo =>
+      (left, right) => Not(EqualTo(left, right))
+    case other =>
+      getPredicate(cmp)
+  }
+
+  def getPredicate(cmp: BinaryComparison)
+  : (Expression, Expression) => BinaryComparison = cmp match {
+    case _: EqualTo =>
+      EqualTo
+    case _: EqualNullSafe =>
+      EqualNullSafe
+    case _: NotEqualTo =>
+      NotEqualTo
+    case _: LessThan =>
+      LessThan
+    case _: LessThanOrEqual =>
+      LessThanOrEqual
+    case _: GreaterThan =>
+      GreaterThan
+    case _: GreaterThanOrEqual =>
+      GreaterThanOrEqual
+  }
+
+  private def combineValues(values: Seq[Expression]): Expression = {
+    if (values.length > 1) {
+      CreateNamedStruct(values.zipWithIndex.flatMap {
+        case (v: NamedExpression, _) => Seq(Literal(v.name), v)
+        case (v, idx) => Seq(Literal(s"_$idx"), v)
+      })
+    } else {
+      values.head
+    }
   }
 
   def apply (
-    p: SubqueryPredicate,
-    values: Seq[Expression],
-    comparison: (Expression, Expression) => BinaryComparison,
-    query: ListQuery): SubqueryPredicate = p match {
+      p: PredicateSubquery,
+      values: Seq[Expression],
+      comparison: BinaryComparison,
+      query: ListQuery): PredicateSubquery = p match {
     case _: InSubquery =>
       InSubquery(values, query)
     case _: AnySubquery =>
-      AnySubquery(values, comparison, query)
+      AnySubquery(getPredicate(comparison)(combineValues(values), query))
   }
 
-  def unapply(p: SubqueryPredicate)
-  : Option[(Seq[Expression], (Expression, Expression) => BinaryComparison, ListQuery)] = {
+  def unapply(p: PredicateSubquery)
+  : Option[(Seq[Expression], BinaryComparison, ListQuery)] = {
     if (p == null) {
       None
     } else {
@@ -257,29 +270,41 @@ object SubqueryPredicate {
 }
 
 /**
- * Evaluates to `true` if `leftValues` are returned in `subquery`'s result set.
+ * Evaluates to `true` if the comparison between `values`
+ * and any row in `query`'s result set returns `true`.
  */
-case class InSubquery(leftValues: Seq[Expression], subquery: ListQuery)
-  extends SubqueryPredicate(leftValues, EqualTo, subquery) {
+case class AnySubquery(values: Seq[Expression], cmp: BinaryComparison, query: ListQuery)
+  extends PredicateSubquery {
 
-  override def toString: String = s"$value IN ($query)"
+  override val comparison: BinaryComparison = cmp
 
-  override def sql: String = s"(${value.sql} IN (${query.sql}))"
+  override def predicateName: String = "ANY"
+  override def toString: String = s"$value ${comparison.symbol} ANY ($query)"
+  override def sql: String = s"(${value.sql} ${comparison.symbol} ANY (${query.sql}))"
+}
+
+object AnySubquery {
+  def apply(comparison: BinaryComparison): AnySubquery = {
+    val values: Seq[Expression] = comparison.left match {
+      case c: CreateNamedStruct => c.valExprs
+      case other => Seq(other)
+    }
+    val query: ListQuery = comparison.right.asInstanceOf[ListQuery]
+
+    AnySubquery(values, comparison, query)
+  }
 }
 
 /**
- * Evaluates to `true` if the comparison between `leftValues`
- * and any row in `subquery`'s result set returns `true`.
+ * Evaluates to `true` if `values` are returned in `query`'s result set.
  */
-case class AnySubquery(
-  leftValues: Seq[Expression],
-  binaryComparison: (Expression, Expression) => BinaryComparison,
-  subquery: ListQuery)
-  extends SubqueryPredicate(leftValues, binaryComparison, subquery) {
+case class InSubquery(values: Seq[Expression], query: ListQuery) extends PredicateSubquery {
 
-  override def toString: String = s"$value $comparisonSymbol ANY ($query)"
+  override val comparison: BinaryComparison = EqualTo(value, query)
 
-  override def sql: String = s"(${value.sql} $comparisonSymbol ANY (${query.sql}))"
+  override def predicateName: String = "IN"
+  override def toString: String = s"$value IN ($query)"
+  override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
 
 /**
@@ -875,4 +900,12 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
+}
+
+/**
+ * Only be used in PredicateSubquery, and will be rewrite as Not(EqualTo(left, right)).
+ */
+case class NotEqualTo(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def symbol: String = "!="
 }
