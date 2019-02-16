@@ -66,9 +66,9 @@ object DateTimeUtils {
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
-  def getZoneId(zoneId: String): ZoneId = ZoneId.of(zoneId)
   def getTimeZone(timeZoneId: String): TimeZone = {
-    TimeZone.getTimeZone(getZoneId(timeZoneId))
+    val zoneId = ZoneId.of(timeZoneId)
+    TimeZone.getTimeZone(zoneId)
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
