@@ -109,7 +109,7 @@ SELECT t1a, t2a
 FROM   t1
 JOIN   t2
 ON     t1c = t2c
-AND    t1b > ANY (SELECT t3b
+WHERE   t1b > ANY (SELECT t3b
                   FROM   t3);
 
 -- ANY subquery with join 2
@@ -124,7 +124,7 @@ SELECT t1a, t2a
 FROM   t1
 JOIN   t2
 ON     t1c = t2c
-AND    t1b > ANY (SELECT t2b
+WHERE  t1b > ANY (SELECT t2b
                   FROM   t2);
 
 -- ANY subquery with group 1
