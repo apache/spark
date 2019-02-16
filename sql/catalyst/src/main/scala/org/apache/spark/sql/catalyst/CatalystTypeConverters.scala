@@ -23,10 +23,10 @@ import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
 import java.time.Instant
 import java.util.{Map => JavaMap}
-
 import javax.annotation.Nullable
 
 import scala.language.existentials
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
