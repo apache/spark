@@ -719,17 +719,8 @@ object DateTimeUtils {
         daysToMillis(prevMonday, timeZone)
       case TRUNC_TO_QUARTER =>
         val dDays = millisToDays(millis, timeZone)
-        val month = getQuarter(dDays) match {
-          case 1 => Month.JANUARY
-          case 2 => Month.APRIL
-          case 3 => Month.JULY
-          case 4 => Month.OCTOBER
-        }
-        millis = daysToMillis(truncDate(dDays, TRUNC_TO_MONTH), timeZone)
-        val instant = Instant.ofEpochMilli(millis)
-        val localDateTime = LocalDateTime.ofInstant(instant, timeZone.toZoneId)
-        val truncated = localDateTime.withMonth(month.getValue)
-        truncated.atZone(timeZone.toZoneId).toInstant.toEpochMilli
+        LocalDate.ofEpochDay(dDays).`with`(IsoFields.DAY_OF_QUARTER, 1L)
+          .atStartOfDay(timeZone.toZoneId).toInstant.toEpochMilli
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
