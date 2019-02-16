@@ -173,7 +173,8 @@ object FileSourceStrategy extends Strategy with Logging {
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
+      val dataFilters =
+        normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
