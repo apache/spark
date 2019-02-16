@@ -75,32 +75,40 @@ public class TransportFrameDecoderSuite {
         return null;
       });
 
-      try {
-        long start = System.currentTimeMillis();
-        ByteBuf buf = Unpooled.buffer(8);
-        long targetBytes = ByteUnit.GiB.toBytes(1);
-        int pieceBytes = (int) ByteUnit.KiB.toBytes(32);
-        long writtenBytes = 0;
-        buf.writeLong(8 + ByteUnit.GiB.toBytes(1));
-        decoder.channelRead(ctx, buf);
-        while (writtenBytes < targetBytes) {
-          buf = Unpooled.buffer(pieceBytes * 2);
-          ByteBuf writtenBuf = Unpooled.buffer(pieceBytes).writerIndex(pieceBytes);
-          buf.writeBytes(writtenBuf);
-          writtenBuf.release();
+      // Testing multiple messages
+      int numMessages = 3;
+      long targetBytes = ByteUnit.GiB.toBytes(1);
+      int pieceBytes = (int) ByteUnit.KiB.toBytes(32);
+      for (int i = 0; i < numMessages; i++) {
+        try {
+          long start = System.currentTimeMillis();
+          long writtenBytes = 0;
+          ByteBuf buf = Unpooled.buffer(8);
+          buf.writeLong(8 + ByteUnit.GiB.toBytes(1));
           decoder.channelRead(ctx, buf);
-          writtenBytes += pieceBytes;
-        }
-        long elapsedTime = System.currentTimeMillis() - start;
-        logger.info("Writing 1GiB frame buf with consolidation of threshold " + threshold
-            + " took " + elapsedTime + " milis");
-        assertEquals(1, retained.size());
-        assertEquals(targetBytes, retained.get(0).capacity());
-      } finally {
-        for (ByteBuf buf : retained) {
-          release(buf);
+          while (writtenBytes < targetBytes) {
+            buf = Unpooled.buffer(pieceBytes * 2);
+            ByteBuf writtenBuf = Unpooled.buffer(pieceBytes).writerIndex(pieceBytes);
+            buf.writeBytes(writtenBuf);
+            writtenBuf.release();
+            decoder.channelRead(ctx, buf);
+            writtenBytes += pieceBytes;
+          }
+          long elapsedTime = System.currentTimeMillis() - start;
+          logger.info("Writing 1GiB frame buf with consolidation of threshold " + threshold
+              + " took " + elapsedTime + " milis");
+        } finally {
+          for (ByteBuf buf : retained) {
+            release(buf);
+          }
         }
       }
+      long totalBytesGot = 0;
+      for (ByteBuf buf : retained) {
+        totalBytesGot += buf.capacity();
+      }
+      assertEquals(numMessages, retained.size());
+      assertEquals(targetBytes * numMessages, totalBytesGot);
     }
   }
 
