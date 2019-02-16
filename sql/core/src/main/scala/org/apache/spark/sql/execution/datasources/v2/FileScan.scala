@@ -18,21 +18,38 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, Scan}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 abstract class FileScan(
     sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex) extends Scan with Batch {
+    fileIndex: PartitioningAwareFileIndex,
+    readSchema: StructType) extends Scan with Batch {
   /**
    * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(path: Path): Boolean = {
     false
   }
+
+  /**
+   * Returns whether this format supports the given [[DataType]] in write path.
+   * By default all data types are supported.
+   */
+  def supportsDataType(dataType: DataType): Boolean = true
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def formatName(): String = "ORC"
+   * }}}
+   */
+  def formatName: String
 
   protected def partitions: Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
@@ -57,5 +74,13 @@ abstract class FileScan(
     partitions.toArray
   }
 
-  override def toBatch: Batch = this
+  override def toBatch: Batch = {
+    readSchema.foreach { field =>
+      if (!supportsDataType(field.dataType)) {
+        throw new AnalysisException(
+          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
+      }
+    }
+    this
+  }
 }
