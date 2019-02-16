@@ -29,7 +29,7 @@
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
-    <jersey-1.version>1.9</jersey-1.version>
+    <jersey-1.version>1.19</jersey-1.version>
   </properties>
 
   <dependencies>
@@ -133,20 +133,6 @@
     </dependency>
 
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
-      <version>${yarn.version}</version>
-      <classifier>tests</classifier>
-      <scope>test</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>javax.ws.rs</groupId>
-          <artifactId>jsr311-api</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-
-    <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
@@ -174,6 +160,12 @@
        <scope>test</scope>
        <version>${jersey-1.version}</version>
      </dependency>
+    <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-servlet</artifactId>
+      <scope>test</scope>
+      <version>${jersey-1.version}</version>
+    </dependency>
      <dependency>
        <groupId>com.sun.jersey.contribs</groupId>
        <artifactId>jersey-guice</artifactId>
