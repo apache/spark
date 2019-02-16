@@ -324,12 +324,12 @@ date_trunc WEEK:                         Best/Avg Time(ms)    Rate(M/s)   Per Ro
 date_trunc WEEK wholestage off                 794 /  797         12.6          79.4       1.0X
 date_trunc WEEK wholestage on                  754 /  761         13.3          75.4       1.1X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 date_trunc QUARTER:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-date_trunc QUARTER wholestage off             5261 / 5271          1.9         526.1       1.0X
-date_trunc QUARTER wholestage on              5145 / 5151          1.9         514.5       1.0X
+date_trunc QUARTER wholestage off             4162 / 4188          2.4         416.2       1.0X
+date_trunc QUARTER wholestage on              4260 / 4285          2.3         426.0       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-ea-b03 on Mac OS X 10.14.2
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
