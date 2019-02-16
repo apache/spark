@@ -29,8 +29,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 case class FileWriterFactory (
     description: WriteJobDescription,
-    committer: FileCommitProtocol,
-    conf: SerializableConfiguration) extends DataWriterFactory {
+    committer: FileCommitProtocol) extends DataWriterFactory {
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
     val taskAttemptContext = createTaskAttemptContext(partitionId)
     committer.setupTask(taskAttemptContext)
@@ -46,7 +45,7 @@ case class FileWriterFactory (
     val taskId = new TaskID(jobId, TaskType.MAP, partitionId)
     val taskAttemptId = new TaskAttemptID(taskId, 0)
     // Set up the configuration object
-    val hadoopConf = conf.value
+    val hadoopConf = description.serializableHadoopConf.value
     hadoopConf.set("mapreduce.job.id", jobId.toString)
     hadoopConf.set("mapreduce.task.id", taskId.toString)
     hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
