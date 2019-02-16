@@ -719,8 +719,9 @@ object DateTimeUtils {
         daysToMillis(prevMonday, timeZone)
       case TRUNC_TO_QUARTER =>
         val dDays = millisToDays(millis, timeZone)
-        LocalDate.ofEpochDay(dDays).`with`(IsoFields.DAY_OF_QUARTER, 1L)
-          .atStartOfDay(timeZone.toZoneId).toInstant.toEpochMilli
+        val daysOfQuarter = LocalDate.ofEpochDay(dDays)
+          .`with`(IsoFields.DAY_OF_QUARTER, 1L).toEpochDay.toInt
+        daysToMillis(daysOfQuarter, timeZone)
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
