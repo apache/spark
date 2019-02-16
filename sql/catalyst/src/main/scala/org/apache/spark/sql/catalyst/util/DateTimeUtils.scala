@@ -22,8 +22,7 @@ import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.function.{Function => JFunction}
+import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
@@ -67,13 +66,9 @@ object DateTimeUtils {
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
-  private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
-  private val computeTimeZone = new JFunction[String, TimeZone] {
-    override def apply(timeZoneId: String): TimeZone = TimeZone.getTimeZone(timeZoneId)
-  }
-
+  def getZoneId(zoneId: String): ZoneId = ZoneId.of(zoneId)
   def getTimeZone(timeZoneId: String): TimeZone = {
-    computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
+    TimeZone.getTimeZone(getZoneId(timeZoneId))
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
