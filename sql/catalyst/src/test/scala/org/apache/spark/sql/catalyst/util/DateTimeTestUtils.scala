@@ -17,12 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.LocalDateTime
 import java.util.TimeZone
-import java.util.concurrent.TimeUnit
-
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localDateTimeToMicros
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 
 /**
  * Helper functions for testing date and time functionality.
@@ -30,17 +25,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 object DateTimeTestUtils {
 
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
-
-  val outstandingTimezonesIds: Seq[String] = Seq(
-    "UTC",
-    "PST",
-    "CET",
-    "Africa/Dakar",
-    "America/Los_Angeles",
-    "Antarctica/Vostok",
-    "Asia/Hong_Kong",
-    "Europe/Amsterdam")
-  val outstandingTimezones: Seq[TimeZone] = outstandingTimezonesIds.map(TimeZone.getTimeZone)
 
   def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
     val originalDefaultTimeZone = TimeZone.getDefault
@@ -53,37 +37,4 @@ object DateTimeTestUtils {
       DateTimeUtils.resetThreadLocals()
     }
   }
-
-  def localDateTimeToMicros(localDateTime: LocalDateTime, tz: TimeZone): Long = {
-    val instant = localDateTime.atZone(tz.toZoneId).toInstant
-    DateTimeUtils.instantToMicros(instant)
-  }
-
-  // Returns microseconds since epoch for the given date
-  def date(
-      year: Int,
-      month: Byte = 1,
-      day: Byte = 1,
-      hour: Byte = 0,
-      minute: Byte = 0,
-      sec: Byte = 0,
-      micros: Int = 0,
-      tz: TimeZone = TimeZoneUTC): Long = {
-    val nanos = TimeUnit.MICROSECONDS.toNanos(micros).toInt
-    val localDateTime = LocalDateTime.of(year, month, day, hour, minute, sec, nanos)
-    localDateTimeToMicros(localDateTime, tz)
-  }
-
-  // Returns number of days since epoch for the given date
-  def days(
-      year: Int,
-      month: Byte = 1,
-      day: Byte = 1,
-      hour: Byte = 0,
-      minute: Byte = 0,
-      sec: Byte = 0): Int = {
-    val micros = date(year, month, day, hour, minute, sec)
-    TimeUnit.MICROSECONDS.toDays(micros).toInt
-  }
-
 }

@@ -472,7 +472,7 @@ object CatalogColumnStat extends Logging {
   private val KEY_MAX_LEN = "maxLen"
   private val KEY_HISTOGRAM = "histogram"
 
-  val VERSION = 2
+  val VERSION = 1
 
   private def getTimestampFormatter(): TimestampFormatter = {
     TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", timeZone = DateTimeUtils.TimeZoneUTC)
@@ -510,8 +510,8 @@ object CatalogColumnStat extends Logging {
    */
   def toExternalString(v: Any, colName: String, dataType: DataType): String = {
     val externalValue = dataType match {
-      case DateType => DateFormatter().format(v.asInstanceOf[Int])
-      case TimestampType => getTimestampFormatter().format(v.asInstanceOf[Long])
+      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
+      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
