@@ -270,13 +270,9 @@ object ScalarSubquery {
 
   def hasScalarSubquery(e: Expression): Boolean = {
     e.find {
-      case s: ScalarSubquery => true
+      case _: ScalarSubquery => true
       case _ => false
     }.isDefined
-  }
-
-  def hasScalarSubquery(e: Seq[Expression]): Boolean = {
-    e.find(hasScalarSubquery(_)).isDefined
   }
 }
 
