@@ -46,8 +46,7 @@ class FileBatchWrite(
   }
 
   override def createBatchWriterFactory(): DataWriterFactory = {
-    val conf = new SerializableConfiguration(job.getConfiguration)
-    FileWriterFactory(description, committer, conf)
+    FileWriterFactory(description, committer)
   }
 }
 
