@@ -33,6 +33,16 @@ import org.apache.spark.ui.TestFilter
 
 class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with LocalSparkContext {
 
+  private var yarnSchedulerBackend: YarnSchedulerBackend = _
+
+  override def afterEach() {
+    try {
+      yarnSchedulerBackend.stop()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   test("RequestExecutors reflects node blacklist and is serializable") {
     sc = new SparkContext("local", "YarnSchedulerBackendSuite")
     // Subclassing the TaskSchedulerImpl here instead of using Mockito. For details see SPARK-26891.
@@ -44,11 +54,12 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       override def nodeBlacklist(): Set[String] = blacklistedNodes.get()
     }
 
-    val yarnSchedulerBackend = new YarnSchedulerBackend(sched, sc) {
+    val yarnSchedulerBackendExtended = new YarnSchedulerBackend(sched, sc) {
       def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
         this.hostToLocalTaskCount = hostToLocalTaskCount
       }
     }
+    yarnSchedulerBackend = yarnSchedulerBackendExtended
     val ser = new JavaSerializer(sc.conf).newInstance()
     for {
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
@@ -58,9 +69,9 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
         Map("a" -> 1, "b" -> 2)
       )
     } {
-      yarnSchedulerBackend.setHostToLocalTaskCount(hostToLocalCount)
+      yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
       sched.setNodeBlacklist(blacklist)
-      val req = yarnSchedulerBackend.prepareRequestExecutors(numRequested)
+      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numRequested)
       assert(req.requestedTotal === numRequested)
       assert(req.nodeBlacklist === blacklist)
       assert(req.hostToLocalTaskCount.keySet.intersect(blacklist).isEmpty)
@@ -83,9 +94,9 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     // Before adding the "YARN" filter, should get the code from the filter in SparkConf.
     assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_BAD_GATEWAY)
 
-    val backend = new YarnSchedulerBackend(sched, sc) { }
+    yarnSchedulerBackend = new YarnSchedulerBackend(sched, sc) { }
 
-    backend.addWebUIFilter(classOf[TestFilter2].getName(),
+    yarnSchedulerBackend.addWebUIFilter(classOf[TestFilter2].getName(),
       Map("responseCode" -> HttpServletResponse.SC_NOT_ACCEPTABLE.toString), "")
 
     sc.ui.get.getHandlers.foreach { h =>
