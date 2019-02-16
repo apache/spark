@@ -346,12 +346,14 @@ class KubernetesSuite extends SparkFunSuite
       Thread.sleep(100)
       // Wait for the executors to become ready
       Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
-        val podsReady = ! execPods.map{
+        val anyReadyPods = ! execPods.map{
           case (name, resource) =>
             (name, resource.getMetadata().getNamespace())
-        }.filter(case (name, namespace) => checkPodReady(namespace, name)).isEmpty
+        }.filter{
+          case (name, namespace) => checkPodReady(namespace, name)
+        }.isEmpty
         val podsEmpty = execPods.values.isEmpty
-        val podsReadyOrDead = podsReady || podsEmpty
+        val podsReadyOrDead = anyReadyPods || podsEmpty
         podsReadyOrDead shouldBe (true)
       }
       // Sleep a small interval to allow execution
