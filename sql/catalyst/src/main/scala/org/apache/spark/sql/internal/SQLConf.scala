@@ -1659,6 +1659,12 @@ object SQLConf {
         "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
+
+  val TIMESTAMP_EXTERNAL_TYPE = buildConf("spark.sql.catalyst.timestampType")
+    .doc("Java class to/from which an instance of TimestampType is converted.")
+    .stringConf
+    .checkValues(Set("Timestamp", "Instant"))
+    .createWithDefault("Timestamp")
 }
 
 /**
@@ -1843,6 +1849,8 @@ class SQLConf extends Serializable with Logging {
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
+  def timestampExternalType: String = getConf(TIMESTAMP_EXTERNAL_TYPE)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

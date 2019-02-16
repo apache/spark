@@ -18,16 +18,17 @@
 package org.apache.spark.sql.catalyst
 
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class CatalystTypeConvertersSuite extends SparkFunSuite {
+class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   private val simpleTypes: Seq[DataType] = Seq(
     StringType,
@@ -164,6 +165,20 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
       val result = CatalystTypeConverters.convertToCatalyst(input)
       val expected = DateTimeUtils.instantToMicros(input)
       assert(result === expected)
+    }
+  }
+
+  test("converting TimestampType to java.time.Instant") {
+    withSQLConf(SQLConf.TIMESTAMP_EXTERNAL_TYPE.key -> "Instant") {
+      Seq(
+        -9463427405253013L,
+        -244000001L,
+        0L,
+        99628200102030L,
+        1543749753123456L).foreach { us =>
+        val instant = DateTimeUtils.microsToInstant(us)
+        assert(CatalystTypeConverters.createToScalaConverter(TimestampType)(us) === instant)
+      }
     }
   }
 }
