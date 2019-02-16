@@ -651,6 +651,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
+    // Vectorized gapply in R should not prune columns because all referred fields
+    // can be used within given R native function.
+    case p @ Project(_, _: FlatMapGroupsInRWithArrow) => p
+
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>
