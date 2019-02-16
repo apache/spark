@@ -21,11 +21,12 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
+import java.time.Instant
 import java.util.{Map => JavaMap}
+
 import javax.annotation.Nullable
 
 import scala.language.existentials
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
@@ -313,6 +314,16 @@ object CatalystTypeConverters {
       else DateTimeUtils.toJavaTimestamp(catalystValue.asInstanceOf[Long])
     override def toScalaImpl(row: InternalRow, column: Int): Timestamp =
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
+  }
+
+  private object InstantConverter extends CatalystTypeConverter[Instant, Instant, Any] {
+    override def toCatalystImpl(scalaValue: Instant): Long =
+      DateTimeUtils.instantToMicros(scalaValue)
+    override def toScala(catalystValue: Any): Instant =
+      if (catalystValue == null) null
+      else DateTimeUtils.microsToInstant(catalystValue.asInstanceOf[Long])
+    override def toScalaImpl(row: InternalRow, column: Int): Instant =
+      DateTimeUtils.microsToInstant(row.getLong(column))
   }
 
   private class DecimalConverter(dataType: DecimalType)

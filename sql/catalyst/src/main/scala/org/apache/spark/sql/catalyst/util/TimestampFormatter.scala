@@ -61,10 +61,7 @@ class Iso8601TimestampFormatter(
   override def parse(s: String): Long = instantToMicros(toInstant(s))
 
   override def format(us: Long): String = {
-    val secs = Math.floorDiv(us, DateTimeUtils.MICROS_PER_SECOND)
-    val mos = Math.floorMod(us, DateTimeUtils.MICROS_PER_SECOND)
-    val instant = Instant.ofEpochSecond(secs, mos * DateTimeUtils.NANOS_PER_MICROS)
-
+    val instant = DateTimeUtils.microsToInstant(us)
     formatter.withZone(timeZone.toZoneId).format(instant)
   }
 }

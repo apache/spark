@@ -356,6 +356,12 @@ object DateTimeUtils {
     result
   }
 
+  def microsToInstant(us: Long): Instant = {
+    val secs = Math.floorDiv(us, MICROS_PER_SECOND)
+    val mos = Math.floorMod(us, MICROS_PER_SECOND)
+    Instant.ofEpochSecond(secs, mos * NANOS_PER_MICROS)
+  }
+
   def instantToDays(instant: Instant): Int = {
     val seconds = instant.getEpochSecond
     val days = Math.floorDiv(seconds, SECONDS_PER_DAY)
