@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -152,8 +152,18 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
   }
 
   test("converting java.time.Instant to TimestampType") {
-    val input = Instant.parse("2019-02-16T18:12:30Z")
-    val result = CatalystTypeConverters.convertToCatalyst(input)
-    assert(result === TimeUnit.SECONDS.toMicros(input.getEpochSecond))
+    Seq(
+      "0101-02-16T10:11:32Z",
+      "1582-10-02T01:02:03.04Z",
+      "1582-12-31T23:59:59.999999Z",
+      "1970-01-01T00:00:01.123Z",
+      "1972-12-31T23:59:59.123456Z",
+      "2019-02-16T18:12:30Z",
+      "2119-03-16T19:13:31Z").foreach { timestamp =>
+      val input = Instant.parse(timestamp)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.instantToMicros(input)
+      assert(result === expected)
+    }
   }
 }
