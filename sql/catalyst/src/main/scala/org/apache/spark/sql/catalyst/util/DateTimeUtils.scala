@@ -67,7 +67,7 @@ object DateTimeUtils {
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
   def getTimeZone(timeZoneId: String): TimeZone = {
-    val zoneId = ZoneId.of(timeZoneId)
+    val zoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
     TimeZone.getTimeZone(zoneId)
   }
 
