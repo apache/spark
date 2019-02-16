@@ -285,7 +285,8 @@ class GBTRegressionModel private[ml](
    * @see `DecisionTreeRegressionModel.featureImportances`
    */
   @Since("2.0.0")
-  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
+  lazy val featureImportances: Vector =
+    TreeEnsembleModel.featureImportances(trees, numFeatures, perTreeNormalization = false)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
