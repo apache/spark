@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.time.Instant
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
@@ -146,5 +149,11 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
     val expected = UTF8String.fromString("X")
     assert(converter(chr) === expected)
+  }
+
+  test("converting java.time.Instant to TimestampType") {
+    val input = Instant.parse("2019-02-16T18:12:30Z")
+    val result = CatalystTypeConverters.convertToCatalyst(input)
+    assert(result === TimeUnit.SECONDS.toMicros(input.getEpochSecond))
   }
 }
