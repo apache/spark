@@ -1492,6 +1492,13 @@ abstract class RDD[T: ClassTag](
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String): Unit = withScope {
+    saveAsTextFile(path, null)
+  }
+
+  /**
+   * Save this RDD as a compressed text file, using string representations of elements.
+   */
+  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = withScope {
     // https://issues.apache.org/jira/browse/SPARK-2075
     //
     // NullWritable is a `Comparable` in Hadoop 1.+, so the compiler cannot find an implicit
@@ -1507,27 +1514,8 @@ abstract class RDD[T: ClassTag](
     val r = this.mapPartitions { iter =>
       val text = new Text()
       iter.map { x =>
-        val value = if (x != null) x.toString else "Null"
-        text.set(value)
-        (NullWritable.get(), text)
-      }
-    }
-    RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
-      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
-  }
-
-  /**
-   * Save this RDD as a compressed text file, using string representations of elements.
-   */
-  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = withScope {
-    // https://issues.apache.org/jira/browse/SPARK-2075
-    val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
-    val textClassTag = implicitly[ClassTag[Text]]
-    val r = this.mapPartitions { iter =>
-      val text = new Text()
-      iter.map { x =>
-        val value = if (x != null) x.toString else "Null"
-        text.set(value)
+        require(x != null, "should not contain null rows")
+        text.set(x.toString)
         (NullWritable.get(), text)
       }
     }
