@@ -515,6 +515,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     val input = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, 16, tz = TimeZonePST))
     assert(millisToDays(input, TimeZonePST) === 16800)
     assert(millisToDays(input, TimeZoneGMT) === 16801)
+    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, TimeZoneGMT) == -1)
 
     var expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZonePST))
     assert(daysToMillis(16800, TimeZonePST) === expected)
