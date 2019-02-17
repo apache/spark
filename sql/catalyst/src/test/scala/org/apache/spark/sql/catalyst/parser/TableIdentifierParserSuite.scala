@@ -59,79 +59,8 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",
     "where", "having", "from", "to", "table", "with", "not")
 
-  val reservedKeywordsInAnsi = Seq("all", "and", "any", "as", "authorization", "both", "case",
-    "cast", "check", "collate", "column", "constraint", "create", "cross", "current_date",
-    "current_time", "current_timestamp", "current_user", "distinct", "else", "end", "except",
-    "false", "fetch", "for", "foreign", "from", "full", "grant", "group", "having", "in", "inner",
-    "intersect", "into", "is", "join", "leading", "left", "natural", "not", "null", "on", "only",
-    "or", "order", "outer", "overlaps", "primary", "references", "right", "select", "session_user",
-    "some", "table", "then", "to", "trailing", "union", "unique", "user", "using", "when",
-    "where", "with")
-
-  val nonReservedKeywordsInAnsi = Seq("abs", "absolute", "acos", "action", "add", "after",
-    "allocate", "alter", "analyze", "are", "archive", "array", "array_agg", "array_max_cardinality",
-    "asc", "asensitive", "asin", "assertion", "asymmetric", "at", "atan", "atomic", "avg", "before",
-    "begin", "begin_frame", "begin_partition", "between", "bigint", "binary", "bit", "bit_length",
-    "blob", "boolean", "breadth", "bucket", "buckets", "by", "cache", "call", "called",
-    "cardinality", "cascade", "cascaded", "catalog", "ceil", "ceiling", "change", "char",
-    "char_length", "character", "character_length", "classifier", "clear", "clob", "close",
-    "cluster", "clustered", "coalesce", "codegen", "collation", "collect", "collection",
-    "columns", "comment", "commit", "compact", "compactions", "compute", "concatenate", "condition",
-    "connect", "connection", "constraints", "constructor", "contains", "continue", "convert",
-    "copy", "corr", "corresponding", "cos", "cosh", "cost", "count", "covar_pop", "covar_samp",
-    "cube", "cume_dist", "current", "current_catalog", "current_default_transform_group",
-    "current_path", "current_role", "current_row", "current_schema",
-    "current_transform_group_for_type", "cursor", "cycle", "data", "database", "databases", "date",
-    "day", "dbproperties", "deallocate", "dec", "decfloat", "decimal", "declare", "default",
-    "deferrable", "deferred", "define", "defined", "delete", "delimited", "dense_rank", "depth",
-    "deref", "desc", "describe", "descriptor", "deterministic", "dfs", "diagnostics",
-    "directories", "directory", "disconnect", "distribute", "div", "do", "domain", "double",
-    "drop", "dynamic", "each", "element", "elseif", "empty", "end_frame", "end_partition",
-    "equals", "escape", "escaped", "every", "exception", "exchange", "exec", "execute",
-    "exists", "exit", "exp", "explain", "export", "extended", "external", "extract", "fields",
-    "fileformat", "filter", "first", "first_value", "float", "following", "format", "formatted",
-    "found", "frame_row", "free", "function", "functions", "fusion", "general", "get", "global",
-    "go", "goto", "grouping", "groups", "handler", "hold", "hour", "identity", "if", "ignore",
-    "immediate", "import", "indicator", "index", "indexes", "initial", "initially", "inout",
-    "inpath", "input", "inputformat", "insensitive", "insert", "int", "integer", "intersection",
-    "interval", "isolation", "items", "iterate", "json_array", "json_arrayagg", "json_exists",
-    "json_object", "json_objectagg", "json_query", "json_table", "json_table_primitive",
-    "json_value", "key", "keys", "lag", "language", "large", "last", "last_value", "lateral",
-    "lazy", "lead", "leave", "level", "like", "like_regex", "limit", "lines", "list", "listagg",
-    "ln", "load", "local", "localtime", "localtimestamp", "location", "locator", "lock", "locks",
-    "log", "log10", "logical", "loop", "lower", "macro", "map", "match", "match_number",
-    "match_recognize", "matches", "max", "member", "merge", "method", "min", "minute", "mod",
-    "modifies", "module", "month", "msck", "multiset", "names", "national", "nchar", "nclob",
-    "new", "next", "no", "none", "normalize", "nth_value", "ntile", "nulls", "nullif", "numeric",
-    "object", "occurrences_regex", "octet_length", "of", "offset", "old", "omit", "one", "open",
-    "option", "options", "ordinality", "out", "output", "outputformat", "over", "overlay",
-    "overwrite", "pad", "parameter", "partial", "partition", "partitioned", "partitions", "path",
-    "pattern", "per", "percent", "percent_rank", "percentile_cont", "percentile_disc", "percentlit",
-    "period", "pivot", "portion", "power", "precedes", "preceding", "precision", "prepare",
-    "preserve", "principals", "prior", "privileges", "procedure", "ptf", "public", "purge", "range",
-    "rank", "read", "reads", "real", "recordreader", "recordwriter", "recursive", "recover",
-    "reduce", "ref", "referencing", "refresh", "regr_avgx", "regr_avgy", "regr_count",
-    "regr_intercept", "regr_r2", "regr_slope", "regr_sxx", "regr_sxy", "regr_syy", "relative",
-    "release", "rename", "repair", "repeat", "replace", "reset", "resignal", "restrict", "result",
-    "return", "returns", "revoke", "rlike", "role", "roles", "rollback", "rollup", "routine",
-    "row", "row_number", "rows", "running", "savepoint", "schema", "scope", "scroll", "search",
-    "second", "section", "seek", "sensitive", "separated", "serde", "serdeproperties", "session",
-    "set", "sets", "show", "signal", "similar", "sin", "sinh", "size", "skip", "skewed", "smallint",
-    "sort", "sorted", "space", "specific", "specifictype", "sql", "sqlcode", "sqlerror",
-    "sqlexception", "sqlstate", "sqlwarning", "sqrt", "start", "state", "static", "statistics",
-    "stddev_pop", "stddev_samp", "stored", "stratify", "struct", "submultiset", "subset",
-    "substring", "substring_regex", "succeeds", "sum", "symmetric", "system", "system_time",
-    "system_user", "tables", "tablesample", "tan", "tanh", "tblproperties", "temporary",
-    "terminated", "time", "timestamp", "timezone_hour", "timezone_minute", "touch", "transaction",
-    "transactions", "transform", "translate", "translate_regex", "translation", "treat", "trigger",
-    "trim", "trim_array", "true", "truncate", "uescape", "unarchive", "unbounded", "uncache",
-    "under", "undo", "unknown", "unlock", "unnest", "unset", "until", "update", "upper", "usage",
-    "use", "value", "values", "value_of", "var_pop", "var_samp", "varbinary", "varchar", "varying",
-    "versioning", "view", "whenever", "while", "width_bucket", "window", "within", "without",
-    "work", "write", "year", "zone"
-  )
-
-  val nonReservedKeywordsInNonAnsi = Seq("abs", "absolute", "acos", "action", "add", "after",
+  // All the keywords in `docs/sql-reserved-and-non-reserved-key-words.md` are listed below:
+  val allCandidateKeywords = Set("abs", "absolute", "acos", "action", "add", "after",
     "all", "allocate", "alter", "analyze", "and", "any", "archive", "are", "array", "array_agg",
     "array_max_cardinality", "as", "asc", "asensitive", "asin", "assertion", "asymmetric", "at",
     "atan", "atomic", "authorization", "avg", "before", "begin", "begin_frame", "begin_partition",
@@ -194,10 +123,23 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "trailing", "transaction", "transactions", "transform", "translate", "translate_regex",
     "translation", "treat", "trigger", "trim", "trim_array", "true", "truncate", "uescape",
     "unarchive", "unbounded", "uncache", "under", "undo", "union", "unique", "unknown", "unlock",
-    "unnest", "unset", "until", "update", "upper", "usage", "use", "user", "value", "value_of",
-    "values", "var_pop", "var_samp", "varbinary", "varchar", "varying", "versioning", "view",
-    "when", "whenever", "where", "while", "width_bucket", "window", "with", "within", "without",
-    "work", "write", "year", "zone")
+    "unnest", "unset", "until", "update", "upper", "usage", "use", "user", "using", "value",
+    "value_of", "values", "var_pop", "var_samp", "varbinary", "varchar", "varying", "versioning",
+    "view", "when", "whenever", "where", "while", "width_bucket", "window", "with", "within",
+    "without", "work", "write", "year", "zone")
+
+  val reservedKeywordsInAnsiMode = Set("all", "and", "any", "as", "authorization", "both", "case",
+    "cast", "check", "collate", "column", "constraint", "create", "cross", "current_date",
+    "current_time", "current_timestamp", "current_user", "distinct", "else", "end", "except",
+    "false", "fetch", "for", "foreign", "from", "full", "grant", "group", "having", "in", "inner",
+    "intersect", "into", "is", "join", "leading", "left", "natural", "not", "null", "on", "only",
+    "or", "order", "outer", "overlaps", "primary", "references", "right", "select", "session_user",
+    "some", "table", "then", "to", "trailing", "union", "unique", "user", "using", "when",
+    "where", "with")
+
+  val nonReservedKeywordsInAnsiMode = allCandidateKeywords -- reservedKeywordsInAnsiMode
+
+  val nonReservedKeywordsInNonAnsiMode = allCandidateKeywords -- Set("using")
 
   test("table identifier") {
     // Regular names.
@@ -220,7 +162,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
     withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
-      reservedKeywordsInAnsi.foreach { keyword =>
+      reservedKeywordsInAnsiMode.foreach { keyword =>
         val errMsg = intercept[ParseException] {
           parseTableIdentifier(keyword)
         }.getMessage
@@ -229,7 +171,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
       }
-      nonReservedKeywordsInAnsi.foreach { keyword =>
+      nonReservedKeywordsInAnsiMode.foreach { keyword =>
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"$keyword"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
       }
@@ -246,7 +188,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("table identifier - non reserved keywords") {
-    nonReservedKeywordsInNonAnsi.foreach { nonReserved =>
+    nonReservedKeywordsInNonAnsiMode.foreach { nonReserved =>
       assert(TableIdentifier(nonReserved) === parseTableIdentifier(nonReserved))
     }
 
