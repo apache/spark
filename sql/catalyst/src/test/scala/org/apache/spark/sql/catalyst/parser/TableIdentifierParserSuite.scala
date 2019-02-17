@@ -59,6 +59,9 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",
     "where", "having", "from", "to", "table", "with", "not")
 
+  val otherNonReservedKeywords = Seq(
+    "check", "collate", "overlaps", "only", "primary", "references", "unique")
+
   val ansiReservedKeywords = Seq("all", "and", "any", "as", "authorization", "both", "case",
     "cast", "check", "collate", "column", "constraint", "create", "cross", "current_date",
     "current_time", "current_timestamp", "current_user", "distinct", "else", "end", "except",
@@ -179,7 +182,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
 
   test("table identifier - non reserved keywords") {
     // Hive keywords are allowed.
-    hiveNonReservedKeywords.foreach { nonReserved =>
+    (hiveNonReservedKeywords ++ otherNonReservedKeywords).foreach { nonReserved =>
       assert(TableIdentifier(nonReserved) === parseTableIdentifier(nonReserved))
     }
   }
