@@ -9,7 +9,8 @@ These reserved key words in this ANSI mode basically follow the ANSI SQL-2011 st
 A full list of reserved/non-reserved key words is as follows:
 
 <table class="table">
-  <tr><th><b>Key Word</b></th><th><b>Spark SQL (ANSI mode)</b></th><th><b>Spark SQL (default mode)</b></th><th><b>SQL-2011</b></th></tr>
+  <tr><th rowspan="2" style="vertical-align: middle;"><b>Key Word</b></th><th colspan="2"><b>Spark SQL</b></th><th rowspan="2" style="vertical-align: middle;"><b>SQL-2011</b></th></tr>
+  <tr><th><b>ANSI mode</b></th><th><b>default mode</b></th></tr>
   <tr><td>ABS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ABSOLUTE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ACOS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
