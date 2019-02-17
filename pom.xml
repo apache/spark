@@ -2988,6 +2988,13 @@
     </profile>
 
     <profile>
+      <id>hive-thriftserver2</id>
+      <modules>
+        <module>sql/hive-thriftserver2</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>hadoop-cloud</id>
       <modules>
         <module>hadoop-cloud</module>
