@@ -37,7 +37,9 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
 
   override def afterEach() {
     try {
-      yarnSchedulerBackend.stop()
+      if (yarnSchedulerBackend != null) {
+        yarnSchedulerBackend.stop()
+      }
     } finally {
       super.afterEach()
     }
