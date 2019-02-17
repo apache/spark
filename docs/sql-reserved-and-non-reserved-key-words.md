@@ -547,7 +547,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>VAR_SAMP</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VARBINARY</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VARCHAR</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>VARYING</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>VARYING</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VERSIONING</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VIEW</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>WHEN</td><td>reserved</td><td>reserved</td></tr>

@@ -65,8 +65,8 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "false", "fetch", "for", "foreign", "from", "full", "grant", "group", "having", "in", "inner",
     "intersect", "into", "is", "join", "leading", "left", "natural", "not", "null", "on", "only",
     "or", "order", "outer", "overlaps", "primary", "references", "right", "select", "session_user",
-    "some", "table", "then", "to", "trailing", "union", "unique", "user", "using", "varying",
-    "when", "where", "with")
+    "some", "table", "then", "to", "trailing", "union", "unique", "user", "using", "when",
+    "where", "with")
 
   val ansiNonReservedKeywords = Seq("abs", "absolute", "acos", "action", "add", "after", "allocate",
     "alter", "analyze", "are", "archive", "array", "array_agg", "array_max_cardinality", "asc",
@@ -126,7 +126,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "transactions", "transform", "translate", "translate_regex", "translation", "treat", "trigger",
     "trim", "trim_array", "true", "truncate", "uescape", "unarchive", "unbounded", "uncache",
     "under", "undo", "unknown", "unlock", "unnest", "unset", "until", "update", "upper", "usage",
-    "use", "value", "values", "value_of", "var_pop", "var_samp", "varbinary", "varchar",
+    "use", "value", "values", "value_of", "var_pop", "var_samp", "varbinary", "varchar", "varying",
     "versioning", "view", "whenever", "while", "width_bucket", "window", "within", "without",
     "work", "write", "year", "zone"
   )
