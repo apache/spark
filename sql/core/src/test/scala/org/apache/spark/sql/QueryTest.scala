@@ -342,8 +342,7 @@ object QueryTest {
       a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Map[_, _], b: Map[_, _]) =>
       a.size == b.size && a.keys.forall { aKey =>
-        b.keys.find(bKey => compare(aKey, bKey))
-          .exists(bKey => compare(a(aKey), b(bKey)))
+        b.keys.find(bKey => compare(aKey, bKey)).exists(bKey => compare(a(aKey), b(bKey)))
       }
     case (a: Iterable[_], b: Iterable[_]) =>
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
