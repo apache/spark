@@ -280,7 +280,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
 
-    withMultipleConnectionJdbcStatement("test_map")(
+    withMultipleConnectionJdbcStatement("test_map", "db1.test_map2")(
       // create table
       { statement =>
 
