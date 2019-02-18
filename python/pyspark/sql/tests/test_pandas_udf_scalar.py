@@ -349,7 +349,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         data = [(0, date(1969, 1, 1),),
                 (1, date(2012, 2, 2),),
                 (2, None,),
-                (3, date(2100, 4, 4),)]
+                (3, date(2100, 4, 4),),
+                (4, date(2262, 4, 12),)]
         df = self.spark.createDataFrame(data, schema=schema)
 
         date_copy = pandas_udf(lambda t: t, returnType=DateType())

@@ -1681,38 +1681,52 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _check_series_convert_date(series, data_type):
-    """
-    Cast the series to datetime.date if it's a date type, otherwise returns the original series.
+def _arrow_column_to_pandas(column, data_type):
+    """ Convert Arrow Column to pandas Series.
 
-    :param series: pandas.Series
-    :param data_type: a Spark data type for the series
+    :param series: pyarrow.lib.Column
+    :param data_type: a Spark data type for the column
     """
-    import pyarrow
+    import pandas as pd
+    import pyarrow as pa
     from distutils.version import LooseVersion
-    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
-    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0") and type(data_type) == DateType:
-        return series.dt.date
+    # If the given column is a date type column, creates a series of datetime.date directly instead
+    # of creating datetime64[ns] as intermediate data to avoid overflow caused by datetime64[ns]
+    # type handling.
+    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+        if type(data_type) == DateType:
+            return pd.Series(column.to_pylist(), name=column.name)
+        else:
+            return column.to_pandas()
     else:
-        return series
+        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
+        # np.datetime64.
+        return column.to_pandas(date_as_object=True)
 
 
-def _check_dataframe_convert_date(pdf, schema):
-    """ Correct date type value to use datetime.date.
+def _arrow_table_to_pandas(table, schema):
+    """ Convert Arrow Table to pandas DataFrame.
 
     Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
     use datetime.date to match the behavior with when Arrow optimization is disabled.
 
-    :param pdf: pandas.DataFrame
-    :param schema: a Spark schema of the pandas.DataFrame
+    :param table: pyarrow.lib.Table
+    :param schema: a Spark schema of the pyarrow.lib.Table
     """
-    import pyarrow
+    import pandas as pd
+    import pyarrow as pa
     from distutils.version import LooseVersion
-    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
-    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0"):
-        for field in schema:
-            pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
-    return pdf
+    # If the given table contains a date type column, use `_arrow_column_to_pandas` for pyarrow<0.11
+    # or use `date_as_object` option for pyarrow>=0.11 to avoid creating datetime64[ns] as
+    # intermediate data.
+    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+        if any(type(field.dataType) == DateType for field in schema):
+            return pd.concat([_arrow_column_to_pandas(column, field.dataType)
+                              for column, field in zip(table.itercolumns(), schema)], axis=1)
+        else:
+            return table.to_pandas()
+    else:
+        return table.to_pandas(date_as_object=True)
 
 
 def _get_local_timezone():
