@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable,
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
@@ -266,13 +266,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       provider.getTable(dsOptions) match {
         case table: SupportsBatchWrite =>
           lazy val relation = DataSourceV2Relation.create(table, options)
+          val isFileSource = table.isInstanceOf[FileTable]
           mode match {
-            case SaveMode.Append =>
+            case SaveMode.Append if !isFileSource =>
               runCommand(df.sparkSession, "save") {
                 AppendData.byName(relation, df.logicalPlan)
               }
 
-            case SaveMode.Overwrite =>
+            case SaveMode.Overwrite if !isFileSource =>
               // truncate the table
               runCommand(df.sparkSession, "save") {
                 OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
