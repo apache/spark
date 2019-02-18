@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, Logi
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
+import org.apache.spark.sql.sources.v2.writer.{SupportsSaveMode, WriteBuilder}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -264,6 +264,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val options = sessionOptions ++ extraOptions + checkFilesExistsOption
       val dsOptions = new DataSourceOptions(options.asJava)
       provider.getTable(dsOptions) match {
+        case table: SupportsDirectWrite =>
+          writeToDataSourceV2(table.newWriteBuilder(dsOptions), table.name)
+
         case table: SupportsBatchWrite =>
           lazy val relation = DataSourceV2Relation.create(table, options)
           mode match {
@@ -279,24 +282,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
 
             case _ =>
-              table.newWriteBuilder(dsOptions) match {
-                case writeBuilder: SupportsSaveMode =>
-                  val write = writeBuilder.mode(mode)
-                      .withQueryId(UUID.randomUUID().toString)
-                      .withInputDataSchema(df.logicalPlan.schema)
-                      .buildForBatch()
-                  // It can only return null with `SupportsSaveMode`. We can clean it up after
-                  // removing `SupportsSaveMode`.
-                  if (write != null) {
-                    runCommand(df.sparkSession, "save") {
-                      WriteToDataSourceV2(write, df.logicalPlan)
-                    }
-                  }
-
-                case _ =>
-                  throw new AnalysisException(
-                    s"data source ${table.name} does not support SaveMode $mode")
-              }
+              writeToDataSourceV2(table.newWriteBuilder(dsOptions), table.name)
           }
 
         // Streaming also uses the data source V2 API. So it may be that the data source implements
@@ -306,6 +292,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       }
     } else {
       saveToV1Source()
+    }
+  }
+
+  private def writeToDataSourceV2(writeBuilder: WriteBuilder, name: String): Unit = {
+    writeBuilder match {
+      case writeBuilder: SupportsSaveMode =>
+        val write = writeBuilder.mode(mode)
+          .withQueryId(UUID.randomUUID().toString)
+          .withInputDataSchema(df.logicalPlan.schema)
+          .buildForBatch()
+        // It can only return null with `SupportsSaveMode`. We can clean it up after
+        // removing `SupportsSaveMode`.
+        if (write != null) {
+          runCommand(df.sparkSession, "save") {
+            WriteToDataSourceV2(write, df.logicalPlan)
+          }
+        }
+
+      case _ =>
+        throw new AnalysisException(
+          s"data source ${name} does not support SaveMode $mode")
     }
   }
 

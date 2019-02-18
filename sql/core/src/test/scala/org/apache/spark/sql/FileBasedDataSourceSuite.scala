@@ -469,6 +469,25 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  test("File data sources V2 supports overwriting with different schema") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "") {
+      Seq("orc", "parquet", "json").foreach { format =>
+        withTempPath { p =>
+          val path = p.getCanonicalPath
+          spark.range(10).write.format(format).save(path)
+          val newDF = spark.range(20).map(id => (id.toDouble, id.toString)).toDF("double", "string")
+          newDF.write.format(format).mode("overwrite").save(path)
+
+          val readDF = spark.read.format(format).load(path)
+          val expectedSchema = StructType(Seq(
+            StructField("double", DoubleType, true), StructField("string", StringType, true)))
+          assert(readDF.schema == expectedSchema)
+          checkAnswer(readDF, newDF)
+        }
+      }
+    }
+  }
+
   test("SPARK-25237 compute correct input metrics in FileScanRDD") {
     withTempPath { p =>
       val path = p.getAbsolutePath

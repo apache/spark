@@ -22,14 +22,14 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchRead, SupportsBatchWrite, Table}
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
 
 abstract class FileTable(
     sparkSession: SparkSession,
     options: DataSourceOptions,
     userSpecifiedSchema: Option[StructType])
-  extends Table with SupportsBatchRead with SupportsBatchWrite {
+  extends Table with SupportsBatchRead with SupportsBatchWrite with SupportsDirectWrite {
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val filePaths = options.paths()
     val hadoopConf =
