@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
-import org.apache.spark.sql.catalyst.plans.LeftSemiOrAnti
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -31,14 +30,12 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *  4) Aggregate
  *  5) Other permissible unary operators. please see [[PushDownPredicate.canPushThrough]].
  */
-
 object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Similar to the above Filter over Project
     // LeftSemi/LeftAnti over Project
     case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
       if pList.forall(_.deterministic) &&
-        !pList.find(ScalarSubquery.hasScalarSubquery(_)).isDefined &&
+        !pList.exists(ScalarSubquery.hasScalarSubquery)&&
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
       if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
@@ -53,20 +50,17 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         p.copy(child = Join(gChild, rightOp, joinType, newJoinCond, hint))
       }
 
-    // Similar to the above Filter over Aggregate
     // LeftSemi/LeftAnti over Aggregate
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if agg.aggregateExpressions.forall(_.deterministic)
-        && agg.groupingExpressions.nonEmpty =>
+      if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty =>
       if (joinCond.isEmpty) {
         // No join condition, just push down Join below Aggregate
         agg.copy(child = Join(agg.child, rightOp, joinType, joinCond, hint))
       } else {
         val aliasMap = PushDownPredicate.getAliasMap(agg)
 
-        // For each join condition, expand the alias and
-        // check if the condition can be evaluated using
-        // attributes produced by the aggregate operator's child operator.
+        // For each join condition, expand the alias and check if the condition can be evaluated
+        // using attributes produced by the aggregate operator's child operator.
         val (pushDown, stayUp) = splitConjunctivePredicates(joinCond.get).partition { cond =>
           val replaced = replaceAlias(cond, aliasMap)
           cond.references.nonEmpty &&
@@ -90,7 +84,6 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
 
-    // Similar to the above Filter over Window
     // LeftSemi/LeftAnti over Window
     case join @ Join(w: Window, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
       if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
@@ -119,7 +112,6 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
 
-    // Similar to the above Filter over Union
     // LeftSemi/LeftAnti over Union
     case join @ Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
       if canPushThroughCondition(union.children, joinCond, rightOp) =>
@@ -148,10 +140,9 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
 
-    // Similar to the above Filter over UnaryNode
     // LeftSemi/LeftAnti over UnaryNode
     case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if PushDownPredicate.canPushThrough(u) =>
+      if PushDownPredicate.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       pushDownJoin(join, u.child) { joinCond =>
         u.withNewChildren(Seq(Join(u.child, rightOp, joinType, Option(joinCond), hint)))
       }

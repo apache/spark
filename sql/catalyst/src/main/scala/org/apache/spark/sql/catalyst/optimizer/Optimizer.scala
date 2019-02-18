@@ -1121,20 +1121,18 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
+  def getAliasMap(plan: Project): AttributeMap[Expression] = {
+    // Create a map of Aliases to their values from the child projection.
+    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
+    AttributeMap(plan.projectList.collect { case a: Alias => (a.toAttribute, a.child) })
+  }
 
-  def getAliasMap(plan: LogicalPlan): AttributeMap[Expression] = {
-    val aliasMap = plan match {
-      case p: Project =>
-        // Create a map of Aliases to their values from the child projection.
-        // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
-        p.projectList.collect { case a: Alias => (a.toAttribute, a.child) }
-      case a: Aggregate =>
-        // Find all the aliased expressions in the aggregate list that don't include any actual
-        // AggregateExpression, and create a map from the alias to the expression
-        a.aggregateExpressions.collect {
-        case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
-          (a.toAttribute, a.child)
-      }
+  def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
+    // Find all the aliased expressions in the aggregate list that don't include any actual
+    // AggregateExpression, and create a map from the alias to the expression
+    val aliasMap = plan.aggregateExpressions.collect {
+      case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
+        (a.toAttribute, a.child)
     }
     AttributeMap(aliasMap)
   }
