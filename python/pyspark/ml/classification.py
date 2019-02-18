@@ -892,7 +892,7 @@ class TreeClassifierParams(object):
 class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol,
                              HasPredictionCol, HasProbabilityCol, HasRawPredictionCol,
                              DecisionTreeParams, TreeClassifierParams, HasCheckpointInterval,
-                             HasSeed, HasWeightCol, JavaMLWritable, JavaMLReadable):
+                             HasSeed, JavaMLWritable, JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
