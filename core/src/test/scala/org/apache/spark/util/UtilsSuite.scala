@@ -1030,15 +1030,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       // starts with -D but no assignment
       "-Ddummy",
       // secret value contained not starting with -D (we don't care about this case for now)
-      "spark.my.password=sensitive_value"
-    )
+      "spark.my.password=sensitive_value")
 
     val cmdArgs = cmdArgsForSecret ++ ignoredArgs ++ Seq(
       // Set a non-secret key
       "-Dspark.regular.property=regular_value",
       // Set a property with a regular key but secret in the value
-      "-Dspark.sensitive.property=has_secret_in_value",
-    )
+      "-Dspark.sensitive.property=has_secret_in_value")
 
     // Redact sensitive information
     val redactedCmdArgs = Utils.redactCommandLineArgs(sparkConf, cmdArgs)
