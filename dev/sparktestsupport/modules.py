@@ -178,6 +178,10 @@ avro = Module(
     ],
     sbt_test_goals=[
         "avro/test",
+    ],
+    python_test_goals=[
+        # doctests
+        "pyspark.sql.avro.functions"
     ]
 )
 
