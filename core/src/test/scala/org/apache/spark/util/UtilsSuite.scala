@@ -1016,6 +1016,52 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   }
 
+  test("redact sensitive information in command line args") {
+    val sparkConf = new SparkConf
+
+    // Set some secret keys
+    val secretKeys = Seq(
+      "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.my.password",
+      "spark.my.sECreT")
+    val cmdArgsForSecret = secretKeys.map(s => s"-D$s=${"sensitive_value"}")
+
+    val ignoredArgs = Seq(
+      // starts with -D but no assignment
+      "-Ddummy",
+      // secret value contained not starting with -D (we don't care about this case for now)
+      "spark.my.password=sensitive_value"
+    )
+
+    val cmdArgs = cmdArgsForSecret ++ ignoredArgs ++ Seq(
+      // Set a non-secret key
+      "-Dspark.regular.property=regular_value",
+      // Set a property with a regular key but secret in the value
+      "-Dspark.sensitive.property=has_secret_in_value",
+    )
+
+    // Redact sensitive information
+    val redactedCmdArgs = Utils.redactCommandLineArgs(sparkConf, cmdArgs)
+
+    // These arguments should be left as they were:
+    // 1) argument without -D option is not applied
+    // 2) -D option without key-value assignment is not applied
+    assert(ignoredArgs.forall(redactedCmdArgs.contains))
+
+    val redactedCmdArgMap = redactedCmdArgs.filterNot(ignoredArgs.contains).map { cmd =>
+      val keyValue = cmd.substring("-D".length).split("=")
+      keyValue(0) -> keyValue.tail.mkString("=")
+    }.toMap
+
+    // Assert that secret information got redacted while the regular property remained the same
+    secretKeys.foreach { key =>
+      assert(redactedCmdArgMap(key) === Utils.REDACTION_REPLACEMENT_TEXT)
+    }
+
+    assert(redactedCmdArgMap("spark.regular.property") === "regular_value")
+    assert(redactedCmdArgMap("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
+  }
+
   test("tryWithSafeFinally") {
     var e = new Error("Block0")
     val finallyBlockError = new Error("Finally Block")

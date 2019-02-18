@@ -2617,6 +2617,22 @@ private[spark] object Utils extends Logging {
     redact(redactionPattern, kvs.toArray)
   }
 
+  def redactCommandLineArgs(conf: SparkConf, commands: Seq[String]): Seq[String] = {
+    val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
+    commands.map { cmd =>
+      var newCmd = cmd
+      if (cmd.startsWith("-D")) {
+        val kv = cmd.substring("-D".length).split("=")
+        if (kv.length > 1) {
+          val kvPair = (kv(0), kv.tail.mkString("="))
+          val (newKey, newValue) = redact(redactionPattern, Seq(kvPair)).head
+          newCmd = s"-D$newKey=$newValue"
+        }
+      }
+      newCmd
+    }
+  }
+
   def stringToSeq(str: String): Seq[String] = {
     str.split(",").map(_.trim()).filter(_.nonEmpty)
   }
