@@ -3325,13 +3325,13 @@ test_that("dapply() Arrow optimization", {
   callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
   tryCatch({
     ret <- dapply(df,
-    function(rdf) {
-      stopifnot(class(rdf) == "data.frame")
-      # mtcars' hp is more then 50.
-      stopifnot(all(grouped$hp > 50))
-      rdf
-    },
-    schema(df))
+                  function(rdf) {
+                    stopifnot(class(rdf) == "data.frame")
+                    # mtcars' hp is more then 50.
+                    stopifnot(all(grouped$hp > 50))
+                     rdf
+                  },
+                  schema(df))
     actual <- collect(ret)
     expect_equal(actual, expected)
     expect_equal(count(ret), nrow(mtcars))
