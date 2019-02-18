@@ -93,7 +93,7 @@ class QueryExecution(
    * If you want to store these rows into collection, please apply some converter or copy row
    * which produces new object per iteration.
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
-   * user `Dataset.rdd` instead which conversion will be applied.
+   * use `Dataset.rdd` instead where conversion will be applied.
    */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
