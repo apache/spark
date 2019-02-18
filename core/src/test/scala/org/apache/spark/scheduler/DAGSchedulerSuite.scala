@@ -166,10 +166,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // for all stage attempts in the particular stage id, it does not need any info about
     // stageAttemptId. Hence, completed partition id's are stored only for stage id's to mock
     // the method implementation here.
-    override def markPartitionCompletedInAllTaskSets(
-        partitionId: Int,
-        stageId: Int,
-        taskInfo: TaskInfo): Unit = {
+    override def markPartitionCompletedFromEventLoop(partitionId: Int, stageId: Int): Unit = {
       val partitionIds = completedPartitions.getOrElseUpdate(stageId, new HashSet[Int])
       partitionIds.add(partitionId)
     }
@@ -681,10 +678,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
-      override def markPartitionCompletedInAllTaskSets(
-          partitionId: Int,
-          stageId: Int,
-          taskInfo: TaskInfo): Unit = {}
+      override def markPartitionCompletedFromEventLoop(partitionId: Int, stageId: Int): Unit = {}
     }
     val noKillScheduler = new DAGScheduler(
       sc,

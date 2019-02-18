@@ -135,8 +135,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           // For SPARK-23433 / SPARK-25250, need to make DAGScheduler lets all tasksets know
           // about complete partitions.  Super implementation is not enough, because we've mocked
           // out too much of the rest of the DAGScheduler.
-          taskScheduler.markPartitionCompletedInAllTaskSets(
-            task.partitionId, task.stageId, taskInfo)
+          taskScheduler.markPartitionCompletedFromEventLoop(task.partitionId, task.stageId)
         }
         super.taskEnded(task, reason, result, accumUpdates, taskInfo)
       }

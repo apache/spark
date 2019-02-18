@@ -784,6 +784,9 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
+    // There may be multiple tasksets for this stage -- we let all of them know that the partition
+    // was completed.  This may result in some of the tasksets getting completed.
+    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -920,6 +923,9 @@ private[spark] class TaskSetManager(
         s" be re-executed (either because the task failed with a shuffle data fetch failure," +
         s" so the previous stage needs to be re-run, or because a different copy of the task" +
         s" has already succeeded).")
+    } else if (sched.stageIdToFinishedPartitions.getOrElse(
+      stageId, new HashSet[Int]).contains(tasks(index).partitionId)) {
+      sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     } else {
       addPendingTask(index)
     }

@@ -1383,8 +1383,7 @@ private[spark] class DAGScheduler(
 
     event.reason match {
       case Success =>
-        taskScheduler.markPartitionCompletedInAllTaskSets(
-          task.partitionId, task.stageId, event.taskInfo)
+        taskScheduler.markPartitionCompletedFromEventLoop(task.partitionId, task.stageId)
         task match {
           case rt: ResultTask[_, _] =>
             // Cast to ResultStage here because it's part of the ResultTask

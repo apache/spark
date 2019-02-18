@@ -119,9 +119,6 @@ private[spark] trait TaskScheduler {
    * attempts for that particular stage. This method must be called from inside the DAGScheduler
    * event loop, to ensure a consistent view of all task sets for the given stage.
    */
-  def markPartitionCompletedInAllTaskSets(
-      partitionId: Int,
-      stageId: Int,
-      taskInfo: TaskInfo): Unit
+  def markPartitionCompletedFromEventLoop(partitionId: Int, stageId: Int): Unit
 
 }
