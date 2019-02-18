@@ -82,6 +82,10 @@ private[spark] class EventLoggingListener(
     CompressionCodec.getShortName(c.getClass.getName)
   }
 
+  private val eventLogPermission = sparkConf.get("spark.eventLog.permission", "770")
+  private val LOG_FILE_PERMISSIONS =
+    new FsPermission(Integer.parseInt(eventLogPermission, 8).toShort)
+
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
@@ -333,8 +337,6 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
-
-  private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = Map.empty[String, CompressionCodec]
