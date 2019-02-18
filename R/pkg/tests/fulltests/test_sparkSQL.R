@@ -3328,7 +3328,7 @@ test_that("dapply() Arrow optimization", {
                   function(rdf) {
                     stopifnot(class(rdf) == "data.frame")
                     # mtcars' hp is more then 50.
-                    stopifnot(all(grouped$hp > 50))
+                    stopifnot(all(rdf$hp > 50))
                      rdf
                   },
                   schema(df))
