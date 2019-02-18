@@ -891,8 +891,8 @@ class TreeClassifierParams(object):
 @inherit_doc
 class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                              HasProbabilityCol, HasRawPredictionCol, DecisionTreeParams,
-                             TreeClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
-                             JavaMLReadable):
+                             TreeClassifierParams, HasCheckpointInterval, HasSeed, HasWeightCol,
+                             JavaMLWritable, JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
@@ -902,12 +902,12 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = spark.createDataFrame([
-    ...     (1.0, Vectors.dense(1.0)),
-    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    ...     (1.0, 1.0, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
+    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed", weightCol="weight")
     >>> model = dt.fit(td)
     >>> model.numNodes
     3
