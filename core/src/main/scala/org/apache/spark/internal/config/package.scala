@@ -83,6 +83,12 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_PERMISSION =
+    ConfigBuilder("spark.eventLog.permission")
+      .doc("Hdfs permission for spark event_log file, especially used in common history server.")
+      .stringConf
+      .createWithDefault("770")
+
   private[spark] val EVENT_LOG_BLOCK_UPDATES =
     ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
       .booleanConf
