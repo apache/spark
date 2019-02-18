@@ -1707,10 +1707,6 @@ def _arrow_column_to_pandas(column, data_type):
 def _arrow_table_to_pandas(table, schema):
     """ Convert Arrow Table to pandas DataFrame.
 
-    If the given table contains a date type column, use `_arrow_column_to_pandas` for pyarrow<0.11
-    or use `date_as_object` option for pyarrow>=0.11 to avoid creating datetime64[ns] as
-    intermediate data.
-
     Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
     use datetime.date to match the behavior with when Arrow optimization is disabled.
 
@@ -1720,9 +1716,9 @@ def _arrow_table_to_pandas(table, schema):
     import pandas as pd
     import pyarrow as pa
     from distutils.version import LooseVersion
-    # If the given table contains date type columns, creates series of datetime.date directly
-    # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
-    # datetime64[ns] type handling.
+    # If the given table contains a date type column, use `_arrow_column_to_pandas` for pyarrow<0.11
+    # or use `date_as_object` option for pyarrow>=0.11 to avoid creating datetime64[ns] as
+    # intermediate data.
     if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
         if any(type(field.dataType) == DateType for field in schema):
             return pd.concat([_arrow_column_to_pandas(column, field.dataType)
@@ -1730,8 +1726,6 @@ def _arrow_table_to_pandas(table, schema):
         else:
             return table.to_pandas()
     else:
-        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
-        # np.datetime64.
         return table.to_pandas(date_as_object=True)
 
 
