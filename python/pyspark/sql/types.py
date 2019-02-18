@@ -1684,22 +1684,23 @@ def from_arrow_schema(arrow_schema):
 def _arrow_column_to_pandas(column, data_type):
     """ Convert Arrow Column to pandas Series.
 
-    If the given column is a date type column, creates a series of datetime.date directly instead
-    of creating datetime64[ns] as intermediate data.
-
     :param series: pyarrow.lib.Column
     :param data_type: a Spark data type for the column
     """
     import pandas as pd
     import pyarrow as pa
     from distutils.version import LooseVersion
-    # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of np.datetime64.
+    # If the given column is a date type column, creates a series of datetime.date directly instead
+    # of creating datetime64[ns] as intermediate data to avoid overflow caused by datetime64[ns]
+    # type handling.
     if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
         if type(data_type) == DateType:
             return pd.Series(column.to_pylist(), name=column.name)
         else:
             return column.to_pandas()
     else:
+        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
+        # np.datetime64.
         return column.to_pandas(date_as_object=True)
 
 
@@ -1719,7 +1720,9 @@ def _arrow_table_to_pandas(table, schema):
     import pandas as pd
     import pyarrow as pa
     from distutils.version import LooseVersion
-    # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of np.datetime64.
+    # If the given table contains date type columns, creates series of datetime.date directly
+    # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+    # datetime64[ns] type handling.
     if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
         if any(type(field.dataType) == DateType for field in schema):
             return pd.concat([_arrow_column_to_pandas(column, field.dataType)
@@ -1727,6 +1730,8 @@ def _arrow_table_to_pandas(table, schema):
         else:
             return table.to_pandas()
     else:
+        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
+        # np.datetime64.
         return table.to_pandas(date_as_object=True)
 
 
