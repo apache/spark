@@ -35,8 +35,6 @@ import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
-import org.apache.spark.sql.types.DataTypes._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
