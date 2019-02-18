@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
@@ -65,6 +67,41 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       data.toDS(),
       data: _*)
+  }
+
+  test("toDS should compare map with byte array keys correctly") {
+    // Choose the order of arrays in such way, that sorting keys of different maps by _.toString
+    // will not incidentally put equal keys together.
+    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.toString).toArray
+    arrays(0)(1) = 1.toByte
+    arrays(1)(1) = 2.toByte
+    arrays(2)(1) = 2.toByte
+    arrays(3)(1) = 1.toByte
+
+    val mapA = Map(arrays(0) -> "one", arrays(2) -> "two")
+    val subsetOfA = Map(arrays(0) -> "one")
+    val equalToA = Map(arrays(1) -> "two", arrays(3) -> "one")
+    val notEqualToA1 = Map(arrays(1) -> "two", arrays(3) -> "not one")
+    val notEqualToA2 = Map(arrays(1) -> "two", arrays(4) -> "one")
+
+    // Comparing map with itself
+    checkDataset(Seq(mapA).toDS(), mapA)
+
+    // Comparing map with equivalent map
+    checkDataset(Seq(equalToA).toDS(), mapA)
+    checkDataset(Seq(mapA).toDS(), equalToA)
+
+    // Comparing map with it's subset
+    intercept[TestFailedException](checkDataset(Seq(subsetOfA).toDS(), mapA))
+    intercept[TestFailedException](checkDataset(Seq(mapA).toDS(), subsetOfA))
+
+    // Comparing map with another map differing by single value
+    intercept[TestFailedException](checkDataset(Seq(notEqualToA1).toDS(), mapA))
+    intercept[TestFailedException](checkDataset(Seq(mapA).toDS(), notEqualToA1))
+
+    // Comparing map with another map differing by single key
+    intercept[TestFailedException](checkDataset(Seq(notEqualToA2).toDS(), mapA))
+    intercept[TestFailedException](checkDataset(Seq(mapA).toDS(), notEqualToA2))
   }
 
   test("toDS with RDD") {
