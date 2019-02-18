@@ -1024,7 +1024,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
       "spark.my.password",
       "spark.my.sECreT")
-    val cmdArgsForSecret = secretKeys.map(s => s"-D$s=${"sensitive_value"}")
+    val cmdArgsForSecret = secretKeys.map(s => s"-D$s=sensitive_value")
 
     val ignoredArgs = Seq(
       // starts with -D but no assignment
