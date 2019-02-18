@@ -29,6 +29,9 @@ public interface SupportsPushDownFilters extends ScanBuilder {
 
   /**
    * Pushes down filters, and returns filters that need to be evaluated after scanning.
+   * <p>
+   * Rows should be returned from the data source if and only if all of the filters match. That is,
+   * filters must be interpreted as ANDed together.
    */
   Filter[] pushFilters(Filter[] filters);
 

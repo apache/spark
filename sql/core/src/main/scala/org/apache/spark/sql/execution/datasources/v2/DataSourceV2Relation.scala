@@ -17,11 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
-import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -30,7 +25,6 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.types.StructType
 
 /**
  * A logical plan representing a data source v2 table.
@@ -45,26 +39,16 @@ case class DataSourceV2Relation(
     options: Map[String, String])
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
+  import DataSourceV2Implicits._
+
   override def name: String = table.name()
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
-  def newScanBuilder(): ScanBuilder = table match {
-    case s: SupportsBatchRead =>
-      val dsOptions = new DataSourceOptions(options.asJava)
-      s.newScanBuilder(dsOptions)
-    case _ => throw new AnalysisException(s"Table is not readable: ${table.name()}")
-  }
-
-  def newWriteBuilder(schema: StructType): WriteBuilder = table match {
-    case s: SupportsBatchWrite =>
-      val dsOptions = new DataSourceOptions(options.asJava)
-      s.newWriteBuilder(dsOptions)
-        .withQueryId(UUID.randomUUID().toString)
-        .withInputDataSchema(schema)
-    case _ => throw new AnalysisException(s"Table is not writable: ${table.name()}")
+  def newScanBuilder(): ScanBuilder = {
+    table.asBatchReadable.newScanBuilder(options.toDataSourceOptions)
   }
 
   override def computeStats(): Statistics = {
