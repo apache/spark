@@ -106,7 +106,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.newScanBuilder()
 
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, relation.output, false)
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(
+        filters.filterNot(SubqueryExpression.hasSubquery), relation.output)
 
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.

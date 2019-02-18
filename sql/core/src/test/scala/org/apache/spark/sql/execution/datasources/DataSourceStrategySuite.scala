@@ -222,8 +222,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
   test("SPARK-26865 DataSourceV2Strategy should push normalized filters") {
     val attrInt = 'cint.int
     assertResult(Seq(IsNotNull(attrInt))) {
-      DataSourceStrategy.normalizeFilters(
-        Seq(IsNotNull(attrInt.withName("CiNt"))), Seq(attrInt), false)
+      DataSourceStrategy.normalizeFilters(Seq(IsNotNull(attrInt.withName("CiNt"))), Seq(attrInt))
     }
   }
 

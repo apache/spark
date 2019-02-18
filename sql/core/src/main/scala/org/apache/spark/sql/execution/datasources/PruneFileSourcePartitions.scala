@@ -39,8 +39,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      val normalizedFilters =
-        DataSourceStrategy.normalizeFilters(filters, logicalRelation.output, false)
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(
+        filters.filterNot(SubqueryExpression.hasSubquery), logicalRelation.output)
 
       val sparkSession = fsRelation.sparkSession
       val partitionColumns =
