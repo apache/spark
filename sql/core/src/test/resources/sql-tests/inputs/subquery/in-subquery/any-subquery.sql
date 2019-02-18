@@ -109,7 +109,7 @@ SELECT t1a, t2a
 FROM   t1
 JOIN   t2
 ON     t1c = t2c
-WHERE   t1b > ANY (SELECT t3b
+WHERE  t1b > ANY (SELECT t3b
                   FROM   t3);
 
 -- ANY subquery with join 2
@@ -168,13 +168,13 @@ WHERE  t1b < ANY (SELECT t2b
 GROUP BY t1a, t1b, t1c
 HAVING t1b <= 8;
 
--- ANY subquery with order by ins subquery
+-- ANY subquery with order by in subquery
 SELECT t1a, t1b
 FROM   t1
-WHERE  t1b < ANY(SELECT Min(t2b)
-                 FROM   t2
-                 GROUP  BY t2a
-                 ORDER  BY t2a DESC);
+WHERE  t1b < ANY (SELECT Min(t2b)
+                  FROM   t2
+                  GROUP  BY t2a
+                  ORDER  BY t2a DESC);
 
 -- ANY subquery with order by in parent
 SELECT t1a, t1b

@@ -148,8 +148,6 @@ case class Not(child: Expression)
 /**
  * An [[Expression]] compares `values` with a `query`.
  *
- * Note: `comparison` can be `NotEqualTo` which should be rewrite as `Not(EqualTo)`.
- *
  * TODO: support `ALL` subquery.
  */
 abstract class PredicateSubquery
@@ -158,13 +156,22 @@ abstract class PredicateSubquery
 
   val values: Seq[Expression]
 
-  val comparison: BinaryComparison
+  val comparison: (Expression, Expression) => BinaryComparison
 
   val query: ListQuery
 
   def predicateName: String
 
-  @transient protected lazy val value: Expression = PredicateSubquery.combineValues(values)
+  protected lazy val comparisonSymbol: String = comparison(value, query).symbol
+
+  @transient protected lazy val value: Expression = if (values.length > 1) {
+    CreateNamedStruct(values.zipWithIndex.flatMap {
+      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
+      case (v, idx) => Seq(Literal(s"_$idx"), v)
+    })
+  } else {
+    values.head
+  }
 
   // scalastyle:off line.size.limit
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -208,59 +215,19 @@ abstract class PredicateSubquery
 }
 
 object PredicateSubquery {
-  /**
-   * Rewrite `NotEqualTo` as `Not(EqualTo)` and reserve others.
-   */
-  def rewritePredicate(cmp: BinaryComparison)
-  : (Expression, Expression) => Expression = cmp match {
-    case _: NotEqualTo =>
-      (left, right) => Not(EqualTo(left, right))
-    case other =>
-      getPredicate(cmp)
-  }
-
-  def getPredicate(cmp: BinaryComparison)
-  : (Expression, Expression) => BinaryComparison = cmp match {
-    case _: EqualTo =>
-      EqualTo
-    case _: EqualNullSafe =>
-      EqualNullSafe
-    case _: NotEqualTo =>
-      NotEqualTo
-    case _: LessThan =>
-      LessThan
-    case _: LessThanOrEqual =>
-      LessThanOrEqual
-    case _: GreaterThan =>
-      GreaterThan
-    case _: GreaterThanOrEqual =>
-      GreaterThanOrEqual
-  }
-
-  private def combineValues(values: Seq[Expression]): Expression = {
-    if (values.length > 1) {
-      CreateNamedStruct(values.zipWithIndex.flatMap {
-        case (v: NamedExpression, _) => Seq(Literal(v.name), v)
-        case (v, idx) => Seq(Literal(s"_$idx"), v)
-      })
-    } else {
-      values.head
-    }
-  }
-
   def apply (
       p: PredicateSubquery,
       values: Seq[Expression],
-      comparison: BinaryComparison,
+      comparison: (Expression, Expression) => BinaryComparison,
       query: ListQuery): PredicateSubquery = p match {
     case _: InSubquery =>
       InSubquery(values, query)
     case _: AnySubquery =>
-      AnySubquery(getPredicate(comparison)(combineValues(values), query))
+      AnySubquery(values, comparison, query)
   }
 
   def unapply(p: PredicateSubquery)
-  : Option[(Seq[Expression], BinaryComparison, ListQuery)] = {
+  : Option[(Seq[Expression], (Expression, Expression) => BinaryComparison, ListQuery)] = {
     if (p == null) {
       None
     } else {
@@ -273,26 +240,15 @@ object PredicateSubquery {
  * Evaluates to `true` if the comparison between `values`
  * and any row in `query`'s result set returns `true`.
  */
-case class AnySubquery(values: Seq[Expression], cmp: BinaryComparison, query: ListQuery)
+case class AnySubquery(
+    values: Seq[Expression],
+    comparison: (Expression, Expression) => BinaryComparison,
+    query: ListQuery)
   extends PredicateSubquery {
 
-  override val comparison: BinaryComparison = cmp
-
   override def predicateName: String = "ANY"
-  override def toString: String = s"$value ${comparison.symbol} ANY ($query)"
-  override def sql: String = s"(${value.sql} ${comparison.symbol} ANY (${query.sql}))"
-}
-
-object AnySubquery {
-  def apply(comparison: BinaryComparison): AnySubquery = {
-    val values: Seq[Expression] = comparison.left match {
-      case c: CreateNamedStruct => c.valExprs
-      case other => Seq(other)
-    }
-    val query: ListQuery = comparison.right.asInstanceOf[ListQuery]
-
-    AnySubquery(values, comparison, query)
-  }
+  override def toString: String = s"$value ${comparisonSymbol} ANY ($query)"
+  override def sql: String = s"(${value.sql} ${comparisonSymbol} ANY (${query.sql}))"
 }
 
 /**
@@ -300,12 +256,13 @@ object AnySubquery {
  */
 case class InSubquery(values: Seq[Expression], query: ListQuery) extends PredicateSubquery {
 
-  override val comparison: BinaryComparison = EqualTo(value, query)
+  override val comparison: (Expression, Expression) => BinaryComparison = EqualTo
 
   override def predicateName: String = "IN"
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
+
 
 /**
  * Evaluates to `true` if `list` contains `value`.
@@ -900,12 +857,4 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
-}
-
-/**
- * Only be used in PredicateSubquery, and will be rewrite as Not(EqualTo(left, right)).
- */
-case class NotEqualTo(left: Expression, right: Expression) extends BinaryComparison {
-
-  override def symbol: String = "!="
 }

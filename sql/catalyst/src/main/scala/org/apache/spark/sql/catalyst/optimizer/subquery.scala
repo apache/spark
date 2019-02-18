@@ -115,7 +115,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val predicateConditions =
-            values.zip(newSub.output).map(PredicateSubquery.rewritePredicate(comparison).tupled)
+            values.zip(newSub.output).map(comparison.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(predicateConditions ++ conditions, p)
           Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint.NONE)
         case (p, Not(PredicateSubquery(values, comparison, ListQuery(sub, conditions, _, _)))) =>
@@ -129,7 +129,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val predicateConditions =
-            values.zip(newSub.output).map(PredicateSubquery.rewritePredicate(comparison).tupled)
+            values.zip(newSub.output).map(comparison.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(predicateConditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -174,7 +174,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
           val predicateConditions =
-            values.zip(newSub.output).map(PredicateSubquery.rewritePredicate(comparison).tupled)
+            values.zip(newSub.output).map(comparison.tupled)
           val newConditions = (predicateConditions ++ conditions).reduceLeftOption(And)
           newPlan = Join(newPlan, newSub, ExistenceJoin(exists), newConditions, JoinHint.NONE)
           exists

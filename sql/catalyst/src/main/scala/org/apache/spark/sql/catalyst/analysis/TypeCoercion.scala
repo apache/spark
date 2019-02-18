@@ -444,7 +444,7 @@ object TypeCoercion {
   }
 
   /**
-   * Handles type coercion for both IN/ANY expression with subquery and IN
+   * Handles type coercion for both IN/ANY expression with subquery and IN/ANY
    * expressions without subquery.
    * 1. In the first case, find the common type by comparing the left hand side (LHS)
    *    expression types against corresponding right hand side (RHS) expression derived
@@ -467,7 +467,7 @@ object TypeCoercion {
       // in IN/ANY subquery.
       case s @ PredicateSubquery(lhs, comparison, ListQuery(sub, children, exprId, _))
           if !s.resolved && lhs.length == sub.output.length =>
-        // LHS is the value expressions of IN subquery.
+        // LHS is the value expressions of IN/ANY subquery.
         // RHS is the subquery output.
         val rhs = sub.output
 

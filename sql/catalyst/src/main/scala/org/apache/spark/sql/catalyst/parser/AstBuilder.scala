@@ -1056,26 +1056,24 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Get the comparison expression. `NotEqualTo` should be rewrite later.
+   * Get the comparison expression.
+   *
+   * Note: SqlBaseParser.NEQ and SqlBaseParser.NEQJ should be parsed outside.
    */
-  def getComparison(
-      operator: Int,
-      left: Expression,
-      right: Expression): BinaryComparison = operator match {
+  def getComparison(operator: Int)
+  : (Expression, Expression) => BinaryComparison = operator match {
     case SqlBaseParser.EQ =>
-      EqualTo(left, right)
+      EqualTo
     case SqlBaseParser.NSEQ =>
-      EqualNullSafe(left, right)
-    case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
-      NotEqualTo(left, right)
+      EqualNullSafe
     case SqlBaseParser.LT =>
-      LessThan(left, right)
+      LessThan
     case SqlBaseParser.LTE =>
-      LessThanOrEqual(left, right)
+      LessThanOrEqual
     case SqlBaseParser.GT =>
-      GreaterThan(left, right)
+      GreaterThan
     case SqlBaseParser.GTE =>
-      GreaterThanOrEqual(left, right)
+      GreaterThanOrEqual
   }
 
   /**
@@ -1094,13 +1092,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val right = expression(ctx.right)
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
 
-    getComparison(operator.getSymbol.getType, left, right) match {
-      case _: NotEqualTo =>
+    operator.getSymbol.getType match {
+      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
         Not(EqualTo(left, right))
       case other =>
-        other
+        getComparison(other)(left, right)
     }
-
   }
 
   /**
@@ -1165,11 +1162,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.DISTINCT =>
         Not(EqualNullSafe(e, expression(ctx.right)))
       case SqlBaseParser.ANY | SqlBaseParser.SOME =>
-        invertIfNotDefined(AnySubquery(
-            getComparison(
-              ctx.comparisonOperator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType,
-              e,
-              ListQuery(plan(ctx.query)))))
+        val comparison = ctx.comparisonOperator.getChild(0).asInstanceOf[TerminalNode]
+        val anySubquery = comparison.getSymbol.getType match {
+          case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
+            Not(AnySubquery(getValueExpressions(e), EqualTo, ListQuery(plan(ctx.query))))
+          case other =>
+            AnySubquery(getValueExpressions(e), getComparison(other), ListQuery(plan(ctx.query)))
+        }
+        invertIfNotDefined(anySubquery)
     }
   }
 
