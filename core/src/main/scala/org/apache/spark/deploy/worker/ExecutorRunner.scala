@@ -152,7 +152,6 @@ private[deploy] class ExecutorRunner(
       val command = builder.command()
       val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala)
         .mkString("\"", "\" \"", "\"")
-
       logInfo(s"Launch command: $redactedCommand")
 
       builder.directory(executorDir)
