@@ -257,19 +257,10 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
 
       // SPARK-22356: overlapped columns between data and partition schema in data source tables
       val tbl_with_col_overlap = s"tbl_with_col_overlap_$index"
-      // For Spark 2.2.0 and 2.1.x, the behavior is different from Spark 2.0, 2.2.1, 2.3+
-      if (testingVersions(index).startsWith("2.1") || testingVersions(index) == "2.2.0") {
-        spark.sql("msck repair table " + tbl_with_col_overlap)
-        assert(spark.table(tbl_with_col_overlap).columns === Array("i", "j", "p"))
-        checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
-        assert(sql("desc " + tbl_with_col_overlap).select("col_name")
-          .as[String].collect().mkString(",").contains("i,j,p"))
-      } else {
-        assert(spark.table(tbl_with_col_overlap).columns === Array("i", "p", "j"))
-        checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
-        assert(sql("desc " + tbl_with_col_overlap).select("col_name")
-          .as[String].collect().mkString(",").contains("i,p,j"))
-      }
+      assert(spark.table(tbl_with_col_overlap).columns === Array("i", "p", "j"))
+      checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
+      assert(sql("desc " + tbl_with_col_overlap).select("col_name")
+        .as[String].collect().mkString(",").contains("i,p,j"))
     }
   }
 }
