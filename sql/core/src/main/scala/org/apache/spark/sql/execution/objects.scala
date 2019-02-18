@@ -208,6 +208,7 @@ case class MapPartitionsInRWithArrowExec(
     inputSchema: StructType,
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryExecNode {
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
 
