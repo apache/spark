@@ -22,6 +22,7 @@ import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
 import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
+import scala.collection.mutable
 
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -150,7 +151,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    createBuilder(dataTypeMap, expression, builder, canPartialPushDownConjuncts = true)
+    createBuilder(
+      dataTypeMap,
+      new OrcConvertibilityChecker(dataTypeMap),
+      expression,
+      builder,
+      canPartialPushDownConjuncts = true)
   }
 
   /**
@@ -164,6 +170,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    */
   private def createBuilder(
       dataTypeMap: Map[String, DataType],
+      orcConvertibilityChecker: OrcConvertibilityChecker,
       expression: Filter,
       builder: Builder,
       canPartialPushDownConjuncts: Boolean): Option[Builder] = {
@@ -185,29 +192,30 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // Pushing one side of AND down is only safe to do at the top level or in the child
         // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
         // can be safely removed.
-        val leftIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
+        val leftIsConvertible = orcConvertibilityChecker.isConvertible(
           left,
           canPartialPushDownConjuncts
         )
-        val rightIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
+        val rightIsConvertible = orcConvertibilityChecker.isConvertible(
           right,
           canPartialPushDownConjuncts
         )
         (leftIsConvertible, rightIsConvertible) match {
           case (true, true) =>
             for {
-              lhs <- createBuilder(dataTypeMap, left,
+              lhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, left,
                 builder.startAnd(), canPartialPushDownConjuncts)
-              rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
+              rhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, right,
+                lhs, canPartialPushDownConjuncts)
             } yield rhs.end()
 
           case (true, false) if canPartialPushDownConjuncts =>
-            createBuilder(dataTypeMap, left, builder, canPartialPushDownConjuncts)
+            createBuilder(dataTypeMap, orcConvertibilityChecker, left,
+              builder, canPartialPushDownConjuncts)
 
           case (false, true) if canPartialPushDownConjuncts =>
-            createBuilder(dataTypeMap, right, builder, canPartialPushDownConjuncts)
+            createBuilder(dataTypeMap, orcConvertibilityChecker, right,
+              builder, canPartialPushDownConjuncts)
 
           case _ => None
         }
@@ -224,28 +232,27 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // The predicate can be converted as
         // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
         // As per the logical in And predicate, we can push down (a1 OR b1).
-        val leftIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
+        val leftIsConvertible = orcConvertibilityChecker.isConvertible(
           left,
           canPartialPushDownConjuncts
         )
-        val rightIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
+        val rightIsConvertible = orcConvertibilityChecker.isConvertible(
           right,
           canPartialPushDownConjuncts
         )
         for {
           _ <- Option(leftIsConvertible && rightIsConvertible).filter(identity)
-          lhs <- createBuilder(dataTypeMap, left,
+          lhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, left,
             builder.startOr(), canPartialPushDownConjuncts)
-          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
+          rhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, right,
+            lhs, canPartialPushDownConjuncts)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          negate <- createBuilder(dataTypeMap,
+          negate <- createBuilder(dataTypeMap, orcConvertibilityChecker,
             child, builder.startNot(), canPartialPushDownConjuncts = false)
-            if isConvertibleToOrcPredicate(dataTypeMap, child, canPartialPushDownConjuncts = false)
+            if orcConvertibilityChecker.isConvertible(child, canPartialPushDownConjuncts = false)
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
@@ -299,13 +306,28 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       case _ => None
     }
   }
+}
 
-  private def isConvertibleToOrcPredicate(
-    dataTypeMap: Map[String, DataType],
-    expression: Filter,
-    canPartialPushDownConjuncts: Boolean
-  ): Boolean = {
+private class OrcConvertibilityChecker(
+  dataTypeMap: Map[String, DataType]
+) {
+  // TODO(ivan): correctness might be more obvious if this is (Filter, Boolean) -> Boolean instead
+  // of just Filter -> Boolean.
+  private val convertibilityCache = new mutable.HashMap[Filter, Boolean]
+
+  def isConvertible(expression: Filter, canPartialPushDownConjuncts: Boolean): Boolean = {
+    if (!convertibilityCache.contains(expression)) {
+      convertibilityCache.put(expression,
+        isConvertibleImpl(expression, canPartialPushDownConjuncts))
+    }
+    convertibilityCache(expression)
+  }
+
+  private def isConvertibleImpl(
+      expression: Filter,
+      canPartialPushDownConjuncts: Boolean): Boolean = {
     import org.apache.spark.sql.sources._
+    import OrcFilters._
 
     expression match {
       case And(left, right) =>
@@ -320,14 +342,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // Pushing one side of AND down is only safe to do at the top level or in the child
         // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
         // can be safely removed.
-        val leftIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
-          left,
-          canPartialPushDownConjuncts)
-        val rightIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
-          right,
-          canPartialPushDownConjuncts)
+        val leftIsConvertible = isConvertible(left, canPartialPushDownConjuncts)
+        val rightIsConvertible = isConvertible(right, canPartialPushDownConjuncts)
         // NOTE: If we can use partial predicates here, we only need one of the children to
         // be convertible to be able to convert the parent. Otherwise, we need both to be
         // convertible.
@@ -338,23 +354,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         }
 
       case Or(left, right) =>
-        val leftIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
-          left,
-          canPartialPushDownConjuncts)
-        val rightIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
-          right,
-          canPartialPushDownConjuncts
-        )
+        val leftIsConvertible = isConvertible(left, canPartialPushDownConjuncts)
+        val rightIsConvertible = isConvertible(right, canPartialPushDownConjuncts)
         leftIsConvertible && rightIsConvertible
 
       case Not(child) =>
-        val childIsConvertible = isConvertibleToOrcPredicate(
-          dataTypeMap,
-          child,
-          canPartialPushDownConjuncts = false
-        )
+        val childIsConvertible = isConvertible(child, canPartialPushDownConjuncts = false)
         childIsConvertible
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
