@@ -186,8 +186,7 @@ case class FileSourceScanExec(
   }
 
   @transient private lazy val selectedPartitionsCount =
-    if (partitionFilters.exists(f =>
-      SubqueryExpression.hasSubquery(f) || ExecSubqueryExpression.hasSubquery(f))) {
+    if (partitionFilters.exists(ExecSubqueryExpression.hasSubquery)) {
       None
     } else {
       Some(selectedPartitions.size)
