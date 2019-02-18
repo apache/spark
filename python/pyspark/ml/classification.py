@@ -889,10 +889,10 @@ class TreeClassifierParams(object):
 
 
 @inherit_doc
-class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                             HasProbabilityCol, HasRawPredictionCol, DecisionTreeParams,
-                             TreeClassifierParams, HasCheckpointInterval, HasSeed, HasWeightCol,
-                             JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol,
+                             HasPredictionCol, HasProbabilityCol, HasRawPredictionCol,
+                             DecisionTreeParams, TreeClassifierParams, HasCheckpointInterval,
+                             HasSeed, HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
@@ -952,13 +952,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 seed=None):
+                 seed=None, weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 seed=None)
+                 seed=None, weightCol=None)
         """
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -975,13 +975,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="gini", seed=None):
+                  impurity="gini", seed=None, weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                  seed=None)
+                  seed=None, weightCol=None)
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self._input_kwargs
@@ -1023,8 +1023,8 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel
 
 
 @inherit_doc
-class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                             HasRawPredictionCol, HasProbabilityCol,
+class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol,
+                             HasPredictionCol, HasSeed, HasRawPredictionCol, HasProbabilityCol,
                              RandomForestParams, TreeClassifierParams, HasCheckpointInterval,
                              JavaMLWritable, JavaMLReadable):
     """
@@ -1038,12 +1038,13 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = spark.createDataFrame([
-    ...     (1.0, Vectors.dense(1.0)),
-    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    ...     (1.0, 1.0, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
+    >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2,
+    ...     labelCol="indexed", weigthCol="weight", seed=42)
     >>> model = rf.fit(td)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
@@ -1081,13 +1082,15 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0):
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0,
+                 weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0)
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
+                 weightCol=None)
         """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1105,13 +1108,15 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0):
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0,
+                  weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0)
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", \
+                  subsamplingRate=1.0, weightCol=None)
         Sets params for linear classification.
         """
         kwargs = self._input_kwargs
@@ -1181,7 +1186,7 @@ class GBTClassifierParams(GBTParams, HasVarianceImpurity):
 
 
 @inherit_doc
-class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol,
                     GBTClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
                     JavaMLReadable):
     """
@@ -1205,12 +1210,13 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = spark.createDataFrame([
-    ...     (1.0, Vectors.dense(1.0)),
-    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    ...     (1.0, 1.0, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
+    >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed",
+    ...     weightCol="weight", seed=42)
     >>> gbt.getFeatureSubsetStrategy()
     'all'
     >>> model = gbt.fit(td)
@@ -1262,14 +1268,15 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
                  maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, impurity="variance",
-                 featureSubsetStrategy="all", validationTol=0.01, validationIndicatorCol=None):
+                 featureSubsetStrategy="all", validationTol=0.01, validationIndicatorCol=None,
+                 weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None)
+                 validationIndicatorCol=None, weightCol=None)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1288,14 +1295,14 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                  validationIndicatorCol=None):
+                  validationIndicatorCol=None, weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None)
+                  validationIndicatorCol=None, weightCol=None)
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
