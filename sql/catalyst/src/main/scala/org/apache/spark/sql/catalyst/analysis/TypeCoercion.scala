@@ -47,7 +47,7 @@ import org.apache.spark.sql.types._
 object TypeCoercion {
 
   def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
-    InConversion(conf) ::
+    PredicateSubqueryConversion(conf) ::
       WidenSetOperationTypes ::
       PromoteStrings(conf) ::
       DecimalPrecision ::
@@ -457,17 +457,17 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  case class InConversion(conf: SQLConf) extends TypeCoercionRule {
+  case class PredicateSubqueryConversion(conf: SQLConf) extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
       // Handle type casting required between value expression and subquery output
-      // in IN/ANY subquery.
-      case s @ PredicateSubquery(lhs, comparison, ListQuery(sub, children, exprId, _))
-          if !s.resolved && lhs.length == sub.output.length =>
-        // LHS is the value expressions of IN/ANY subquery.
+      // in predicate subquery.
+      case ps @ PredicateSubquery(lhs, ListQuery(sub, children, exprId, _), genCmp)
+          if !ps.resolved && lhs.length == sub.output.length =>
+        // LHS is the value expressions of predicate subquery.
         // RHS is the subquery output.
         val rhs = sub.output
 
@@ -476,8 +476,8 @@ object TypeCoercion {
             .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
-        // The number of columns/expressions must match between LHS and RHS of an
-        // IN/ANY subquery expression.
+        // The number of columns/expressions must match between LHS and RHS of a
+        // predicate subquery expression.
         if (commonTypes.length == lhs.length) {
           val castedRhs = rhs.zip(commonTypes).map {
             case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
@@ -487,12 +487,11 @@ object TypeCoercion {
             case (e, dt) if e.dataType != dt => Cast(e, dt)
             case (e, _) => e
           }
-
           val newSub = Project(castedRhs, sub)
-          PredicateSubquery(s, newLhs, comparison,
-            ListQuery(newSub, children, exprId, newSub.output))
+          val newQuery = ListQuery(newSub, children, exprId, newSub.output)
+          ps.makeCopy(Array(newLhs, newQuery, genCmp))
         } else {
-          s
+          ps
         }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
