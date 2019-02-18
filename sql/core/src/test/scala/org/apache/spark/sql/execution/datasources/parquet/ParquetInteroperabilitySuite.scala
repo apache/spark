@@ -289,34 +289,42 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       }
     }
 
+    def withTimeZone(timeZone: String)(f: => Unit): Unit = {
+      val tz = TimeZone.getDefault
+      TimeZone.setDefault(TimeZone.getTimeZone(timeZone))
+      try f finally TimeZone.setDefault(tz)
+    }
+
     withTempPath { tableDir =>
       FileUtils.copyFile(new File(timestampPath), new File(tableDir, "part-00001.parq"))
 
       Seq("America/Los_Angeles", "Australia/Perth").foreach({ timeZone =>
-        TimeZone.setDefault(TimeZone.getTimeZone(timeZone))
-        Seq(false, true).foreach { vectorized =>
-          withSQLConf(
-            (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
-          ) {
-            val losAngeles = spark.read.parquet(tableDir.getAbsolutePath).select("inLosAngeles")
-              .collect.map(_.getString(0))
-            val utc = spark.read.parquet(tableDir.getAbsolutePath).select("inUtc")
-              .collect.map(_.getString(0))
-            val singapore = spark.read.parquet(tableDir.getAbsolutePath).select("inPerth")
-              .collect.map(_.getString(0))
-            Seq(losAngeles, utc, singapore).foreach(values => values.foreach(item =>
-              Seq("millisUtc", "millisNonUtc", "microsUtc", "microsNonUtc").foreach(column => {
-                val dataFrame = spark.read.parquet(tableDir.getAbsolutePath).select(column)
-                verifyPredicate(dataFrame, column, item, "=", vectorized)
-                verifyPredicate(dataFrame, column, item, "!=", vectorized)
-                verifyPredicate(dataFrame, column, item, ">", vectorized)
-                verifyPredicate(dataFrame, column, item, ">=", vectorized)
-                verifyPredicate(dataFrame, column, item, "<", vectorized)
-                verifyPredicate(dataFrame, column, item, "<=", vectorized)
-              })
-            ))
+        withTimeZone(timeZone) {
+          Seq(false, true).foreach { vectorized =>
+            withSQLConf(
+              (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
+            ) {
+              val losAngeles = spark.read.parquet(tableDir.getAbsolutePath).select("inLosAngeles")
+                .collect.map(_.getString(0))
+              val utc = spark.read.parquet(tableDir.getAbsolutePath).select("inUtc")
+                .collect.map(_.getString(0))
+              val singapore = spark.read.parquet(tableDir.getAbsolutePath).select("inPerth")
+                .collect.map(_.getString(0))
+              Seq(losAngeles, utc, singapore).foreach(values => values.foreach(item =>
+                Seq("millisUtc", "millisNonUtc", "microsUtc", "microsNonUtc").foreach(column => {
+                  val dataFrame = spark.read.parquet(tableDir.getAbsolutePath).select(column)
+                  verifyPredicate(dataFrame, column, item, "=", vectorized)
+                  verifyPredicate(dataFrame, column, item, "!=", vectorized)
+                  verifyPredicate(dataFrame, column, item, ">", vectorized)
+                  verifyPredicate(dataFrame, column, item, ">=", vectorized)
+                  verifyPredicate(dataFrame, column, item, "<", vectorized)
+                  verifyPredicate(dataFrame, column, item, "<=", vectorized)
+                })
+              ))
+            }
           }
         }
-    })}
+    })
+    }
   }
 }
