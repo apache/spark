@@ -173,6 +173,7 @@ abstract class PredicateSubquery
     values.head
   }
 
+
   // scalastyle:off line.size.limit
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
