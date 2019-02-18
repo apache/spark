@@ -742,6 +742,7 @@ case class HashAggregateExec(
     val fastRowKeys = ctx.generateExpressions(
       bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
+    val unsafeRowHash = ctx.freshName("unsafeRowHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
 
@@ -754,13 +755,6 @@ case class HashAggregateExec(
           e.aggregateFunction.asInstanceOf[DeclarativeAggregate].mergeExpressions
       }
     }
-
-    // generate hash code for key
-    // SPARK-24076: HashAggregate uses the same hash algorithm on the same expressions
-    // as ShuffleExchange, it may lead to bad hash conflict when shuffle.partitions=8192*n,
-    // pick a different seed to avoid this conflict
-    val hashExpr = Murmur3Hash(groupingExpressions, 48)
-    val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
@@ -777,11 +771,11 @@ case class HashAggregateExec(
       s"""
          |// generate grouping key
          |${unsafeRowKeyCode.code}
-         |${hashEval.code}
+         |int $unsafeRowHash = ${unsafeRowKeyCode.value}.hashCode();
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
          |  $unsafeRowBuffer =
-         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
+         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowHash);
          |}
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
@@ -795,7 +789,7 @@ case class HashAggregateExec(
          |  // the hash map had be spilled, it should have enough memory now,
          |  // try to allocate buffer again.
          |  $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-         |    $unsafeRowKeys, ${hashEval.value});
+         |    $unsafeRowKeys, $unsafeRowHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
          |    throw new $oomeClassName("No enough memory for aggregation");
