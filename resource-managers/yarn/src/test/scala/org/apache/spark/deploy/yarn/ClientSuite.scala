@@ -40,6 +40,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers {
@@ -184,7 +185,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
     val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
 
-    val client = new Client(args, sparkConf)
+    val client = new Client(args, sparkConf, null)
     client.createApplicationSubmissionContext(
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
@@ -368,7 +369,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       val resources = Map("fpga" -> 2, "gpu" -> 3)
       ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
-      val conf = new SparkConf().set("spark.submit.deployMode", deployMode)
+      val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, deployMode)
       resources.foreach { case (name, v) =>
         conf.set(prefix + name, v.toString)
       }
@@ -377,7 +378,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
       val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
 
-      val client = new Client(new ClientArguments(Array()), conf)
+      val client = new Client(new ClientArguments(Array()), conf, null)
       client.createApplicationSubmissionContext(
         new YarnClientApplication(getNewApplicationResponse, appContext),
         containerLaunchContext)
@@ -455,7 +456,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       sparkConf: SparkConf,
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, sparkConf))
+    spy(new Client(clientArgs, sparkConf, null))
   }
 
   private def classpath(client: Client): Array[String] = {

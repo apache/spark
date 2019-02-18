@@ -15,9 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.protocol import Py4JJavaError
-
-from pyspark.serializers import PairDeserializer, NoOpSerializer
+from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming import DStream
 

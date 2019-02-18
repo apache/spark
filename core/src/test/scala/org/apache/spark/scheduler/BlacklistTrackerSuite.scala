@@ -443,20 +443,20 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       (2, 2),
       (2, 3)
     ).foreach { case (maxTaskFailures, maxNodeAttempts) =>
-      conf.set(config.MAX_TASK_FAILURES, maxTaskFailures)
+      conf.set(config.TASK_MAX_FAILURES, maxTaskFailures)
       conf.set(config.MAX_TASK_ATTEMPTS_PER_NODE.key, maxNodeAttempts.toString)
       val excMsg = intercept[IllegalArgumentException] {
         BlacklistTracker.validateBlacklistConfs(conf)
       }.getMessage()
       assert(excMsg === s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-        s"( = ${maxNodeAttempts}) was >= ${config.MAX_TASK_FAILURES.key} " +
+        s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
         s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
         s"Spark will not be robust to one bad node.  Decrease " +
-        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
+        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
         s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
     }
 
-    conf.remove(config.MAX_TASK_FAILURES)
+    conf.remove(config.TASK_MAX_FAILURES)
     conf.remove(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
     Seq(

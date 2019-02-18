@@ -17,7 +17,6 @@
 
 import sys
 import numpy as np
-import warnings
 
 if sys.version > '3':
     xrange = range
@@ -420,7 +419,7 @@ class Loader(object):
                      was saved.
         :return: model instance
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
 @inherit_doc

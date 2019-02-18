@@ -663,8 +663,8 @@ object CoalesceExec {
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
   override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
-    "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"))
 
   override def output: Seq[Attribute] = child.output
 

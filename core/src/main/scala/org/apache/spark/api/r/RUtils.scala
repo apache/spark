@@ -23,6 +23,7 @@ import java.util.Arrays
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.internal.config._
 
 private[spark] object RUtils {
   // Local path where R binary packages built from R source code contained in the spark
@@ -63,7 +64,7 @@ private[spark] object RUtils {
         (sys.props("spark.master"), sys.props("spark.submit.deployMode"))
       } else {
         val sparkConf = SparkEnv.get.conf
-        (sparkConf.get("spark.master"), sparkConf.get("spark.submit.deployMode", "client"))
+        (sparkConf.get("spark.master"), sparkConf.get(SUBMIT_DEPLOY_MODE))
       }
 
     val isYarnCluster = master != null && master.contains("yarn") && deployMode == "cluster"

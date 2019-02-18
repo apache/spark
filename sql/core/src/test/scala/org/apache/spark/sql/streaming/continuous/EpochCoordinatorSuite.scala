@@ -27,7 +27,7 @@ import org.apache.spark._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.test.TestSparkSession
@@ -45,7 +45,7 @@ class EpochCoordinatorSuite
   private var orderVerifier: InOrder = _
 
   override def beforeEach(): Unit = {
-    val reader = mock[ContinuousReadSupport]
+    val stream = mock[ContinuousStream]
     writeSupport = mock[StreamingWriteSupport]
     query = mock[ContinuousExecution]
     orderVerifier = inOrder(writeSupport, query)
@@ -53,7 +53,7 @@ class EpochCoordinatorSuite
     spark = new TestSparkSession()
 
     epochCoordinator
-      = EpochCoordinatorRef.create(writeSupport, reader, query, "test", 1, spark, SparkEnv.get)
+      = EpochCoordinatorRef.create(writeSupport, stream, query, "test", 1, spark, SparkEnv.get)
   }
 
   test("single epoch") {

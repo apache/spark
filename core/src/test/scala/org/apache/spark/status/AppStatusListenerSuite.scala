@@ -135,7 +135,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     execIds.foreach { id =>
       listener.onExecutorAdded(SparkListenerExecutorAdded(time, id,
-        new ExecutorInfo(s"$id.example.com", 1, Map())))
+        new ExecutorInfo(s"$id.example.com", 1, Map.empty, Map.empty)))
     }
 
     execIds.foreach { id =>
@@ -154,7 +154,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     val jobProps = new Properties()
     jobProps.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "jobGroup")
-    jobProps.setProperty("spark.scheduler.pool", "schedPool")
+    jobProps.setProperty(SparkContext.SPARK_SCHEDULER_POOL, "schedPool")
 
     listener.onJobStart(SparkListenerJobStart(1, time, stages, jobProps))
 
@@ -685,7 +685,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val bm2 = BlockManagerId("2", "2.example.com", 84)
     Seq(bm1, bm2).foreach { bm =>
       listener.onExecutorAdded(SparkListenerExecutorAdded(1L, bm.executorId,
-        new ExecutorInfo(bm.host, 1, Map())))
+        new ExecutorInfo(bm.host, 1, Map.empty, Map.empty)))
       listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm, maxMemory))
       check[ExecutorSummaryWrapper](bm.executorId) { exec =>
         assert(exec.info.maxMemory === maxMemory)
@@ -937,6 +937,24 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       BlockUpdatedInfo(bm1, stream1, StorageLevel.NONE, 0L, 0L)))
     intercept[NoSuchElementException] {
       check[StreamBlockData](stream1.name) { _ => () }
+    }
+
+    // Update a BroadcastBlock.
+    val broadcast1 = BroadcastBlockId(1L)
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, broadcast1, level, 1L, 1L)))
+
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.memoryUsed === 1L)
+      assert(exec.info.diskUsed === 1L)
+    }
+
+    // Drop a BroadcastBlock.
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, broadcast1, StorageLevel.NONE, 1L, 1L)))
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.memoryUsed === 0)
+      assert(exec.info.diskUsed === 0)
     }
   }
 
@@ -1553,7 +1571,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   /** Create an executor added event for the specified executor Id. */
   private def createExecutorAddedEvent(executorId: Int) = {
-    SparkListenerExecutorAdded(0L, executorId.toString, new ExecutorInfo("host1", 1, Map.empty))
+    SparkListenerExecutorAdded(0L, executorId.toString,
+      new ExecutorInfo("host1", 1, Map.empty, Map.empty))
   }
 
   /** Create an executor added event for the specified executor Id. */

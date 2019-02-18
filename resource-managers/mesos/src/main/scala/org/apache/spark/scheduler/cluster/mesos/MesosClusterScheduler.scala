@@ -32,7 +32,7 @@ import org.apache.mesos.Protos.TaskStatus.Reason
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
-import org.apache.spark.internal.config.{CORES_MAX, EXECUTOR_LIBRARY_PATH, EXECUTOR_MEMORY}
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
@@ -127,10 +127,10 @@ private[spark] class MesosClusterScheduler(
     MetricsSystem.createMetricsSystem("mesos_cluster", conf, new SecurityManager(conf))
   private val master = conf.get("spark.master")
   private val appName = conf.get("spark.app.name")
-  private val queuedCapacity = conf.getInt("spark.mesos.maxDrivers", 200)
-  private val retainedDrivers = conf.getInt("spark.mesos.retainedDrivers", 200)
-  private val maxRetryWaitTime = conf.getInt("spark.mesos.cluster.retry.wait.max", 60) // 1 minute
-  private val useFetchCache = conf.getBoolean("spark.mesos.fetchCache.enable", false)
+  private val queuedCapacity = conf.get(config.MAX_DRIVERS)
+  private val retainedDrivers = conf.get(config.RETAINED_DRIVERS)
+  private val maxRetryWaitTime = conf.get(config.CLUSTER_RETRY_WAIT_MAX_SECONDS)
+  private val useFetchCache = conf.get(config.ENABLE_FETCHER_CACHE)
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   // Keyed by submission id
@@ -390,10 +390,10 @@ private[spark] class MesosClusterScheduler(
   private def getDriverEnvironment(desc: MesosDriverDescription): Environment = {
     // TODO(mgummelt): Don't do this here.  This should be passed as a --conf
     val commandEnv = adjust(desc.command.environment, "SPARK_SUBMIT_OPTS", "")(
-      v => s"$v -Dspark.mesos.driver.frameworkId=${getDriverFrameworkID(desc)}"
+      v => s"$v -D${config.DRIVER_FRAMEWORK_ID.key}=${getDriverFrameworkID(desc)}"
     )
 
-    val env = desc.conf.getAllWithPrefix("spark.mesos.driverEnv.") ++ commandEnv
+    val env = desc.conf.getAllWithPrefix(config.DRIVER_ENV_PREFIX) ++ commandEnv
 
     val envBuilder = Environment.newBuilder()
 
@@ -419,22 +419,17 @@ private[spark] class MesosClusterScheduler(
 
   private def isContainerLocalAppJar(desc: MesosDriverDescription): Boolean = {
     val isLocalJar = desc.jarUrl.startsWith("local://")
-    val isContainerLocal = desc.conf.getOption("spark.mesos.appJar.local.resolution.mode").exists {
+    val isContainerLocal = desc.conf.get(config.APP_JAR_LOCAL_RESOLUTION_MODE) match {
       case "container" => true
       case "host" => false
-      case other =>
-        logWarning(s"Unknown spark.mesos.appJar.local.resolution.mode $other, using host.")
-        false
-      }
+    }
     isLocalJar && isContainerLocal
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
-    val confUris = List(conf.getOption("spark.mesos.uris"),
-      desc.conf.getOption("spark.mesos.uris"),
-      desc.conf.getOption("spark.submit.pyFiles")).flatMap(
-      _.map(_.split(",").map(_.trim))
-    ).flatten
+    val confUris = (conf.get(config.URIS_TO_DOWNLOAD) ++
+      desc.conf.get(config.URIS_TO_DOWNLOAD) ++
+      desc.conf.get(SUBMIT_PYTHON_FILES)).toList
 
     if (isContainerLocalAppJar(desc)) {
       (confUris ++ getDriverExecutorURI(desc).toList).map(uri =>
@@ -464,7 +459,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverCommandValue(desc: MesosDriverDescription): String = {
-    val dockerDefined = desc.conf.contains("spark.mesos.executor.docker.image")
+    val dockerDefined = desc.conf.contains(config.EXECUTOR_DOCKER_IMAGE)
     val executorUri = getDriverExecutorURI(desc)
     // Gets the path to run spark-submit, and the path to the Mesos sandbox.
     val (executable, sandboxPath) = if (dockerDefined) {
@@ -484,11 +479,11 @@ private[spark] class MesosClusterScheduler(
       // Sandbox path points to the parent folder as we chdir into the folderBasename.
       (cmdExecutable, "..")
     } else {
-      val executorSparkHome = desc.conf.getOption("spark.mesos.executor.home")
+      val executorSparkHome = desc.conf.get(config.EXECUTOR_HOME)
         .orElse(conf.getOption("spark.home"))
         .orElse(Option(System.getenv("SPARK_HOME")))
         .getOrElse {
-          throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+          throw new SparkException(s"Executor Spark home `${config.EXECUTOR_HOME}` is not set!")
         }
       val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getPath
       // Sandbox points to the current directory by default with Mesos.
@@ -534,20 +529,20 @@ private[spark] class MesosClusterScheduler(
     desc.conf.getOption(CORES_MAX.key).foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
-    desc.conf.getOption("spark.submit.pyFiles").foreach { pyFiles =>
-      val formattedFiles = pyFiles.split(",")
-        .map { path => new File(sandboxPath, path.split("/").last).toString() }
-        .mkString(",")
-      options ++= Seq("--py-files", formattedFiles)
-    }
+
+    val pyFiles = desc.conf.get(SUBMIT_PYTHON_FILES)
+    val formattedFiles = pyFiles.map { path =>
+      new File(sandboxPath, path.split("/").last).toString()
+    }.mkString(",")
+    options ++= Seq("--py-files", formattedFiles)
 
     // --conf
     val replicatedOptionsBlacklist = Set(
-      "spark.jars", // Avoids duplicate classes in classpath
+      JARS.key, // Avoids duplicate classes in classpath
       "spark.submit.deployMode", // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master
     )
-    val defaultConf = conf.getAllWithPrefix("spark.mesos.dispatcher.driverDefault.").toMap
+    val defaultConf = conf.getAllWithPrefix(config.DISPATCHER_DRIVER_DEFAULT_PREFIX).toMap
     val driverConf = desc.conf.getAll
       .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
       .toMap

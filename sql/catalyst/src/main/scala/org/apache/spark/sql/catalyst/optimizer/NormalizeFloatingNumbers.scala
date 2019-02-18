@@ -98,8 +98,10 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
   }
 
   private[sql] def normalize(expr: Expression): Expression = expr match {
-    case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
-      NormalizeNaNAndZero(expr)
+    case _ if !needNormalize(expr.dataType) => expr
+
+    case a: Alias =>
+      a.withNewChildren(Seq(normalize(a.child)))
 
     case CreateNamedStruct(children) =>
       CreateNamedStruct(children.map(normalize))
@@ -113,22 +115,22 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case CreateMap(children) =>
       CreateMap(children.map(normalize))
 
-    case a: Alias if needNormalize(a.dataType) =>
-      a.withNewChildren(Seq(normalize(a.child)))
+    case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
+      NormalizeNaNAndZero(expr)
 
-    case _ if expr.dataType.isInstanceOf[StructType] && needNormalize(expr.dataType) =>
+    case _ if expr.dataType.isInstanceOf[StructType] =>
       val fields = expr.dataType.asInstanceOf[StructType].fields.indices.map { i =>
         normalize(GetStructField(expr, i))
       }
       CreateStruct(fields)
 
-    case _ if expr.dataType.isInstanceOf[ArrayType] && needNormalize(expr.dataType) =>
+    case _ if expr.dataType.isInstanceOf[ArrayType] =>
       val ArrayType(et, containsNull) = expr.dataType
       val lv = NamedLambdaVariable("arg", et, containsNull)
       val function = normalize(lv)
       ArrayTransform(expr, LambdaFunction(function, Seq(lv)))
 
-    case _ => expr
+    case _ => throw new IllegalStateException(s"fail to normalize $expr")
   }
 }
 
