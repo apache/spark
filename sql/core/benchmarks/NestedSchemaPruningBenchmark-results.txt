@@ -1,0 +1,40 @@
+================================================================================================
+Nested Schema Pruning Benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Selection:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Top-level column                                63 /   69         15.8          63.3       1.0X
+Nested column                                  182 /  188          5.5         182.0       0.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Limiting:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Top-level column                               242 /  263          4.1         242.2       1.0X
+Nested column                                 1855 / 1931          0.5        1855.2       0.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Repartitioning:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Top-level column                               204 /  226          4.9         204.0       1.0X
+Nested column                                 1844 / 1936          0.5        1844.2       0.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Repartitioning by expressions:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Top-level column                               206 /  216          4.9         205.6       1.0X
+Nested column                                 1938 / 1994          0.5        1937.8       0.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_201-b09 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Sorting:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Top-level column                               286 /  313          3.5         286.3       1.0X
+Nested column                                 2268 / 2323          0.4        2267.7       0.1X
+
+
