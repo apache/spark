@@ -101,7 +101,8 @@ class WrapperTests(MLlibTestCase):
         self.assertEqual(_java2py(self.sc, java_array), [])
         # test array of array of strings
         str_list = [["a", "b", "c"], ["d", "e"], ["f", "g", "h", "i"], []]
-        expected_str_list = [("a", "b", "c"), ("d", "e"), ("f", "g", "h", "i"), ()]
+        expected_str_list = [("a", "b", "c", None), ("d", "e", None, None), ("f", "g", "h", "i"),
+                             (None, None, None, None)]
         java_class = self.sc._gateway.jvm.java.lang.String
         java_array = JavaWrapper._new_java_array(str_list, java_class)
         self.assertEqual(_java2py(self.sc, java_array), expected_str_list)
