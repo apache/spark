@@ -508,9 +508,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val filteredLines: Dataset[String] =
       CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
+    val needsFirstLine: Boolean =
+      userSpecifiedSchema.isEmpty || parsedOptions.headerFlag
     val maybeFirstLine: Option[String] =
-      if (userSpecifiedSchema.isEmpty)
-	filteredLines.take(1).headOption else None
+      if (needsFirstLine) {
+	filteredLines.take(1).headOption 
+      } else {
+	None
+      }
 
     val schema = userSpecifiedSchema.getOrElse {
       TextInputCSVDataSource.inferFromDataset(
