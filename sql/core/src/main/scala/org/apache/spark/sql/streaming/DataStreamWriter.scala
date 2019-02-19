@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources._
-import org.apache.spark.sql.sources.v2.StreamingWriteSupportProvider
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsStreamingWrite, TableProvider}
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -278,7 +278,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       query
     } else if (source == "foreach") {
       assertNotPartitioned("foreach")
-      val sink = ForeachWriteSupportProvider[T](foreachWriter, ds.exprEnc)
+      val sink = ForeachWriterTable[T](foreachWriter, ds.exprEnc)
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
@@ -304,36 +304,44 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
-      val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+      val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
-      var options = extraOptions.toMap
-      val sink = ds.getConstructor().newInstance() match {
-        case w: StreamingWriteSupportProvider
-            if !disabledSources.contains(w.getClass.getCanonicalName) =>
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            w, df.sparkSession.sessionState.conf)
-          options = sessionOptions ++ extraOptions
-          w
-        case _ =>
-          val ds = DataSource(
-            df.sparkSession,
-            className = source,
-            options = options,
-            partitionColumns = normalizedParCols.getOrElse(Nil))
-          ds.createSink(outputMode)
+      val useV1Source = disabledSources.contains(cls.getCanonicalName)
+
+      val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
+        val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          source = provider, conf = df.sparkSession.sessionState.conf)
+        val options = sessionOptions ++ extraOptions
+        val dsOptions = new DataSourceOptions(options.asJava)
+        provider.getTable(dsOptions) match {
+          case s: SupportsStreamingWrite => s
+          case _ => createV1Sink()
+        }
+      } else {
+        createV1Sink()
       }
 
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
-        options.get("queryName"),
-        options.get("checkpointLocation"),
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
         df,
-        options,
+        extraOptions.toMap,
         sink,
         outputMode,
         useTempCheckpointLocation = source == "console" || source == "noop",
         recoverFromCheckpointLocation = true,
         trigger = trigger)
     }
+  }
+
+  private def createV1Sink(): BaseStreamingSink = {
+    val ds = DataSource(
+      df.sparkSession,
+      className = source,
+      options = extraOptions.toMap,
+      partitionColumns = normalizedParCols.getOrElse(Nil))
+    ds.createSink(outputMode)
   }
 
   /**
