@@ -45,6 +45,34 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
   private val nameToColInfo: Map[String, (Attribute, ColumnStat)] =
     columnInfo.map(kv => kv._1.name -> kv)
 
+  test("aggregate with alias") {
+    val tableColumns = Seq("key11", "key12")
+    val groupByColumns = Seq("key11")
+    val attributes = groupByColumns.map(nameToAttr)
+
+    val rowCount = 2
+    val child = StatsTestPlan(
+      outputList = tableColumns.map(nameToAttr),
+      rowCount,
+      // rowCount * (overhead + column size)
+      size = Some(4 * (8 + 4)),
+      attributeStats = AttributeMap(tableColumns.map(nameToColInfo)))
+
+    val testAgg = Aggregate(
+      groupingExpressions = attributes,
+      aggregateExpressions = Seq(Alias(nameToAttr("key12"), "abc")()),
+      child)
+
+    val expectedColStats = Seq("abc" -> nameToColInfo("key12")._2)
+    val expectedAttrStats = toAttributeMap(expectedColStats, testAgg)
+
+    val expectedStats = Statistics(
+      sizeInBytes = getOutputSize(testAgg.output, rowCount, expectedAttrStats),
+      rowCount = Some(rowCount),
+      attributeStats = expectedAttrStats)
+    assert(testAgg.stats == expectedStats)
+  }
+
   test("set an upper bound if the product of ndv's of group-by columns is too large") {
     // Suppose table1 (key11 int, key12 int) has 4 records: (1, 10), (1, 20), (2, 30), (2, 40)
     checkAggStats(
