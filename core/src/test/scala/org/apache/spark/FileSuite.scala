@@ -99,7 +99,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val outputDir = new File(tempDir, "output").getAbsolutePath
     val nums = sc.makeRDD((1 to 100) ++ Seq(null))
     val exception = intercept[SparkException](nums.saveAsTextFile(outputDir))
-    assert(Utils.exceptionString(exception).contains("should not contain null rows"))
+    assert(Utils.exceptionString(exception).contains("text files do not allow null rows"))
   }
 
   test("SequenceFiles") {
