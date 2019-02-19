@@ -169,7 +169,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     // negatives within each bin, and then sort by score values in descending order.
     val counts = scoreLabelsWeight.combineByKey(
       createCombiner = (labelAndWeight: (Double, Double)) =>
-        new BinaryLabelCounter(labelAndWeight._1, labelAndWeight._2),
+        new BinaryLabelCounter(0.0, 0.0) += (labelAndWeight._1, labelAndWeight._2),
       mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>
         c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
