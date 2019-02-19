@@ -244,10 +244,9 @@ private[spark] class BlockManager(
     protected def saveToDiskStore(): Unit
 
     private def saveDeserializedValuesToMemoryStore(inputStream: InputStream): Boolean = {
-      var res = false
       try {
         val values = serializerManager.dataDeserializeStream(blockId, inputStream)(classTag)
-        res = memoryStore.putIteratorAsValues(blockId, values, classTag) match {
+        memoryStore.putIteratorAsValues(blockId, values, classTag) match {
           case Right(_) => true
           case Left(iter) =>
             // If putting deserialized values in memory failed, we will put the bytes directly
@@ -259,7 +258,6 @@ private[spark] class BlockManager(
       } finally {
         IOUtils.closeQuietly(inputStream)
       }
-      res
     }
 
     private def saveSerializedValuesToMemoryStore(bytes: ChunkedByteBuffer): Boolean = {
