@@ -77,10 +77,23 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+<!--
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+-->
+<!--
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
     </dependency>
+-->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
@@ -90,14 +103,16 @@
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
     </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-serde</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-shims</artifactId>
-    </dependency>
+    <!--
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-serde</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-shims</artifactId>
+        </dependency>
+    -->
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
     <dependency>
       <groupId>org.apache.avro</groupId>

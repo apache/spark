@@ -51,12 +51,8 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
       .set(SparkLauncher.SPARK_MASTER, "local")
       .set(WAREHOUSE_PATH.key, warehouse.toURI().toString())
       .set(CATALOG_IMPLEMENTATION.key, "hive")
+      .set(HiveUtils.HIVE_METASTORE_VERSION.key, "2.1")
       .set(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
-    val sparkConfWithHiveVersion = if (HiveUtils.isHive2) {
-      sparkConf.set(HiveUtils.HIVE_METASTORE_VERSION.key, "3.1")
-    } else {
-      sparkConf.set(HiveUtils.HIVE_METASTORE_VERSION.key, "2.1")
-    }
 
     val hadoopConf = new Configuration()
     hadoopConf.set("hive.metastore.warehouse.dir", warehouse.toURI().toString())
@@ -67,7 +63,7 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
     hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
     hadoopConf.set("hive.metastore.schema.verification", "false")
 
-    new HiveExternalCatalog(sparkConfWithHiveVersion, hadoopConf)
+    new HiveExternalCatalog(sparkConf, hadoopConf)
   }
 
   override def afterEach: Unit = {

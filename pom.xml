@@ -1497,11 +1497,11 @@
             <groupId>org.apache.calcite.avatica</groupId>
             <artifactId>avatica-metrics</artifactId>
           </exclusion>
-          <!--  this is needed and must be explicitly included later-->
           <exclusion>
             <groupId>org.apache.calcite.avatica</groupId>
             <artifactId>avatica</artifactId>
           </exclusion>
+          <!--  this is needed and must be explicitly included later-->
           <exclusion>
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-core</artifactId>
@@ -1545,10 +1545,6 @@
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.slf4j</groupId>
@@ -1842,6 +1838,10 @@
             <artifactId>commons-logging</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
@@ -1941,6 +1941,10 @@
             <artifactId>avatica</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica-metrics</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
           </exclusion>
@@ -1951,10 +1955,6 @@
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.calcite.avatica</groupId>
-            <artifactId>avatica-metrics</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.google.guava</groupId>
@@ -2844,57 +2844,19 @@
       </properties>
       <dependencies>
         <dependency>
-          <groupId>org.apache.hive.shims</groupId>
-          <artifactId>hive-shims-common</artifactId>
-          <version>${hive.version.short}</version>
-          <scope>${hive.deps.scope}</scope>
-          <exclusions>
-            <exclusion>
-              <groupId>org.slf4j</groupId>
-              <artifactId>slf4j-api</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.logging.log4j</groupId>
-              <artifactId>log4j-slf4j-impl</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.thrift</groupId>
-              <artifactId>libthrift</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.curator</groupId>
-              <artifactId>curator-framework</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.zookeeper</groupId>
-              <artifactId>zookeeper</artifactId>
-            </exclusion>
-          </exclusions>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-common</artifactId>
         </dependency>
-
         <dependency>
-          <groupId>org.apache.hive.shims</groupId>
-          <artifactId>hive-shims-0.23</artifactId>
-          <version>${hive.version.short}</version>
-          <scope>${hive.deps.scope}</scope>
-          <exclusions>
-            <exclusion>
-              <groupId>org.apache.hive.shims</groupId>
-              <artifactId>hive-shims-common</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.slf4j</groupId>
-              <artifactId>slf4j-api</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.hadoop</groupId>
-              <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
-            </exclusion>
-          </exclusions>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-serde</artifactId>
         </dependency>
-
         <dependency>
-          <groupId>org.apache.hive</groupId>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-shims</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
           <artifactId>hive-llap-client</artifactId>
           <version>${hive.version}</version>
           <scope>${hive.deps.scope}</scope>
@@ -2929,23 +2891,7 @@
         <dependency>
           <groupId>org.apache.hive</groupId>
           <artifactId>hive-storage-api</artifactId>
-          <version>2.7.0</version>
-        </dependency>
-
-        <dependency>
-          <groupId>org.apache.calcite.avatica</groupId>
-          <artifactId>avatica-core</artifactId>
-          <version>1.13.0</version>
-          <exclusions>
-            <exclusion>
-              <groupId>org.apache.calcite.avatica</groupId>
-              <artifactId>avatica-metrics</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>com.google.protobuf</groupId>
-              <artifactId>protobuf-java</artifactId>
-            </exclusion>
-          </exclusions>
+          <version>2.6.0</version>
         </dependency>
       </dependencies>
     </profile>
