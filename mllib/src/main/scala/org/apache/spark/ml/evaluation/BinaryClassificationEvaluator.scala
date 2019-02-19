@@ -43,11 +43,6 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   def this() = this(Identifiable.randomUID("binEval"))
 
   /**
-   * Default number of bins to use for binary classification evaluation.
-   */
-  val defaultNumberOfBins = 1000
-
-  /**
    * param for metric name in evaluation (supports `"areaUnderROC"` (default), `"areaUnderPR"`)
    * @group param
    */
@@ -101,7 +96,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         case Row(rawPrediction: Double, label: Double, weight: Double) =>
           (rawPrediction, label, weight)
       }
-    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights, defaultNumberOfBins)
+    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights)
     val metric = $(metricName) match {
       case "areaUnderROC" => metrics.areaUnderROC()
       case "areaUnderPR" => metrics.areaUnderPR()

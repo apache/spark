@@ -43,10 +43,11 @@ import org.apache.spark.sql.DataFrame
 @Since("1.0.0")
 class BinaryClassificationMetrics @Since("3.0.0") (
     @Since("1.3.0") val scoreAndLabelsWithOptWeight: RDD[_ <: Product],
-    @Since("1.3.0") val numBins: Int)
+    @Since("1.3.0") val numBins: Int = 1000)
   extends Logging {
   val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabelsWithOptWeight.map {
     case (prediction: Double, label: Double, weight: Double) =>
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
       (prediction, (label, weight))
     case (prediction: Double, label: Double) =>
       (prediction, (label, 1.0))
@@ -66,7 +67,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
    * Retrieves the score and labels (for binary compatibility).
    * @return The score and labels.
    */
-  @Since("1.0.0")
+  @Since("1.3.0")
   def scoreAndLabels: RDD[(Double, Double)] = {
     scoreLabelsWeight.map { case (prediction, (label, _)) => (prediction, label) }
   }
