@@ -923,8 +923,8 @@ private[spark] class TaskSetManager(
         s" be re-executed (either because the task failed with a shuffle data fetch failure," +
         s" so the previous stage needs to be re-run, or because a different copy of the task" +
         s" has already succeeded).")
-    } else if (sched.stageIdToFinishedPartitions.getOrElse(
-      stageId, new HashSet[Int]).contains(tasks(index).partitionId)) {
+    } else if (sched.stageIdToFinishedPartitions.get(stageId).exists(
+      partitions => partitions.contains(tasks(index).partitionId))) {
       sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     } else {
       addPendingTask(index)
