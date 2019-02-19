@@ -69,16 +69,23 @@ object FileStreamSink extends Logging {
             false
         }
       if (legacyMetadataPathExists) {
-        throw new SparkException(s"Found $legacyMetadataPath. In Spark 2.4 and earlier, the " +
-          s"file sink metadata is written to $legacyMetadataPath when using $metadataPath as " +
-          s"the output path. We detected that $legacyMetadataPath exists but not sure " +
-          s"whether we should ignore this directory and start your query using $metadataPath " +
-          s"directly. If you would like to recover your query from $legacyMetadataPath, please " +
-          s"*move* all files in $legacyMetadataPath to $metadataPath and rerun your codes. If " +
-          s"$legacyMetadataPath is not related to the query or you have already moved the files " +
-          s"to $metadataPath, you can either set SQL conf " +
-          s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
-          s"off this check, or just remove $legacyMetadataPath.")
+        throw new SparkException(
+          s"""Error: we detected a possible problem with the location of your "_spark_metadata"
+             |directory and you likely need to move it before restarting this query.
+             |
+             |Earlier version of Spark incorrectly escaped paths when writing out the
+             |"_spark_metadata" directory for structured streaming. While this was corrected in
+             |Spark 3.0, it appears that your query was started using an earlier version that
+             |incorrectly handled the "_spark_metadata" path.
+             |
+             |Correct "_spark_metadata" Directory: $metadataPath
+             |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
+             |
+             |Please move the data from the incorrect directory to the correct one, delete the
+             |incorrect directory, and then restart this query. If you believe you are receiving
+             |this message in error, you can disable it with the SQL conf
+             |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
+            .stripMargin)
       }
     }
   }

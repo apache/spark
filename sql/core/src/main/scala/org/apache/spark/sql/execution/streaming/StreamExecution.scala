@@ -106,16 +106,23 @@ abstract class StreamExecution(
             false
         }
       if (legacyCheckpointDirExists) {
-        throw new SparkException(s"Found $legacyCheckpointDir. In Spark 2.4 and earlier, the " +
-          s"checkpoint data is written to $legacyCheckpointDir when using $checkpointPath as " +
-          s"the checkpoint location. We detected that $legacyCheckpointDir exists but not sure " +
-          s"whether we should ignore this directory and start your query using $checkpointPath " +
-          s"directly. If you would like to recover your query from $legacyCheckpointDir, please " +
-          s"*move* all files in $legacyCheckpointDir to $checkpointPath and rerun your codes. If " +
-          s"$legacyCheckpointDir is not related to the query or you have already moved the files " +
-          s"to $checkpointPath, you can either set SQL conf " +
-          s"'${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}' to false to turn " +
-          s"off this check, or just remove $legacyCheckpointDir.")
+        throw new SparkException(
+          s"""Error: we detected a possible problem with the location of your checkpoint and you
+             |likely need to move it before restarting this query.
+             |
+             |Earlier version of Spark incorrectly escaped paths when writing out checkpoints for
+             |structured streaming. While this was corrected in Spark 3.0, it appears that your
+             |query was started using an earlier version that incorrectly handled the checkpoint
+             |path.
+             |
+             |Correct Checkpoint Directory: $checkpointPath
+             |Incorrect Checkpoint Directory: $legacyCheckpointDir
+             |
+             |Please move the data from the incorrect directory to the correct one, delete the
+             |incorrect directory, and then restart this query. If you believe you are receiving
+             |this message in error, you can disable it with the SQL conf
+             |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
+            .stripMargin)
       }
     }
     val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
