@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.FilterFunction
@@ -26,7 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode }
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -91,6 +93,72 @@ case class SerializeFromObject(
     child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+}
+
+object SerializeFromObject {
+  /**
+   * Collects all struct types from given data type object, recursively. Supports struct and array
+   * types for now.
+   * TODO(SPARK-26847): support map type.
+   */
+  def collectStructType(dt: DataType, structs: ArrayBuffer[StructType]): ArrayBuffer[StructType] = {
+    dt match {
+      case s @ StructType(fields) =>
+        structs += s
+        fields.map(f => collectStructType(f.dataType, structs))
+      case ArrayType(elementType, _) =>
+        collectStructType(elementType, structs)
+      case _ =>
+    }
+    structs
+  }
+
+  /**
+   * This method prunes given serializer expression by given pruned data type. For example,
+   * given a serializer creating struct(a int, b int) and pruned data type struct(a int),
+   * this method returns pruned serializer creating struct(a int). For now it supports to
+   * prune nested fields in struct and array of struct.
+   * TODO(SPARK-26847): support to prune nested fields in key and value of map type.
+   */
+  def pruneSerializer(
+      serializer: NamedExpression,
+      prunedDataType: DataType): NamedExpression = {
+    val prunedStructTypes = collectStructType(prunedDataType, ArrayBuffer.empty[StructType])
+    var structTypeIndex = 0
+
+    val prunedSerializer = serializer.transformDown {
+      case s: CreateNamedStruct if structTypeIndex < prunedStructTypes.size =>
+        val prunedType = prunedStructTypes(structTypeIndex)
+
+        // Filters out the pruned fields.
+        val prunedFields = s.nameExprs.zip(s.valExprs).filter { case (nameExpr, _) =>
+          val name = nameExpr.eval(EmptyRow).toString
+          prunedType.fieldNames.exists { fieldName =>
+            if (SQLConf.get.caseSensitiveAnalysis) {
+              fieldName.equals(name)
+            } else {
+              fieldName.equalsIgnoreCase(name)
+            }
+          }
+        }.flatMap(pair => Seq(pair._1, pair._2))
+
+        structTypeIndex += 1
+        CreateNamedStruct(prunedFields)
+    }.transformUp {
+      // When we change nested serializer data type, `If` expression will be unresolved because
+      // literal null's data type doesn't match now. We need to align it with new data type.
+      // Note: we should do `transformUp` explicitly to change data types.
+      case i @ If(_: IsNull, Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
+        i.copy(trueValue = Literal(null, ser.dataType))
+    }.asInstanceOf[NamedExpression]
+
+    if (prunedSerializer.dataType.sameType(prunedDataType)) {
+      prunedSerializer
+    } else {
+      serializer
+    }
+  }
+
 }
 
 object MapPartitions {

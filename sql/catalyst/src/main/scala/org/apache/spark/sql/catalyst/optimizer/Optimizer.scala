@@ -569,11 +569,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
       val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
 
       if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
-        // Prunes nested fields in serialzers.
+        // Prunes nested fields in serializers.
         val prunedSchema = SchemaPruning.pruneDataSchema(
           StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
         val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
-          SchemaPruning.pruneSerializer(serializer, prunedSchema(idx).dataType)
+          SerializeFromObject.pruneSerializer(serializer, prunedSchema(idx).dataType)
         }
 
         // Builds new projection.

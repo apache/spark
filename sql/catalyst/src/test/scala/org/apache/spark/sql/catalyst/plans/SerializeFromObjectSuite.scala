@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.SchemaPruning
 import org.apache.spark.sql.types._
 
-class SchemaPruningSuite extends SparkFunSuite {
-  import SchemaPruning._
+class SerializeFromObjectSuite extends SparkFunSuite {
+  import SerializeFromObject._
 
   test("collect struct types") {
     val dataTypes = Seq(
@@ -55,9 +56,9 @@ class SchemaPruningSuite extends SparkFunSuite {
         requestedFields: StructField*): Unit = {
       val requestedRootFields = requestedFields.map { f =>
         // `derivedFromAtt` doesn't affect the result of pruned schema.
-        RootField(field = f, derivedFromAtt = true)
+        SchemaPruning.RootField(field = f, derivedFromAtt = true)
       }
-      val expectedSchema = pruneDataSchema(schema, requestedRootFields)
+      val expectedSchema = SchemaPruning.pruneDataSchema(schema, requestedRootFields)
       assert(expectedSchema == StructType(requestedFields))
     }
 
