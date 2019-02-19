@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql.sources.v2.writer;
 
-import java.io.Serializable;
-
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite;
-
 /**
- * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
- * as the input parameter of {@link BatchWrite#commit(WriterCommitMessage[])} or
- * {@link StreamingWrite#commit(long, WriterCommitMessage[])}.
- *
- * This is an empty interface, data sources should define their own message class and use it when
- * generating messages at executor side and handling the messages at driver side.
+ * Write builder trait for tables that support truncation.
+ * <p>
+ * Truncation removes all data in a table and replaces it with data that is committed in the write.
  */
-@Evolving
-public interface WriterCommitMessage extends Serializable {}
+public interface SupportsTruncate extends WriteBuilder {
+  /**
+   * Configures a write to replace all existing data with data committed in the write.
+   *
+   * @return this write builder for method chaining
+   */
+  WriteBuilder truncate();
+}

@@ -17,18 +17,21 @@
 
 package org.apache.spark.sql.sources.v2.writer;
 
-import java.io.Serializable;
-
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite;
-
 /**
- * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
- * as the input parameter of {@link BatchWrite#commit(WriterCommitMessage[])} or
- * {@link StreamingWrite#commit(long, WriterCommitMessage[])}.
- *
- * This is an empty interface, data sources should define their own message class and use it when
- * generating messages at executor side and handling the messages at driver side.
+ * Write builder trait for tables that support dynamic partition overwrite.
+ * <p>
+ * A write that dynamically overwrites partitions removes all existing data in each logical
+ * partition for which the write will commit new data. Any existing logical partition for which the
+ * write does not contain data will remain unchanged.
+ * <p>
+ * This is provided to implement SQL compatible with Hive table operations but is not recommended.
+ * Instead, use the {@link SupportsOverwrite overwrite by filter API} to explicitly replace data.
  */
-@Evolving
-public interface WriterCommitMessage extends Serializable {}
+public interface SupportsDynamicOverwrite extends WriteBuilder {
+  /**
+   * Configures a write to dynamically replace partitions with data committed in the write.
+   *
+   * @return this write builder for method chaining
+   */
+  WriteBuilder overwriteDynamicPartitions();
+}

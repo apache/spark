@@ -202,7 +202,7 @@ private[yarn] class ExecutorRunnable(
     val commands = prefixEnv ++
       Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
       javaOpts ++
-      Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+      Seq("org.apache.spark.executor.YarnCoarseGrainedExecutorBackend",
         "--driver-url", masterAddress,
         "--executor-id", executorId,
         "--hostname", hostname,
@@ -232,21 +232,6 @@ private[yarn] class ExecutorRunnable(
       } else {
         // For other env variables, simply overwrite the value.
         env(key) = value
-      }
-    }
-
-    // Add log urls, as well as executor attributes
-    container.foreach { c =>
-      YarnContainerInfoHelper.getLogUrls(conf, Some(c)).foreach { m =>
-        m.foreach { case (fileName, url) =>
-          env("SPARK_LOG_URL_" + fileName.toUpperCase(Locale.ROOT)) = url
-        }
-      }
-
-      YarnContainerInfoHelper.getAttributes(conf, Some(c)).foreach { m =>
-        m.foreach { case (attr, value) =>
-          env("SPARK_EXECUTOR_ATTRIBUTE_" + attr.toUpperCase(Locale.ROOT)) = value
-        }
       }
     }
 
