@@ -195,7 +195,7 @@
     -->
     <arrow.version>0.12.0</arrow.version>
 
-    <test.java.home>${java.home}</test.java.home>
+    <test.java.home>${env.JAVA_HOME}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
 
