@@ -73,7 +73,8 @@ class JavaWrapper(object):
         calling a method with a Scala Array from Python with Py4J.
         If the param pylist is a 2D array, then a 2D java array will be returned.
         The returned 2D java array is a square, non-jagged 2D array that is big
-        enough for all elements.
+        enough for all elements. The empty slots in the inner Java arrays will
+        be filled with null to make the non-jagged 2D array.
 
         :param pylist:
           Python list to convert to a Java Array.
@@ -94,7 +95,6 @@ class JavaWrapper(object):
         if len(pylist) > 0 and isinstance(pylist[0], list):
             # If pylist is a 2D array, then a 2D java array will be created.
             # The 2D array is a square, non-jagged 2D array that is big enough for all elements.
-            # Currently, this is only used by StringIndexerModel.from_arrays_of_labels
             inner_array_length = 0
             for i in xrange(len(pylist)):
                 inner_array_length = max(inner_array_length, len(pylist[i]))
