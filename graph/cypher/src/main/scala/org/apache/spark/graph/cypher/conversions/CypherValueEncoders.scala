@@ -23,7 +23,7 @@ object CypherValueEncoders {
   }
 
   implicit def cypherNodeEncoder: ExpressionEncoder[SparkCypherNode] = {
-    kryo[SparkCypherNode].asInstanceOf[ExpressionEncoder[SparkCypherNode]]
+    kryo[SparkCypherNode]
   }
 
   implicit def cypherRelationshipEncoder: ExpressionEncoder[SparkCypherRelationship] = {
