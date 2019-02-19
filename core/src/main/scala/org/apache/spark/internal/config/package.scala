@@ -499,6 +499,13 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val METRICS_CPU_TIME_DRIVER_ENABLED =
+    ConfigBuilder("spark.metrics.cpu.time.driver.enabled")
+      .doc("Whether Dropwizard/Codahale metrics " +
+        "for the JVM CPU time will be reported for the driver.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
     .stringConf
     .createOptional
