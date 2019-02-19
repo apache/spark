@@ -60,7 +60,7 @@ def from_avro(col, jsonFormatSchema, options={}):
             _to_java_column(col), jsonFormatSchema, options)
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
-            _print_missing_jar("Avro", "avro", "avro", ssc.sparkContext.version)
+            _print_missing_jar("Avro", "avro", "avro", sc.version)
         raise
     return Column(jc)
 
@@ -88,7 +88,7 @@ def to_avro(col):
         jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(col))
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
-            _print_missing_jar("Avro", "avro", "avro", ssc.sparkContext.version)
+            _print_missing_jar("Avro", "avro", "avro", sc.version)
         raise
     return Column(jc)
 
