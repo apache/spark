@@ -267,6 +267,7 @@ object SQLConf {
       "Note: For structured streaming, this configuration cannot be changed between query " +
       "restarts from the same checkpoint location.")
     .intConf
+    .checkValue(_ > 0, "the value of sql.shuffle.partitions must be greater than 0")
     .createWithDefault(200)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
