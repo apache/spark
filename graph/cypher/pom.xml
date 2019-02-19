@@ -37,11 +37,6 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.opencypher</groupId>
-      <artifactId>okapi-relational</artifactId>
-      <version>${okapi.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -56,16 +51,16 @@
       <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-graph-api_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.opencypher</groupId>
-      <artifactId>okapi-shade</artifactId>
-      <version>${okapi.version}</version>
-    </dependency>
+      <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-graph-api_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+      </dependency>
+      <dependency>
+          <groupId>org.opencypher</groupId>
+          <artifactId>okapi-shade</artifactId>
+          <version>${okapi.version}</version>
+      </dependency>
 
     <!-- Test dependencies -->
 
