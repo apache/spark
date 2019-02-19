@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * Pushes Left semi and Left Anti joins below the following operators.
+ * This rule is a variant of [[PushDownPredicate]] which can handle
+ * pushing down Left semi and Left Anti joins below the following operators.
  *  1) Project
  *  2) Window
  *  3) Union
@@ -149,17 +150,19 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Check if we can safely push a join through a project or union by making sure that predicate
-   * subqueries in the condition do not contain the same attributes as the plan they are moved
+   * Check if we can safely push a join through a project or union by making sure that attributes
+   * referred in join condition do not contain the same attributes as the plan they are moved
    * into. This can happen when the plan and predicate subquery have the same source.
    */
   private def canPushThroughCondition(plans: Seq[LogicalPlan], condition: Option[Expression],
     rightOp: LogicalPlan): Boolean = {
-    val attributes = AttributeSet(plans.flatMap (_.output))
+    val attributes = AttributeSet(plans.flatMap(_.output))
     if (condition.isDefined) {
       val matched = condition.get.references.intersect(rightOp.outputSet).intersect(attributes)
       matched.isEmpty
-    } else true
+    } else {
+      true
+    }
   }
 
 
