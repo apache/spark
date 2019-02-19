@@ -329,7 +329,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
-      Seq(true).foreach { useV1 =>
+      Seq(true, false).foreach { useV1 =>
         val useV1List = if (useV1) {
           "orc"
         } else {
@@ -374,7 +374,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
-    Seq(true).foreach { useV1 =>
+    Seq(true, false).foreach { useV1 =>
       val useV1List = if (useV1) {
         "orc"
       } else {
@@ -464,6 +464,25 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
             checkAnswer(sql(s"select a from $tableName"), (0 until end).map(_ => Row(null)))
             checkAnswer(sql(s"select b from $tableName"), data.select("b"))
           }
+        }
+      }
+    }
+  }
+
+  test("File data sources V2 supports overwriting with different schema") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "") {
+      Seq("orc", "parquet", "json").foreach { format =>
+        withTempPath { p =>
+          val path = p.getCanonicalPath
+          spark.range(10).write.format(format).save(path)
+          val newDF = spark.range(20).map(id => (id.toDouble, id.toString)).toDF("double", "string")
+          newDF.write.format(format).mode("overwrite").save(path)
+
+          val readDF = spark.read.format(format).load(path)
+          val expectedSchema = StructType(Seq(
+            StructField("double", DoubleType, true), StructField("string", StringType, true)))
+          assert(readDF.schema == expectedSchema)
+          checkAnswer(readDF, newDF)
         }
       }
     }
