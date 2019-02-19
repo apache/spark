@@ -46,9 +46,9 @@ object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
     apply(CreateGraphFactory(createQuery))
   }
 
-  val tableEntityIdKey = "id"
-  val tableEntityStartNodeKey = s"source"
-  val tableEntityEndNodeKey = s"target"
+  val tableEntityIdKey = "___id"
+  val tableEntityStartNodeKey = "___source"
+  val tableEntityEndNodeKey = "___target"
 
   override def apply(propertyGraph: InMemoryTestGraph)
     (implicit sparkCypher: SparkCypherSession): ScanGraph[DataFrameTable] = {
