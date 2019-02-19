@@ -407,7 +407,7 @@ import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType
         val df = spark.range(1).selectExpr(columns: _*)
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
-        (1 to width by 50).foreach { numFilter =>
+        (1 to width by 200).foreach { numFilter =>
             val whereColumn = (1 to numFilter)
               .map(i => col(s"c$i") === lit(0))
               .foldLeft(lit(false))(_ || _)
