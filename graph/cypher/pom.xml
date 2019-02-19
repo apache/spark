@@ -37,6 +37,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.opencypher</groupId>
+      <artifactId>okapi-relational</artifactId>
+      <version>${okapi.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
