@@ -57,7 +57,7 @@ class OrcDeserializer(
     var targetColumnIndex = 0
     while (targetColumnIndex < fieldWriters.length) {
       if (fieldWriters(targetColumnIndex) != null) {
-        var value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
+        val value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
         if (value == null) {
           resultRow.setNullAt(targetColumnIndex)
         } else {
