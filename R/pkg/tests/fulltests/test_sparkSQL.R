@@ -332,6 +332,23 @@ test_that("createDataFrame/collect Arrow optimization", {
   })
 })
 
+test_that("createDataFrame/collect Arrow optimization - many partitions (partition order test)", {
+  skip_if_not_installed("arrow")
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    expect_equal(collect(createDataFrame(mtcars, numPartitions = 32)),
+                 collect(createDataFrame(mtcars, numPartitions = 1)))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
 test_that("createDataFrame/collect Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
   rdf <- data.frame(list(list(a = 1,
