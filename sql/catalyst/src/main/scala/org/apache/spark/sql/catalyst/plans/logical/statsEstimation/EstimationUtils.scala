@@ -72,8 +72,9 @@ object EstimationUtils {
   }
 
   /** Match alias with its child's column stat */
-  def getAliasStats(expressions: Seq[Expression],
-                    attributeStats: AttributeMap[ColumnStat]) : Seq[(Attribute, ColumnStat)] = {
+  def getAliasStats(
+      expressions: Seq[Expression],
+      attributeStats: AttributeMap[ColumnStat]): Seq[(Attribute, ColumnStat)] = {
     expressions.collect {
       case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)
