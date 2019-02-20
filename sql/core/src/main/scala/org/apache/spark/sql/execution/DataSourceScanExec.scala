@@ -221,7 +221,8 @@ case class FileSourceScanExec(
           val sortColumns =
             spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
 
-          val sortOrder = if (sortColumns.nonEmpty) {
+          val sortOrder = if (sortColumns.nonEmpty &&
+            !partitionFilters.exists(ExecSubqueryExpression.hasSubquery)) {
             // In case of bucketing, its possible to have multiple files belonging to the
             // same bucket in a given relation. Each of these files are locally sorted
             // but those files combined together are not globally sorted. Given that,
