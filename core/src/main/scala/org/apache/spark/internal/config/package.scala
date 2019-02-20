@@ -361,7 +361,7 @@ package object config {
 
   private[streaming] val STREAMING_DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.streaming.dynamicAllocation.minExecutors")
-      .intConf.createWithDefault(0)
+      .intConf.createOptional
 
   private[streaming] val STREAMING_DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.streaming.dynamicAllocation.maxExecutors")
