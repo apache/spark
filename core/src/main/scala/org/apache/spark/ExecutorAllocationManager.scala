@@ -147,7 +147,8 @@ private[spark] class ExecutorAllocationManager(
   private val executorIds = new mutable.HashSet[String]
 
   // Max number of removed executors to track
-  // Assumes the late events will be correctly handled before the queue capacity reached.
+  // Assumes the late events for the executor will be correctly handled before the removal
+  // of executorId from this queue when it's full.
   private val MAXIMUM_NUM_REMOVED_EXECUTORS = 10000
   // Tracking all known executors that have been removed
   private val removedExecutorIds = new LinkedBlockingQueue[String](MAXIMUM_NUM_REMOVED_EXECUTORS)
