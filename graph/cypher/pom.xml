@@ -91,6 +91,15 @@
       <version>${okapi.version}</version>
       <scope>test</scope>
     </dependency>
+
+    <!-- TODO: remove when https://trello.com/c/LlIcZShZ is solved -->
+    <dependency>
+      <groupId>org.antlr</groupId>
+      <artifactId>antlr4-runtime</artifactId>
+      <version>4.7.1</version>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
 
   <build>
