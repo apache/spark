@@ -1,4 +1,4 @@
-package org.apache.spark.graph.api.v1
+package org.apache.spark.graph.api
 
 import org.apache.spark.sql.DataFrame
 

@@ -1,4 +1,4 @@
-package org.apache.spark.graph.api.v1
+package org.apache.spark.graph.api
 
 import org.apache.spark.sql.DataFrame
 
@@ -14,16 +14,16 @@ trait GraphElementDataFrame {
 case class NodeDataFrame(
   df: DataFrame,
   idColumn: String,
-  properties: Map[String, String],
-  labels: Set[String],
-  optionalLabels: Map[String, String]
+  labels: Set[String] = Set.empty,
+  properties: Map[String, String] = Map.empty,
+  optionalLabels: Map[String, String] = Map.empty
 ) extends GraphElementDataFrame
 
 case class RelationshipDataFrame(
   df: DataFrame,
   idColumn: String,
-  properties: Map[String, String],
-  relationshipType: String,
   sourceIdColumn: String,
-  targetIdColumn: String
+  targetIdColumn: String,
+  relationshipType: String,
+  properties: Map[String, String] = Map.empty
 ) extends GraphElementDataFrame

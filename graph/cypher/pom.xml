@@ -53,16 +53,16 @@
         </exclusion>
       </exclusions>
     </dependency>
-      <dependency>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-graph-api_${scala.binary.version}</artifactId>
-          <version>${project.version}</version>
-      </dependency>
-      <dependency>
-          <groupId>org.opencypher</groupId>
-          <artifactId>okapi-shade</artifactId>
-          <version>${okapi.version}</version>
-      </dependency>
+    <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-graph-api_${scala.binary.version}</artifactId>
+        <version>${project.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.opencypher</groupId>
+        <artifactId>okapi-shade</artifactId>
+        <version>${okapi.version}</version>
+    </dependency>
 
     <!-- Test dependencies -->
 

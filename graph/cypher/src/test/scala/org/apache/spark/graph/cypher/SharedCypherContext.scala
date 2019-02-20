@@ -4,17 +4,17 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 trait SharedCypherContext extends SharedSQLContext {
 
-  private var _sparkCypher: SparkCypherSession = _
+  private var _cypherEngine: SparkCypherSession = _
 
-  protected implicit def sparkCypher: SparkCypherSession = _sparkCypher
+  protected implicit def cypherEngine: SparkCypherSession = _cypherEngine
 
   override def beforeAll() {
     super.beforeAll()
-    _sparkCypher = SparkCypherSession.create
+    _cypherEngine = SparkCypherSession.create
   }
 
   protected override def afterAll(): Unit = {
-    _sparkCypher = null
+    _cypherEngine = null
     super.afterAll()
   }
 }
