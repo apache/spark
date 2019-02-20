@@ -60,9 +60,6 @@ class LeftSemiPushdownSuite extends PlanTest {
   }
 
   test("Project: LeftSemiAnti join no pushdown because of non-deterministic proj exprs") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
-
     val originalQuery = testRelation
       .select(Rand('a), 'b, 'c)
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
@@ -70,7 +67,22 @@ class LeftSemiPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .select(Rand('a), 'b, 'c)
-      .join(y, joinType = LeftSemi, condition = Some('b === 'd))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Project: LeftSemiAnti join no pushdown because scalar subq proj exprs") {
+    val subq = ScalarSubquery(testRelation.groupBy('b)(sum('c).as("sum")))
+    val originalQuery = testRelation
+      .select(subq.as("sum"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .select(subq.as("sum"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd))
       .analyze
 
     comparePlans(optimized, correctAnswer)

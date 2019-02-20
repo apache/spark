@@ -68,7 +68,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
             replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
         }
 
-        // Check if the remaining predicates do not contain columns from subquery
+        // Check if the remaining predicates do not contain columns from the right
+        // hand side of the join. Since the remaining predicates will be kept
+        // as a filter over aggregate, this check is necessary after the left semi
+        // or left anti join is moved below aggregate. The reason is, for this kind
+        // of join, we only output from the left leg of the join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
@@ -99,7 +103,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
           cond.references.subsetOf(partitionAttrs)
         }
 
-        // Check if the remaining predicates do not contain columns from subquery
+        // Check if the remaining predicates do not contain columns from the right
+        // hand side of the join. Since the remaining predicates will be kept
+        // as a filter over window, this check is necessary after the left semi
+        // or left anti join is moved below window. The reason is, for this kind
+        // of join, we only output from the left leg of the join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
@@ -152,10 +160,14 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Check if we can safely push a join through a project or union by making sure that attributes
    * referred in join condition do not contain the same attributes as the plan they are moved
-   * into. This can happen when the plan and predicate subquery have the same source.
+   * into. This can happen when both sides of join refers to the same source (self join). This
+   * function makes sure that the join condition refers to attributes that are not ambiguous (i.e
+   * present in both the legs of the join) or else the resultant plan will be invalid.
    */
-  private def canPushThroughCondition(plans: Seq[LogicalPlan], condition: Option[Expression],
-    rightOp: LogicalPlan): Boolean = {
+  private def canPushThroughCondition(
+      plans: Seq[LogicalPlan],
+      condition: Option[Expression],
+      rightOp: LogicalPlan): Boolean = {
     val attributes = AttributeSet(plans.flatMap(_.output))
     if (condition.isDefined) {
       val matched = condition.get.references.intersect(rightOp.outputSet).intersect(attributes)
@@ -167,8 +179,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
 
 
   private def pushDownJoin(
-    join: Join,
-    grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+      join: Join,
+      grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
     val (pushDown, stayUp) = if (join.condition.isDefined) {
       splitConjunctivePredicates(join.condition.get)
         .partition {_.references.subsetOf(grandchild.outputSet ++ join.right.outputSet)}
