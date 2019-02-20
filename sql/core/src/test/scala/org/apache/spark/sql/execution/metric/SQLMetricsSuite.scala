@@ -305,26 +305,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
-  test("shuffle.partitions=0" ) {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
-      "spark.sql.shuffle.partitions" -> "-1",
-      "spark.sql.join.preferSortMergeJoin" -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
-      // Assume the execution plan is
-      // Project(nodeId = 0)
-      // +- ShuffledHashJoin(nodeId = 1)
-      // :- Exchange(nodeId = 2)
-      // :  +- Project(nodeId = 3)
-      // :     +- LocalTableScan(nodeId = 4)
-      // +- Exchange(nodeId = 5)
-      // +- Project(nodeId = 6)
-      // +- LocalTableScan(nodeId = 7)
-      val df = df1.join(df2, "key")
-      assert(df.collect().size == 2)
-    }
-  }
-
   test("BroadcastHashJoin(outer) metrics") {
     val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
