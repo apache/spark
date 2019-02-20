@@ -208,7 +208,7 @@ class FileStreamSource(
     var allFiles: Seq[FileStatus] = null
     sourceHasMetadata match {
       case None =>
-        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
           sourceHasMetadata = Some(true)
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
@@ -220,7 +220,7 @@ class FileStreamSource(
             // double check whether source has metadata, preventing the extreme corner case that
             // metadata log and data files are only generated after the previous
             // `FileStreamSink.hasMetadata` check
-            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
               sourceHasMetadata = Some(true)
               allFiles = allFilesUsingMetadataLogFileIndex()
             } else {
