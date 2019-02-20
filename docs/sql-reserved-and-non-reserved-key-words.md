@@ -22,6 +22,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>ALTER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ANALYZE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>AND</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>ANTI</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ANY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ARE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ARCHIVE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -445,6 +446,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>SECTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SEEK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SELECT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>SEMI</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SENSITIVE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SEPARATED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SERDE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -452,6 +454,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>SESSION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SESSION_USER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SET</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>SETMINUS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SETS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SHOW</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SIGNAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
