@@ -51,7 +51,8 @@
     "MinorGCTime" : 374,
     "MajorGCCount" : 3,
     "MajorGCTime" : 170
-  }
+  },
+  "attributes" : { }
 }, {
   "id" : "2",
   "hostPort" : "028.company.com:46325",
@@ -83,7 +84,8 @@
     "totalOnHeapStorageMemory" : 97832140,
     "totalOffHeapStorageMemory" : 0
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "1",
   "hostPort" : "036.company.com:35126",
@@ -115,5 +117,6 @@
     "totalOnHeapStorageMemory" : 97832140,
     "totalOffHeapStorageMemory" : 0
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 } ]
