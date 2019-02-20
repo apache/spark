@@ -1499,7 +1499,7 @@ abstract class RDD[T: ClassTag](
    * Save this RDD as a compressed text file, using string representations of elements.
    */
   def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = withScope {
-    val r = this.mapPartitions { iter =>
+    this.mapPartitions { iter =>
       val text = new Text()
       iter.map { x =>
         require(x != null, "text files do not allow null rows")
