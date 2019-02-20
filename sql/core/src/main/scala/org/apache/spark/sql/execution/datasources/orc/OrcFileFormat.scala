@@ -159,6 +159,8 @@ class OrcFileFormat
       }
     }
 
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, requiredSchema.catalogString)
+
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
@@ -187,8 +189,6 @@ class OrcFileFormat
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
-        taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
-          requestedColIds.filter(_ != -1).sorted.mkString(","))
 
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)

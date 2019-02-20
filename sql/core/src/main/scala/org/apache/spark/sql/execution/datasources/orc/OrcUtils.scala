@@ -120,14 +120,18 @@ object OrcUtils extends Logging {
         })
       } else {
         if (isCaseSensitive) {
-          Some(requiredSchema.fieldNames.map { name =>
-            orcFieldNames.indexWhere(caseSensitiveResolution(_, name))
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+            if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
+              idx
+            } else {
+              -1
+            }
           })
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
           val caseInsensitiveOrcFieldMap =
             orcFieldNames.zipWithIndex.groupBy(_._1.toLowerCase(Locale.ROOT))
-          Some(requiredSchema.fieldNames.map { requiredFieldName =>
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
             caseInsensitiveOrcFieldMap
               .get(requiredFieldName.toLowerCase(Locale.ROOT))
               .map { matchedOrcFields =>
@@ -137,7 +141,7 @@ object OrcUtils extends Logging {
                   throw new RuntimeException(s"""Found duplicate field(s) "$requiredFieldName": """
                     + s"$matchedOrcFieldsString in case-insensitive mode")
                 } else {
-                  matchedOrcFields.head._2
+                  idx
                 }
               }.getOrElse(-1)
           })
