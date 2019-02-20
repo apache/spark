@@ -105,7 +105,7 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       .withTTY()
       .exec(cmd.toArray: _*)
     // wait to get some result back
-    Thread.sleep(1000)
+    Thread.sleep(5000)
     watch.close()
     out.flush()
     out.toString()
