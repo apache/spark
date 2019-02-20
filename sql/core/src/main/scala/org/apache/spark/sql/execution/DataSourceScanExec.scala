@@ -185,6 +185,10 @@ case class FileSourceScanExec(
     ret
   }
 
+  private def partitionOnlyAvailableAtRuntime: Boolean = {
+    partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
+  }
+
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
@@ -221,8 +225,7 @@ case class FileSourceScanExec(
           val sortColumns =
             spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
 
-          val sortOrder = if (sortColumns.nonEmpty &&
-            !partitionFilters.exists(ExecSubqueryExpression.hasSubquery)) {
+          val sortOrder = if (sortColumns.nonEmpty && !partitionOnlyAvailableAtRuntime) {
             // In case of bucketing, its possible to have multiple files belonging to the
             // same bucket in a given relation. Each of these files are locally sorted
             // but those files combined together are not globally sorted. Given that,
@@ -272,7 +275,7 @@ case class FileSourceScanExec(
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
     val withOptPartitionCount = if (relation.partitionSchemaOption.isDefined &&
-      !partitionFilters.exists(ExecSubqueryExpression.hasSubquery)) {
+      !partitionOnlyAvailableAtRuntime) {
       metadata + ("PartitionCount" -> selectedPartitions.size.toString)
     } else {
       metadata
