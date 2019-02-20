@@ -499,6 +499,8 @@ case class FlatMapGroupsInRWithArrow(
     keyDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
+  // This operator always need all columns of its child, even it doesn't reference to.
+  override def references: AttributeSet = child.outputSet
 
   override protected def stringArgs: Iterator[Any] = Iterator(
     inputSchema, StructType.fromAttributes(output), keyDeserializer, groupingAttributes, child)

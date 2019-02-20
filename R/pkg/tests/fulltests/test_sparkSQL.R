@@ -3564,11 +3564,15 @@ test_that("gapply() Arrow optimization", {
                      stopifnot(is.numeric(key[[1]]))
                    }
                    stopifnot(class(grouped) == "data.frame")
+                   stopifnot(length(colnames(grouped)) == 11)
+                   # mtcars' hp is more then 50.
+                   stopifnot(all(grouped$hp > 50))
                    grouped
                  },
                  schema(df))
     actual <- collect(ret)
     expect_equal(actual, expected)
+    expect_equal(count(ret), nrow(mtcars))
   },
   finally = {
     # Resetting the conf back to default value
