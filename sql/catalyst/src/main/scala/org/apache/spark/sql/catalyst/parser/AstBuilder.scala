@@ -1055,25 +1055,24 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     Exists(plan(ctx.query))
   }
 
-  /**
-   * Get the comparison expression.
-   *
-   * Note: SqlBaseParser.NEQ and SqlBaseParser.NEQJ should be parsed outside.
-   */
-  def getComparison(operator: Int)
-  : (Expression, Expression) => BinaryComparison = operator match {
-    case SqlBaseParser.EQ =>
-      EqualTo
-    case SqlBaseParser.NSEQ =>
-      EqualNullSafe
-    case SqlBaseParser.LT =>
-      LessThan
-    case SqlBaseParser.LTE =>
-      LessThanOrEqual
-    case SqlBaseParser.GT =>
-      GreaterThan
-    case SqlBaseParser.GTE =>
-      GreaterThanOrEqual
+  private def getPredicate(
+      operator: ComparisonOperatorContext): (Expression, Expression) => Expression = {
+    operator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType match {
+      case SqlBaseParser.EQ =>
+        (left, right) => EqualTo(left, right)
+      case SqlBaseParser.NSEQ =>
+        (left, right) => EqualNullSafe(left, right)
+      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
+        (left, right) => Not(EqualTo(left, right))
+      case SqlBaseParser.LT =>
+        (left, right) => LessThan(left, right)
+      case SqlBaseParser.LTE =>
+        (left, right) => LessThanOrEqual(left, right)
+      case SqlBaseParser.GT =>
+        (left, right) => GreaterThan(left, right)
+      case SqlBaseParser.GTE =>
+        (left, right) => GreaterThanOrEqual(left, right)
+    }
   }
 
   /**
@@ -1090,14 +1089,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.left)
     val right = expression(ctx.right)
-    val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
-
-    operator.getSymbol.getType match {
-      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
-        Not(EqualTo(left, right))
-      case other =>
-        getComparison(other)(left, right)
-    }
+    val operator = ctx.comparisonOperator()
+    getPredicate(operator)(left, right)
   }
 
   /**
@@ -1162,14 +1155,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.DISTINCT =>
         Not(EqualNullSafe(e, expression(ctx.right)))
       case SqlBaseParser.ANY | SqlBaseParser.SOME =>
-        val comparison = ctx.comparisonOperator.getChild(0).asInstanceOf[TerminalNode]
-        val anySubquery = comparison.getSymbol.getType match {
+        val left = getValueExpressions(e)
+        val right = ListQuery(plan(ctx.query))
+        val operator = ctx.comparisonOperator
+        invertIfNotDefined(operator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType match {
+          // We need to specially handle negative froms here
           case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
-            Not(AnySubquery(getValueExpressions(e), EqualTo, ListQuery(plan(ctx.query))))
-          case other =>
-            AnySubquery(getValueExpressions(e), getComparison(other), ListQuery(plan(ctx.query)))
-        }
-        invertIfNotDefined(anySubquery)
+            val genCmp = (left: Expression, right: Expression) => EqualTo(left, right)
+            Not(AnySubquery(left, right, genCmp))
+          case _ =>
+            val genCmp = getPredicate(operator)
+              .asInstanceOf[(Expression, Expression) => BinaryComparison]
+            AnySubquery(left, right, genCmp)
+        })
     }
   }
 

@@ -105,8 +105,8 @@ trait PredicateHelper {
     // Non-deterministic expressions are not allowed as join conditions.
     case e if !e.deterministic => false
     case _: ListQuery | _: Exists =>
-      // A ListQuery defines the query which we want to search in an IN subquery expression.
-      // Currently the only way to evaluate an IN subquery is to convert it to a
+      // A ListQuery defines the query which we want to search in a predicate subquery expression.
+      // Currently the only way to evaluate a predicate subquery is to convert it to a
       // LeftSemi/LeftAnti/ExistenceJoin by `RewritePredicateSubquery` rule.
       // It cannot be evaluated as part of a Join operator.
       // An Exists shouldn't be push into a Join operator too.
@@ -145,26 +145,16 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
-/**
- * An [[Expression]] compares `values` with a `query`.
- *
- * TODO: support `ALL` subquery.
- */
-abstract class PredicateSubquery
-  extends Predicate
-  with Unevaluable {
+abstract class PredicateSubquery extends BinaryExpression with Predicate with Unevaluable {
 
-  val values: Seq[Expression]
+  def values: Seq[Expression]
+  def query: ListQuery
+  def genCmp: (Expression, Expression) => BinaryComparison
+  def symbol: String
 
-  val comparison: (Expression, Expression) => BinaryComparison
+  @transient protected lazy val cmp: BinaryComparison = genCmp(value, query)
 
-  val query: ListQuery
-
-  def predicateName: String
-
-  protected lazy val comparisonSymbol: String = comparison(value, query).symbol
-
-  @transient protected lazy val value: Expression = if (values.length > 1) {
+  @transient private lazy val value: Expression = if (values.length > 1) {
     CreateNamedStruct(values.zipWithIndex.flatMap {
       case (v: NamedExpression, _) => Seq(Literal(v.name), v)
       case (v, idx) => Seq(Literal(s"_$idx"), v)
@@ -174,12 +164,11 @@ abstract class PredicateSubquery
   }
 
 
-  // scalastyle:off line.size.limit
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The number of columns in the left hand side of an $predicateName subquery does not match the
+           |The number of columns in the left hand side of a predicate subquery does not match the
            |number of columns in the output of subquery.
            |#columns in left hand side: ${values.length}.
            |#columns in right hand side: ${query.childOutputs.length}.
@@ -197,7 +186,7 @@ abstract class PredicateSubquery
       }
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The data type of one or more elements in the left hand side of an $predicateName subquery
+           |The data type of one or more elements in the left hand side of a predicate subquery
            |is not compatible with the data type of the output of the subquery
            |Mismatched columns:
            |[${mismatchedColumns.mkString(", ")}]
@@ -209,61 +198,48 @@ abstract class PredicateSubquery
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
     }
   }
-  // scalastyle:on line.size.limit
-  override def children: Seq[Expression] = values :+ query
+
+  override def left: Expression = value
+  override def right: Expression = query
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+
+  private def toString(left: String, right: String): String = {
+    s"$value $symbol ($query)"
+  }
+
+  override def toString: String = toString(value.toString, query.toString)
+  override def sql: String = s"${toString(value.sql, query.sql)}"
 }
 
 object PredicateSubquery {
-  def apply (
-      p: PredicateSubquery,
-      values: Seq[Expression],
-      comparison: (Expression, Expression) => BinaryComparison,
-      query: ListQuery): PredicateSubquery = p match {
-    case _: InSubquery =>
-      InSubquery(values, query)
-    case _: AnySubquery =>
-      AnySubquery(values, comparison, query)
-  }
 
   def unapply(p: PredicateSubquery)
-  : Option[(Seq[Expression], (Expression, Expression) => BinaryComparison, ListQuery)] = {
-    if (p == null) {
-      None
-    } else {
-      Some((p.values, p.comparison, p.query))
-    }
+    : Option[(Seq[Expression], ListQuery, (Expression, Expression) => BinaryComparison)] = {
+    Some(( p.values, p.query, p.genCmp))
   }
 }
 
 /**
- * Evaluates to `true` if the comparison between `values`
- * and any row in `query`'s result set returns `true`.
+ * ANY subquery, e.g., SELECT id FROM t1 WHERE t1.id > ANY (SELECT id FROM t2)
  */
 case class AnySubquery(
     values: Seq[Expression],
-    comparison: (Expression, Expression) => BinaryComparison,
-    query: ListQuery)
-  extends PredicateSubquery {
+    query: ListQuery,
+    genCmp: (Expression, Expression) => BinaryComparison) extends PredicateSubquery {
 
-  override def predicateName: String = "ANY"
-  override def toString: String = s"$value ${comparisonSymbol} ANY ($query)"
-  override def sql: String = s"(${value.sql} ${comparisonSymbol} ANY (${query.sql}))"
+  override def symbol: String = s"${cmp.symbol} ANY"
 }
 
 /**
- * Evaluates to `true` if `values` are returned in `query`'s result set.
+ * Evaluates to `true` if `values` are returned in `query`'s result set, e.g.,
+ * SELECT id FROM t1 WHERE t1.id IN (SELECT id FROM t2)
  */
 case class InSubquery(values: Seq[Expression], query: ListQuery) extends PredicateSubquery {
 
-  override val comparison: (Expression, Expression) => BinaryComparison = EqualTo
-
-  override def predicateName: String = "IN"
-  override def toString: String = s"$value IN ($query)"
-  override def sql: String = s"(${value.sql} IN (${query.sql}))"
+  override def genCmp: (Expression, Expression) => BinaryComparison = EqualTo
+  override def symbol: String = "IN"
 }
-
 
 /**
  * Evaluates to `true` if `list` contains `value`.
