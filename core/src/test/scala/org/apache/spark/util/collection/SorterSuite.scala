@@ -142,8 +142,8 @@ class SorterSuite extends SparkFunSuite with Logging {
       858, 88, 44, 110, 154, 44, 22, 352, 66, 44, 88, 132, 44, 22, 1738, 198, 1760,175, 156, 18, 17, 19, 36, 65,
       21, 20, 22, 18, 452, 114, 95, 18, 17, 21, 36, 18, 17, 115, 76, 144, 44, 38, 61,20, 19, 21, 17)
     // scalastyle:on
-    val arrayToSortSize = ((1091482190L * 2) / 3).toInt
-    val arrayToSort = new Array[Int](arrayToSortSize)
+    val arrayToSortSize = 1091482190
+    val arrayToSort = new Array[Byte](arrayToSortSize)
     var i = 0
     while (i < arrayToSortSize) {
       arrayToSort(i) = 0
@@ -154,8 +154,9 @@ class SorterSuite extends SparkFunSuite with Logging {
       sum += i
       arrayToSort(sum) = 1
     }
-    val sorter = new Sorter(new IntArraySortDataFormat)
-    sorter.sort(arrayToSort, 0, arrayToSort.length, Ordering.Int)
+    val sorter = new Sorter(new ByteArraySortDataFormat)
+    sorter.sort(arrayToSort, 0, arrayToSort.length, Ordering.Byte)
+    assert(arrayToSort.length == arrayToSortSize)
   }
 
   /** Runs an experiment several times. */
@@ -317,10 +318,42 @@ abstract class AbstractIntArraySortDataFormat[K] extends SortDataFormat[K, Array
   }
 }
 
+abstract class AbstractByteArraySortDataFormat[K] extends SortDataFormat[K, Array[Byte]] {
+
+  override def swap(data: Array[Byte], pos0: Int, pos1: Int): Unit = {
+    val tmp = data(pos0)
+    data(pos0) = data(pos1)
+    data(pos1) = tmp
+  }
+
+  override def copyElement(src: Array[Byte], srcPos: Int, dst: Array[Byte], dstPos: Int) {
+    dst(dstPos) = src(srcPos)
+  }
+
+  /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
+  override def copyRange(src: Array[Byte],
+                         srcPos: Int, dst: Array[Byte], dstPos: Int, length: Int) {
+    System.arraycopy(src, srcPos, dst, dstPos, length)
+  }
+
+  /** Allocates a new structure that can hold up to 'length' elements. */
+  override def allocate(length: Int): Array[Byte] = {
+    new Array[Byte](length)
+  }
+}
+
+
 /** Format to sort a simple Array[Int]. Could be easily generified and specialized. */
 class IntArraySortDataFormat extends AbstractIntArraySortDataFormat[Int] {
 
   override protected def getKey(data: Array[Int], pos: Int): Int = {
+    data(pos)
+  }
+}
+
+class ByteArraySortDataFormat extends AbstractByteArraySortDataFormat[Byte] {
+
+  override protected def getKey(data: Array[Byte], pos: Int): Byte = {
     data(pos)
   }
 }
