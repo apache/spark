@@ -726,8 +726,7 @@ qualifiedName
 identifier
     : {ansi}? ansiReserved
     | strictIdentifier
-    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT | SETMINUS
+    | {!ansi}? strictNonReserved
     ;
 
 strictIdentifier
@@ -806,6 +805,11 @@ nonReserved
     | START | STATISTICS | STORED | STRATIFY | STRUCT | TABLE | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY
     | TERMINATED | THEN | TO | TOUCH | TRAILING | TRANSACTION | TRANSACTIONS | TRANSFORM | TRUE | TRUNCATE | UNARCHIVE
     | UNBOUNDED | UNCACHE | UNLOCK | UNIQUE | UNSET | USE | USER | VALUES | VIEW | WHEN | WHERE | WINDOW | WITH
+    ;
+
+strictNonReserved
+    : ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
+    | UNION | INTERSECT | EXCEPT | SETMINUS
     ;
 
 SELECT: 'SELECT';
