@@ -184,8 +184,14 @@ class FileStreamSource(
    * Some(true)  means we know for sure the source DOES have metadata
    * Some(false) means we know for sure the source DOSE NOT have metadata
    */
-  @volatile private[sql] var sourceHasMetadata: Option[Boolean] =
-    if (SparkHadoopUtil.get.isGlobPath(new Path(path))) Some(false) else None
+  @volatile private[sql] var sourceHasMetadata: Option[Boolean] = {
+    if (sourceOptions.ignoreFileStreamSinkMetadata ||
+      SparkHadoopUtil.get.isGlobPath(new Path(path))) {
+      Some(false)
+    } else {
+      None
+    }
+  }
 
   private def allFilesUsingInMemoryFileIndex() = {
     val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(fs, qualifiedBasePath)
@@ -208,10 +214,7 @@ class FileStreamSource(
     var allFiles: Seq[FileStatus] = null
     sourceHasMetadata match {
       case None =>
-        if (sourceOptions.ignoreFileStreamSinkMetadata) {
-          sourceHasMetadata = Some(false)
-          allFiles = allFilesUsingMetadataLogFileIndex()
-        } else if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
           sourceHasMetadata = Some(true)
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
