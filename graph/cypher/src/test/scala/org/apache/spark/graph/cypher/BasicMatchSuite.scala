@@ -19,8 +19,8 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
   }
 
   test("match single node pattern using spark-graph-api") {
-    val nodeData = spark.createDataFrame(Seq(Array[Byte](0) -> "Alice", Array[Byte](1) -> "Bob")).toDF("id", "name")
-    val nodeDataFrame: NodeDataFrame = NodeDataFrame(nodeData, "id", Set("Person"), Map("name" -> "name"))
+    val nodeData: DataFrame = spark.createDataFrame(Seq(Array[Byte](0) -> "Alice", Array[Byte](1) -> "Bob")).toDF("id", "name")
+    val nodeDataFrame: NodeDataFrame = NodeDataFrame(df = nodeData, idColumn = "id", labels = Set("Person"), properties = Map("name" -> "name"))
 
     val graph: PropertyGraph = cypherEngine.createGraph(Seq(nodeDataFrame))
 
