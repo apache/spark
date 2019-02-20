@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{CharArrayWriter, DataOutputStream}
+import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -31,6 +31,7 @@ import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
+import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
@@ -3198,9 +3199,66 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Collect a Dataset as Arrow batches and serve stream to PySpark.
+   * Collect a Dataset as Arrow batches and serve stream to SparkR. It sends
+   * arrow batches in an ordered manner with buffering. This is inevitable
+   * due to missing R API that reads batches from socket directly. See ARROW-4512.
+   * Eventually, this code should be deduplicated by `collectAsArrowToPython`.
    */
-  private[sql] def collectAsArrowToPython(): Array[Any] = {
+  private[sql] def collectAsArrowToR(): Array[Any] = {
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+
+    withAction("collectAsArrowToR", queryExecution) { plan =>
+      RRDD.serveToStream("serve-Arrow") { outputStream =>
+        val buffer = new ByteArrayOutputStream()
+        val out = new DataOutputStream(outputStream)
+        val batchWriter = new ArrowBatchStreamWriter(schema, buffer, timeZoneId)
+        val arrowBatchRdd = toArrowBatchRdd(plan)
+        val numPartitions = arrowBatchRdd.partitions.length
+
+        // Store collection results for worst case of 1 to N-1 partitions
+        val results = new Array[Array[Array[Byte]]](numPartitions - 1)
+        var lastIndex = -1  // index of last partition written
+
+        // Handler to eagerly write partitions to Python in order
+        def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
+          // If result is from next partition in order
+          if (index - 1 == lastIndex) {
+            batchWriter.writeBatches(arrowBatches.iterator)
+            lastIndex += 1
+            // Write stored partitions that come next in order
+            while (lastIndex < results.length && results(lastIndex) != null) {
+              batchWriter.writeBatches(results(lastIndex).iterator)
+              results(lastIndex) = null
+              lastIndex += 1
+            }
+            // After last batch, end the stream
+            if (lastIndex == results.length) {
+              batchWriter.end()
+              val batches = buffer.toByteArray
+              out.writeInt(batches.length)
+              out.write(batches)
+            }
+          } else {
+            // Store partitions received out of order
+            results(index - 1) = arrowBatches
+          }
+        }
+
+        sparkSession.sparkContext.runJob(
+          arrowBatchRdd,
+          (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
+          0 until numPartitions,
+          handlePartitionBatches)
+      }
+    }
+  }
+
+  /**
+   * Collect a Dataset as Arrow batches and serve stream to PySpark. It sends
+   * arrow batches in an un-ordered manner without buffering, and then batch order
+   * information at the end. The batches should be reordered at Python side.
+   */
+  private[sql] def collectAsArrowToPython: Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
     withAction("collectAsArrowToPython", queryExecution) { plan =>
@@ -3211,7 +3269,7 @@ class Dataset[T] private[sql](
         val numPartitions = arrowBatchRdd.partitions.length
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
-        val batchOrder = new ArrayBuffer[(Int, Int)]()
+        val batchOrder = ArrayBuffer.empty[(Int, Int)]
         var partitionCount = 0
 
         // Handler to eagerly write batches to Python as they arrive, un-ordered
@@ -3220,7 +3278,7 @@ class Dataset[T] private[sql](
             // Write all batches (can be more than 1) in the partition, store the batch order tuple
             batchWriter.writeBatches(arrowBatches.iterator)
             arrowBatches.indices.foreach {
-              partition_batch_index => batchOrder.append((index, partition_batch_index))
+              partitionBatchIndex => batchOrder.append((index, partitionBatchIndex))
             }
           }
           partitionCount += 1
@@ -3232,8 +3290,8 @@ class Dataset[T] private[sql](
             // Sort by (index of partition, batch index in that partition) tuple to get the
             // overall_batch_index from 0 to N-1 batches, which can be used to put the
             // transferred batches in the correct order
-            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overall_batch_index) =>
-              out.writeInt(overall_batch_index)
+            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+              out.writeInt(overallBatchIndex)
             }
             out.flush()
           }

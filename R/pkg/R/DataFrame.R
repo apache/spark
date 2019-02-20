@@ -1177,11 +1177,67 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "SparkDataFrame"),
           function(x, stringsAsFactors = FALSE) {
+            connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
+            useArrow <- FALSE
+            arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+            if (arrowEnabled) {
+              useArrow <- tryCatch({
+                requireNamespace1 <- requireNamespace
+                if (!requireNamespace1("arrow", quietly = TRUE)) {
+                  stop("'arrow' package should be installed.")
+                }
+                # Currenty Arrow optimization does not support raw for now.
+                # Also, it does not support explicit float type set by users.
+                if (inherits(schema(x), "structType")) {
+                  if (any(sapply(schema(x)$fields(),
+                                 function(x) x$dataType.toString() == "FloatType"))) {
+                    stop(paste0("Arrow optimization in the conversion from Spark DataFrame to R ",
+                                "DataFrame does not support FloatType yet."))
+                  }
+                  if (any(sapply(schema(x)$fields(),
+                                 function(x) x$dataType.toString() == "BinaryType"))) {
+                    stop(paste0("Arrow optimization in the conversion from Spark DataFrame to R ",
+                                "DataFrame does not support BinaryType yet."))
+                  }
+                }
+                TRUE
+              }, error = function(e) {
+                warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
+                               "with Arrow optimization because ",
+                               "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                               "failed, attempting non-optimization. Reason: ",
+                               e))
+                FALSE
+              })
+            }
+
             dtypes <- dtypes(x)
             ncol <- length(dtypes)
             if (ncol <= 0) {
               # empty data.frame with 0 columns and 0 rows
               data.frame()
+            } else if (useArrow) {
+              requireNamespace1 <- requireNamespace
+              if (requireNamespace1("arrow", quietly = TRUE)) {
+                read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
+                as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+
+                portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
+                port <- portAuth[[1]]
+                authSecret <- portAuth[[2]]
+                conn <- socketConnection(
+                  port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+                output <- tryCatch({
+                  doServerAuth(conn, authSecret)
+                  arrowTable <- read_arrow(readRaw(conn))
+                  as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                }, finally = {
+                  close(conn)
+                })
+                return(output)
+              } else {
+                stop("'arrow' package should be installed.")
+              }
             } else {
               # listCols is a list of columns
               listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
