@@ -351,6 +351,34 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
+  private[streaming] val STREAMING_DYN_ALLOCATION_ENABLED =
+    ConfigBuilder("spark.streaming.dynamicAllocation.enabled")
+      .booleanConf.createWithDefault(false)
+
+  private[streaming] val STREAMING_DYN_ALLOCATION_TESTING =
+    ConfigBuilder("spark.streaming.dynamicAllocation.testing")
+      .booleanConf.createWithDefault(false)
+
+  private[streaming] val STREAMING_DYN_ALLOCATION_MIN_EXECUTORS =
+    ConfigBuilder("spark.streaming.dynamicAllocation.minExecutors")
+      .intConf.createWithDefault(0)
+
+  private[streaming] val STREAMING_DYN_ALLOCATION_MAX_EXECUTORS =
+    ConfigBuilder("spark.streaming.dynamicAllocation.maxExecutors")
+      .intConf.createWithDefault(Int.MaxValue)
+
+  private[streaming] val STREAMING_DYN_ALLOCATION_SCALING_INTERVAL =
+    ConfigBuilder("spark.streaming.dynamicAllocation.scalingInterval")
+      .timeConf(TimeUnit.SECONDS).createWithDefault(60)
+
+  private[streaming] val STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO =
+    ConfigBuilder("spark.streaming.dynamicAllocation.scalingUpRatio")
+      .doubleConf.createWithDefault(0.9)
+
+  private[streaimg] val STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO =
+    ConfigBuilder("spark.streaming.dynamicAllocation.scalingDownRatio")
+      .doubleConf.createWithDefault(0.3)
+
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")

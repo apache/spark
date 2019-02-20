@@ -2490,6 +2490,12 @@ private[spark] object Utils extends Logging {
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
   }
 
+  def isStreamingDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+    val streamingDynamicAllocationEnabled = conf.get(STREAMING_DYN_ALLOCATION_ENABLED)
+    streamingDynamicAllocationEnabled &&
+      (!isLocalMaster(conf) || conf.get(STREAMING_DYN_ALLOCATION_TESTING))
+  }
+
   /**
    * Return the initial number of executors for dynamic allocation.
    */

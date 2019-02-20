@@ -100,7 +100,9 @@ private[spark] class ApplicationMaster(
 
   private val maxNumExecutorFailures = {
     val effectiveNumExecutors =
-      if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+      if (Utils.isStreamingDynamicAllocationEnabled(sparkConf)) {
+        sparkConf.get(STREAMING_DYN_ALLOCATION_MAX_EXECUTORS)
+      } else if (Utils.isDynamicAllocationEnabled(sparkConf)) {
         sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       } else {
         sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
