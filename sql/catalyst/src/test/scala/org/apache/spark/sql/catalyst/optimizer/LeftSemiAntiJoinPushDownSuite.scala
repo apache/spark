@@ -134,13 +134,11 @@ class LeftSemiPushdownSuite extends PlanTest {
 
   test("LeftSemiAnti join over aggregate - no pushdown") {
     val originalQuery = testRelation
-      // .select('b.as('alias1))
       .groupBy('b)('b, sum('c).as('sum))
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      // .select('b.as('alias1))
       .groupBy('b)('b, sum('c).as('sum))
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 'd))
       .analyze
