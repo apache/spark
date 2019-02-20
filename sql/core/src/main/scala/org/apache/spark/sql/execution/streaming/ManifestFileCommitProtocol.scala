@@ -42,14 +42,19 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   @transient private var fileLog: FileStreamSinkLog = _
   private var batchId: Long = _
+  private var retainOnlyLastBatch: Boolean = _
 
   /**
    * Sets up the manifest log output and the batch id for this job.
    * Must be called before any other function.
    */
-  def setupManifestOptions(fileLog: FileStreamSinkLog, batchId: Long): Unit = {
+  def setupManifestOptions(
+      fileLog: FileStreamSinkLog,
+      batchId: Long,
+      retainOnlyLastBatch: Boolean): Unit = {
     this.fileLog = fileLog
     this.batchId = batchId
+    this.retainOnlyLastBatch = retainOnlyLastBatch
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -63,6 +68,10 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
     if (fileLog.add(batchId, fileStatuses)) {
       logInfo(s"Committed batch $batchId")
+      if (retainOnlyLastBatch) {
+        // purge older than batchId, which always keep only one batch in file log
+        fileLog.purge(batchId)
+      }
     } else {
       throw new IllegalStateException(s"Race while writing batch $batchId")
     }

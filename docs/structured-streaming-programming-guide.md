@@ -536,6 +536,11 @@ Here are the details of all the sources in Spark.
         href="api/R/read.stream.html">R</a>).
         E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code>.
         <br/><br/>
+        <code>ignoreFileStreamSinkMetadata</code>: whether to ignore metadata information being left from file stream sink, which leads to always use in-memory file index. (default: false)
+        <br/>
+        This option is useful when metadata grows too big and reading metadata is even slower than listing files from filesystem.<br/>
+        NOTE: This option must be set to "true" if file source is reading from output files which file stream sink is written, with setting "retainOnlyLastBatchInMetadata" option to "true".
+        <br/><br/>
         In addition, there are session configurations that affect certain file-formats. See the <a href="sql-programming-guide.html">SQL Programming Guide</a> for more details. E.g., for "parquet", see <a href="sql-data-sources-parquet.html#configuration">Parquet configuration</a> section.
         </td>
     <td>Yes</td>
@@ -1812,6 +1817,12 @@ Here are the details of all the sinks in Spark.
         (<a href="api/scala/index.html#org.apache.spark.sql.DataFrameWriter">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>/<a
         href="api/R/write.stream.html">R</a>).
         E.g. for "parquet" format options see <code>DataFrameWriter.parquet()</code>
+        <br/>
+        <code>retainOnlyLastBatchInMetadata</code>: whether to retain metadata information only for last succeed batch.
+        <br/><br/>
+        This option greatly reduces overhead on compacting metadata files which would be non-trivial when query processes lots of files in each batch.<br/>
+        NOTE: As it only retains the last batch in metadata, the metadata is not readable from file source: you must set "ignoreFileStreamSinkMetadata" option
+        to "true" when reading sink's output files from another query, regardless of batch and streaming source.
     </td>
     <td>Yes (exactly-once)</td>
     <td>Supports writes to partitioned tables. Partitioning by time may be useful.</td>

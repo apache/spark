@@ -208,7 +208,10 @@ class FileStreamSource(
     var allFiles: Seq[FileStatus] = null
     sourceHasMetadata match {
       case None =>
-        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+        if (sourceOptions.ignoreFileStreamSinkMetadata) {
+          sourceHasMetadata = Some(false)
+          allFiles = allFilesUsingMetadataLogFileIndex()
+        } else if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
           sourceHasMetadata = Some(true)
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {

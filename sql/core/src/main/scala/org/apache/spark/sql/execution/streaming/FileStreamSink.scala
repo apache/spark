@@ -97,6 +97,8 @@ class FileStreamSink(
   private val fileLog =
     new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toUri.toString)
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+  private val retainOnlyLastBatchInMetadata: Boolean =
+    options.getOrElse("retainOnlyLastBatchInMetadata", "false").toBoolean
 
   private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
@@ -114,7 +116,7 @@ class FileStreamSink(
 
       committer match {
         case manifestCommitter: ManifestFileCommitProtocol =>
-          manifestCommitter.setupManifestOptions(fileLog, batchId)
+          manifestCommitter.setupManifestOptions(fileLog, batchId, retainOnlyLastBatchInMetadata)
         case _ =>  // Do nothing
       }
 

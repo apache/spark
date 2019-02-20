@@ -908,6 +908,56 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("ignore metadata when reading data from outputs of another streaming query") {
+    withTempDirs { case (outputDir, checkpointDir) =>
+      // q1 is a streaming query that reads from memory and writes to text files
+      val q1Source = MemoryStream[String]
+      val q1 =
+        q1Source
+          .toDF()
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .format("text")
+          .start(outputDir.getCanonicalPath)
+
+      // q2 is a streaming query that reads q1's text outputs
+      // even q1 is supposed to store metadata in output location, we intend to ignore it
+      val q2 =
+        createFileStream("text", outputDir.getCanonicalPath,
+          options = Map("ignoreFileStreamSinkMetadata" -> "true"))
+          .filter($"value" contains "keep")
+
+      def q1AddData(data: String*): StreamAction =
+        Execute { _ =>
+          q1Source.addData(data)
+          q1.processAllAvailable()
+        }
+      def q2ProcessAllAvailable(): StreamAction = Execute { q2 => q2.processAllAvailable() }
+
+      testStream(q2)(
+        // batch 0
+        q1AddData("drop1", "keep2"),
+        q2ProcessAllAvailable(),
+        CheckAnswer("keep2"),
+
+        // batch 1
+        Assert {
+          // create a text file that won't be on q1's sink log
+          // given we are ignoring sink metadata, the content should appear in q2's answer
+          val shouldNotKeep = new File(outputDir, "keep.txt")
+          stringToFile(shouldNotKeep, "keep")
+          shouldNotKeep.exists()
+        },
+        q1AddData("keep3"),
+        q2ProcessAllAvailable(),
+        // here we should see "keep", whereas with metadata index, it should not appear
+        CheckAnswer("keep", "keep2", "keep3"),
+
+        Execute { _ => q1.stop() }
+      )
+    }
+  }
+
   test("start before another streaming query, and read its output") {
     withTempDirs { case (outputDir, checkpointDir) =>
       // q1 is a streaming query that reads from memory and writes to text files

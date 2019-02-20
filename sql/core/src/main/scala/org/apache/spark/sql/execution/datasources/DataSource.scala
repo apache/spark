@@ -344,8 +344,9 @@ case class DataSource(
       // We are reading from the results of a streaming query. Load files from the metadata log
       // instead of listing them using HDFS APIs.
       case (format: FileFormat, _)
-          if FileStreamSink.hasMetadata(
-            caseInsensitiveOptions.get("path").toSeq ++ paths,
+          if !caseInsensitiveOptions.getOrElse(
+            "ignoreFileStreamSinkMetadata", "false").toBoolean &&
+            FileStreamSink.hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths,
             sparkSession.sessionState.newHadoopConf()) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath, userSpecifiedSchema)

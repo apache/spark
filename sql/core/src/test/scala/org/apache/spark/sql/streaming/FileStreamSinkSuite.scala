@@ -190,6 +190,75 @@ class FileStreamSinkSuite extends StreamTest {
     }
   }
 
+  test("SPARK-24295 retain only last batch for file log metadata") {
+    val inputData = MemoryStream[Long]
+    val inputDF = inputData.toDF.toDF("time")
+    val outputDf = inputDF
+      .selectExpr("CAST(time AS timestamp) AS timestamp")
+
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+    var query: StreamingQuery = null
+
+    try {
+      query =
+        outputDf.writeStream
+          .option("checkpointLocation", checkpointDir)
+          .option("retainOnlyLastBatchInMetadata", true)
+          .format("parquet")
+          .start(outputDir)
+
+      def addTimestamp(timestampInSecs: Int*): Unit = {
+        inputData.addData(timestampInSecs.map(_ * 1L): _*)
+        failAfter(streamingTimeout) {
+          query.processAllAvailable()
+        }
+      }
+
+      def check(expectedResult: Long*): Unit = {
+        val outputDf = spark.read
+          // This option must be provided when we enable 'retainOnlyLastBatchInFileLog'
+          // to purge metadata from FileStreamSink, otherwise query will fail while loading
+          // due to incomplete of metadata.
+          .option("ignoreFileStreamSinkMetadata", "true")
+          .parquet(outputDir)
+          .selectExpr("timestamp")
+          .sort("timestamp")
+        checkDataset(outputDf.as[Long], expectedResult: _*)
+      }
+
+      val logPath = new Path(outputDir, FileStreamSink.metadataDir)
+      val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, logPath.toUri.toString)
+
+      addTimestamp(100)
+      check(100)
+
+      // only new batch is retained, hence length should be 1
+      assert(fileLog.get(None, None).length == 1)
+      assert(fileLog.get(None, None).head._1 === 0)
+
+      addTimestamp(104, 123)
+      check(100, 104, 123)
+
+      // only new batch is retained, hence length should be 1
+      assert(fileLog.get(None, None).length === 1)
+      assert(fileLog.get(None, None).head._1 === 1)
+
+      addTimestamp(140)
+      check(100, 104, 123, 140)
+
+      // only new batch is retained, hence length should be 1
+      assert(fileLog.get(None, None).length === 1)
+      assert(fileLog.get(None, None).head._1 === 2)
+
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
+  }
+
   test("partitioned writing and batch reading with 'basePath'") {
     withTempDir { outputDir =>
       withTempDir { checkpointDir =>

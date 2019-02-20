@@ -74,6 +74,12 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
    */
   val fileNameOnly: Boolean = withBooleanParameter("fileNameOnly", false)
 
+  /**
+   * Whether to ignore FileStreamSink metadata in source, which leads to use in-memory file index.
+   */
+  val ignoreFileStreamSinkMetadata: Boolean = withBooleanParameter("ignoreFileStreamSinkMetadata",
+    default = false)
+
   private def withBooleanParameter(name: String, default: Boolean) = {
     parameters.get(name).map { str =>
       try {
