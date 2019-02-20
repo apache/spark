@@ -261,7 +261,7 @@
       <id>parquet-1.11.0</id>
       <!-- This is a temporary repository to use parquet-mr 1.11.0 release candidate -->
       <name>Parquet 1.11.0 RC3</name>
-      <url>https://repository.apache.org/content/groups/staging/</url>
+      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1023/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
