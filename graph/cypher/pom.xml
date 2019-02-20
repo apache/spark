@@ -45,11 +45,13 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
+      <!-- TODO: remove when https://github.com/opencypher/openCypher/issues/351 is solved -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.antlr</groupId>
+          <artifactId>antlr4-runtime</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
       <dependency>
           <groupId>org.apache.spark</groupId>
@@ -77,14 +79,15 @@
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
+      <!-- TODO: remove when https://github.com/opencypher/openCypher/issues/351 is solved -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.antlr</groupId>
+          <artifactId>antlr4-runtime</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
+
     <dependency>
       <groupId>org.opencypher</groupId>
       <artifactId>okapi-tck</artifactId>
@@ -92,7 +95,7 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- TODO: remove when https://trello.com/c/LlIcZShZ is solved -->
+    <!-- TODO: remove when https://github.com/opencypher/openCypher/issues/351 is solved -->
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr4-runtime</artifactId>
