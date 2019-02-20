@@ -146,6 +146,21 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("Aggregate: LeftSemiAnti join no pushdown because scalar subq aggr exprs") {
+    val subq = ScalarSubquery(testRelation.groupBy('b)(sum('c).as("sum")))
+    val originalQuery = testRelation
+      .groupBy('a) ('a, subq.as("sum"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd && 'a === 'd))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .groupBy('a) ('a, subq.as("sum"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd && 'a === 'd))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("LeftSemiAnti join over Window") {
     val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
 
