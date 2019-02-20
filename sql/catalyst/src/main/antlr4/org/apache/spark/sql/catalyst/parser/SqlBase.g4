@@ -751,9 +751,13 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
+// A list of reserved keywords in Spark SQL. These keywords are reserved when `spark.sql.parser.ansi.enabled` = true.
+// Currently, we only reserve the ANSI keywords below that almost all the ANSI SQL standards (SQL-92, SQL-99,
+// SQL-2003, SQL-2008, SQL-2011, and SQL-2016) and PostgreSQL reserve.
+//
+// NOTE: The ANTLR tokens in `SqlBase.g4` must exist in either `ansiReserved` or `ansiNonReserved`. Therefore,
+// when one adds a new token in this file, ones must update one of the two rules, too.
 ansiReserved
-    // A list of reserved keywords in SparkSQL. These keywords are reserved in all the ANSI SQL standards
-    // (SQL-92, SQL-99, SQL-2003, SQL-2008, SQL-2011, and SQL-2016) and PostgreSQL.
     : ALL | AND | ANY | AS | AUTHORIZATION | BOTH | CASE | CAST | CHECK | COLLATE | COLUMN | CONSTRAINT | CREATE
     | CROSS | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP | CURRENT_USER | DISTINCT | ELSE | END | EXCEPT
     | FALSE | FETCH | FOR | FOREIGN | FROM | FULL | GRANT | GROUP | HAVING | IN | INNER | INTERSECT | INTO | IS
@@ -762,6 +766,9 @@ ansiReserved
     | USING | WHEN | WHERE | WITH
     ;
 
+// When `spark.sql.parser.ansi.enabled` = true, the `ansiNonReserved` keywords can be used for identifiers.
+// Otherwise (`spark.sql.parser.ansi.enabled` = false), we follow the existing Spark SQL behaviour until v3.0:
+// the `nonReserved` keywords can be used instead.
 ansiNonReserved
     : ADD | AFTER | ALTER | ANALYZE | ANTI | ARCHIVE | ARRAY | ASC | AT | BETWEEN | BUCKET | BUCKETS | BY | CACHE
     | CASCADE | CHANGE | CLEAR | CLUSTER | CLUSTERED | CODEGEN | COLLECTION | COLUMNS | COMMENT | COMMIT
