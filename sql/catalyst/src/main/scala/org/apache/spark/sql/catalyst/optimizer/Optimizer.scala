@@ -164,7 +164,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
-      CombineTypedFilters) :+
+      CombineTypedFilters,
+      ObjectSerializerPruning) :+
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
@@ -560,32 +561,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from child of `DeserializeToObject`
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
-
-    case p @ Project(_, s: SerializeFromObject) =>
-      // Prunes individual serializer if it is not used at all by above projection.
-      val usedRefs = p.references
-      val prunedSerializer = s.serializer.filter(usedRefs.contains)
-
-      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
-
-      if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
-        // Prunes nested fields in serializers.
-        val prunedSchema = SchemaPruning.pruneDataSchema(
-          StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
-        val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
-          SerializeFromObject.pruneSerializer(serializer, prunedSchema(idx).dataType)
-        }
-
-        // Builds new projection.
-        val projectionOverSchema = ProjectionOverSchema(prunedSchema)
-        val newProjects = p.projectList.map(_.transformDown {
-          case projectionOverSchema(expr) => expr
-        }).map { case expr: NamedExpression => expr }
-        p.copy(projectList = newProjects,
-          child = SerializeFromObject(nestedPrunedSerializer, s.child))
-      } else {
-        p.copy(child = SerializeFromObject(prunedSerializer, s.child))
-      }
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
     case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>

@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 /*
  * This file defines optimization rules related to object manipulation (for the Dataset API).
@@ -107,5 +109,39 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
      case MapObjects(_, _, _, LambdaVariable(_, _, _, false), inputData, None) => inputData
+  }
+}
+
+/**
+ * Prunes unnecessary object serializers from query plan. This rule prunes both individual
+ * serializer and nested fields in serializers.
+ */
+object ObjectSerializerPruning extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Project(_, s: SerializeFromObject) =>
+      // Prunes individual serializer if it is not used at all by above projection.
+      val usedRefs = p.references
+      val prunedSerializer = s.serializer.filter(usedRefs.contains)
+
+      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
+
+      if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
+        // Prunes nested fields in serializers.
+        val prunedSchema = SchemaPruning.pruneDataSchema(
+          StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
+        val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
+          SerializeFromObject.pruneSerializer(serializer, prunedSchema(idx).dataType)
+        }
+
+        // Builds new projection.
+        val projectionOverSchema = ProjectionOverSchema(prunedSchema)
+        val newProjects = p.projectList.map(_.transformDown {
+          case projectionOverSchema(expr) => expr
+        }).map { case expr: NamedExpression => expr }
+        p.copy(projectList = newProjects,
+          child = SerializeFromObject(nestedPrunedSerializer, s.child))
+      } else {
+        p.copy(child = SerializeFromObject(prunedSerializer, s.child))
+      }
   }
 }
