@@ -417,10 +417,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(
         """
-          |SELECT l.a, count(*)
-          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY l.a
-        """.
+        |SELECT l.a, count(*)
+        |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+        |GROUP BY l.a
+      """.
           stripMargin),
       Row(null, 10))
 
@@ -603,11 +603,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       "SELECT * FROM testData full outer join testData2",
       "SELECT * FROM testData, testData2",
       "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
-
       /** The following should fail because after reordering there are cartesian products */
       "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
       "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
-
       /** Cartesian product involving C, which is not involved in a CROSS join */
       "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
 
