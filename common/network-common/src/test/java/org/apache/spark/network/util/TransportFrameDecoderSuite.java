@@ -77,26 +77,28 @@ public class TransportFrameDecoderSuite {
 
       // Testing multiple messages
       int numMessages = 3;
-      long targetBytes = ByteUnit.GiB.toBytes(1);
+      long targetBytes = ByteUnit.MiB.toBytes(300);
       int pieceBytes = (int) ByteUnit.KiB.toBytes(32);
       for (int i = 0; i < numMessages; i++) {
         try {
-          long start = System.currentTimeMillis();
           long writtenBytes = 0;
+          long totalTime = 0;
           ByteBuf buf = Unpooled.buffer(8);
-          buf.writeLong(8 + ByteUnit.GiB.toBytes(1));
+          buf.writeLong(8 + targetBytes);
           decoder.channelRead(ctx, buf);
           while (writtenBytes < targetBytes) {
             buf = Unpooled.buffer(pieceBytes * 2);
             ByteBuf writtenBuf = Unpooled.buffer(pieceBytes).writerIndex(pieceBytes);
             buf.writeBytes(writtenBuf);
             writtenBuf.release();
+            long start = System.currentTimeMillis();
             decoder.channelRead(ctx, buf);
+            long elapsedTime = System.currentTimeMillis() - start;
+            totalTime += elapsedTime;
             writtenBytes += pieceBytes;
           }
-          long elapsedTime = System.currentTimeMillis() - start;
-          logger.info("Writing 1GiB frame buf with consolidation of threshold " + threshold
-              + " took " + elapsedTime + " milis");
+          logger.info("Writing 300MiB frame buf with consolidation of threshold " + threshold
+              + " took " + totalTime + " milis");
         } finally {
           for (ByteBuf buf : retained) {
             release(buf);
