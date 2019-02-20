@@ -481,6 +481,18 @@ To use a custom metrics.properties for the application master and executors, upd
       <td>`http://` or `https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
     </tr>
     <tr>
+      <td>{{NM_HOST}}</td>
+      <td>The "host" of node where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{NM_PORT}}</td>
+      <td>The "port" of node manager where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{NM_HTTP_PORT}}</td>
+      <td>The "port" of node manager's http server where container was run.</td>
+    </tr>
+    <tr>
       <td>{{NM_HTTP_ADDRESS}}</td>
       <td>Http URI of the node on which the container is allocated.</td>
     </tr>
@@ -502,6 +514,12 @@ To use a custom metrics.properties for the application master and executors, upd
     </tr>
 </table>
 
+For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
+
+ `{{HTTP_SCHEME}}<JHS_HOST>:<JHS_PORT>/jobhistory/logs/{{NM_HOST}}:{{NM_PORT}}/{{CONTAINER_ID}}/{{CONTAINER_ID}}/{{USER}}/{{FILE_NAME}}?start=-4096`
+
+ NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
+
 # Important notes
 
 - Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
@@ -519,13 +537,6 @@ for:
 - the filesystem hosting the staging directory of the Spark application (which is the default
   filesystem if `spark.yarn.stagingDir` is not set);
 - if Hadoop federation is enabled, all the federated filesystems in the configuration.
-
-The YARN integration also supports custom delegation token providers using the Java Services
-mechanism (see `java.util.ServiceLoader`). Implementations of
-`org.apache.spark.deploy.yarn.security.ServiceCredentialProvider` can be made available to Spark
-by listing their names in the corresponding file in the jar's `META-INF/services` directory. These
-providers can be disabled individually by setting `spark.security.credentials.{service}.enabled` to
-`false`, where `{service}` is the name of the credential provider.
 
 ## YARN-specific Kerberos Configuration
 

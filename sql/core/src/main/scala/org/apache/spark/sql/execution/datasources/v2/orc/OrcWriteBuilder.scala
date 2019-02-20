@@ -63,4 +63,10 @@ class OrcWriteBuilder(options: DataSourceOptions) extends FileWriteBuilder(optio
       }
     }
   }
+
+  override def supportsDataType(dataType: DataType): Boolean = {
+    OrcDataSourceV2.supportsDataType(dataType)
+  }
+
+  override def formatName: String = "ORC"
 }
