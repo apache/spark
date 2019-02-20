@@ -346,7 +346,8 @@ case class DataSource(
       case (format: FileFormat, _)
           if FileStreamSink.hasMetadata(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
-            sparkSession.sessionState.newHadoopConf()) =>
+            sparkSession.sessionState.newHadoopConf(),
+            sparkSession.sessionState.conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath, userSpecifiedSchema)
         val dataSchema = userSpecifiedSchema.orElse {
