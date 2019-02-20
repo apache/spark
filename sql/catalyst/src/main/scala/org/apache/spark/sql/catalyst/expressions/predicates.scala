@@ -145,7 +145,7 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
-abstract class PredicateSubquery extends BinaryExpression with Predicate with Unevaluable {
+abstract class PredicateSubquery extends Predicate with Unevaluable {
 
   def values: Seq[Expression]
   def query: ListQuery
@@ -199,17 +199,16 @@ abstract class PredicateSubquery extends BinaryExpression with Predicate with Un
     }
   }
 
-  override def left: Expression = value
-  override def right: Expression = query
+  override def children: Seq[Expression] = values :+ query
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   private def toString(left: String, right: String): String = {
-    s"$value $symbol ($query)"
+    s"$left $symbol ($right)"
   }
 
   override def toString: String = toString(value.toString, query.toString)
-  override def sql: String = s"${toString(value.sql, query.sql)}"
+  override def sql: String = toString(value.sql, query.sql)
 }
 
 object PredicateSubquery {
@@ -235,10 +234,19 @@ case class AnySubquery(
  * Evaluates to `true` if `values` are returned in `query`'s result set, e.g.,
  * SELECT id FROM t1 WHERE t1.id IN (SELECT id FROM t2)
  */
-case class InSubquery(values: Seq[Expression], query: ListQuery) extends PredicateSubquery {
+case class InSubquery(
+    values: Seq[Expression],
+    query: ListQuery,
+    genCmp: (Expression, Expression) => BinaryComparison) extends PredicateSubquery {
 
-  override def genCmp: (Expression, Expression) => BinaryComparison = EqualTo
   override def symbol: String = "IN"
+}
+
+object InSubquery {
+
+  def apply(values: Seq[Expression], query: ListQuery): InSubquery = {
+    new InSubquery(values, query, EqualTo)
+  }
 }
 
 /**

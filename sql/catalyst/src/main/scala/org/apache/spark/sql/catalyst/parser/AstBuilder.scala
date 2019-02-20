@@ -1159,7 +1159,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         val right = ListQuery(plan(ctx.query))
         val operator = ctx.comparisonOperator
         invertIfNotDefined(operator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType match {
-          // We need to specially handle negative froms here
+          // We need to specially handle negative forms here
           case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
             val genCmp = (left: Expression, right: Expression) => EqualTo(left, right)
             Not(AnySubquery(left, right, genCmp))

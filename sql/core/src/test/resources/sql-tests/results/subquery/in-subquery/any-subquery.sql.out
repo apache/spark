@@ -153,15 +153,15 @@ WHERE  (t1b, t1c) < ANY (SELECT t2b, t2c, t2d
 struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t1b', t1.`t1b`, 't1c', t1.`t1c`) < ANY (listquery()))' due to data type mismatch: 
-The number of columns in the left hand side of an ANY subquery does not match the
+cannot resolve 'named_struct('t1b', t1.`t1b`, 't1c', t1.`t1c`) < ANY (listquery())' due to data type mismatch: 
+The number of columns in the left hand side of a predicate subquery does not match the
 number of columns in the output of subquery.
 #columns in left hand side: 2.
 #columns in right hand side: 3.
 Left side columns:
 [t1.`t1b`, t1.`t1c`].
 Right side columns:
-[t2.`t2b`, t2.`t2c`, t2.`t2d`].;
+[t2.`t2b`, t2.`t2c`, t2.`t2d`].; line 3 pos 18
 
 
 -- !query 9
@@ -174,15 +174,15 @@ WHERE  (t1b, t1c) > ANY (SELECT t2b, t2h
 struct<>
 -- !query 9 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t1b', t1.`t1b`, 't1c', t1.`t1c`) > ANY (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an ANY subquery
+cannot resolve 'named_struct('t1b', t1.`t1b`, 't1c', t1.`t1c`) > ANY (listquery())' due to data type mismatch: 
+The data type of one or more elements in the left hand side of a predicate subquery
 is not compatible with the data type of the output of the subquery
 Mismatched columns:
 [(t1.`t1c`:int, t2.`t2h`:timestamp)]
 Left side:
 [smallint, int].
 Right side:
-[smallint, timestamp].;
+[smallint, timestamp].; line 3 pos 18
 
 
 -- !query 10
