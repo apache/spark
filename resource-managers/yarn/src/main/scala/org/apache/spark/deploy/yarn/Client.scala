@@ -177,7 +177,8 @@ private[spark] class Client(
 
       // The app staging dir based on the STAGING_DIR configuration if configured
       // otherwise based on the users home directory.
-      val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
+      val appStagingBaseDir = sparkConf.get(STAGING_DIR)
+        .map { new Path(_, UserGroupInformation.getCurrentUser.getShortUserName) }
         .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
       stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
 
