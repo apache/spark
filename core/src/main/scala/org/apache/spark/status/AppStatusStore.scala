@@ -346,6 +346,12 @@ private[spark] class AppStatusStore(
 
   private def quantileToString(q: Double): String = math.round(q * 100).toString
 
+  def task(stageId: Int, stageAttemptId: Int, taskId: Long): v1.TaskData = {
+    val stageKey = Array(stageId, stageAttemptId)
+    val indexed = store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey)
+    indexed.skip(taskId).max(1).asScala.head.toApi
+  }
+
   def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
     store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()

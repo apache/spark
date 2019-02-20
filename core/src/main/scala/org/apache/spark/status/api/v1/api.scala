@@ -19,10 +19,13 @@ package org.apache.spark.status.api.v1
 import java.lang.{Long => JLong}
 import java.util.Date
 
+import scala.collection.mutable.LinkedHashMap
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
-import org.apache.spark.JobExecutionStatus
+import org.apache.spark.{JobExecutionStatus, SparkContext}
+import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -228,6 +231,96 @@ class TaskMetrics private[spark](
     val outputMetrics: OutputMetrics,
     val shuffleReadMetrics: ShuffleReadMetrics,
     val shuffleWriteMetrics: ShuffleWriteMetrics)
+
+object TaskMetrics {
+  def toAccumulators(metrics: TaskMetrics, sc: SparkContext): Seq[AccumulatorV2[_, _]] = {
+    import org.apache.spark.InternalAccumulator._
+
+    val _executorDeserializeTime = new LongAccumulator
+    _executorDeserializeTime.setValue(metrics.executorDeserializeTime)
+    val _executorDeserializeCpuTime = new LongAccumulator
+    _executorDeserializeCpuTime.setValue(metrics.executorDeserializeCpuTime)
+    val _executorRunTime = new LongAccumulator
+    _executorRunTime.setValue(metrics.executorRunTime)
+    val _executorCpuTime = new LongAccumulator
+    _executorCpuTime.setValue(metrics.executorCpuTime)
+    val _resultSize = new LongAccumulator
+    _resultSize.setValue(metrics.resultSize)
+    val _jvmGCTime = new LongAccumulator
+    _jvmGCTime.setValue(metrics.jvmGcTime)
+    val _resultSerializationTime = new LongAccumulator
+    _resultSerializationTime.setValue(metrics.resultSerializationTime)
+    val _memoryBytesSpilled = new LongAccumulator
+    _memoryBytesSpilled.setValue(metrics.memoryBytesSpilled)
+    val _diskBytesSpilled = new LongAccumulator
+    _diskBytesSpilled.setValue(metrics.diskBytesSpilled)
+    val _peakExecutionMemory = new LongAccumulator
+    _peakExecutionMemory.setValue(metrics.peakExecutionMemory)
+
+    val _remoteBlocksFetched = new LongAccumulator
+    _remoteBlocksFetched.setValue(metrics.shuffleReadMetrics.remoteBlocksFetched)
+    val _localBlocksFetched = new LongAccumulator
+    _localBlocksFetched.setValue(metrics.shuffleReadMetrics.localBlocksFetched)
+    val _remoteBytesRead = new LongAccumulator
+    _remoteBytesRead.setValue(metrics.shuffleReadMetrics.remoteBytesRead)
+    val _remoteBytesReadToDisk = new LongAccumulator
+    _remoteBytesReadToDisk.setValue(metrics.shuffleReadMetrics.remoteBytesReadToDisk)
+    val _localBytesRead = new LongAccumulator
+    _localBlocksFetched.setValue(metrics.shuffleReadMetrics.localBlocksFetched)
+    val _fetchWaitTime = new LongAccumulator
+    _fetchWaitTime.setValue(metrics.shuffleReadMetrics.fetchWaitTime)
+    val _shuffleRecordsRead = new LongAccumulator
+    _shuffleRecordsRead.setValue(metrics.shuffleReadMetrics.recordsRead)
+
+    val _shuffleBytesWritten = new LongAccumulator
+    _shuffleBytesWritten.setValue(metrics.shuffleWriteMetrics.bytesWritten)
+    val _shuffleRecordsWritten = new LongAccumulator
+    _shuffleRecordsWritten.setValue(metrics.shuffleWriteMetrics.recordsWritten)
+    val _shuffleWriteTime = new LongAccumulator
+    _shuffleWriteTime.setValue(metrics.shuffleWriteMetrics.writeTime)
+
+    val _bytesRead = new LongAccumulator
+    _bytesRead.setValue(metrics.inputMetrics.bytesRead)
+    val _recordsRead = new LongAccumulator
+    _recordsRead.setValue(metrics.inputMetrics.recordsRead)
+
+    val _bytesWritten = new LongAccumulator
+    _bytesWritten.setValue(metrics.outputMetrics.bytesWritten)
+    val _recordsWritten = new LongAccumulator
+    _recordsWritten.setValue(metrics.outputMetrics.recordsWritten)
+
+    val nameToAccums = LinkedHashMap(
+      EXECUTOR_DESERIALIZE_TIME -> _executorDeserializeTime,
+      EXECUTOR_DESERIALIZE_CPU_TIME -> _executorDeserializeCpuTime,
+      EXECUTOR_RUN_TIME -> _executorRunTime,
+      EXECUTOR_CPU_TIME -> _executorCpuTime,
+      RESULT_SIZE -> _resultSize,
+      JVM_GC_TIME -> _jvmGCTime,
+      RESULT_SERIALIZATION_TIME -> _resultSerializationTime,
+      MEMORY_BYTES_SPILLED -> _memoryBytesSpilled,
+      DISK_BYTES_SPILLED -> _diskBytesSpilled,
+      PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
+      shuffleRead.REMOTE_BLOCKS_FETCHED -> _remoteBlocksFetched,
+      shuffleRead.LOCAL_BLOCKS_FETCHED -> _localBlocksFetched,
+      shuffleRead.REMOTE_BYTES_READ -> _remoteBytesRead,
+      shuffleRead.REMOTE_BYTES_READ_TO_DISK -> _remoteBytesReadToDisk,
+      shuffleRead.LOCAL_BYTES_READ -> _localBytesRead,
+      shuffleRead.FETCH_WAIT_TIME -> _fetchWaitTime,
+      shuffleRead.RECORDS_READ -> _shuffleRecordsRead,
+      shuffleWrite.BYTES_WRITTEN -> _shuffleBytesWritten,
+      shuffleWrite.RECORDS_WRITTEN -> _shuffleRecordsWritten,
+      shuffleWrite.WRITE_TIME -> _shuffleWriteTime,
+      input.BYTES_READ -> _bytesRead,
+      input.RECORDS_READ -> _recordsRead,
+      output.BYTES_WRITTEN -> _bytesWritten,
+      output.RECORDS_WRITTEN -> _recordsWritten
+    )
+    nameToAccums.foreach {
+      case (name, acc) => acc.register(sc, name = Some(name), countFailedValues = true)
+    }
+    nameToAccums.values.toIndexedSeq
+  }
+}
 
 class InputMetrics private[spark](
     val bytesRead: Long,

@@ -865,7 +865,14 @@ private[spark] class TaskSetManager(
         logWarning(failureReason)
         None
     }
-
+    if (accumUpdates.isEmpty) {
+      val store = sched.sc.statusStore
+      val metrics = store.task(taskSet.stageId, taskSet.stageAttemptId, tid).taskMetrics
+      if (metrics.isDefined) {
+        import org.apache.spark.status.api.v1.TaskMetrics.toAccumulators
+        accumUpdates = toAccumulators(metrics.get, sched.sc)
+      }
+    }
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
