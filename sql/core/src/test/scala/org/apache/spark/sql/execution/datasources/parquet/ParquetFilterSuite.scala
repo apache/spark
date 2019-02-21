@@ -114,10 +114,22 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             new SparkToParquetSchemaConverter(conf).convert(df.schema), pred)
           assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
           // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-          maybeFilter.exists(_.getClass === filterClass)
+          assert(flattenPredicateTree(maybeFilter.get).exists(_.getClass === filterClass))
         }
         checker(stripSparkFilter(query), expected)
     }
+  }
+
+  private def flattenPredicateTree(filterPredicate: FilterPredicate): Seq[Object] = {
+    Seq(filterPredicate) ++ (filterPredicate match {
+      case or: Operators.Or =>
+        flattenPredicateTree(or.getLeft) ++ flattenPredicateTree(or.getRight)
+      case and: Operators.And =>
+        flattenPredicateTree(and.getLeft) ++ flattenPredicateTree(and.getRight)
+      case not: Operators.Not =>
+        flattenPredicateTree(not.getPredicate)
+      case _ => Nil
+    })
   }
 
   private def checkFilterPredicate
