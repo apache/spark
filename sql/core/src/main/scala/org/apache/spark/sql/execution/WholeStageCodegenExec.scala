@@ -291,6 +291,18 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
+   * Returns source code to evaluate the variables for non-deterministic expressions, and clear the
+   * code of evaluated variables, to prevent them to be evaluated twice.
+   */
+  protected def evaluateNondeterministicVariables(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      expressions: Seq[NamedExpression]): String = {
+    val nondeterministicAttrs = expressions.filterNot(_.deterministic).map(_.toAttribute)
+    evaluateRequiredVariables(attributes, variables, AttributeSet(nondeterministicAttrs))
+  }
+
+  /**
    * The subset of inputSet those should be evaluated before this plan.
    *
    * We will use this to insert some code to access those columns that are actually used by current

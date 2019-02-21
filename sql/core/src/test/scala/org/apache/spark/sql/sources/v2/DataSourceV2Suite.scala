@@ -351,18 +351,20 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25700: do not read schema when writing in other modes except append mode") {
+  test("SPARK-25700: do not read schema when writing in other modes except append and overwrite") {
     withTempPath { file =>
       val cls = classOf[SimpleWriteOnlyDataSource]
       val path = file.getCanonicalPath
       val df = spark.range(5).select('id as 'i, -'id as 'j)
       // non-append mode should not throw exception, as they don't access schema.
       df.write.format(cls.getName).option("path", path).mode("error").save()
-      df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       df.write.format(cls.getName).option("path", path).mode("ignore").save()
-      // append mode will access schema and should throw exception.
+      // append and overwrite modes will access the schema and should throw exception.
       intercept[SchemaReadAttemptException] {
         df.write.format(cls.getName).option("path", path).mode("append").save()
+      }
+      intercept[SchemaReadAttemptException] {
+        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       }
     }
   }

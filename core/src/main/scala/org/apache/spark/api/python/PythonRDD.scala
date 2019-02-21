@@ -430,6 +430,12 @@ private[spark] object PythonRDD extends Logging {
    */
   private[spark] def serveToStream(
       threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
+    serveToStream(threadName, authHelper)(writeFunc)
+  }
+
+  private[spark] def serveToStream(
+      threadName: String, authHelper: SocketAuthHelper)(writeFunc: OutputStream => Unit)
+    : Array[Any] = {
     val (port, secret) = PythonServer.setupOneConnectionServer(authHelper, threadName) { s =>
       val out = new BufferedOutputStream(s.getOutputStream())
       Utils.tryWithSafeFinally {

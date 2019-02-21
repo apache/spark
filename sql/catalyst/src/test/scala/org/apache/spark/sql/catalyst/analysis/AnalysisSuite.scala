@@ -303,51 +303,57 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
-    val string = testRelation2.output(0)
-    val double = testRelation2.output(2)
-    val short = testRelation2.output(4)
+    val testRelation = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", ShortType)(),
+      AttributeReference("d", DoubleType, nullable = false)())
+
+    val string = testRelation.output(0)
+    val double = testRelation.output(1)
+    val short = testRelation.output(2)
+    val nonNullableDouble = testRelation.output(3)
     val nullResult = Literal.create(null, StringType)
 
     def checkUDF(udf: Expression, transformed: Expression): Unit = {
       checkAnalysis(
-        Project(Alias(udf, "")() :: Nil, testRelation2),
-        Project(Alias(transformed, "")() :: Nil, testRelation2)
+        Project(Alias(udf, "")() :: Nil, testRelation),
+        Project(Alias(transformed, "")() :: Nil, testRelation)
       )
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, true :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, false :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      true :: false :: Nil)
+      false :: true :: Nil)
     val expected2 =
-      If(IsNull(double), nullResult, udf2.copy(inputsNullSafe = true :: true :: Nil))
+      If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      false :: false :: Nil)
+      true :: true :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3.copy(inputsNullSafe = true :: true :: Nil))
+      udf3.copy(children = KnownNotNull(short) :: KnownNotNull(double) :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
-    // TODO: this is disabled for now as we can not completely trust `nullable`.
     val udf4 = ScalaUDF(
       (s: Short, d: Double) => "x",
       StringType,
-      short :: double.withNullability(false) :: Nil,
-      false :: false :: Nil)
+      short :: nonNullableDouble :: Nil,
+      true :: true :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4.copy(inputsNullSafe = true :: true :: Nil))
-    // checkUDF(udf4, expected4)
+      udf4.copy(children = KnownNotNull(short) :: nonNullableDouble :: Nil))
+    checkUDF(udf4, expected4)
   }
 
   test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
