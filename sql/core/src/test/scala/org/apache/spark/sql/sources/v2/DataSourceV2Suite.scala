@@ -195,7 +195,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           val statics = logical.computeStats()
           assert(statics.rowCount.isDefined && statics.rowCount.get === 10,
             "Row count statics should be reported by data source")
-          assert(statics.sizeInBytes === 40,
+          assert(statics.sizeInBytes === 80,
             "Size in bytes statics should be reported by data source")
         }
     }
