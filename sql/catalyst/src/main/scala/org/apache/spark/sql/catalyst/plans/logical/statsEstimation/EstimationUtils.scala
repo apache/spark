@@ -71,7 +71,9 @@ object EstimationUtils {
     AttributeMap(output.flatMap(a => inputMap.get(a).map(a -> _)))
   }
 
-  /** Match alias with its child's column stat */
+  /**
+   * Match alias with its child's column stat
+   */
   def getAliasStats(
       expressions: Seq[Expression],
       attributeStats: AttributeMap[ColumnStat]): Seq[(Attribute, ColumnStat)] = {
