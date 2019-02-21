@@ -115,6 +115,37 @@ public class JavaBeanDeserializationSuite implements Serializable {
     Assert.assertEquals(records, MAP_RECORDS);
   }
 
+  private static final List<RecordSpark22000> RECORDS_SPARK_22000 = new ArrayList<>();
+
+  static {
+    RECORDS_SPARK_22000.add(new RecordSpark22000("1", "j123@aaa.com", 2, 11));
+    RECORDS_SPARK_22000.add(new RecordSpark22000("2", "j123@aaa.com", 3, 12));
+    RECORDS_SPARK_22000.add(new RecordSpark22000("3", "j123@aaa.com", 4, 13));
+    RECORDS_SPARK_22000.add(new RecordSpark22000("4", "j123@aaa.com", 5, 14));
+  }
+
+  @Test
+  public void testSpark22000() {
+    // Here we try to convert the type of 'ref' field, from integer to string.
+    // Before applying SPARK-22000, Spark called toString() against variable which type might be primitive.
+    // SPARK-22000 it calls String.valueOf() which finally calls toString() but handles boxing
+    // if the type is primitive.
+    Encoder<RecordSpark22000> encoder = Encoders.bean(RecordSpark22000.class);
+
+    Dataset<RecordSpark22000> dataset = spark
+      .read()
+      .format("csv")
+      .option("header", "true")
+      .option("mode", "DROPMALFORMED")
+      .schema("ref int, userId string, x int, y int")
+      .load("src/test/resources/test-data/spark-22000.csv")
+      .as(encoder);
+
+    List<RecordSpark22000> records = dataset.collectAsList();
+
+    Assert.assertEquals(records, RECORDS_SPARK_22000);
+  }
+
   public static class ArrayRecord {
 
     private int id;
@@ -250,6 +281,75 @@ public class JavaBeanDeserializationSuite implements Serializable {
     @Override
     public String toString() {
       return String.format("[%d,%d]", startTime, endTime);
+    }
+  }
+
+  public static class RecordSpark22000 {
+    private String ref;
+    private String userId;
+    private int x;
+    private int y;
+
+    public RecordSpark22000() { }
+
+    RecordSpark22000(String ref, String userId, int x, int y) {
+      this.ref = ref;
+      this.userId = userId;
+      this.x = x;
+      this.y = y;
+    }
+
+    public String getRef() {
+      return ref;
+    }
+
+    public void setRef(String ref) {
+      this.ref = ref;
+    }
+
+    public String getUserId() {
+      return userId;
+    }
+
+    public void setUserId(String userId) {
+      this.userId = userId;
+    }
+
+    public int getX() {
+      return x;
+    }
+
+    public void setX(int x) {
+      this.x = x;
+    }
+
+    public int getY() {
+      return y;
+    }
+
+    public void setY(int y) {
+      this.y = y;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      RecordSpark22000 that = (RecordSpark22000) o;
+      return x == that.x &&
+              y == that.y &&
+              Objects.equals(ref, that.ref) &&
+              Objects.equals(userId, that.userId);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(ref, userId, x, y);
+    }
+
+    @Override
+    public String toString() {
+      return String.format("ref='%s', userId='%s', x=%d, y=%d", ref, userId, x, y);
     }
   }
 }
