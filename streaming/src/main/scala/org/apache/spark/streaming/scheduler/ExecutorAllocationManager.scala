@@ -149,26 +149,6 @@ private[streaming] class ExecutorAllocationManager(
 
   private def validateSettings(): Unit = {
     require(
-      scalingIntervalSecs > 0,
-      s"Config ${STREAMING_DYN_ALLOCATION_SCALING_INTERVAL.key} must be more than 0")
-
-    require(
-      scalingUpRatio > 0,
-      s"Config ${STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.key} must be more than 0")
-
-    require(
-      scalingDownRatio > 0,
-      s"Config ${STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.key} must be more than 0")
-
-    require(
-      minNumExecutors > 0,
-      s"Config ${STREAMING_DYN_ALLOCATION_MIN_EXECUTORS.key} must be more than 0")
-
-    require(
-      maxNumExecutors > 0,
-      s"${STREAMING_DYN_ALLOCATION_MAX_EXECUTORS.key} must be more than 0")
-
-    require(
       scalingUpRatio > scalingDownRatio,
       s"Config ${STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.key} must be more than config " +
         s"${STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.key}")
@@ -194,7 +174,6 @@ private[streaming] object ExecutorAllocationManager extends Logging {
 
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
     val streamingDynamicAllocationEnabled = Utils.isStreamingDynamicAllocationEnabled(conf)
-    Utils.isStreamingDynamicAllocationEnabled(conf)
     if (Utils.isDynamicAllocationEnabled(conf) && streamingDynamicAllocationEnabled) {
       throw new IllegalArgumentException(
         """

@@ -353,31 +353,48 @@ package object config {
 
   private[streaming] val STREAMING_DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.streaming.dynamicAllocation.enabled")
-      .booleanConf.createWithDefault(false)
+      .booleanConf
+      .createWithDefault(false)
 
   private[streaming] val STREAMING_DYN_ALLOCATION_TESTING =
     ConfigBuilder("spark.streaming.dynamicAllocation.testing")
-      .booleanConf.createWithDefault(false)
+      .booleanConf
+      .createWithDefault(false)
 
   private[streaming] val STREAMING_DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.streaming.dynamicAllocation.minExecutors")
-      .intConf.createOptional
+      .intConf
+      .checkValue(_ > 0, "The min executor number of streaming dynamic " +
+        "allocation must be positive.")
+      .createOptional
 
   private[streaming] val STREAMING_DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.streaming.dynamicAllocation.maxExecutors")
-      .intConf.createWithDefault(Int.MaxValue)
+      .intConf
+      .checkValue(_ > 0, "The max executor number of streaming dynamic " +
+        "allocation must be positive.")
+      .createWithDefault(Int.MaxValue)
 
   private[streaming] val STREAMING_DYN_ALLOCATION_SCALING_INTERVAL =
     ConfigBuilder("spark.streaming.dynamicAllocation.scalingInterval")
-      .timeConf(TimeUnit.SECONDS).createWithDefault(60)
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ > 0, "The scaling interval of streaming dynamic " +
+        "allocation must be positive.")
+      .createWithDefault(60)
 
   private[streaming] val STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO =
     ConfigBuilder("spark.streaming.dynamicAllocation.scalingUpRatio")
-      .doubleConf.createWithDefault(0.9)
+      .doubleConf
+      .checkValue(_ > 0, "The scaling up ratio of streaming dynamic " +
+        "allocation must be positive.")
+      .createWithDefault(0.9)
 
   private[streaimg] val STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO =
     ConfigBuilder("spark.streaming.dynamicAllocation.scalingDownRatio")
-      .doubleConf.createWithDefault(0.3)
+      .doubleConf
+      .checkValue(_ > 0, "The scaling down ratio of streaming dynamic " +
+        "allocation must be positive.")
+      .createWithDefault(0.3)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)
