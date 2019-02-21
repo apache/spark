@@ -106,10 +106,12 @@ step_templates:
         if [ -n "$CIRCLE_TAG" ]
         then
           git fetch origin "+refs/tags/${CIRCLE_TAG}:refs/tags/${CIRCLE_TAG}"
+        elif [ -n "$CIRCLE_PR_NUMBER" ]
+        then
+          git fetch origin "+${CIRCLE_BRANCH}/head:remotes/origin/${CIRCLE_BRANCH}"
         else
           git fetch origin "+${CIRCLE_BRANCH}:remotes/origin/${CIRCLE_BRANCH}"
         fi
-
 
         if [ -n "$CIRCLE_TAG" ]
         then
