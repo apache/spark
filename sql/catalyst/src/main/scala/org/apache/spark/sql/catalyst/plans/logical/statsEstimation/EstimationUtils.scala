@@ -72,7 +72,7 @@ object EstimationUtils {
   }
 
   /**
-   * Match alias with its child's column stat
+   * Returns the stats for aliases of child's attributes
    */
   def getAliasStats(
       expressions: Seq[Expression],
