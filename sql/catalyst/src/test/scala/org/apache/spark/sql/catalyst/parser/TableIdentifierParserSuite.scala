@@ -129,16 +129,21 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "varying", "versioning", "view", "when", "whenever", "where", "while", "width_bucket", "window",
     "with", "within", "without", "work", "write", "year", "zone")
 
-  val reservedKeywordsInAnsiMode = Set("all", "and", "any", "as", "authorization", "both", "case",
-    "cast", "check", "collate", "column", "constraint", "create", "current_date", "current_time",
-    "current_timestamp", "current_user", "distinct", "else", "end", "false", "fetch", "for",
-    "foreign", "from", "grant", "group", "having", "in", "into", "is", "leading", "not", "null",
-    "only", "or", "order", "outer", "overlaps", "primary", "references", "select", "session_user",
-    "some", "table", "then", "to", "trailing", "unique", "user", "using", "when", "where", "with")
+  val reservedKeywordsInAnsiMode = Set("all", "and", "anti", "any", "as", "authorization", "both",
+    "case", "cast", "check", "collate", "column", "constraint", "create", "cross", "current_date",
+    "current_time", "current_timestamp", "current_user", "distinct", "else", "end", "except",
+    "false", "fetch", "for", "foreign", "from", "full", "grant", "group", "having", "in", "inner",
+    "intersect", "into", "join", "is", "leading", "left", "natural", "not", "null", "on", "only",
+    "or", "order", "outer", "overlaps", "primary", "references", "right", "select", "semi",
+    "session_user", "minus", "some", "table", "then", "to", "trailing", "union", "unique", "user",
+    "using", "when", "where", "with")
 
   val nonReservedKeywordsInAnsiMode = allCandidateKeywords -- reservedKeywordsInAnsiMode
 
-  val nonReservedKeywordsInNonAnsiMode = allCandidateKeywords
+  val reservedKeywordsInNonAnsiMode = Set("anti", "cross", "except", "full", "inner", "intersect",
+    "join", "left", "natural", "on", "right", "semi", "minus", "union")
+
+  val nonReservedKeywordsInNonAnsiMode = allCandidateKeywords -- reservedKeywordsInNonAnsiMode
 
   test("table identifier") {
     // Regular names.

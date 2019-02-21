@@ -22,7 +22,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>ALTER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ANALYZE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>AND</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ANTI</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>ANTI</td><td>reserved</td><td>reserved</td><td>non-reserved</td></tr>
   <tr><td>ANY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ARE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ARCHIVE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -112,7 +112,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>COVAR_POP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>COVAR_SAMP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CREATE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CROSS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>CROSS</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>CUBE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CUME_DIST</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CURRENT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -179,7 +179,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>ESCAPE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ESCAPED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EVERY</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>EXCEPT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>EXCEPT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>EXCEPTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EXCHANGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EXEC</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -209,7 +209,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>FRAME_ROW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FREE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FROM</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FULL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>FULL</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>FUNCTION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FUNCTIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FUSION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -237,7 +237,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>INDEXES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>INITIAL</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>INITIALLY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>INNER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>INNER</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>INOUT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INPATH</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>INPUT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -246,7 +246,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>INSERT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INTEGER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>INTERSECT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>INTERSECT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>INTERSECTION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INTERVAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INTO</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -254,7 +254,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>ISOLATION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ITEMS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ITERATE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>JOIN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>JOIN</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>JSON_ARRAY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>JSON_ARRAYAGG</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>JSON_EXISTS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -276,7 +276,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>LEAD</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LEADING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LEAVE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>LEFT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>LEFT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>LEVEL</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>LIKE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LIKE_REGEX</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -309,7 +309,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>MERGE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>METHOD</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>MIN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>MINUS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>MINUS</td><td>reserved</td><td>reserved</td><td>non-reserved</td></tr>
   <tr><td>MINUTE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>MOD</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>MODIFIES</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -319,7 +319,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>MULTISET</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>NAMES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>NATIONAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>NATURAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>NATURAL</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>NCHAR</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>NCLOB</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>NEW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -341,7 +341,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>OFFSET</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>OLD</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>OMIT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ON</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>ON</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>ONE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ONLY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>OPEN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -427,7 +427,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>RETURN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>RETURNS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>REVOKE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>RIGHT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>RIGHT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>RLIKE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ROLE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ROLES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -447,7 +447,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>SECTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SEEK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SELECT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SEMI</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>SEMI</td><td>reserved</td><td>reserved</td><td>non-reserved</td></tr>
   <tr><td>SENSITIVE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SEPARATED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SERDE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -531,7 +531,7 @@ A full list of reserved/non-reserved key words is as follows:
   <tr><td>UNCACHE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>UNDER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>UNDO</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>UNION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>UNION</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>UNIQUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>UNKNOWN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>UNLOCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>

@@ -833,7 +833,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     val tvf = UnresolvedTableValuedFunction(
       visitIdentifier(func.identifier), func.expression.asScala.map(expression), aliases)
-    tvf.optionalMap(strictIdentifier(func.tableAlias.strictIdentifier))(aliasPlan)
+    tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
   /**
@@ -858,7 +858,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val table = UnresolvedInlineTable(aliases, rows)
-    table.optionalMap(strictIdentifier(ctx.tableAlias.strictIdentifier))(aliasPlan)
+    table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
   }
 
   /**
@@ -898,8 +898,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create an alias ([[SubqueryAlias]]) for a [[LogicalPlan]].
    */
-  private def aliasPlan(alias: String, plan: LogicalPlan): LogicalPlan = {
-    SubqueryAlias(alias, plan)
+  private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
+    SubqueryAlias(alias.getText, plan)
   }
 
   /**
@@ -908,7 +908,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   private def mayApplyAliasPlan(tableAlias: TableAliasContext, plan: LogicalPlan): LogicalPlan = {
     if (tableAlias.strictIdentifier != null) {
-      val subquery = SubqueryAlias(strictIdentifier(tableAlias.strictIdentifier), plan)
+      val subquery = SubqueryAlias(tableAlias.strictIdentifier.getText, plan)
       if (tableAlias.identifierList != null) {
         val columnNames = visitIdentifierList(tableAlias.identifierList)
         UnresolvedSubqueryColumnAliases(columnNames, subquery)
@@ -1404,29 +1404,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  private def strictIdentifier(ctx: StrictIdentifierContext): String = {
-    if (ctx != null) {
-      val keyword = ctx.getText
-      ctx match {
-        case u: UnquotedIdentifierContext =>
-          if (u.ansiReserved() != null) {
-            throw new ParseException(
-              s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
-          }
-        case _ =>
-      }
-      keyword
-    } else {
-      null
-    }
-  }
-
   override def visitIdentifier(ctx: IdentifierContext): String = withOrigin(ctx) {
-    if (ctx.strictIdentifier() != null) {
-      strictIdentifier(ctx.strictIdentifier())
-    } else {
-      ctx.getText
+    val keyword = ctx.getText
+    if (ctx.ansiReserved() != null) {
+      throw new ParseException(
+        s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
     }
+    keyword
   }
 
   /**
