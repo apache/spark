@@ -5,8 +5,11 @@ displayTitle: SQL Reserved/Non-Reserved Key Words
 ---
 
 When `spark.sql.parser.ansi.enabled` is set to true (false by default), some keywords are reserved for Spark SQL.
-These reserved key words in this ANSI mode basically follow the ANSI SQL-2011 standard, but it is slightly different between each other.
-A full list of reserved/non-reserved key words is as follows:
+The reserved keywords cannot be used for identifiers (e.g., table names, view names, column names, column aliases) in a query.
+Note that there is one exception; table aliases (e.g., SELECT * FROM t AS t1) always follow the default mode
+(see a list below) regardless of the `spark.sql.parser.ansi.enabled` value. These reserved keywords in the ANSI mode basically
+follow the ANSI SQL-2011 standard, but it is slightly different between each other.
+A full list of the reserved/non-reserved keywords is as follows:
 
 <table class="table">
   <tr><th rowspan="2" style="vertical-align: middle;"><b>Key Word</b></th><th colspan="2"><b>Spark SQL</b></th><th rowspan="2" style="vertical-align: middle;"><b>SQL-2011</b></th></tr>
