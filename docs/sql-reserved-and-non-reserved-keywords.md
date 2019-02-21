@@ -1,7 +1,7 @@
 ---
 layout: global
-title: SQL Reserved/Non-Reserved Key Words
-displayTitle: SQL Reserved/Non-Reserved Key Words
+title: SQL Reserved/Non-Reserved Keywords
+displayTitle: SQL Reserved/Non-Reserved Keywords
 ---
 
 When `spark.sql.parser.ansi.enabled` is set to true (false by default), some keywords are reserved for Spark SQL.
@@ -12,7 +12,7 @@ follow the ANSI SQL-2011 standard, but it is slightly different between each oth
 A full list of the reserved/non-reserved keywords is as follows:
 
 <table class="table">
-  <tr><th rowspan="2" style="vertical-align: middle;"><b>Key Word</b></th><th colspan="2"><b>Spark SQL</b></th><th rowspan="2" style="vertical-align: middle;"><b>SQL-2011</b></th></tr>
+  <tr><th rowspan="2" style="vertical-align: middle;"><b>Keyword</b></th><th colspan="2"><b>Spark SQL</b></th><th rowspan="2" style="vertical-align: middle;"><b>SQL-2011</b></th></tr>
   <tr><th><b>ANSI mode</b></th><th><b>default mode</b></th></tr>
   <tr><td>ABS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ABSOLUTE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>

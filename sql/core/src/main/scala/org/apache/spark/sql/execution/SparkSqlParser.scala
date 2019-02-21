@@ -705,7 +705,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     import ctx._
-    val (user, system) = Option(ctx.identifier).map(i => visitIdentifier(i).toLowerCase(Locale.ROOT)) match {
+    val (user, system) = Option(ctx.identifier).map { i =>
+        visitIdentifier(i).toLowerCase(Locale.ROOT) } match {
       case None | Some("all") => (true, true)
       case Some("system") => (false, true)
       case Some("user") => (true, false)

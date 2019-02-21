@@ -1862,7 +1862,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(visitIdentifier(identifier), typedVisit(dataType), nullable = true)
+    val name = visitIdentifier(identifier)
+    val structField = StructField(name, typedVisit(dataType), nullable = true)
     if (STRING == null) structField else structField.withComment(string(STRING))
   }
 }

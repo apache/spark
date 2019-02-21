@@ -726,7 +726,7 @@ qualifiedName
 identifier
     : strictIdentifier
     | {ansi}? ansiReserved
-    | reserved
+    | {!ansi}? reserved
     ;
 
 strictIdentifier
