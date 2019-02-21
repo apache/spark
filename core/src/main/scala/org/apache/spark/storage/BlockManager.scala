@@ -223,6 +223,8 @@ private[spark] class BlockManager(
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   /**
+   * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
+   *
    * @param blockSize the decrypted size of the block
    */
   private abstract class BlockStoreUpdater[T](
@@ -343,6 +345,7 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Helper for storing a block from bytes already in memory.
    * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
    * so may corrupt or change the data stored by the `BlockManager`.
    */
@@ -366,7 +369,9 @@ private[spark] class BlockManager(
     override def saveToDiskStore(): Unit = diskStore.putBytes(blockId, bytes)
 
   }
-
+  /**
+   * Helper for storing a block based from bytes already in a local temp file.
+   */
   private case class TempFileBasedBlockStoreUpdater[T](
       blockId: BlockId,
       level: StorageLevel,
@@ -377,9 +382,6 @@ private[spark] class BlockManager(
       keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock) {
 
-    /**
-     * Calling this method once leads to loading the content of the temporary file into the memory.
-     */
     override def readToByteBuffer(): ChunkedByteBuffer = {
       val allocator = level.memoryMode match {
         case MemoryMode.ON_HEAP => ByteBuffer.allocate _
