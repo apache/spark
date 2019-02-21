@@ -56,7 +56,14 @@ case class DataSourceV2Relation(
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
-        Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+        val numRows: Option[BigInt] = if (statistics.numRows().isPresent) {
+          Some(statistics.numRows().getAsLong)
+        } else {
+          None
+        }
+        Statistics(
+          sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes),
+          rowCount = numRows)
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
@@ -89,7 +96,14 @@ case class StreamingDataSourceV2Relation(
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      val numRows: Option[BigInt] = if (statistics.numRows().isPresent) {
+        Some(statistics.numRows().getAsLong)
+      } else {
+        None
+      }
+      Statistics(
+        sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes),
+        rowCount = numRows)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
