@@ -107,7 +107,7 @@ step_templates:
         then
           git fetch origin "+refs/tags/${CIRCLE_TAG}:refs/tags/${CIRCLE_TAG}"
         else
-          git fetch origin "+${CIRCLE_BRANCH}/head:remotes/origin/${CIRCLE_BRANCH}"
+          git fetch origin "+${CIRCLE_BRANCH}:remotes/origin/${CIRCLE_BRANCH}"
         fi
 
 
