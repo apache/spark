@@ -20,7 +20,7 @@ package org.apache.spark.shuffle
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
+import org.apache.spark.storage._
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -41,13 +41,30 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   private val dep = handle.dependency
 
+  private def getFilterBlocks(): Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
+
+    if (handle.dependency.partitioner.isInstanceOf[HDPartitioner]) {
+      val hdPartitioner = handle.dependency.partitioner.asInstanceOf[HDPartitioner]
+      val sPartition = hdPartitioner.getPartitionIndex(startPartition)
+      val allBlocks = mapOutputTracker.getMapSizesByExecutorId(
+        handle.shuffleId, sPartition, sPartition + 1)
+      val blocks = hdPartitioner.filter(allBlocks.toSeq, startPartition, startPartition + 1)
+      blocks.toIterator
+    }
+    else {
+      val allBlocks = mapOutputTracker.getMapSizesByExecutorId(
+        handle.shuffleId, startPartition, endPartition)
+      allBlocks
+    }
+  }
+
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
     val wrappedStreams = new ShuffleBlockFetcherIterator(
       context,
       blockManager.shuffleClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
+      getFilterBlocks,
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.get(config.REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024,

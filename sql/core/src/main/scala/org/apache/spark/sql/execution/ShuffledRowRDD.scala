@@ -112,12 +112,13 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  * a post-shuffle partition is created for every pre-shuffle partition.
  */
 class ShuffledRowRDD(
-    var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
+    var dependencyOld: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
     specifiedPartitionStartIndices: Option[Array[Int]] = None)
-  extends RDD[InternalRow](dependency.rdd.context, Nil) {
+  extends RDD[InternalRow](dependencyOld.rdd.context, Nil) {
 
-  private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
+  private[this] var dependencyNew = HDShuffleConverter.doConvert(dependencyOld)
+  private[this] val numPreShufflePartitions = dependencyNew.partitioner.numPartitions
 
   private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
     case Some(indices) => indices
@@ -128,9 +129,9 @@ class ShuffledRowRDD(
   }
 
   private[this] val part: Partitioner =
-    new CoalescedPartitioner(dependency.partitioner, partitionStartIndices)
+    new CoalescedPartitioner(dependencyNew.partitioner, partitionStartIndices)
 
-  override def getDependencies: Seq[Dependency[_]] = List(dependency)
+  override def getDependencies: Seq[Dependency[_]] = List(dependencyNew)
 
   override val partitioner: Option[Partitioner] = Some(part)
 
@@ -164,7 +165,7 @@ class ShuffledRowRDD(
     // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
     val reader =
       SparkEnv.get.shuffleManager.getReader(
-        dependency.shuffleHandle,
+        dependencyNew.shuffleHandle,
         shuffledRowPartition.startPreShufflePartitionIndex,
         shuffledRowPartition.endPreShufflePartitionIndex,
         context,
@@ -174,6 +175,7 @@ class ShuffledRowRDD(
 
   override def clearDependencies() {
     super.clearDependencies()
-    dependency = null
+    dependencyNew = null
+    dependencyOld = null
   }
 }
