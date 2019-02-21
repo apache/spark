@@ -17,6 +17,8 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
+import java.util.OptionalLong;
+
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.TableProvider;
@@ -24,8 +26,6 @@ import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 import org.apache.spark.sql.sources.v2.reader.Statistics;
 import org.apache.spark.sql.sources.v2.reader.SupportsReportStatistics;
-
-import java.util.OptionalLong;
 
 public class JavaReportStatisticsDataSource implements TableProvider {
   class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportStatistics {
