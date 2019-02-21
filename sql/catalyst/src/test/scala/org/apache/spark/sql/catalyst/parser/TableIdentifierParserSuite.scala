@@ -97,7 +97,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "list", "listagg", "ln", "load", "local", "localtime", "localtimestamp", "location",
     "locator", "lock", "locks", "log", "log10", "logical", "loop", "lower", "macro", "map",
     "match", "match_number", "match_recognize", "matches", "max", "member", "merge", "method",
-    "min", "minute", "mod", "modifies", "module", "month", "msck", "multiset", "names",
+    "min", "minus", "minute", "mod", "modifies", "module", "month", "msck", "multiset", "names",
     "national", "natural", "nchar", "nclob", "new", "next", "no", "none", "normalize",
     "not", "nth_value", "ntile", "null", "nullif", "nulls", "numeric", "object",
     "occurrences_regex", "octet_length", "of", "offset", "old", "omit", "on", "one", "only", "open",
@@ -114,7 +114,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "right", "rlike", "role", "roles", "rollback", "rollup", "routine", "row", "row_number", "rows",
     "running", "savepoint", "schema", "scope", "scroll", "search", "second", "section", "seek",
     "select", "semi", "sensitive", "separated", "serde", "serdeproperties", "session",
-    "session_user", "set", "setminus", "sets", "show", "signal", "similar", "sin", "sinh", "size",
+    "session_user", "set", "sets", "show", "signal", "similar", "sin", "sinh", "size",
     "skewed", "skip", "smallint", "some", "sort", "sorted", "space", "specific", "specifictype",
     "sql", "sqlcode", "sqlerror", "sqlexception", "sqlstate", "sqlwarning", "sqrt", "start",
     "state", "static", "statistics", "stddev_pop", "stddev_samp", "stored", "stratify", "struct",
@@ -130,17 +130,15 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "with", "within", "without", "work", "write", "year", "zone")
 
   val reservedKeywordsInAnsiMode = Set("all", "and", "any", "as", "authorization", "both", "case",
-    "cast", "check", "collate", "column", "constraint", "create", "cross", "current_date",
-    "current_time", "current_timestamp", "current_user", "distinct", "else", "end", "except",
-    "false", "fetch", "for", "foreign", "from", "full", "grant", "group", "having", "in", "inner",
-    "intersect", "into", "is", "join", "leading", "left", "natural", "not", "null", "on", "only",
-    "or", "order", "outer", "overlaps", "primary", "references", "right", "select", "session_user",
-    "some", "table", "then", "to", "trailing", "union", "unique", "user", "using", "when",
-    "where", "with")
+    "cast", "check", "collate", "column", "constraint", "create", "current_date", "current_time",
+    "current_timestamp", "current_user", "distinct", "else", "end", "false", "fetch", "for",
+    "foreign", "from", "grant", "group", "having", "in", "into", "is", "leading", "not", "null",
+    "only", "or", "order", "outer", "overlaps", "primary", "references", "select", "session_user",
+    "some", "table", "then", "to", "trailing", "unique", "user", "using", "when", "where", "with")
 
   val nonReservedKeywordsInAnsiMode = allCandidateKeywords -- reservedKeywordsInAnsiMode
 
-  val nonReservedKeywordsInNonAnsiMode = allCandidateKeywords -- Set("using")
+  val nonReservedKeywordsInNonAnsiMode = allCandidateKeywords
 
   test("table identifier") {
     // Regular names.

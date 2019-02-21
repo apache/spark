@@ -724,14 +724,17 @@ qualifiedName
     ;
 
 identifier
-    : {ansi}? ansiReserved
-    | strictIdentifier
-    | {!ansi}? strictNonReserved
+    : strictIdentifier
+    // We can't move the tokens below into `strictIdentifier` because we need to parse some SQL texts,
+    // e.g., SELECT * FROM t1 CROSS JOIN t2
+    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
+    | UNION | INTERSECT | EXCEPT | SETMINUS
     ;
 
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
+    | {ansi}? ansiReserved    #unquotedIdentifier
     | {ansi}? ansiNonReserved #unquotedIdentifier
     | {!ansi}? nonReserved    #unquotedIdentifier
     ;
@@ -750,18 +753,24 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// A list of reserved keywords in Spark SQL. These keywords are reserved when `spark.sql.parser.ansi.enabled` = true.
-// Currently, we only reserve the ANSI keywords below that almost all the ANSI SQL standards (SQL-92, SQL-99,
-// SQL-2003, SQL-2008, SQL-2011, and SQL-2016) and PostgreSQL reserve.
+// NOTE: You must follow a rule below when you add a new ANTLR taken in this file:
+//  - All the ANTLR tokens except for some keywords (ANTI, FULL, INNER, LEFT, SEMI, RIGHT, NATURAL, JOIN, CROSS, ON,
+//          UNION, INTERSECT, EXCEPT, and SETMINUS)
+//      = UNION(`ansiReserved`, `ansiNonReserved`)
+//      = `nonReserved`
 //
-// NOTE: The ANTLR tokens in `SqlBase.g4` must exist in either `ansiReserved` or `ansiNonReserved`. Therefore,
-// when one adds a new token in this file, ones must update one of the two rules, too.
+// Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
+// value. In this case, you must add a token `NEWTOKEN` in both `ansiNonReserved` and `nonReserved`.
+
+// A list of the reserved keywords below in Spark SQL. These keywords cannot be used for identifiers
+// when `spark.sql.parser.ansi.enabled` = true. Currently, we only reserve the ANSI keywords
+// that almost all the ANSI SQL standards (SQL-92, SQL-99, SQL-2003, SQL-2008, SQL-2011, and SQL-2016)
+// and PostgreSQL reserve.
 ansiReserved
     : ALL | AND | ANY | AS | AUTHORIZATION | BOTH | CASE | CAST | CHECK | COLLATE | COLUMN | CONSTRAINT | CREATE
-    | CROSS | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP | CURRENT_USER | DISTINCT | ELSE | END | EXCEPT
-    | FALSE | FETCH | FOR | FOREIGN | FROM | FULL | GRANT | GROUP | HAVING | IN | INNER | INTERSECT | INTO | IS
-    | JOIN | LEADING | LEFT | NATURAL | NOT | NULL | ON | ONLY | OR | ORDER | OUTER | OVERLAPS | PRIMARY
-    | REFERENCES | RIGHT | SELECT | SESSION_USER | SOME | TABLE | THEN | TO | TRAILING | UNION | UNIQUE | USER
+    | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP | CURRENT_USER | DISTINCT | ELSE | END | FALSE | FETCH | FOR
+    | FOREIGN | FROM | GRANT | GROUP | HAVING | IN | INTO | IS | LEADING | NOT | NULL | ONLY | OR | ORDER | OUTER
+    | OVERLAPS | PRIMARY | REFERENCES | SELECT | SESSION_USER | SOME | TABLE | THEN | TO | TRAILING | UNIQUE | USER
     | USING | WHEN | WHERE | WITH
     ;
 
@@ -769,21 +778,20 @@ ansiReserved
 // Otherwise (`spark.sql.parser.ansi.enabled` = false), we follow the existing Spark SQL behaviour until v3.0:
 // the `nonReserved` keywords can be used instead.
 ansiNonReserved
-    : ADD | AFTER | ALTER | ANALYZE | ANTI | ARCHIVE | ARRAY | ASC | AT | BETWEEN | BUCKET | BUCKETS | BY | CACHE
-    | CASCADE | CHANGE | CLEAR | CLUSTER | CLUSTERED | CODEGEN | COLLECTION | COLUMNS | COMMENT | COMMIT
-    | COMPACT | COMPACTIONS | COMPUTE | CONCATENATE | COST | CUBE | CURRENT | DATA | DATABASE | DATABASES
-    | DBPROPERTIES | DEFINED | DELETE | DELIMITED | DESC | DESCRIBE | DFS | DIRECTORIES | DIRECTORY | DISTRIBUTE
-    | DIV | DROP | ESCAPED | EXCHANGE | EXISTS | EXPLAIN | EXPORT | EXTENDED | EXTERNAL | EXTRACT | FIELDS
-    | FILEFORMAT | FIRST | FOLLOWING | FORMAT | FORMATTED | FUNCTION | FUNCTIONS | GLOBAL | GROUPING | IF
-    | IGNORE | IMPORT | INDEX | INDEXES | INPATH | INPUTFORMAT | INSERT | INTERVAL | ITEMS | KEYS | LAST
-    | LATERAL | LAZY | LIKE | LIMIT | LINES | LIST | LOAD | LOCAL | LOCATION | LOCK | LOCKS | LOGICAL | MACRO
-    | MAP | MSCK | NO | NULLS | OF | OPTION | OPTIONS | OUT | OUTPUTFORMAT | OVER | OVERWRITE | PARTITION
-    | PARTITIONED | PARTITIONS | PERCENT | PERCENTLIT | PIVOT | PRECEDING | PRINCIPALS | PURGE | RANGE
-    | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFRESH | RENAME | REPAIR | REPLACE | RESET | RESTRICT
-    | REVOKE | RLIKE | ROLE | ROLES | ROLLBACK | ROLLUP | ROW | ROWS | SCHEMA | SEMI | SEPARATED | SERDE
-    | SERDEPROPERTIES | SET | SETMINUS | SETS | SHOW | SKEWED | SORT | SORTED | START | STATISTICS | STORED | STRATIFY
-    | STRUCT | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY | TERMINATED | TOUCH | TRANSACTION | TRANSACTIONS
-    | TRANSFORM | TRUE | TRUNCATE | UNARCHIVE | UNBOUNDED | UNCACHE | UNLOCK | UNSET | USE | VALUES | VIEW | WINDOW
+    : ADD | AFTER | ALTER | ANALYZE | ARCHIVE | ARRAY | ASC | AT | BETWEEN | BUCKET | BUCKETS | BY | CACHE | CASCADE
+    | CHANGE | CLEAR | CLUSTER | CLUSTERED | CODEGEN | COLLECTION | COLUMNS | COMMENT | COMMIT | COMPACT | COMPACTIONS
+    | COMPUTE | CONCATENATE | COST | CUBE | CURRENT | DATA | DATABASE | DATABASES | DBPROPERTIES | DEFINED | DELETE
+    | DELIMITED | DESC | DESCRIBE | DFS | DIRECTORIES | DIRECTORY | DISTRIBUTE | DIV | DROP | ESCAPED | EXCHANGE
+    | EXISTS | EXPLAIN | EXPORT | EXTENDED | EXTERNAL | EXTRACT | FIELDS | FILEFORMAT | FIRST | FOLLOWING | FORMAT
+    | FORMATTED | FUNCTION | FUNCTIONS | GLOBAL | GROUPING | IF | IGNORE | IMPORT | INDEX | INDEXES | INPATH
+    | INPUTFORMAT | INSERT | INTERVAL | ITEMS | KEYS | LAST | LATERAL | LAZY | LIKE | LIMIT | LINES | LIST | LOAD
+    | LOCAL | LOCATION | LOCK | LOCKS | LOGICAL | MACRO | MAP | MSCK | NO | NULLS | OF | OPTION | OPTIONS | OUT
+    | OUTPUTFORMAT | OVER | OVERWRITE | PARTITION | PARTITIONED | PARTITIONS | PERCENT | PERCENTLIT | PIVOT | PRECEDING
+    | PRINCIPALS | PURGE | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFRESH | RENAME | REPAIR | REPLACE
+    | RESET | RESTRICT | REVOKE | RLIKE | ROLE | ROLES | ROLLBACK | ROLLUP | ROW | ROWS | SCHEMA | SEPARATED | SERDE
+    | SERDEPROPERTIES | SET | SETS | SHOW | SKEWED | SORT | SORTED | START | STATISTICS | STORED | STRATIFY | STRUCT
+    | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY | TERMINATED | TOUCH | TRANSACTION | TRANSACTIONS | TRANSFORM
+    | TRUE | TRUNCATE | UNARCHIVE | UNBOUNDED | UNCACHE | UNLOCK | UNSET | USE | VALUES | VIEW | WINDOW
     ;
 
 nonReserved
@@ -804,12 +812,7 @@ nonReserved
     | SELECT | SEPARATED | SERDE | SERDEPROPERTIES | SESSION_USER | SET | SETS | SHOW | SKEWED | SOME | SORT | SORTED
     | START | STATISTICS | STORED | STRATIFY | STRUCT | TABLE | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY
     | TERMINATED | THEN | TO | TOUCH | TRAILING | TRANSACTION | TRANSACTIONS | TRANSFORM | TRUE | TRUNCATE | UNARCHIVE
-    | UNBOUNDED | UNCACHE | UNLOCK | UNIQUE | UNSET | USE | USER | VALUES | VIEW | WHEN | WHERE | WINDOW | WITH
-    ;
-
-strictNonReserved
-    : ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT | SETMINUS
+    | UNBOUNDED | UNCACHE | UNLOCK | UNIQUE | UNSET | USE | USER | USING | VALUES | VIEW | WHEN | WHERE | WINDOW | WITH
     ;
 
 SELECT: 'SELECT';
