@@ -902,12 +902,12 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeig
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = spark.createDataFrame([
-    ...     (1.0, 1.0, Vectors.dense(1.0)),
-    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed", weightCol="weight")
+    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
     >>> model = dt.fit(td)
     >>> model.numNodes
     3
@@ -943,6 +943,28 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeig
     >>> model2 = DecisionTreeClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
+
+    >>> df3 = spark.createDataFrame([
+    ...     (1.0, 0.2, Vectors.dense(1.0)),
+    ...     (1.0, 0.8, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> si3 = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> si_model3 = si3.fit(df3)
+    >>> td3 = si_model3.transform(df3)
+    >>> dt3 = DecisionTreeClassifier(maxDepth=2, weightCol="weight", labelCol="indexed")
+    >>> model3 = dt2.fit(td3)
+    >>> model3.numNodes
+    3
+    >>> model3.depth
+    1
+    >>> model3.featureImportances
+    SparseVector(1, {0: 1.0})
+    >>> model3.numFeatures
+    1
+    >>> model3.numClasses
+    2
+    >>> print(model3.toDebugString)
+    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
 
     .. versionadded:: 1.4.0
     """

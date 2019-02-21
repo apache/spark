@@ -759,9 +759,9 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
-    ...     (1.0, 1.0, Vectors.dense(1.0)),
-    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
-    >>> dt = DecisionTreeRegressor(maxDepth=2, weightCol="weight", varianceCol="variance")
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
     >>> model = dt.fit(df)
     >>> model.depth
     1
@@ -791,6 +791,21 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     True
     >>> model.transform(test1).head().variance
     0.0
+
+    >>> df3 = spark.createDataFrame([
+    ...     (1.0, 0.2, 1.0, Vectors.dense(1.0)),
+    ...     (1.0, 0.8, 1.0, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> dt3 = DecisionTreeRegressor(maxDepth=2, weightCol="weight", varianceCol="variance")
+    >>> model3 = dt3.fit(df3)
+    >>> model3.depth
+    1
+    >>> model3.numNodes
+    3
+    >>> model3.featureImportances
+    SparseVector(1, {0: 1.0})
+    >>> model3.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
