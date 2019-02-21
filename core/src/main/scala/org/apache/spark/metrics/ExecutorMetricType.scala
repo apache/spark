@@ -103,6 +103,8 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
 }
 
 case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
+  private var nonBuiltInCollectors: Seq[String] = Nil
+
   override val names = Seq(
     "MinorGCCount",
     "MinorGCTime",
@@ -135,17 +137,21 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
-      ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
+    ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
       if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(0) = mxBean.getCollectionCount
         gcMetrics(1) = mxBean.getCollectionTime
       } else if (oldGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(2) = mxBean.getCollectionCount
         gcMetrics(3) = mxBean.getCollectionTime
-      } else {
-        logDebug(s"${mxBean.getName} is an unsupported garbage collector." +
-          s"Add it to ${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key} " +
+      } else if (!nonBuiltInCollectors.contains(mxBean.getName)) {
+        nonBuiltInCollectors = mxBean.getName +: nonBuiltInCollectors
+        // log it when first seen
+        logWarning(s"Add the non-built-in garbage collector(s) $nonBuiltInCollectors " +
+          s"to ${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key} " +
           s"or ${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key} to enable.")
+      } else {
+        // do nothing
       }
     }
     gcMetrics
