@@ -21,14 +21,9 @@ import java.io.Serializable;
 import java.util.*;
 
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRowConverterSuite;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.*;
 
 import org.apache.spark.sql.Dataset;
@@ -124,19 +119,55 @@ public class JavaBeanDeserializationSuite implements Serializable {
     Assert.assertEquals(records, MAP_RECORDS);
   }
 
-  private static final List<Row> ROWS_SPARK_22000 = new ArrayList<>();
-  private static final List<RecordSpark22000> RECORDS_SPARK_22000 = new ArrayList<>();
+  @Test
+  public void testSpark22000() {
+    List<Row> inputRows = new ArrayList<>();
+    List<RecordSpark22000> expectedRecords = new ArrayList<>();
+
+    for (long idx = 0 ; idx < 5 ; idx++) {
+      Row row = createRecordSpark22000Row(idx);
+      inputRows.add(row);
+      expectedRecords.add(createRecordSpark22000(row));
+    }
+
+    // Here we try to convert the fields, from any types to string.
+    // Before applying SPARK-22000, Spark called toString() against variable which type might
+    // be primitive.
+    // SPARK-22000 it calls String.valueOf() which finally calls toString() but handles boxing
+    // if the type is primitive.
+    Encoder<RecordSpark22000> encoder = Encoders.bean(RecordSpark22000.class);
+
+    StructType schema = new StructType()
+      .add("shortField", DataTypes.ShortType)
+      .add("intField", DataTypes.IntegerType)
+      .add("longField", DataTypes.LongType)
+      .add("floatField", DataTypes.FloatType)
+      .add("doubleField", DataTypes.DoubleType)
+      .add("stringField", DataTypes.StringType)
+      .add("booleanField", DataTypes.BooleanType)
+      .add("timestampField", DataTypes.TimestampType)
+      // explicitly setting nullable = true to make clear the intention
+      .add("nullIntField", DataTypes.IntegerType, true);
+
+    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+    Dataset<RecordSpark22000> dataset = dataFrame.as(encoder);
+
+    List<RecordSpark22000> records = dataset.collectAsList();
+
+    Assert.assertEquals(records, records);
+  }
 
   private static Row createRecordSpark22000Row(Long index) {
     Object[] values = new Object[] {
-      index.shortValue(),
-      index.intValue(),
-      index,
-      index.floatValue(),
-      index.doubleValue(),
-      String.valueOf(index),
-      index % 2 == 0,
-      new java.sql.Timestamp(System.currentTimeMillis())
+            index.shortValue(),
+            index.intValue(),
+            index,
+            index.floatValue(),
+            index.doubleValue(),
+            String.valueOf(index),
+            index % 2 == 0,
+            new java.sql.Timestamp(System.currentTimeMillis()),
+            null
     };
     return new GenericRow(values);
   }
@@ -151,41 +182,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
     record.setStringField(recordRow.getString(5));
     record.setBooleanField(String.valueOf(recordRow.getBoolean(6)));
     record.setTimestampField(String.valueOf(recordRow.getTimestamp(7).getTime() * 1000));
+    // This would figure out that null value will not become "null".
+    record.setNullIntField(null);
     return record;
-  }
-
-  static {
-    for (long idx = 0 ; idx < 5 ; idx++) {
-      Row row = createRecordSpark22000Row(idx);
-      ROWS_SPARK_22000.add(row);
-      RECORDS_SPARK_22000.add(createRecordSpark22000(row));
-    }
-  }
-
-  @Test
-  public void testSpark22000() {
-    // Here we try to convert the fields, from any types to string.
-    // Before applying SPARK-22000, Spark called toString() against variable which type might be primitive.
-    // SPARK-22000 it calls String.valueOf() which finally calls toString() but handles boxing
-    // if the type is primitive.
-    Encoder<RecordSpark22000> encoder = Encoders.bean(RecordSpark22000.class);
-
-    StructType schema = new StructType()
-      .add("shortField", DataTypes.ShortType)
-      .add("intField", DataTypes.IntegerType)
-      .add("longField", DataTypes.LongType)
-      .add("floatField", DataTypes.FloatType)
-      .add("doubleField", DataTypes.DoubleType)
-      .add("stringField", DataTypes.StringType)
-      .add("booleanField", DataTypes.BooleanType)
-      .add("timestampField", DataTypes.TimestampType);
-
-    Dataset<Row> dataFrame = spark.createDataFrame(ROWS_SPARK_22000, schema);
-    Dataset<RecordSpark22000> dataset = dataFrame.as(encoder);
-
-    List<RecordSpark22000> records = dataset.collectAsList();
-
-    Assert.assertEquals(RECORDS_SPARK_22000, records);
   }
 
   public static class ArrayRecord {
@@ -326,7 +325,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
   }
 
-  public static class RecordSpark22000 {
+  public final static class RecordSpark22000 {
     private String shortField;
     private String intField;
     private String longField;
@@ -335,6 +334,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     private String stringField;
     private String booleanField;
     private String timestampField;
+    private String nullIntField;
 
     public RecordSpark22000() { }
 
@@ -402,6 +402,14 @@ public class JavaBeanDeserializationSuite implements Serializable {
       this.timestampField = timestampField;
     }
 
+    public String getNullIntField() {
+      return nullIntField;
+    }
+
+    public void setNullIntField(String nullIntField) {
+      this.nullIntField = nullIntField;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -414,13 +422,14 @@ public class JavaBeanDeserializationSuite implements Serializable {
               Objects.equals(doubleField, that.doubleField) &&
               Objects.equals(stringField, that.stringField) &&
               Objects.equals(booleanField, that.booleanField) &&
-              Objects.equals(timestampField, that.timestampField);
+              Objects.equals(timestampField, that.timestampField) &&
+              Objects.equals(nullIntField, that.nullIntField);
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(shortField, intField, longField, floatField, doubleField, stringField,
-              booleanField, timestampField);
+              booleanField, timestampField, nullIntField);
     }
 
     @Override
@@ -434,6 +443,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
               .add("stringField", stringField)
               .add("booleanField", booleanField)
               .add("timestampField", timestampField)
+              .add("nullIntField", nullIntField)
               .toString();
     }
   }
