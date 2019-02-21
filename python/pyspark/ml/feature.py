@@ -2299,7 +2299,10 @@ class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputC
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "How to order labels of string column. The first label after " +
                             "ordering is assigned an index of 0. Supported options: " +
-                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc. " +
+                            "Default is frequencyDesc. In case of equal frequency when " +
+                            "under frequencyDesc/Asc, the strings are further sorted " +
+                            "alphabetically",
                             typeConverter=TypeConverters.toString)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
