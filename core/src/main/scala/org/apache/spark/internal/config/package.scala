@@ -1223,17 +1223,17 @@ package object config {
       .createOptional
 
   private[spark] val SCHEDULER_DEFAULT_SCHEDULING_MODE =
-    ConfigBuilder("spark.scheduler.default.schedulingMode")
+    ConfigBuilder("spark.scheduler.pool.default.schedulingMode")
       .stringConf
       .createWithDefaultString(SchedulingMode.FAIR.toString)
 
   private[spark] val SCHEDULER_DEFAULT_MINIMUM_SHARE =
-    ConfigBuilder("spark.scheduler.default.minShare")
+    ConfigBuilder("spark.scheduler.pool.default.minShare")
       .intConf
       .createWithDefault(0)
 
   private[spark] val SCHEDULER_DEFAULT_WEIGHT =
-    ConfigBuilder("spark.scheduler.default.weight")
+    ConfigBuilder("spark.scheduler.pool.default.weight")
       .intConf
       .createWithDefault(1)
 
