@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, RateCo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
-import org.apache.spark.sql.sources.v2.writer.streaming.SupportsOutputMode
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
 
@@ -515,14 +514,7 @@ class MicroBatchExecution(
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
       case s: SupportsStreamingWrite =>
-        // TODO: we should translate OutputMode to concrete write actions like truncate, but
-        // the truncate action is being developed in SPARK-26666.
-        val writeBuilder = s.newWriteBuilder(new DataSourceOptions(extraOptions.asJava))
-          .withQueryId(runId.toString)
-          .withInputDataSchema(newAttributePlan.schema)
-        val streamingWrite = writeBuilder.asInstanceOf[SupportsOutputMode]
-          .outputMode(outputMode)
-          .buildForStreaming()
+        val streamingWrite = createStreamingWrite(s, extraOptions, newAttributePlan)
         WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, streamingWrite), newAttributePlan)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }

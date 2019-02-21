@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsContinuousRead, SupportsStreamingWrite}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
-import org.apache.spark.sql.sources.v2.writer.streaming.SupportsOutputMode
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
 
@@ -175,14 +174,7 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    // TODO: we should translate OutputMode to concrete write actions like truncate, but
-    // the truncate action is being developed in SPARK-26666.
-    val writeBuilder = sink.newWriteBuilder(new DataSourceOptions(extraOptions.asJava))
-      .withQueryId(runId.toString)
-      .withInputDataSchema(withNewSources.schema)
-    val streamingWrite = writeBuilder.asInstanceOf[SupportsOutputMode]
-      .outputMode(outputMode)
-      .buildForStreaming()
+    val streamingWrite = createStreamingWrite(sink, extraOptions, withNewSources)
     val planWithSink = WriteToContinuousDataSource(streamingWrite, withNewSources)
 
     reportTimeTaken("queryPlanning") {
