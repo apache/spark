@@ -952,7 +952,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeig
     >>> si_model3 = si3.fit(df3)
     >>> td3 = si_model3.transform(df3)
     >>> dt3 = DecisionTreeClassifier(maxDepth=2, weightCol="weight", labelCol="indexed")
-    >>> model3 = dt2.fit(td3)
+    >>> model3 = dt3.fit(td3)
     >>> model3.numNodes
     3
     >>> model3.depth
