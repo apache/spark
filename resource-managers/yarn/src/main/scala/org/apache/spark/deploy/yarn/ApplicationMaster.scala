@@ -148,6 +148,9 @@ private[spark] class ApplicationMaster(
   // In cluster mode, used to tell the AM when the user's SparkContext has been initialized.
   private val sparkContextPromise = Promise[SparkContext]()
 
+  // When invoke main() method cause exception, it will be true otherwise false
+  private var userClassFailed = false
+
   /**
    * Load the list of localized files set by the client, used when launching executors. This should
    * be called in a context where the needed credentials to access HDFS are available.
@@ -248,7 +251,9 @@ private[spark] class ApplicationMaster(
 
         if (!unregistered) {
           // we only want to unregister if we don't want the RM to retry
-          if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
+          if (finalStatus == FinalApplicationStatus.SUCCEEDED ||
+            finalStatus == FinalApplicationStatus.KILLED ||
+            isLastAttempt || userClassFailed) {
             unregister(finalStatus, finalMsg)
             cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
           }
@@ -719,9 +724,11 @@ private[spark] class ApplicationMaster(
               case SparkUserAppException(exitCode) =>
                 val msg = s"User application exited with status $exitCode"
                 logError(msg)
+                userClassFailed = true
                 finish(FinalApplicationStatus.FAILED, exitCode, msg)
               case cause: Throwable =>
                 logError("User class threw exception: " + cause, cause)
+                userClassFailed = true
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
                   "User class threw exception: " + StringUtils.stringifyException(cause))
