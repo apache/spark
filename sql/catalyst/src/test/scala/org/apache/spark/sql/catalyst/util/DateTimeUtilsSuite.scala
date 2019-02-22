@@ -544,8 +544,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("toMillis") {
-    val input = -9223372036844776001L
-    val expected = -9223372036844777L
-    assert(DateTimeUtils.toMillis(input) === expected)
+    assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
+    assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
   }
 }
