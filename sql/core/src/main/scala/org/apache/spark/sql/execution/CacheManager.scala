@@ -213,8 +213,7 @@ class CacheManager extends Logging {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val plan = spark.sessionState.executePlan(cd.plan).executedPlan
       val newCache = InMemoryRelation(
-        cacheBuilder = cd.cachedRepresentation
-          .cacheBuilder.copy(cachedPlan = plan)(_cachedColumnBuffers = null),
+        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = plan),
         logicalPlan = cd.plan)
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       writeLock {
