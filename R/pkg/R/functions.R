@@ -3568,6 +3568,8 @@ setMethod("element_at",
 
 #' @details
 #' \code{explode}: Creates a new row for each element in the given array or map column.
+#' Uses the default column name \code{col} for elements in the array and
+#' \code{key} and \code{value} for elements in the map unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases explode explode,Column-method
@@ -3628,7 +3630,9 @@ setMethod("sort_array",
 
 #' @details
 #' \code{posexplode}: Creates a new row for each element with position in the given array
-#' or map column.
+#' or map column. Uses the default column name \code{pos} for position, and \code{col}
+#' for elements in the array and \code{key} and \code{value} for elements in the map
+#' unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases posexplode posexplode,Column-method
@@ -3769,7 +3773,8 @@ setMethod("repeat_string",
 #' \code{explode}: Creates a new row for each element in the given array or map column.
 #' Unlike \code{explode}, if the array/map is \code{null} or empty
 #' then \code{null} is produced.
-#'
+#' Uses the default column name \code{col} for elements in the array and
+#' \code{key} and \code{value} for elements in the map unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases explode_outer explode_outer,Column-method
@@ -3794,6 +3799,9 @@ setMethod("explode_outer",
 #' \code{posexplode_outer}: Creates a new row for each element with position in the given
 #' array or map column. Unlike \code{posexplode}, if the array/map is \code{null} or empty
 #' then the row (\code{null}, \code{null}) is produced.
+#' Uses the default column name \code{pos} for position, and \code{col}
+#' for elements in the array and \code{key} and \code{value} for elements in the map
+#' unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases posexplode_outer posexplode_outer,Column-method
