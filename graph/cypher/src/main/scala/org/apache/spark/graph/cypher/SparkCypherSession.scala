@@ -50,9 +50,7 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
       )
     }
 
-    new CypherResult {
-      override def df: DataFrame = relationalGraph.cypher(query).records.table.df
-    }
+    SparkCypherResult(relationalGraph.cypher(query).records, relationalGraph.schema)
   }
 }
 

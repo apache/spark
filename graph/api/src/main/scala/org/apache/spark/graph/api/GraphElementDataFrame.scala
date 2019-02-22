@@ -15,8 +15,7 @@ case class NodeDataFrame(
   df: DataFrame,
   idColumn: String,
   labels: Set[String] = Set.empty,
-  properties: Map[String, String] = Map.empty,
-  optionalLabels: Map[String, String] = Map.empty
+  properties: Map[String, String] = Map.empty
 ) extends GraphElementDataFrame
 
 case class RelationshipDataFrame(

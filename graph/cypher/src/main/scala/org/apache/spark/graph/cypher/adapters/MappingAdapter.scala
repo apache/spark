@@ -7,7 +7,7 @@ object MappingAdapter {
 
   implicit class RichNodeDataFrame(val nodeDf: NodeDataFrame) extends AnyVal {
     def toNodeMapping: NodeMapping =
-      NodeMapping(nodeDf.idColumn, nodeDf.labels, nodeDf.optionalLabels, nodeDf.properties)
+      NodeMapping(nodeDf.idColumn, nodeDf.labels, propertyMapping = nodeDf.properties)
 
   }
 
