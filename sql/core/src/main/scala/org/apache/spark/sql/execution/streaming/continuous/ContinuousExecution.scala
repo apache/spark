@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.UnaryOperator
 
 import scala.collection.JavaConverters._
@@ -59,8 +60,7 @@ class ContinuousExecution(
   private[sql] var currentEpochCoordinatorId: String = _
 
   // Throwable that caused the execution to fail
-  private var failure: Option[Throwable] = None
-  protected val failureLock = new AnyRef
+  private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
 
   override val logicalPlan: LogicalPlan = {
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
@@ -266,8 +266,9 @@ class ContinuousExecution(
         }
       }
 
-      failureLock.synchronized {
-        failure.foreach(throw _)
+      val f = failure.get()
+      if (f != null) {
+        throw f
       }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
@@ -385,15 +386,9 @@ class ContinuousExecution(
    * Stores error and stops the query execution thread to terminate the query in new thread.
    */
   def stopInNewThread(error: Throwable): Unit = {
-    failureLock.synchronized {
-      failure match {
-        case None =>
-          logError(s"Query $prettyIdString received exception $error")
-          failure = Some(error)
-          stopInNewThread()
-        case _ =>
-          // Stop already initiated
-      }
+    if (failure.compareAndSet(null, error)) {
+      logError(s"Query $prettyIdString received exception $error")
+      stopInNewThread()
     }
   }
 
