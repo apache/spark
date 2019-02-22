@@ -8,7 +8,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory, RelationalCypherSession}
 import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
-import org.opencypher.okapi.relational.api.table.{RelationalCypherRecords, RelationalEntityTableFactory}
+import org.opencypher.okapi.relational.api.table.RelationalEntityTableFactory
 
 object SparkCypherSession {
   def create(implicit sparkSession: SparkSession): SparkCypherSession = new SparkCypherSession(sparkSession)
@@ -50,14 +50,8 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
       )
     }
 
-    val result: DataFrame = relationalGraph.cypher(query).records match {
-      case relationalRecords: RelationalCypherRecords[_] => relationalRecords.table match {
-        case table: DataFrameTable => table.df
-      }
-    }
-
     new CypherResult {
-      override def df: DataFrame = result
+      override def df: DataFrame = relationalGraph.cypher(query).records.table.df
     }
   }
 }
