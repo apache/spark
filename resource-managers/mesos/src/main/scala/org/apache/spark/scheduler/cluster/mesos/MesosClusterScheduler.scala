@@ -33,7 +33,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.internal.config._
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.util.Utils
 
 /**
@@ -124,7 +124,8 @@ private[spark] class MesosClusterScheduler(
   extends Scheduler with MesosSchedulerUtils {
   var frameworkUrl: String = _
   private val metricsSystem =
-    MetricsSystem.createMetricsSystem("mesos_cluster", conf, new SecurityManager(conf))
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MESOS_CLUSTER, conf,
+      new SecurityManager(conf))
   private val master = conf.get("spark.master")
   private val appName = conf.get("spark.app.name")
   private val queuedCapacity = conf.get(config.MAX_DRIVERS)
