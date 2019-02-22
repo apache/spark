@@ -23,6 +23,7 @@ import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecor
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.types.{BinaryType, StringType}
 
 /**
@@ -86,7 +87,8 @@ private[kafka010] abstract class KafkaRowWriter(
     val value = projectedRow.getBinary(2)
     if (topic == null) {
       throw new NullPointerException(s"null topic present in the data. Use the " +
-        s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
+        s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option or " +
+        s"${DataSourceOptions.PATH_KEY} option for setting a default topic.")
     }
     val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
     producer.send(record, callback)

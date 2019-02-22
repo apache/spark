@@ -427,14 +427,20 @@ The Dataframe being written to Kafka should have the following columns in schema
   <td>topic (*optional)</td>
   <td>string</td>
 </tr>
+<tr>
+  <td>path (*optional)</td>
+  <td>string</td>
+</tr>
 </table>
-\* The topic column is required if the "topic" configuration option is not specified.<br>
+\* The topic column is required if the "topic" or "path" configuration option is not specified.<br>
 
 The value column is the only required option. If a key column is not specified then
 a ```null``` valued key column will be automatically added (see Kafka semantics on
 how ```null``` valued key values are handled). If a topic column exists then its value
-is used as the topic when writing the given row to Kafka, unless the "topic" configuration
-option is set i.e., the "topic" configuration option overrides the topic column.
+is used as the topic when writing the given row to Kafka, unless the "topic" or "path"
+configuration option is set i.e., the "topic" configuration option overrides both the
+"path" configuration option and the topic column; the "path" configuration option
+overrides the topic column: 1) topic option -> 2) path option -> 3) topic column.
 
 The following options must be set for the Kafka sink
 for both batch and streaming queries.
@@ -457,8 +463,17 @@ The following configurations are optional:
   <td>string</td>
   <td>none</td>
   <td>streaming and batch</td>
+  <td>Sets the topic that all rows will be written to in Kafka. This option overrides
+  ```path``` option and any topic column that may exist in the data.</td>
+</tr>
+<tr>
+  <td>path</td>
+  <td>string</td>
+  <td>none</td>
+  <td>streaming and batch</td>
   <td>Sets the topic that all rows will be written to in Kafka. This option overrides any
-  topic column that may exist in the data.</td>
+  topic column that may exist in the data and is overridden by ```topic``` option.
+  However, if both ```topic``` and ```path``` options are specified they should match.</td>
 </tr>
 </table>
 
@@ -468,7 +483,7 @@ The following configurations are optional:
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+// Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
 val ds = df
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream
@@ -477,20 +492,28 @@ val ds = df
   .option("topic", "topic1")
   .start()
 
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+// Write key-value data from a DataFrame to Kafka using the topic specified in the data
 val ds = df
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .start()
+
+// Write key-value data from a DataFrame to Kafka using the topic specified in the path option
+val ds = df
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .start("topic2")
 
 {% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
 
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+// Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
 StreamingQuery ds = df
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream()
@@ -499,7 +522,7 @@ StreamingQuery ds = df
   .option("topic", "topic1")
   .start();
 
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+// Write key-value data from a DataFrame to Kafka using the topic specified in the data
 StreamingQuery ds = df
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream()
@@ -507,12 +530,20 @@ StreamingQuery ds = df
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .start();
 
+// Write key-value data from a DataFrame to Kafka using the topic specified in the path option
+StreamingQuery ds = df
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .start("topic2");
+
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
-# Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+# Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
 ds = df \
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .writeStream \
@@ -521,13 +552,21 @@ ds = df \
   .option("topic", "topic1") \
   .start()
 
-# Write key-value data from a DataFrame to Kafka using a topic specified in the data
+# Write key-value data from a DataFrame to Kafka using the topic specified in the data
 ds = df \
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
   .writeStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .start()
+
+# Write key-value data from a DataFrame to Kafka using the topic specified in the path option
+ds = df \
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .start("topic2")
 
 {% endhighlight %}
 </div>
@@ -539,7 +578,7 @@ ds = df \
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+// Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .write
   .format("kafka")
@@ -547,11 +586,19 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .option("topic", "topic1")
   .save()
 
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+// Write key-value data from a DataFrame to Kafka using the topic specified in the data
 df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .write
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .save()
+
+// Write key-value data from a DataFrame to Kafka using the topic specified in the path option
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
   .save()
 
 {% endhighlight %}
@@ -559,7 +606,7 @@ df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
 <div data-lang="java" markdown="1">
 {% highlight java %}
 
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+// Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .write()
   .format("kafka")
@@ -567,7 +614,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .option("topic", "topic1")
   .save();
 
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+// Write key-value data from a DataFrame to Kafka using the topic specified in the data
 df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .write()
   .format("kafka")
@@ -579,7 +626,7 @@ df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
-# Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+# Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .write \
   .format("kafka") \
@@ -587,12 +634,19 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .option("topic", "topic1") \
   .save()
 
-# Write key-value data from a DataFrame to Kafka using a topic specified in the data
+# Write key-value data from a DataFrame to Kafka using the topic specified in the data
 df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
   .write \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .save()
+
+# Write key-value data from a DataFrame to Kafka using the topic specified in the path option
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .write \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .save("topic2")
 
 {% endhighlight %}
 </div>

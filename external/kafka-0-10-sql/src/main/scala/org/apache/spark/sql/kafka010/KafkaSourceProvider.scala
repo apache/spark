@@ -142,7 +142,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String],
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
-    val defaultTopic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
+    val defaultTopic = resolveTopic(parameters)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
     new KafkaSink(sqlContext, specifiedKafkaParams, defaultTopic)
   }
@@ -159,7 +159,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           s"${SaveMode.ErrorIfExists} (default).")
       case _ => // good
     }
-    val topic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
+    val topic = resolveTopic(parameters)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
     KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution, specifiedKafkaParams,
       topic)
@@ -192,6 +192,19 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       // Should never reach here as we are already matching on
       // matched strategy names
       throw new IllegalArgumentException("Unknown option")
+  }
+
+  private def resolveTopic(parameters: Map[String, String]): Option[String] = {
+    val topicOption = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
+    val pathOption = parameters.get(DataSourceOptions.PATH_KEY).map(_.trim)
+
+    (topicOption, pathOption) match {
+      case (Some(t), Some(p)) if t != p => throw new IllegalArgumentException("'topic' and 'path'"
+        + " options should match if both defined: '" + t + "' should match '" + p + "'")
+      case (Some(t), _) => Some(t)
+      case (None, Some(p)) => Option(p)
+      case _ => Option.empty
+    }
   }
 
   private def failOnDataLoss(caseInsensitiveParams: Map[String, String]) =
@@ -376,8 +389,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           import scala.collection.JavaConverters._
 
           assert(inputSchema != null)
-          val topic = Option(options.get(TOPIC_OPTION_KEY).orElse(null)).map(_.trim)
-          val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
+          val params = options.asMap.asScala.toMap
+          val topic = resolveTopic(params)
+          val producerParams = kafkaParamsForProducer(params)
           new KafkaStreamingWrite(topic, producerParams, inputSchema)
         }
       }

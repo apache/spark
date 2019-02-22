@@ -29,7 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.{DataStreamWriter, _}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
@@ -72,7 +72,51 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
       Row("1") :: Row("2") :: Row("3") :: Row("4") :: Row("5") :: Nil)
   }
 
-  test("batch - null topic field value, and no topic option") {
+  test("batch - only path option specified") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    val df = Seq("1", "2", "3").map(v => (null.asInstanceOf[String], v)).toDF("topic", "value")
+    df.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .save(topic)
+    checkAnswer(
+      createKafkaReader(topic).selectExpr("CAST(value as STRING) value"),
+      Row("1") :: Row("2") :: Row("3") :: Nil)
+  }
+
+  test("batch - topic, path and topic field value specified") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val df = Seq("1", "2", "3").map(v => (topic, v)).toDF("topic", "value")
+    df.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("topic", topic)
+      .save(topic)
+    checkAnswer(
+      createKafkaReader(topic).selectExpr("CAST(value as STRING) value"),
+      Row("1") :: Row("2") :: Row("3") :: Nil)
+  }
+
+  test("batch - different topic and path option values") {
+    val topic = newTopic()
+    val pathOptionTopic = newTopic()
+
+    val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
+    val ex = intercept[IllegalArgumentException] {
+      df.write
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("topic", topic)
+        .save(pathOptionTopic)
+    }
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
+      "topic' and 'path' options should match if both defined"))
+  }
+
+  test("batch - null topic field value, and no topic or path option") {
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
     val ex = intercept[SparkException] {
       df.write
@@ -160,7 +204,15 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     }
   }
 
-  test("streaming - write aggregation w/o topic field, with topic option") {
+  /**
+   * The purpose of this test is to ensure that the topic option overrides the
+   * topic path and topic field. We begin by writing some data that includes a
+   * topic field and value (e.g., 'foo') along with a topic option and topic
+   * path (e.g. 'bar'). Then when we read from the topic specified in the option
+   * we should see the data i.e., the data was written to the topic option, and
+   * not to the topic in the data e.g., foo
+   */
+  test("streaming - aggregation with topic field, path and topic option") {
     val input = MemoryStream[String]
     val topic = newTopic()
     testUtils.createTopic(topic)
@@ -168,38 +220,46 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     val writer = createKafkaWriter(
       input.toDF().groupBy("value").count(),
       withTopic = Some(topic),
+      withPath = Some(topic),
+      withOutputMode = Some(OutputMode.Update()))(
+      withSelectExpr = "'foo' as topic",
+      "CAST(value as STRING) key",
+      "CAST(count as STRING) value")
+
+    checkStreamAggregation(input, writer, topic)
+  }
+
+  test("streaming - write aggregation with topic and path option") {
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF().groupBy("value").count(),
+      withTopic = Some(topic),
+      withPath = Some(topic),
       withOutputMode = Some(OutputMode.Update()))(
       withSelectExpr = "CAST(value as STRING) key", "CAST(count as STRING) value")
 
-    val reader = createKafkaReader(topic)
-      .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
-      .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
-      .as[(Int, Int)]
+    checkStreamAggregation(input, writer, topic)
+  }
 
-    try {
-      input.addData("1", "2", "2", "3", "3", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3))
-      input.addData("1", "2", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3), (1, 2), (2, 3), (3, 4))
-    } finally {
-      writer.stop()
-    }
+  test("streaming - write aggregation with path option") {
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF().groupBy("value").count(),
+      withTopic = None,
+      withPath = Some(topic),
+      withOutputMode = Some(OutputMode.Update()))(
+      withSelectExpr = "CAST(value as STRING) key", "CAST(count as STRING) value")
+
+    checkStreamAggregation(input, writer, topic)
   }
 
   test("streaming - aggregation with topic field and topic option") {
-    /* The purpose of this test is to ensure that the topic option
-     * overrides the topic field. We begin by writing some data that
-     * includes a topic field and value (e.g., 'foo') along with a topic
-     * option. Then when we read from the topic specified in the option
-     * we should see the data i.e., the data was written to the topic
-     * option, and not to the topic in the data e.g., foo
-     */
     val input = MemoryStream[String]
     val topic = newTopic()
     testUtils.createTopic(topic)
@@ -207,29 +267,30 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     val writer = createKafkaWriter(
       input.toDF().groupBy("value").count(),
       withTopic = Some(topic),
+      withPath = None,
       withOutputMode = Some(OutputMode.Update()))(
       withSelectExpr = "'foo' as topic",
-        "CAST(value as STRING) key", "CAST(count as STRING) value")
+      "CAST(value as STRING) key",
+      "CAST(count as STRING) value")
 
-    val reader = createKafkaReader(topic)
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
-      .as[(Int, Int)]
+    checkStreamAggregation(input, writer, topic)
+  }
 
-    try {
-      input.addData("1", "2", "2", "3", "3", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3))
-      input.addData("1", "2", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3), (1, 2), (2, 3), (3, 4))
-    } finally {
-      writer.stop()
-    }
+  test("streaming - aggregation with topic field and path option") {
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF().groupBy("value").count(),
+      withTopic = None,
+      withPath = Some(topic),
+      withOutputMode = Some(OutputMode.Update()))(
+      withSelectExpr = "'foo' as topic",
+      "CAST(value as STRING) key",
+      "CAST(count as STRING) value")
+
+    checkStreamAggregation(input, writer, topic)
   }
 
   test("streaming - sink progress is produced") {
@@ -435,13 +496,14 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
   private def createKafkaWriter(
       input: DataFrame,
       withTopic: Option[String] = None,
+      withPath: Option[String] = None,
       withOutputMode: Option[OutputMode] = None,
       withOptions: Map[String, String] = Map[String, String]())
       (withSelectExpr: String*): StreamingQuery = {
     var stream: DataStreamWriter[Row] = null
     withTempDir { checkpointDir =>
       var df = input.toDF()
-      if (withSelectExpr.length > 0) {
+      if (withSelectExpr.nonEmpty) {
         df = df.selectExpr(withSelectExpr: _*)
       }
       stream = df.writeStream
@@ -454,6 +516,33 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
       withOutputMode.foreach(stream.outputMode(_))
       withOptions.foreach(opt => stream.option(opt._1, opt._2))
     }
-    stream.start()
+    withPath match {
+      case Some(path) => stream.start(path)
+      case _ => stream.start()
+    }
+  }
+
+  private def checkStreamAggregation(input: MemoryStream[String],
+                                     stream: StreamingQuery,
+                                     topic: String): Unit = {
+    val dataset = createKafkaReader(topic)
+      .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
+      .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
+      .as[(Int, Int)]
+
+    try {
+      input.addData("1", "2", "2", "3", "3", "3")
+      failAfter(streamingTimeout) {
+        stream.processAllAvailable()
+      }
+      checkDatasetUnorderly(dataset, (1, 1), (2, 2), (3, 3))
+      input.addData("1", "2", "3")
+      failAfter(streamingTimeout) {
+        stream.processAllAvailable()
+      }
+      checkDatasetUnorderly(dataset, (1, 1), (2, 2), (3, 3), (1, 2), (2, 3), (3, 4))
+    } finally {
+      stream.stop()
+    }
   }
 }
