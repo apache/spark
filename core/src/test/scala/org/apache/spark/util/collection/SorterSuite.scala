@@ -149,7 +149,7 @@ class SorterSuite extends SparkFunSuite with Logging {
       sum += i
       arrayToSort(sum) = 1
     }
-    val sorter = new Sorter(new ByteArraySortDataFormat)
+    val sorter = new Sorter(new ByteArraySortDataFormat())
     sorter.sort(arrayToSort, 0, arrayToSort.length, Ordering.Byte)
     // The sort should finish without ArrayIndexOutOfBoundsException
     assert(arrayToSort.length == arrayToSortSize)
