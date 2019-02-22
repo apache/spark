@@ -26,7 +26,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for binary classification.
  *
- * @param scoreAndLabelsWithOptWeight an RDD of (score, label, weight) tuples.
+ * @param scoreAndLabelsWithOptWeight an RDD of (score, label) or (score, label, weight) tuples.
  * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
  *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
  *                This is useful because the curve contains a point for each distinct score
