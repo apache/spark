@@ -1206,6 +1206,67 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
+  test("successful tasks from previous attempts could be learnt by later active taskset") {
+    val taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
+    val valueSer = SparkEnv.get.serializer.newInstance()
+    val result = new DirectTaskResult[Int](valueSer.serialize(1), Seq())
+
+    // submit a taskset with 10 tasks to taskScheduler
+    val attempt0 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(attempt0)
+    // get the current active tsm
+    val tsm0 = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    // offer sufficient resources
+    val offers0 = (0 until 10).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
+    taskScheduler.resourceOffers(offers0)
+    assert(tsm0.runningTasks === 10)
+    // fail task 0.0 and mark tsm0 as zombie
+    tsm0.handleFailedTask(tsm0.taskAttempts(0)(0).taskId, TaskState.FAILED,
+      FetchFailed(null, 0, 0, 0, "fetch failed"))
+    // the attempt0 is a zombie, but the tasks are still running (this could be true even if
+    // we actively killed those tasks, as killing is best-effort)
+    assert(tsm0.isZombie)
+    assert(tsm0.runningTasks === 9)
+
+
+    // success task 1.0 , finish partition 1. But now,
+    // no active tsm exists in TaskScheduler for stage0.
+    tsm0.handleSuccessfulTask(tsm0.taskAttempts(1)(0).taskId, result)
+    assert(tsm0.runningTasks === 8)
+    assert(taskScheduler.stageIdToFinishedPartitions(0).contains(1))
+
+    // submit a new taskset with 10 tasks after someone previous task attempt succeed
+    val attempt1 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 1)
+    taskScheduler.submitTasks(attempt1)
+    // get the current active tsm
+    val tsm1 = taskScheduler.taskSetManagerForAttempt(0, 1).get
+    // tsm1 learns about the finished partition 1 during constructing, so it only need
+    // to execute other 9 tasks
+    assert(tsm1.taskSet.tasks.length == 9)
+    // offer one resource
+    val offers1 = (10 until 11).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
+    taskScheduler.resourceOffers(offers1)
+    assert(tsm1.runningTasks === 1)
+    // success task 0.0 in tsm1 and finish partition 0
+    tsm1.handleSuccessfulTask(tsm1.taskAttempts(0)(0).taskId, result)
+    assert(taskScheduler.stageIdToFinishedPartitions(0).contains(0))
+
+
+    val runningTasks = tsm0.taskSet.tasks.filterNot{ t =>
+      taskScheduler.stageIdToFinishedPartitions(0).contains(t.partitionId)
+    }
+    // finish tsm1 by previous task attempts from tsm0, this remains same behavior with SPARK-23433
+    runningTasks.foreach{ t =>
+      val attempt = tsm0.taskAttempts(tsm0.partitionToIndex(t.partitionId)).head
+      tsm0.handleSuccessfulTask(attempt.taskId, result)
+    }
+
+    assert(taskScheduler.taskSetManagerForAttempt(0, 0).isEmpty)
+    assert(taskScheduler.taskSetManagerForAttempt(0, 1).isEmpty)
+    assert(taskScheduler.stageIdToFinishedPartitions.isEmpty)
+
+  }
+
   test("don't schedule for a barrier taskSet if available slots are less than pending tasks") {
     val taskCpus = 2
     val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
