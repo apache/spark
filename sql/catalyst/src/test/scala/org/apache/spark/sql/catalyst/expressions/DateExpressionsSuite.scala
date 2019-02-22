@@ -847,9 +847,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
     // Test escaping of timezone
+    val zoneWithQuote = "\"quote"
     val msg = intercept[java.time.DateTimeException] {
-      GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal("\"quote")) :: Nil)
+      GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal(zoneWithQuote)) :: Nil)
     }.getMessage
-    assert(msg == "Invalid ID for region-based ZoneId, invalid format: \"quote")
+    assert(msg.contains(zoneWithQuote))
   }
 }
