@@ -22,6 +22,7 @@ import java.nio.file.Files
 
 import scala.collection.JavaConverters._
 
+import com.google.common.net.InternetDomainName
 import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
@@ -122,6 +123,16 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, longPodNamePrefix)
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
+  }
+
+  test("hostname truncation generates valid host names") {
+    val invalidPrefix = "abcdef-*_/[]{}+==.,;'\"-----------------------------------------------"
+
+    baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalidPrefix)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
+    val hostname = step.configurePod(SparkPod.initialPod()).pod.getSpec().getHostname()
+    assert(hostname.length <= 63)
+    assert(InternetDomainName.isValid(hostname))
   }
 
   test("classpath and extra java options get translated into environment variables") {

@@ -28,9 +28,9 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.test.TestSparkSession
 
 class EpochCoordinatorSuite
@@ -41,14 +41,14 @@ class EpochCoordinatorSuite
 
   private var epochCoordinator: RpcEndpointRef = _
 
-  private var writeSupport: StreamingWriteSupport = _
+  private var writeSupport: StreamingWrite = _
   private var query: ContinuousExecution = _
   private var orderVerifier: InOrder = _
   private val epochBacklogQueueSize = 10
 
   override def beforeEach(): Unit = {
-    val reader = mock[ContinuousReadSupport]
-    writeSupport = mock[StreamingWriteSupport]
+    val stream = mock[ContinuousStream]
+    writeSupport = mock[StreamingWrite]
     query = mock[ContinuousExecution]
     orderVerifier = inOrder(writeSupport, query)
 
@@ -60,7 +60,7 @@ class EpochCoordinatorSuite
           epochBacklogQueueSize.toString)))
 
     epochCoordinator
-      = EpochCoordinatorRef.create(writeSupport, reader, query, "test", 1, spark, SparkEnv.get)
+      = EpochCoordinatorRef.create(writeSupport, stream, query, "test", 1, spark, SparkEnv.get)
   }
 
   test("single epoch") {

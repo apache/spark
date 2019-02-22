@@ -323,7 +323,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count
     assert(sc.persistentRdds.isEmpty === false)
-    data.unpersist()
+    data.unpersist(blocking = true)
     assert(sc.persistentRdds.isEmpty === true)
 
     failAfter(Span(3000, Millis)) {

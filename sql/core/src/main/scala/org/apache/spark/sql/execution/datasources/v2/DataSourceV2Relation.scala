@@ -17,20 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
-import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.types.StructType
 
 /**
  * A logical plan representing a data source v2 table.
@@ -45,28 +39,16 @@ case class DataSourceV2Relation(
     options: Map[String, String])
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
+  import DataSourceV2Implicits._
+
   override def name: String = table.name()
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
-  def newScanBuilder(): ScanBuilder = table match {
-    case s: SupportsBatchRead =>
-      val dsOptions = new DataSourceOptions(options.asJava)
-      s.newScanBuilder(dsOptions)
-    case _ => throw new AnalysisException(s"Table is not readable: ${table.name()}")
-  }
-
-
-
-  def newWriteBuilder(schema: StructType): WriteBuilder = table match {
-    case s: SupportsBatchWrite =>
-      val dsOptions = new DataSourceOptions(options.asJava)
-      s.newWriteBuilder(dsOptions)
-        .withQueryId(UUID.randomUUID().toString)
-        .withInputDataSchema(schema)
-    case _ => throw new AnalysisException(s"Table is not writable: ${table.name()}")
+  def newScanBuilder(): ScanBuilder = {
+    table.asBatchReadable.newScanBuilder(options.toDataSourceOptions)
   }
 
   override def computeStats(): Statistics = {
@@ -94,7 +76,7 @@ case class DataSourceV2Relation(
  */
 case class StreamingDataSourceV2Relation(
     output: Seq[Attribute],
-    scanDesc: String,
+    scan: Scan,
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
@@ -104,49 +86,9 @@ case class StreamingDataSourceV2Relation(
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
-  override def computeStats(): Statistics = stream match {
+  override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
-    case _ =>
-      Statistics(sizeInBytes = conf.defaultSizeInBytes)
-  }
-}
-
-// TODO: remove it after finish API refactor for continuous streaming.
-case class OldStreamingDataSourceV2Relation(
-    output: Seq[AttributeReference],
-    source: DataSourceV2,
-    options: Map[String, String],
-    readSupport: ReadSupport,
-    scanConfigBuilder: ScanConfigBuilder)
-  extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
-
-  override def isStreaming: Boolean = true
-
-  override def simpleString(maxFields: Int): String = {
-    "Streaming RelationV2 " + metadataString(maxFields)
-  }
-
-  override def pushedFilters: Seq[Expression] = Nil
-
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
-
-  // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
-  override def equals(other: Any): Boolean = other match {
-    case other: OldStreamingDataSourceV2Relation =>
-      output == other.output && readSupport.getClass == other.readSupport.getClass &&
-        options == other.options
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Seq(output, source, options).hashCode()
-  }
-
-  override def computeStats(): Statistics = readSupport match {
-    case r: OldSupportsReportStatistics =>
-      val statistics = r.estimateStatistics(scanConfigBuilder.build())
       Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)

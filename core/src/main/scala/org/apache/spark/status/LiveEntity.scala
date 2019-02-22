@@ -258,6 +258,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   var blacklistedInStages: Set[Int] = TreeSet()
 
   var executorLogs = Map[String, String]()
+  var attributes = Map[String, String]()
 
   // Memory metrics. They may not be recorded (e.g. old event logs) so if totalOnHeap is not
   // initialized, the store will not contain this information.
@@ -306,7 +307,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       executorLogs,
       memoryMetrics,
       blacklistedInStages,
-      Some(peakExecutorMetrics).filter(_.isSet))
+      Some(peakExecutorMetrics).filter(_.isSet),
+      attributes)
     new ExecutorSummaryWrapper(info)
   }
 }

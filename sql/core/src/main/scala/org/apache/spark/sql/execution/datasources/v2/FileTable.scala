@@ -16,18 +16,30 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.{SupportsBatchRead, Table}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchRead, SupportsBatchWrite, Table}
 import org.apache.spark.sql.types.StructType
 
 abstract class FileTable(
     sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex,
-    userSpecifiedSchema: Option[StructType]) extends Table with SupportsBatchRead {
-  def getFileIndex: PartitioningAwareFileIndex = this.fileIndex
+    options: DataSourceOptions,
+    userSpecifiedSchema: Option[StructType])
+  extends Table with SupportsBatchRead with SupportsBatchWrite {
+  lazy val fileIndex: PartitioningAwareFileIndex = {
+    val filePaths = options.paths()
+    val hadoopConf =
+      sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
+    val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(filePaths, hadoopConf,
+      checkEmptyGlobPath = true, checkFilesExist = options.checkFilesExist())
+    val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+    new InMemoryFileIndex(sparkSession, rootPathsSpecified,
+      options.asMap().asScala.toMap, userSpecifiedSchema, fileStatusCache)
+  }
 
   lazy val dataSchema: StructType = userSpecifiedSchema.orElse {
     inferSchema(fileIndex.allFiles())

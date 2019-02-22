@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.sources.v2._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
@@ -40,14 +40,14 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
+      case d: BatchScanExec =>
         d.batch.asInstanceOf[AdvancedBatch]
     }.head
   }
 
   private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
+      case d: BatchScanExec =>
         d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
     }.head
   }
@@ -309,7 +309,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       assert(logical.canonicalized.output.length == logicalNumOutput)
 
       val physical = df.queryExecution.executedPlan.collect {
-        case d: DataSourceV2ScanExec => d
+        case d: BatchScanExec => d
       }.head
       assert(physical.canonicalized.output.length == physicalNumOutput)
     }
@@ -351,18 +351,20 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25700: do not read schema when writing in other modes except append mode") {
+  test("SPARK-25700: do not read schema when writing in other modes except append and overwrite") {
     withTempPath { file =>
       val cls = classOf[SimpleWriteOnlyDataSource]
       val path = file.getCanonicalPath
       val df = spark.range(5).select('id as 'i, -'id as 'j)
       // non-append mode should not throw exception, as they don't access schema.
       df.write.format(cls.getName).option("path", path).mode("error").save()
-      df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       df.write.format(cls.getName).option("path", path).mode("ignore").save()
-      // append mode will access schema and should throw exception.
+      // append and overwrite modes will access the schema and should throw exception.
       intercept[SchemaReadAttemptException] {
         df.write.format(cls.getName).option("path", path).mode("append").save()
+      }
+      intercept[SchemaReadAttemptException] {
+        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       }
     }
   }

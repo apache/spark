@@ -890,6 +890,21 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
+    (true :: false :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withTempPath { path =>
+          // Repeated values for dictionary encoding.
+          Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+            .write.parquet(path.getAbsolutePath)
+          val df = spark.read.parquet(path.getAbsolutePath)
+          checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
+        }
+      }
+    }
+  }
+
 }
 
 object TestingUDT {

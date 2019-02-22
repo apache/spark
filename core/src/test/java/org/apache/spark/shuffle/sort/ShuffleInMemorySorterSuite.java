@@ -26,6 +26,7 @@ import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryConsumer;
@@ -38,7 +39,7 @@ public class ShuffleInMemorySorterSuite {
   protected boolean shouldUseRadixSort() { return false; }
 
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
+    new TestMemoryManager(new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
 
@@ -69,7 +70,7 @@ public class ShuffleInMemorySorterSuite {
       "Lychee",
       "Mango"
     };
-    final SparkConf conf = new SparkConf().set("spark.memory.offHeap.enabled", "false");
+    final SparkConf conf = new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryConsumer c = new TestMemoryConsumer(memoryManager);
