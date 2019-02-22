@@ -21,10 +21,12 @@ A collections of builtin avro functions
 
 
 from pyspark import since, SparkContext
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.util import _print_missing_jar
 
 
+@ignore_unicode_prefix
 @since(3.0)
 def from_avro(data, jsonFormatSchema, options={}):
     """
@@ -32,8 +34,8 @@ def from_avro(data, jsonFormatSchema, options={}):
     schema must match the read data, otherwise the behavior is undefined: it may fail or return
     arbitrary result.
 
-    Avro is built-in but external data source module since Spark 2.4. Please deploy the application
-    as per the deployment section of "Apache Avro Data Source Guide".
+    Note: Avro is built-in but external data source module since Spark 2.4. Please deploy the
+    application as per the deployment section of "Apache Avro Data Source Guide".
 
     :param data: the binary column.
     :param jsonFormatSchema: the avro schema in JSON string format.
@@ -65,13 +67,14 @@ def from_avro(data, jsonFormatSchema, options={}):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(3.0)
 def to_avro(data):
     """
     Converts a column into binary of avro format.
 
-    Avro is built-in but external data source module since Spark 2.4. Please deploy the application
-    as per the deployment section of "Apache Avro Data Source Guide".
+    Note: Avro is built-in but external data source module since Spark 2.4. Please deploy the
+    application as per the deployment section of "Apache Avro Data Source Guide".
 
     :param data: the data column.
 
