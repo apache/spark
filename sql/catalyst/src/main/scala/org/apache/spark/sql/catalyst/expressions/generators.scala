@@ -127,7 +127,7 @@ case class UserDefinedGenerator(
  *   3      NULL
  * }}}
  */
-// scalastyle.off line.size.limit
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
   examples = """
@@ -136,7 +136,7 @@ case class UserDefinedGenerator(
        1  2
        3  NULL
   """)
-// scalastyle.on line.size.limit
+// scalastyle:on line.size.limit
 case class Stack(children: Seq[Expression]) extends Generator {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
@@ -392,7 +392,7 @@ case class PosExplode(child: Expression) extends ExplodeBase {
 /**
  * Explodes an array of structs into a table.
  */
-// scalastyle.off line.size.limit
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
