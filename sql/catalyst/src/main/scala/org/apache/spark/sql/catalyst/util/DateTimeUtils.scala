@@ -567,7 +567,7 @@ object DateTimeUtils {
       months: Int,
       microseconds: Long,
       timeZone: TimeZone): SQLTimestamp = {
-    val days = millisToDays(start / 1000L, timeZone)
+    val days = millisToDays(MICROSECONDS.toMillis(start), timeZone)
     val newDays = dateAddMonths(days, months)
     start +
       MILLISECONDS.toMicros(daysToMillis(newDays, timeZone) - daysToMillis(days, timeZone)) +
@@ -695,7 +695,7 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
-    var millis = t / MICROS_PER_MILLIS
+    var millis = MICROSECONDS.toMillis(t)
     val truncated = level match {
       case TRUNC_TO_YEAR =>
         val dDays = millisToDays(millis, timeZone)
@@ -706,7 +706,7 @@ object DateTimeUtils {
       case TRUNC_TO_DAY =>
         val offset = timeZone.getOffset(millis)
         millis += offset
-        millis - millis % (MILLIS_PER_SECOND * SECONDS_PER_DAY) - offset
+        millis - millis % DAYS.toMillis(1) - offset
       case TRUNC_TO_HOUR =>
         val offset = timeZone.getOffset(millis)
         millis += offset
