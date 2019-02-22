@@ -128,7 +128,7 @@ case class UserDefinedGenerator(
  * }}}
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows.",
+  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
@@ -391,7 +391,7 @@ case class PosExplode(child: Expression) extends ExplodeBase {
  * Explodes an array of structs into a table.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Explodes an array of structs into a table.",
+  usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
