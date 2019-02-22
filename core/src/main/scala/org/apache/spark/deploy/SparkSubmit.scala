@@ -131,17 +131,11 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   /**
-   * Submit the application using the provided parameters.
-   *
-   * This runs in two steps. First, we prepare the launch environment by setting up
-   * the appropriate classpath, system properties, and application arguments for
-   * running the child main class based on the cluster manager and the deploy mode.
-   * Second, we use this launch environment to invoke the main method of the child
-   * main class.
+   * Submit the application using the provided parameters, ensuring to first wrap
+   * in a doAs when --proxy-user is specified.
    */
   @tailrec
   private def submit(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
-    val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
@@ -150,7 +144,7 @@ private[spark] class SparkSubmit extends Logging {
         try {
           proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+              runMain(args)
             }
           })
         } catch {
@@ -165,7 +159,7 @@ private[spark] class SparkSubmit extends Logging {
             }
         }
       } else {
-        runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+        runMain(args)
       }
     }
 
@@ -774,18 +768,20 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   /**
-   * Run the main method of the child class using the provided launch environment.
+   * Run the main method of the child class using the submit arguments.
+   *
+   * This runs in two steps. First, we prepare the launch environment by setting up
+   * the appropriate classpath, system properties, and application arguments for
+   * running the child main class based on the cluster manager and the deploy mode.
+   * Second, we use this launch environment to invoke the main method of the child
+   * main class.
    *
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    */
-  private def runMain(
-      childArgs: Seq[String],
-      childClasspath: Seq[String],
-      sparkConf: SparkConf,
-      childMainClass: String,
-      verbose: Boolean): Unit = {
-    if (verbose) {
+  private def runMain(args: SparkSubmitArguments): Unit = {
+    val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
+    if (args.verbose) {
       logInfo(s"Main class:\n$childMainClass")
       logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
