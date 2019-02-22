@@ -726,7 +726,7 @@ qualifiedName
 identifier
     : strictIdentifier
     | {ansi}? ansiReserved
-    | {!ansi}? reserved
+    | {!ansi}? defaultReserved
     ;
 
 strictIdentifier
@@ -751,15 +751,14 @@ number
     ;
 
 // NOTE: You must follow a rule below when you add a new ANTLR taken in this file:
-//  - All the ANTLR tokens = UNION(`ansiReserved`, `ansiNonReserved`) = UNION(`reserved`, `nonReserved`)
+//  - All the ANTLR tokens = UNION(`ansiReserved`, `ansiNonReserved`) = UNION(`defaultReserved`, `nonReserved`)
 //
 // Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
 // value. In this case, you must add a token `NEWTOKEN` in both `ansiNonReserved` and `nonReserved`.
 
-// A list of the reserved keywords below in Spark SQL. These keywords cannot be used for identifiers
-// when `spark.sql.parser.ansi.enabled` = true. Currently, we only reserve the ANSI keywords
-// that almost all the ANSI SQL standards (SQL-92, SQL-99, SQL-2003, SQL-2008, SQL-2011, and SQL-2016)
-// and PostgreSQL reserve.
+// The list of the reserved keywords when `spark.sql.parser.ansi.enabled` is true. Currently, we only reserve
+// the ANSI keywords that almost all the ANSI SQL standards (SQL-92, SQL-99, SQL-2003, SQL-2008, SQL-2011,
+// and SQL-2016) and PostgreSQL reserve.
 ansiReserved
     : ALL | AND | ANTI | ANY | AS | AUTHORIZATION | BOTH | CASE | CAST | CHECK | COLLATE | COLUMN | CONSTRAINT | CREATE
     | CROSS | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP | CURRENT_USER | DISTINCT | ELSE | END | EXCEPT | FALSE
@@ -769,9 +768,8 @@ ansiReserved
     | WHEN | WHERE | WITH
     ;
 
-// When `spark.sql.parser.ansi.enabled` = true, the `ansiNonReserved` keywords can be used for identifiers.
-// Otherwise (`spark.sql.parser.ansi.enabled` = false), we follow the existing Spark SQL behaviour until v3.0:
-// the `nonReserved` keywords can be used instead.
+
+// The list of the non-reserved keywords when `spark.sql.parser.ansi.enabled` is true.
 ansiNonReserved
     : ADD | AFTER | ALTER | ANALYZE | ARCHIVE | ARRAY | ASC | AT | BETWEEN | BUCKET | BUCKETS | BY | CACHE | CASCADE
     | CHANGE | CLEAR | CLUSTER | CLUSTERED | CODEGEN | COLLECTION | COLUMNS | COMMENT | COMMIT | COMPACT | COMPACTIONS
@@ -789,7 +787,7 @@ ansiNonReserved
     | TRUE | TRUNCATE | UNARCHIVE | UNBOUNDED | UNCACHE | UNLOCK | UNSET | USE | VALUES | VIEW | WINDOW
     ;
 
-reserved
+defaultReserved
     : ANTI | CROSS | EXCEPT | FULL | INNER | INTERSECT | JOIN | LEFT | NATURAL | ON | RIGHT | SEMI | SETMINUS | UNION
     | USING
     ;
