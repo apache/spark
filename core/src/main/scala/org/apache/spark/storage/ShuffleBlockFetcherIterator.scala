@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{InputStream, IOException}
 import java.nio.ByteBuffer
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -92,7 +92,7 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] var numBlocksProcessed = 0
 
-  private[this] val startTime = System.currentTimeMillis
+  private[this] val startTimeNs = System.nanoTime()
 
   /** Local blocks to fetch, excluding zero-sized blocks. */
   private[this] val localBlocks = scala.collection.mutable.LinkedHashSet[BlockId]()
@@ -250,7 +250,7 @@ final class ShuffleBlockFetcherIterator(
             logDebug("remainingBlocks: " + remainingBlocks)
           }
         }
-        logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+        logTrace(s"Got remote block $blockId after ${Utils.getUsedTimeNs(startTimeNs)}")
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
@@ -380,11 +380,11 @@ final class ShuffleBlockFetcherIterator(
     fetchUpToMaxBytes()
 
     val numFetches = remoteRequests.size - fetchRequests.size
-    logInfo("Started " + numFetches + " remote fetches in" + Utils.getUsedTimeMs(startTime))
+    logInfo(s"Started $numFetches remote fetches in ${Utils.getUsedTimeNs(startTimeNs)}")
 
     // Get Local Blocks
     fetchLocalBlocks()
-    logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime))
+    logDebug(s"Got local blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
   }
 
   override def hasNext: Boolean = !isZombie && (numBlocksProcessed < numBlocksToFetch)
@@ -411,10 +411,10 @@ final class ShuffleBlockFetcherIterator(
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
     while (!isZombie && result == null) {
-      val startFetchWait = System.currentTimeMillis()
+      val startFetchWait = System.nanoTime()
       result = results.take()
-      val stopFetchWait = System.currentTimeMillis()
-      shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
+      val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
+      shuffleMetrics.incFetchWaitTime(fetchWaitTime)
 
       result match {
         case r @ SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>

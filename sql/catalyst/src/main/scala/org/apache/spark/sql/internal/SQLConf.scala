@@ -907,6 +907,12 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
+      .doc("When true, enable temporary checkpoint locations force delete.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
     .internal()
     .doc("The minimum number of batches that must be retained and made recoverable.")
@@ -1105,6 +1111,14 @@ object SQLConf {
         "of the interface CheckpointFileManager.")
       .internal()
       .stringConf
+
+  val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
+      .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
+        "to SPARK-26824.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
 
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
@@ -1446,7 +1460,7 @@ object SQLConf {
       " register class names for which data source V2 write paths are disabled. Writes from these" +
       " sources will fall back to the V1 sources.")
     .stringConf
-    .createWithDefault("")
+    .createWithDefault("orc")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +

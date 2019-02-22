@@ -307,7 +307,7 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame Arrow optimization", {
+test_that("createDataFrame/collect Arrow optimization", {
   skip_if_not_installed("arrow")
 
   conf <- callJMethod(sparkSession, "conf")
@@ -332,7 +332,24 @@ test_that("createDataFrame Arrow optimization", {
   })
 })
 
-test_that("createDataFrame Arrow optimization - type specification", {
+test_that("createDataFrame/collect Arrow optimization - many partitions (partition order test)", {
+  skip_if_not_installed("arrow")
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    expect_equal(collect(createDataFrame(mtcars, numPartitions = 32)),
+                 collect(createDataFrame(mtcars, numPartitions = 1)))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("createDataFrame/collect Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
   rdf <- data.frame(list(list(a = 1,
                               b = "a",
@@ -3526,6 +3543,120 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   finally = {
     # Resetting the conf back to default value
     callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+  })
+})
+
+test_that("gapply() Arrow optimization", {
+  skip_if_not_installed("arrow")
+  df <- createDataFrame(mtcars)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    ret <- gapply(df,
+                 "gear",
+                 function(key, grouped) {
+                   if (length(key) > 0) {
+                     stopifnot(is.numeric(key[[1]]))
+                   }
+                   stopifnot(class(grouped) == "data.frame")
+                   grouped
+                 },
+                 schema(df))
+    expected <- collect(ret)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- gapply(df,
+                 "gear",
+                 function(key, grouped) {
+                   if (length(key) > 0) {
+                     stopifnot(is.numeric(key[[1]]))
+                   }
+                   stopifnot(class(grouped) == "data.frame")
+                   stopifnot(length(colnames(grouped)) == 11)
+                   # mtcars' hp is more then 50.
+                   stopifnot(all(grouped$hp > 50))
+                   grouped
+                 },
+                 schema(df))
+    actual <- collect(ret)
+    expect_equal(actual, expected)
+    expect_equal(count(ret), nrow(mtcars))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("gapply() Arrow optimization - type specification", {
+  skip_if_not_installed("arrow")
+  # Note that regular gapply() seems not supporting date and timestamps
+  # whereas Arrow-optimized gapply() does.
+  rdf <- data.frame(list(list(a = 1,
+                              b = "a",
+                              c = TRUE,
+                              d = 1.1,
+                              e = 1L)))
+  df <- createDataFrame(rdf)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    ret <- gapply(df,
+                 "a",
+                 function(key, grouped) { grouped }, schema(df))
+    expected <- collect(ret)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- gapply(df,
+                 "a",
+                 function(key, grouped) { grouped }, schema(df))
+    actual <- collect(ret)
+    expect_equal(actual, expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("gapply() Arrow optimization - type specification (date and timestamp)", {
+  skip_if_not_installed("arrow")
+  rdf <- data.frame(list(list(a = as.Date("1990-02-24"),
+                              b = as.POSIXct("1990-02-24 12:34:56"))))
+  df <- createDataFrame(rdf)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- gapply(df,
+                  "a",
+                  function(key, grouped) { grouped }, schema(df))
+    expect_equal(collect(ret), rdf)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
   })
 })
 

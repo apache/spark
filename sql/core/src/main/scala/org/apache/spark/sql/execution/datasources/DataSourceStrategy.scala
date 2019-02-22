@@ -427,6 +427,22 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 
 object DataSourceStrategy {
   /**
+   * The attribute name of predicate could be different than the one in schema in case of
+   * case insensitive, we should change them to match the one in schema, so we do not need to
+   * worry about case sensitivity anymore.
+   */
+  protected[sql] def normalizeFilters(
+      filters: Seq[Expression],
+      attributes: Seq[AttributeReference]): Seq[Expression] = {
+    filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
+      e transform {
+        case a: AttributeReference =>
+          a.withName(attributes.find(_.semanticEquals(a)).get.name)
+      }
+    }
+  }
+
+  /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
@@ -512,6 +528,12 @@ object DataSourceStrategy {
 
       case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
         Some(sources.StringContains(a.name, v.toString))
+
+      case expressions.Literal(true, BooleanType) =>
+        Some(sources.AlwaysTrue)
+
+      case expressions.Literal(false, BooleanType) =>
+        Some(sources.AlwaysFalse)
 
       case _ => None
     }

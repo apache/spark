@@ -19,18 +19,18 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.{sources, AnalysisException, SaveMode, Strategy}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
+import org.apache.spark.sql.{AnalysisException, Strategy}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Repartition}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 
-object DataSourceV2Strategy extends Strategy {
+object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
   /**
    * Pushes down filters to the data source reader
@@ -100,14 +100,18 @@ object DataSourceV2Strategy extends Strategy {
     }
   }
 
+  import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.newScanBuilder()
+
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, relation.output)
+
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFilters) = pushFilters(scanBuilder, filters)
+      val (pushedFilters, postScanFilters) = pushFilters(scanBuilder, normalizedFilters)
       val (scan, output) = pruneColumns(scanBuilder, relation, project ++ postScanFilters)
       logInfo(
         s"""
@@ -143,14 +147,22 @@ object DataSourceV2Strategy extends Strategy {
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      val writeBuilder = r.newWriteBuilder(query.schema)
-      writeBuilder match {
-        case s: SupportsSaveMode =>
-          val write = s.mode(SaveMode.Append).buildForBatch()
-          assert(write != null)
-          WriteToDataSourceV2Exec(write, planLater(query)) :: Nil
-        case _ => throw new AnalysisException(s"data source ${r.name} does not support SaveMode")
-      }
+      AppendDataExec(
+        r.table.asBatchWritable, r.options.toDataSourceOptions, planLater(query)) :: Nil
+
+    case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
+      // fail if any filter cannot be converted. correctness depends on removing all matching data.
+      val filters = splitConjunctivePredicates(deleteExpr).map {
+        filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
+          throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
+      }.toArray
+
+      OverwriteByExpressionExec(
+        r.table.asBatchWritable, filters, r.options.toDataSourceOptions, planLater(query)) :: Nil
+
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
+      OverwritePartitionsDynamicExec(r.table.asBatchWritable,
+        r.options.toDataSourceOptions, planLater(query)) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
