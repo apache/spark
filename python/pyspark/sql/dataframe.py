@@ -2054,7 +2054,7 @@ class DataFrame(object):
 
         >>> df = spark.createDataFrame([(1.1, 2), (2.2, 1)], ["float", "int"])
         >>> def cast_all_to_str(input_df):
-        ...     return input_df.select([col(col_name).cast("string") for col_name in input_df.columns])
+        ...     return input_df.select([col(c_name).cast("string") for c_name in input_df.columns])
         >>> df.transform(cast_all_to_str).show()
         +------+----+
         | float| int|
