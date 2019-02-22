@@ -271,7 +271,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
-      val name = visitIdentifier(pVal.identifier)
+      val name = pVal.identifier.getText
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
     }
@@ -570,7 +570,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowMap = ctx.namedWindow.asScala.map {
       wCtx =>
-        (visitIdentifier(wCtx.identifier), typedVisit[WindowSpec](wCtx.windowSpec))
+        (wCtx.identifier.getText, typedVisit[WindowSpec](wCtx.windowSpec))
     }.toMap
 
     // Handle cases like
@@ -645,11 +645,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
     val pivotColumn = if (ctx.pivotColumn.identifiers.size == 1) {
-      UnresolvedAttribute.quoted(visitIdentifier(ctx.pivotColumn.identifier))
+      UnresolvedAttribute.quoted(ctx.pivotColumn.identifier.getText)
     } else {
       CreateStruct(
         ctx.pivotColumn.identifiers.asScala.map(
-          identifier => UnresolvedAttribute.quoted(visitIdentifier(identifier))))
+          identifier => UnresolvedAttribute.quoted(identifier.getText)))
     }
     val pivotValues = ctx.pivotValues.asScala.map(visitPivotValue)
     Pivot(None, pivotColumn, pivotValues, aggregates, query)
@@ -661,7 +661,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitPivotValue(ctx: PivotValueContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
-      Alias(e, visitIdentifier(ctx.identifier))()
+      Alias(e, ctx.identifier.getText)()
     } else {
       e
     }
@@ -832,7 +832,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val tvf = UnresolvedTableValuedFunction(
-      visitIdentifier(func.identifier), func.expression.asScala.map(expression), aliases)
+      func.identifier.getText, func.expression.asScala.map(expression), aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
@@ -931,7 +931,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Sequence of Strings for an identifier list.
    */
   override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
-    ctx.identifier.asScala.map(visitIdentifier)
+    ctx.identifier.asScala.map(_.getText)
   }
 
   /* ********************************************************************************************
@@ -942,7 +942,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
-    TableIdentifier(visitIdentifier(ctx.table), Option(ctx.db).map(_.getText))
+    TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
   }
 
   /**
@@ -974,7 +974,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Both un-targeted (global) and targeted aliases are supported.
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(visitIdentifier)))
+    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText)))
   }
 
   /**
@@ -984,7 +984,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitNamedExpression(ctx: NamedExpressionContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
-      Alias(e, visitIdentifier(ctx.identifier))()
+      Alias(e, ctx.identifier.getText)()
     } else if (ctx.identifierList != null) {
       MultiAlias(e, visitIdentifierList(ctx.identifierList))
     } else {
@@ -1326,7 +1326,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a function database (optional) and name pair.
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
-    ctx.identifier().asScala.map(visitIdentifier) match {
+    ctx.identifier().asScala.map(_.getText) match {
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
@@ -1350,7 +1350,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a reference to a window frame, i.e. [[WindowSpecReference]].
    */
   override def visitWindowRef(ctx: WindowRefContext): WindowSpecReference = withOrigin(ctx) {
-    WindowSpecReference(visitIdentifier(ctx.identifier))
+    WindowSpecReference(ctx.identifier.getText)
   }
 
   /**
@@ -1402,15 +1402,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.FOLLOWING =>
         value
     }
-  }
-
-  override def visitIdentifier(ctx: IdentifierContext): String = withOrigin(ctx) {
-    val keyword = ctx.getText
-    if (ctx.ansiReserved() != null) {
-      throw new ParseException(
-        s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
-    }
-    keyword
   }
 
   /**
@@ -1560,7 +1551,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
-    val valueType = visitIdentifier(ctx.identifier).toUpperCase(Locale.ROOT)
+    val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
         throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
@@ -1764,7 +1755,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
-    val dataType = visitIdentifier(ctx.identifier).toLowerCase(Locale.ROOT)
+    val dataType = ctx.identifier.getText.toLowerCase(Locale.ROOT)
     (dataType, ctx.INTEGER_VALUE().asScala.toList) match {
       case ("boolean", Nil) => BooleanType
       case ("tinyint" | "byte", Nil) => ByteType
@@ -1836,7 +1827,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     StructField(
-      visitIdentifier(identifier),
+      identifier.getText,
       cleanedDataType,
       nullable = true,
       builder.build())
@@ -1862,8 +1853,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val name = visitIdentifier(identifier)
-    val structField = StructField(name, typedVisit(dataType), nullable = true)
+    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
     if (STRING == null) structField else structField.withComment(string(STRING))
   }
 }

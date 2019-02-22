@@ -116,9 +116,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       }
     }
     if (ctx.identifier != null &&
-        visitIdentifier(ctx.identifier).toLowerCase(Locale.ROOT) != "noscan") {
-      throw new ParseException("Expected `NOSCAN` instead of " +
-        s"`${visitIdentifier(ctx.identifier)}`", ctx)
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
 
     val table = visitTableIdentifier(ctx.tableIdentifier)
@@ -638,7 +637,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitCreateDatabase(ctx: CreateDatabaseContext): LogicalPlan = withOrigin(ctx) {
     CreateDatabaseCommand(
-      visitIdentifier(ctx.identifier),
+      ctx.identifier.getText,
       ctx.EXISTS != null,
       Option(ctx.locationSpec).map(visitLocationSpec),
       Option(ctx.comment).map(string),
@@ -656,7 +655,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitSetDatabaseProperties(
       ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterDatabasePropertiesCommand(
-      visitIdentifier(ctx.identifier),
+      ctx.identifier.getText,
       visitPropertyKeyValues(ctx.tablePropertyList))
   }
 
@@ -669,7 +668,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabaseCommand(visitIdentifier(ctx.identifier), ctx.EXISTS != null, ctx.CASCADE != null)
+    DropDatabaseCommand(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
@@ -681,7 +680,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabaseCommand(visitIdentifier(ctx.identifier), ctx.EXTENDED != null)
+    DescribeDatabaseCommand(ctx.identifier.getText, ctx.EXTENDED != null)
   }
 
   /**
@@ -705,8 +704,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     import ctx._
-    val (user, system) = Option(ctx.identifier).map { i =>
-        visitIdentifier(i).toLowerCase(Locale.ROOT) } match {
+    val (user, system) = Option(ctx.identifier).map(_.getText.toLowerCase(Locale.ROOT)) match {
       case None | Some("all") => (true, true)
       case Some("system") => (false, true)
       case Some("user") => (true, false)
@@ -736,7 +734,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
     val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = visitIdentifier(resource.identifier).toLowerCase(Locale.ROOT)
+      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
       resourceType match {
         case "jar" | "file" | "archive" =>
           FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
@@ -997,7 +995,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     AlterTableChangeColumnCommand(
       tableName = visitTableIdentifier(ctx.tableIdentifier),
-      columnName = visitIdentifier(ctx.identifier),
+      columnName = ctx.identifier.getText,
       newColumn = visitColType(ctx.colType))
   }
 
@@ -1025,7 +1023,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
             }
           }
 
-          visitIdentifier(orderedIdCtx.identifier)
+          orderedIdCtx.identifier.getText
         })
   }
 
@@ -1073,13 +1071,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val mayebePaths = remainder(ctx.identifier).trim
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
-        visitIdentifier(ctx.identifier).toLowerCase(Locale.ROOT) match {
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "file" => AddFileCommand(mayebePaths)
           case "jar" => AddJarCommand(mayebePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
-        visitIdentifier(ctx.identifier).toLowerCase(Locale.ROOT) match {
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
             if (mayebePaths.length > 0) {
               ListFilesCommand(mayebePaths.split("\\s+"))
@@ -1289,7 +1287,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitGenericFileFormat(
       ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    val source = visitIdentifier(ctx.identifier)
+    val source = ctx.identifier.getText
     HiveSerDe.sourceToSerDe(source) match {
       case Some(s) =>
         CatalogStorageFormat.empty.copy(
@@ -1384,7 +1382,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (_, ffTable: TableFileFormatContext) => // OK
       case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
-        visitIdentifier(ffGeneric.identifier).toLowerCase(Locale.ROOT) match {
+        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
           case ("sequencefile" | "textfile" | "rcfile") => // OK
           case fmt =>
             operationNotAllowed(
@@ -1392,7 +1390,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
               parentCtx)
         }
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
-        visitIdentifier(ffGeneric.identifier).toLowerCase(Locale.ROOT) match {
+        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "textfile" => // OK
           case fmt => operationNotAllowed(
             s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)
@@ -1444,7 +1442,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
       val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
         icl.identifierComment.asScala.map { ic =>
-          visitIdentifier(ic.identifier) -> Option(ic.STRING).map(string)
+          ic.identifier.getText -> Option(ic.STRING).map(string)
         }
       }
 
