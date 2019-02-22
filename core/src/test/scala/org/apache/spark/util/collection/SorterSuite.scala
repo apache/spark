@@ -151,8 +151,21 @@ class SorterSuite extends SparkFunSuite with Logging {
     }
     val sorter = new Sorter(new ByteArraySortDataFormat())
     sorter.sort(arrayToSort, 0, arrayToSort.length, Ordering.Byte)
-    // The sort should finish without ArrayIndexOutOfBoundsException
-    assert(arrayToSort.length == arrayToSortSize)
+    // The sort must finish without ArrayIndexOutOfBoundsException
+    // The arrayToSort contains runLengths.length elements of 1, and others are 0.
+    // Those 1 must be placed at the end of arrayToSort after sorting.
+    var i = 0
+    var (zeros, ones) = (0, 0)
+    while (i < arrayToSort.length) {
+      if (i < arrayToSort.length - runLengths.length) {
+        zeros += arrayToSort(i) + 1
+      } else {
+        ones += arrayToSort(i)
+      }
+      i += 1
+    }
+    assert(zeros === (arrayToSort.length - runLengths.length))
+    assert(ones === runLengths.length)
   }
 
   /** Runs an experiment several times. */
