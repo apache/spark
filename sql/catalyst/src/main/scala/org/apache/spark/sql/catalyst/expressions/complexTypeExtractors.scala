@@ -216,24 +216,15 @@ case class GetArrayStructFields(
 }
 
 /**
- * Returns the field at `ordinal` in the Array `child`.
- *
- * We need to do type checking here as `ordinal` expression maybe unresolved.
+ * Common trait for [[GetArrayItem]] and [[ElementAt]].
  */
-case class GetArrayItem(child: Expression, ordinal: Expression)
-  extends BinaryExpression with ExpectsInputTypes with ExtractValue with NullIntolerant {
+trait GetArrayItemUtil extends BinaryExpression {
 
-  // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
-
-  override def toString: String = s"$child[$ordinal]"
-  override def sql: String = s"${child.sql}[${ordinal.sql}]"
-
-  override def left: Expression = child
-  override def right: Expression = ordinal
+  private val child = left
+  private val ordinal = right
 
   /** `Null` is returned for invalid ordinals. */
-  override def nullable: Boolean = if (ordinal.foldable && !ordinal.nullable) {
+  protected def computeNullabilityFromArray: Boolean = if (ordinal.foldable && !ordinal.nullable) {
     val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
     child match {
       case CreateArray(ar) if intOrdinal < ar.length =>
@@ -247,7 +238,25 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   } else {
     true
   }
+}
 
+/**
+ * Returns the field at `ordinal` in the Array `child`.
+ *
+ * We need to do type checking here as `ordinal` expression maybe unresolved.
+ */
+case class GetArrayItem(child: Expression, ordinal: Expression)
+  extends GetArrayItemUtil with ExpectsInputTypes with ExtractValue with NullIntolerant {
+
+  // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
+
+  override def toString: String = s"$child[$ordinal]"
+  override def sql: String = s"${child.sql}[${ordinal.sql}]"
+
+  override def left: Expression = child
+  override def right: Expression = ordinal
+  override def nullable: Boolean = computeNullabilityFromArray
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
@@ -281,10 +290,29 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 }
 
 /**
- * Common base class for [[GetMapValue]] and [[ElementAt]].
+ * Common trait for [[GetMapValue]] and [[ElementAt]].
  */
+trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
+  private val child = left
+  private val key = right
+
+  /** `Null` is returned for invalid ordinals. */
+  protected def computeNullabilityFromMap: Boolean = if (key.foldable && !key.nullable) {
+    val keyObj = key.eval()
+    child match {
+      case m: CreateMap if m.resolved =>
+        m.keys.zip(m.values).filter { case (k, _) => k.foldable && !k.nullable }.find {
+          case (k, _) if k.eval() == keyObj => true
+          case _ => false
+        }.map(_._2.nullable).getOrElse(true)
+      case _ =>
+        true
+    }
+  } else {
+    true
+  }
+
   // todo: current search is O(n), improve it.
   def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
     val map = value.asInstanceOf[MapData]
@@ -379,24 +407,7 @@ case class GetMapValue(child: Expression, key: Expression)
 
   override def left: Expression = child
   override def right: Expression = key
-
-  /** `Null` is returned for invalid ordinals. */
-  override def nullable: Boolean = if (key.foldable && !key.nullable) {
-    val keyObj = key.eval()
-    child match {
-      case m: CreateMap if m.resolved =>
-        m.keys.zip(m.values).filter { case (k, _) => k.foldable && !k.nullable }.find {
-          case (k, _) if k.eval() == keyObj => true
-          case _ => false
-        }.map(_._2.nullable).getOrElse(true)
-      case _ =>
-        true
-    }
-  } else {
-    true
-  }
-
-
+  override def nullable: Boolean = computeNullabilityFromMap
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
   // todo: current search is O(n), improve it.

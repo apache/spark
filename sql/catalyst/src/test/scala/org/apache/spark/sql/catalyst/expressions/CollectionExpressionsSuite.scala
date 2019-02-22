@@ -1092,6 +1092,58 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
+  test("SPARK-26965 correctly handles ElementAt nullability for arrays") {
+    // CreateArray case
+    val a = AttributeReference("a", IntegerType, nullable = false)()
+    val b = AttributeReference("b", IntegerType, nullable = true)()
+    val array = CreateArray(a :: b :: Nil)
+    assert(!ElementAt(array, Literal(0)).nullable)
+    assert(ElementAt(array, Literal(1)).nullable)
+    assert(!ElementAt(array, Subtract(Literal(2), Literal(2))).nullable)
+    assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
+
+    // GetArrayStructFields case
+    val f1 = StructField("a", IntegerType, nullable = false)
+    val f2 = StructField("b", IntegerType, nullable = true)
+    val structType = StructType(f1 :: f2 :: Nil)
+    val c = AttributeReference("c", structType, nullable = false)()
+    val inputArray1 = CreateArray(c :: Nil)
+    val inputArray1ContainsNull = c.nullable
+    val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
+    assert(!ElementAt(stArray1, Literal(0)).nullable)
+    val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
+    assert(ElementAt(stArray2, Literal(0)).nullable)
+
+    val d = AttributeReference("d", structType, nullable = true)()
+    val inputArray2 = CreateArray(c :: d :: Nil)
+    val inputArray2ContainsNull = c.nullable || d.nullable
+    val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
+    assert(!ElementAt(stArray3, Literal(0)).nullable)
+    assert(ElementAt(stArray3, Literal(1)).nullable)
+    val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
+    assert(ElementAt(stArray4, Literal(0)).nullable)
+    assert(ElementAt(stArray4, Literal(1)).nullable)
+  }
+
+  test("SPARK-26965 correctly handles ElementAt nullability for maps") {
+    // String key test
+    val k1 = Literal("k1")
+    val v1 = AttributeReference("v1", StringType, nullable = true)()
+    val k2 = Literal("k2")
+    val v2 = AttributeReference("v2", StringType, nullable = false)()
+    val map1 = CreateMap(k1 :: v1 :: k2 :: v2 :: Nil)
+    assert(ElementAt(map1, Literal("k1")).nullable)
+    assert(!ElementAt(map1, Literal("k2")).nullable)
+    assert(ElementAt(map1, Literal("non-existent-key")).nullable)
+
+    // Complex type key test
+    val k3 = Literal.create((1, "a"))
+    val k4 = Literal.create((2, "b"))
+    val map2 = CreateMap(k3 :: v1 :: k4 :: v2 :: Nil)
+    assert(ElementAt(map2, Literal.create((1, "a"))).nullable)
+    assert(!ElementAt(map2, Literal.create((2, "b"))).nullable)
+  }
+
   test("Concat") {
     // Primitive-type elements
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
