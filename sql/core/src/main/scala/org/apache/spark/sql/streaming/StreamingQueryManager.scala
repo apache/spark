@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution,
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
-import org.apache.spark.sql.sources.v2.StreamingWriteSupportProvider
+import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -217,10 +217,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       triggerClock: Clock): StreamingQueryWrapper = {
     var deleteCheckpointOnStop = false
     val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
-      new Path(userSpecified).toUri.toString
+      new Path(userSpecified).toString
     }.orElse {
       df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
-        new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toUri.toString
+        new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toString
       }
     }.getOrElse {
       if (useTempCheckpointLocation) {
@@ -261,7 +261,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }
 
     (sink, trigger) match {
-      case (v2Sink: StreamingWriteSupportProvider, trigger: ContinuousTrigger) =>
+      case (v2Sink: SupportsStreamingWrite, trigger: ContinuousTrigger) =>
         if (operationCheckEnabled) {
           UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
         }

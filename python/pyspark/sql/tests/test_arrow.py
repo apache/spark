@@ -68,7 +68,9 @@ class ArrowTests(ReusedSQLTestCase):
                     (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
                      date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3)),
+                    (u"d", 4, 40, 1.0, 8.0, Decimal("8.0"),
+                     date(2262, 4, 12), datetime(2262, 3, 3, 3, 3, 3))]
 
         # TODO: remove version check once minimum pyarrow version is 0.10.0
         if LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
@@ -76,6 +78,7 @@ class ArrowTests(ReusedSQLTestCase):
             cls.data[0] = cls.data[0] + (bytearray(b"a"),)
             cls.data[1] = cls.data[1] + (bytearray(b"bb"),)
             cls.data[2] = cls.data[2] + (bytearray(b"ccc"),)
+            cls.data[3] = cls.data[3] + (bytearray(b"dddd"),)
 
     @classmethod
     def tearDownClass(cls):

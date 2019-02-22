@@ -85,7 +85,16 @@ class QueryExecution(
     prepareForExecution(sparkPlan)
   }
 
-  /** Internal version of the RDD. Avoids copies and has no schema */
+  /**
+   * Internal version of the RDD. Avoids copies and has no schema.
+   * Note for callers: Spark may apply various optimization including reusing object: this means
+   * the row is valid only for the iteration it is retrieved. You should avoid storing row and
+   * accessing after iteration. (Calling `collect()` is one of known bad usage.)
+   * If you want to store these rows into collection, please apply some converter or copy row
+   * which produces new object per iteration.
+   * Given QueryExecution is not a public class, end users are discouraged to use this: please
+   * use `Dataset.rdd` instead where conversion will be applied.
+   */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
   /**

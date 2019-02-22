@@ -307,7 +307,7 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame Arrow optimization", {
+test_that("createDataFrame/collect Arrow optimization", {
   skip_if_not_installed("arrow")
 
   conf <- callJMethod(sparkSession, "conf")
@@ -332,7 +332,24 @@ test_that("createDataFrame Arrow optimization", {
   })
 })
 
-test_that("createDataFrame Arrow optimization - type specification", {
+test_that("createDataFrame/collect Arrow optimization - many partitions (partition order test)", {
+  skip_if_not_installed("arrow")
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    expect_equal(collect(createDataFrame(mtcars, numPartitions = 32)),
+                 collect(createDataFrame(mtcars, numPartitions = 1)))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("createDataFrame/collect Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
   rdf <- data.frame(list(list(a = 1,
                               b = "a",
@@ -3564,11 +3581,15 @@ test_that("gapply() Arrow optimization", {
                      stopifnot(is.numeric(key[[1]]))
                    }
                    stopifnot(class(grouped) == "data.frame")
+                   stopifnot(length(colnames(grouped)) == 11)
+                   # mtcars' hp is more then 50.
+                   stopifnot(all(grouped$hp > 50))
                    grouped
                  },
                  schema(df))
     actual <- collect(ret)
     expect_equal(actual, expected)
+    expect_equal(count(ret), nrow(mtcars))
   },
   finally = {
     # Resetting the conf back to default value

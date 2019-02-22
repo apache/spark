@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, RateCo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.writer.streaming.SupportsOutputMode
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
 
@@ -513,13 +514,16 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: StreamingWriteSupportProvider =>
-        val writer = s.createStreamingWriteSupport(
-          s"$runId",
-          newAttributePlan.schema,
-          outputMode,
-          new DataSourceOptions(extraOptions.asJava))
-        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, writer), newAttributePlan)
+      case s: SupportsStreamingWrite =>
+        // TODO: we should translate OutputMode to concrete write actions like truncate, but
+        // the truncate action is being developed in SPARK-26666.
+        val writeBuilder = s.newWriteBuilder(new DataSourceOptions(extraOptions.asJava))
+          .withQueryId(runId.toString)
+          .withInputDataSchema(newAttributePlan.schema)
+        val streamingWrite = writeBuilder.asInstanceOf[SupportsOutputMode]
+          .outputMode(outputMode)
+          .buildForStreaming()
+        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, streamingWrite), newAttributePlan)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
@@ -549,7 +553,7 @@ class MicroBatchExecution(
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
-          case _: StreamingWriteSupportProvider =>
+          case _: SupportsStreamingWrite =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }
