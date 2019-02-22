@@ -139,7 +139,7 @@ object ScalaReflection extends ScalaReflection {
    * This method help us "remember" the required data type by adding a `UpCast`. Note that we
    * only need to do this for leaf nodes.
    */
-  private def upCastToExpectedType(expr: Expression, expected: DataType,
+  private[spark] def upCastToExpectedType(expr: Expression, expected: DataType,
       walkedTypePath: Seq[String]): Expression = expected match {
     case _: StructType => expr
     case _: ArrayType => expr
@@ -349,10 +349,18 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
+        val classNameForKey = getClassNameFromType(keyType)
+        val classNameForValue = getClassNameFromType(valueType)
+
+        val newTypePath =
+          s"""- map key class: "$classNameForKey",
+             | value class: "$classNameForValue"""".stripMargin +:
+          walkedTypePath
+
         UnresolvedCatalystToExternalMap(
           path,
-          p => deserializerFor(keyType, p, walkedTypePath),
-          p => deserializerFor(valueType, p, walkedTypePath),
+          p => deserializerFor(keyType, p, newTypePath),
+          p => deserializerFor(valueType, p, newTypePath),
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
