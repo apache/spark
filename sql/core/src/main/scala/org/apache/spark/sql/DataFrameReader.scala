@@ -513,6 +513,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     //   - TextInputCSVDataSource - Only uses firstLine to infer an unspecified schema
     //   - CSVHeaderChecker       - Only uses firstLine to check header, when headerFlag is true
     //   - CSVUtils               - Only uses firstLine to filter headers, when headerFlag is true
+    // (If the downstream logic grows more complicated, consider refactoring to an approach that
+    //  delegates this decision to the constituent consumers themselves.)
     val maybeFirstLine: Option[String] =
       if (userSpecifiedSchema.isEmpty || parsedOptions.headerFlag) {
         filteredLines.take(1).headOption
