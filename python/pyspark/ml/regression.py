@@ -793,8 +793,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     0.0
 
     >>> df3 = spark.createDataFrame([
-    ...     (1.0, 0.2, 1.0, Vectors.dense(1.0)),
-    ...     (1.0, 0.8, 1.0, Vectors.dense(1.0)),
+    ...     (1.0, 0.2, Vectors.dense(1.0)),
+    ...     (1.0, 0.8, Vectors.dense(1.0)),
     ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> dt3 = DecisionTreeRegressor(maxDepth=2, weightCol="weight", varianceCol="variance")
     >>> model3 = dt3.fit(df3)
