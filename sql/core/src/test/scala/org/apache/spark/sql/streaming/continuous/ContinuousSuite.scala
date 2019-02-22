@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -356,7 +357,7 @@ class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
   // This test forces the backlog to overflow by not standing up enough executors for the query
   // to make progress.
   test("epoch backlog overflow") {
-    withSQLConf(("spark.sql.streaming.continuous.epochBacklogQueueSize", "10")) {
+    withSQLConf((CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE.key, "10")) {
       val df = spark.readStream
         .format("rate")
         .option("numPartitions", "2")

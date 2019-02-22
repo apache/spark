@@ -27,6 +27,7 @@ import org.apache.spark._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
@@ -55,7 +56,7 @@ class EpochCoordinatorSuite
     new SparkContext(
       "local[2]", "test-sql-context",
       new SparkConf().set("spark.sql.testkey", "true")
-        .set("spark.sql.streaming.continuous.epochBacklogQueueSize",
+        .set(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE.key,
           epochBacklogQueueSize.toString)))
 
     epochCoordinator
@@ -193,14 +194,11 @@ class EpochCoordinatorSuite
   }
 
   test("several epochs, max epoch backlog reached by partitionOffsets") {
-
     setWriterPartitions(1)
     setReaderPartitions(1)
 
     reportPartitionOffset(0, 1)
-
     // Commit messages not arriving
-
     for (i <- 2 to epochBacklogQueueSize + 1) {
       reportPartitionOffset(0, i)
     }
@@ -214,14 +212,11 @@ class EpochCoordinatorSuite
   }
 
   test("several epochs, max epoch backlog reached by partitionCommits") {
-
     setWriterPartitions(1)
     setReaderPartitions(1)
 
     commitPartitionEpoch(0, 1)
-
     // Offset messages not arriving
-
     for (i <- 2 to epochBacklogQueueSize + 1) {
       commitPartitionEpoch(0, i)
     }
@@ -235,7 +230,6 @@ class EpochCoordinatorSuite
   }
 
   test("several epochs, max epoch backlog reached by epochsWaitingToBeCommitted") {
-
     setWriterPartitions(2)
     setReaderPartitions(2)
 
@@ -243,7 +237,6 @@ class EpochCoordinatorSuite
     reportPartitionOffset(0, 1)
 
     // For partition 2 epoch 1 messages never arriving
-
     // +2 because the first epoch not yet arrived
     for (i <- 2 to epochBacklogQueueSize + 2) {
       commitPartitionEpoch(0, i)
