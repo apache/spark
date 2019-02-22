@@ -144,11 +144,6 @@ class SorterSuite extends SparkFunSuite with Logging {
     // scalastyle:on
     val arrayToSortSize = 1091482190
     val arrayToSort = new Array[Byte](arrayToSortSize)
-    var i = 0
-    while (i < arrayToSortSize) {
-      arrayToSort(i) = 0
-      i += 1
-    }
     var sum = -1
     for (i <- runLengths) {
       sum += i
