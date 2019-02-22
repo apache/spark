@@ -84,7 +84,7 @@ GIT_REF=${GIT_REF:-master}
 
 RELEASE_STAGING_LOCATION="https://dist.apache.org/repos/dist/dev/spark"
 
-GPG="gpg -u $GPG_KEY --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch --pinentry-mode loopback"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
