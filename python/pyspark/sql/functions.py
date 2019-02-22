@@ -2088,7 +2088,10 @@ def array_except(col1, col2):
 
 @since(1.4)
 def explode(col):
-    """Returns a new row for each element in the given array or map.
+    """
+    Returns a new row for each element in the given array or map.
+    Uses the default column name `col` for elements in the array and
+    `key` and `value` for elements in the map unless specified otherwise.
 
     >>> from pyspark.sql import Row
     >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
@@ -2109,7 +2112,10 @@ def explode(col):
 
 @since(2.1)
 def posexplode(col):
-    """Returns a new row for each element with position in the given array or map.
+    """
+    Returns a new row for each element with position in the given array or map.
+    Uses the default column name `pos` for position, and `col` for elements in the
+    array and `key` and `value` for elements in the map unless specified otherwise.
 
     >>> from pyspark.sql import Row
     >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
@@ -2130,8 +2136,11 @@ def posexplode(col):
 
 @since(2.3)
 def explode_outer(col):
-    """Returns a new row for each element in the given array or map.
+    """
+    Returns a new row for each element in the given array or map.
     Unlike explode, if the array/map is null or empty then null is produced.
+    Uses the default column name `col` for elements in the array and
+    `key` and `value` for elements in the map unless specified otherwise.
 
     >>> df = spark.createDataFrame(
     ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
@@ -2163,8 +2172,11 @@ def explode_outer(col):
 
 @since(2.3)
 def posexplode_outer(col):
-    """Returns a new row for each element with position in the given array or map.
+    """
+    Returns a new row for each element with position in the given array or map.
     Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
+    Uses the default column name `pos` for position, and `col` for elements in the
+    array and `key` and `value` for elements in the map unless specified otherwise.
 
     >>> df = spark.createDataFrame(
     ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
