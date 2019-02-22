@@ -5,7 +5,7 @@ displayTitle: SQL Reserved/Non-Reserved Keywords
 ---
 
 When `spark.sql.parser.ansi.enabled` is set to true (false by default), some keywords are reserved for Spark SQL.
-The reserved keywords cannot be used for identifiers (e.g., table names, view names, column names, column aliases) in a query.
+The reserved keywords cannot be used for identifiers (e.g., table names, view names, column names, column aliases) in queries.
 Note that there is one exception; table aliases (e.g., SELECT * FROM t AS t1) always follow the default mode
 (see a list below) regardless of the `spark.sql.parser.ansi.enabled` value. These reserved keywords in the ANSI mode basically
 follow the ANSI SQL-2011 standard, but it is slightly different between each other.
@@ -546,7 +546,7 @@ A full list of the reserved/non-reserved keywords is as follows:
   <tr><td>USAGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>USE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>USER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>USING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>USING</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
   <tr><td>VALUE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VALUES</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VALUE_OF</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>

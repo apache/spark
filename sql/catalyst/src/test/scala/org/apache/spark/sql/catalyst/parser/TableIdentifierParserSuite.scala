@@ -141,7 +141,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   val nonReservedKeywordsInAnsiMode = allCandidateKeywords -- reservedKeywordsInAnsiMode
 
   val reservedKeywordsInNonAnsiMode = Set("anti", "cross", "except", "full", "inner", "intersect",
-    "join", "left", "natural", "on", "right", "semi", "minus", "union")
+    "join", "left", "natural", "on", "right", "semi", "minus", "union", "using")
 
   val nonReservedKeywordsInNonAnsiMode = allCandidateKeywords -- reservedKeywordsInNonAnsiMode
 
