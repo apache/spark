@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, BitSet, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
 
@@ -187,6 +187,18 @@ private[spark] class TaskSetManager(
   // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
+  }
+
+  {
+    // TaskSet got submitted by DAGScheduler may have some already completed
+    // tasks since DAGScheduler does not always know all the tasks that have
+    // been completed by other tasksets when completing a stage, so we mark
+    // those tasks as finished here to avoid launching duplicate tasks, while
+    // holding the TaskSchedulerImpl lock.
+    // See SPARK-25250 and markPartitionCompletedInAllTaskSets()`
+    sched.stageIdToFinishedPartitions
+      .getOrElseUpdate(taskSet.stageId, new BitSet)
+      .foreach(markPartitionCompleted(_, None))
   }
 
   /**
@@ -786,7 +798,7 @@ private[spark] class TaskSetManager(
     }
     // There may be multiple tasksets for this stage -- we let all of them know that the partition
     // was completed.  This may result in some of the tasksets getting completed.
-    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
+    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, Some(info))
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -797,11 +809,12 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
+  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: Option[TaskInfo])
+  : Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
         if (speculationEnabled && !isZombie) {
-          successfulTaskDurations.insert(taskInfo.duration)
+          taskInfo.foreach { info => successfulTaskDurations.insert(info.duration) }
         }
         tasksSuccessful += 1
         successful(index) = true

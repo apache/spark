@@ -23,7 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.Set
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, BitSet, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark._
@@ -97,7 +97,7 @@ private[spark] class TaskSchedulerImpl(
   val taskIdToExecutorId = new HashMap[Long, String]
 
   // Protected by `this`
-  private[scheduler] val stageIdToFinishedPartitions = new HashMap[Int, HashSet[Int]]
+  private[scheduler] val stageIdToFinishedPartitions = new HashMap[Int, BitSet]
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
@@ -211,7 +211,7 @@ private[spark] class TaskSchedulerImpl(
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
       stageTaskSets(taskSet.stageAttemptId) = manager
       val conflictingTaskSet = stageTaskSets.exists { case (_, ts) =>
-        ts.taskSet != manager.taskSet && !ts.isZombie
+        ts.taskSet != taskSet && !ts.isZombie
       }
       if (conflictingTaskSet) {
         throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
@@ -241,13 +241,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    val finishedPartitions =
-      stageIdToFinishedPartitions.getOrElseUpdate(taskSet.stageId, new HashSet[Int])
-    // filter the task which has been finished by previous attempts
-    val tasks = taskSet.tasks.filterNot{ t => finishedPartitions(t.partitionId) }
-    val ts = new TaskSet(
-      tasks, taskSet.stageId, taskSet.stageAttemptId, taskSet.priority, taskSet.properties)
-    new TaskSetManager(this, ts, maxTaskFailures, blacklistTrackerOpt)
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -853,24 +847,20 @@ private[spark] class TaskSchedulerImpl(
    * If an earlier attempt of a stage completes a task, we should ensure that the later attempts
    * do not also submit those same tasks.  That also means that a task completion from an earlier
    * attempt can lead to the entire stage getting marked as successful.
-   * And there's a situation that the active TaskSetManager corresponding to the stage may
-   * haven't been created at the time we call this method. And it is possible since the behaviour
-   * of calling on this method and creating active TaskSetManager is from two different threads,
-   * which are "task-result-getter" and "dag-scheduler-event-loop" separately. Consequently, under
-   * this situation, the active TaskSetManager which is created later could not learn about the
-   * finished partitions and keep on launching duplicate tasks, which may lead to job fail for some
-   * severe cases, see SPARK-25250 for details. So, to avoid the problem, we record the finished
-   * partitions for that stage here and exclude the already finished tasks when we creating active
-   * TaskSetManagers later by looking into stageIdToFinishedPartitions. Thus, active TaskSetManager
-   * could be always notified about the finished partitions whether it has been created or not at
-   * the time we call this method.
+   * And there is also the possibility that the DAGScheduler submits another taskset at the same
+   * time as we're marking a task completed here -- that taskset would have a task for a partition
+   * that was already completed. We maintain the set of finished partitions in
+   * stageIdToFinishedPartitions, protected by this, so we can detect those tasks when the taskset
+   * is submitted. See SPARK-25250 for more details.
+   *
+   * note: this method must be called with a lock on this.
    */
   private[scheduler] def markPartitionCompletedInAllTaskSets(
       stageId: Int,
       partitionId: Int,
-      taskInfo: TaskInfo) = {
+      taskInfo: Option[TaskInfo]) = {
     val finishedPartitions =
-      stageIdToFinishedPartitions.getOrElseUpdate(stageId, new HashSet[Int])
+      stageIdToFinishedPartitions.getOrElseUpdate(stageId, new BitSet)
     finishedPartitions += partitionId
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.markPartitionCompleted(partitionId, taskInfo)
