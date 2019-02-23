@@ -149,10 +149,15 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
 
   def values: Seq[Expression]
   def query: ListQuery
-  def genCmp: (Expression, Expression) => BinaryComparison
+  def genCmp: (Expression, Expression) => Expression
   def symbol: String
 
-  @transient protected lazy val cmp: BinaryComparison = genCmp(value, query)
+  @transient protected lazy val cmpSymbol: String = genCmp(value, query) match {
+    case b: BinaryComparison =>
+      b.symbol
+    case _ @ Not(EqualTo(_, _)) =>
+      "!="
+  }
 
   @transient private lazy val value: Expression = if (values.length > 1) {
     CreateNamedStruct(values.zipWithIndex.flatMap {
@@ -214,7 +219,7 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
 object PredicateSubquery {
 
   def unapply(p: PredicateSubquery)
-    : Option[(Seq[Expression], ListQuery, (Expression, Expression) => BinaryComparison)] = {
+    : Option[(Seq[Expression], ListQuery, (Expression, Expression) => Expression)] = {
     Some(( p.values, p.query, p.genCmp))
   }
 }
@@ -225,9 +230,9 @@ object PredicateSubquery {
 case class AnySubquery(
     values: Seq[Expression],
     query: ListQuery,
-    genCmp: (Expression, Expression) => BinaryComparison) extends PredicateSubquery {
+    genCmp: (Expression, Expression) => Expression) extends PredicateSubquery {
 
-  override def symbol: String = s"${cmp.symbol} ANY"
+  override def symbol: String = s"$cmpSymbol ANY"
 }
 
 /**
@@ -237,7 +242,7 @@ case class AnySubquery(
 case class InSubquery(
     values: Seq[Expression],
     query: ListQuery,
-    genCmp: (Expression, Expression) => BinaryComparison) extends PredicateSubquery {
+    genCmp: (Expression, Expression) => Expression) extends PredicateSubquery {
 
   override def symbol: String = "IN"
 }
@@ -245,7 +250,7 @@ case class InSubquery(
 object InSubquery {
 
   def apply(values: Seq[Expression], query: ListQuery): InSubquery = {
-    new InSubquery(values, query, EqualTo)
+    InSubquery(values, query, EqualTo)
   }
 }
 

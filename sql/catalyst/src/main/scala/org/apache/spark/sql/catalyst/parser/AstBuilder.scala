@@ -1155,19 +1155,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.DISTINCT =>
         Not(EqualNullSafe(e, expression(ctx.right)))
       case SqlBaseParser.ANY | SqlBaseParser.SOME =>
-        val left = getValueExpressions(e)
-        val right = ListQuery(plan(ctx.query))
-        val operator = ctx.comparisonOperator
-        invertIfNotDefined(operator.getChild(0).asInstanceOf[TerminalNode].getSymbol.getType match {
-          // We need to specially handle negative forms here
-          case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
-            val genCmp = (left: Expression, right: Expression) => EqualTo(left, right)
-            Not(AnySubquery(left, right, genCmp))
-          case _ =>
-            val genCmp = getPredicate(operator)
-              .asInstanceOf[(Expression, Expression) => BinaryComparison]
-            AnySubquery(left, right, genCmp)
-        })
+        AnySubquery(
+          getValueExpressions(e),
+          ListQuery(plan(ctx.query)),
+          getPredicate(ctx.comparisonOperator))
     }
   }
 
