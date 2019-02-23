@@ -2052,16 +2052,11 @@ class DataFrame(object):
 
         :param func: a function that takes and returns a class:`DataFrame`.
 
-        >>> df = spark.createDataFrame([(1.1, 2), (2.2, 1)], ["float", "int"])
-        >>> def cast_all_to_str(input_df):
-        ...     return input_df.select([col(c_name).cast("string") for c_name in input_df.columns])
-        >>> df.transform(cast_all_to_str).show()
-        +------+----+
-        | float| int|
-        +------+----+
-        |   1.1|  2 |
-        |   2.2|  1 |
-        +------+----+
+        >>> input_df = spark.createDataFrame([Row(a=170.1, b=75.0)])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(c_name).cast("int") for c_name in input_df.columns])
+        >>> df.transform(cast_all_to_int).collect()
+        [Row(a=170), Row(b=75)]
         """
         result = func(self)
         assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
