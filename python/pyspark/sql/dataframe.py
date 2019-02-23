@@ -2052,7 +2052,7 @@ class DataFrame(object):
 
         :param func: a function that takes and returns a class:`DataFrame`.
 
-        >>> input_df = spark.createDataFrame([Row(a=170.1, b=75.0)])
+        >>> df = spark.createDataFrame([Row(a=170.1, b=75.0)])
         >>> def cast_all_to_int(input_df):
         ...     return input_df.select([col(c_name).cast("int") for c_name in input_df.columns])
         >>> df.transform(cast_all_to_int).collect()
