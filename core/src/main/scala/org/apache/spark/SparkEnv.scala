@@ -51,9 +51,6 @@ import org.apache.spark.util.{RpcUtils, Utils}
  * including the serializer, RpcEnv, block manager, map output tracker, etc. Currently
  * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
  * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
- *
- * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
- *       in a future release.
  */
 @DeveloperApi
 class SparkEnv (
