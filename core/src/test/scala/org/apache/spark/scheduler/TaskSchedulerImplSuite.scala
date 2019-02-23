@@ -1159,7 +1159,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       val index = finalTsm.partitionToIndex(partitionId)
       assert(finalTsm.successful(index))
     }
-    
+
     val offers = (0 until 5).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
     val finalAttemptLaunchedPartitions = taskScheduler.resourceOffers(offers).flatten.map { task =>
       finalAttempt.tasks(task.index).partitionId
