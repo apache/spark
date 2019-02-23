@@ -29,7 +29,6 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
