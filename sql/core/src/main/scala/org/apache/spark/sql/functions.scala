@@ -1273,6 +1273,14 @@ object functions {
   def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
 
   /**
+   * Computes bitwise NOT (~) of a number.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  def bitwiseNOT(columnName: String): Column = bitwiseNOT(Column(columnName))
+
+  /**
    * Parses the expression string into the column that it represents, similar to
    * [[Dataset#selectExpr]].
    * {{{
@@ -1300,6 +1308,14 @@ object functions {
    * @since 1.3.0
    */
   def abs(e: Column): Column = withExpr { Abs(e.expr) }
+
+  /**
+   * Computes the absolute value of a numeric value.
+   *
+   * @group math_funcs
+   * @since 1.3.0
+   */
+  def abs(columnName: String): Column = abs(Column(columnName))
 
   /**
    * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
@@ -2294,6 +2310,14 @@ object functions {
   def lower(e: Column): Column = withExpr { Lower(e.expr) }
 
   /**
+   * Converts a string column to lower case.
+   *
+   * @group string_funcs
+   * @since 1.3.0
+   */
+  def lower(columnName: String): Column = tanh(Column(columnName))
+
+  /**
    * Computes the Levenshtein distance of the two given string columns.
    * @group string_funcs
    * @since 1.5.0
@@ -2539,6 +2563,14 @@ object functions {
    * @since 1.3.0
    */
   def upper(e: Column): Column = withExpr { Upper(e.expr) }
+
+  /**
+   * Converts a string column to upper case.
+   *
+   * @group string_funcs
+   * @since 1.3.0
+   */
+  def upper(columnName: String): Column = upper(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
