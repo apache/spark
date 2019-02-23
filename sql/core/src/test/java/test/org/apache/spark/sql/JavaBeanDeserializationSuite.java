@@ -325,7 +325,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
   }
 
-  public final static class RecordSpark22000 {
+  public static final class RecordSpark22000 {
     private String shortField;
     private String intField;
     private String longField;
