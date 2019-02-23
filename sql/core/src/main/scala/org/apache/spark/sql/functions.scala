@@ -2315,7 +2315,7 @@ object functions {
    * @group string_funcs
    * @since 1.3.0
    */
-  def lower(columnName: String): Column = tanh(Column(columnName))
+  def lower(columnName: String): Column = lower(Column(columnName))
 
   /**
    * Computes the Levenshtein distance of the two given string columns.
