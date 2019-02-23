@@ -819,9 +819,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
-    // Test escaping of timezone
-    GenerateUnsafeProjection.generate(
-      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("\"quote")) :: Nil)
+  }
+
+  test("to_utc_timestamp - invalid time zone id") {
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(
+          ToUTCTimestamp(
+            Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
+    }
   }
 
   test("from_utc_timestamp") {
@@ -842,7 +850,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
-    // Test escaping of timezone
-    GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal("\"quote")) :: Nil)
+  }
+
+  test("from_utc_timestamp - invalid time zone id") {
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
+    }
   }
 }
