@@ -19,9 +19,11 @@ package org.apache.spark.util.collection
 
 import java.lang.{Float => JFloat}
 import java.util.{Arrays, Comparator}
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils.timeIt
 import org.apache.spark.util.random.XORShiftRandom
 
 class SorterSuite extends SparkFunSuite with Logging {
@@ -79,13 +81,13 @@ class SorterSuite extends SparkFunSuite with Logging {
       return
     }
 
-    val firstTry = org.apache.spark.util.Utils.timeIt(1)(f, Some(prepare))
+    val firstTry = TimeUnit.NANOSECONDS.toMillis(timeIt(1)(f, Some(prepare)))
     System.gc()
 
     var i = 0
     var next10: Long = 0
     while (i < 10) {
-      val time = org.apache.spark.util.Utils.timeIt(1)(f, Some(prepare))
+      val time = TimeUnit.NANOSECONDS.toMillis(timeIt(1)(f, Some(prepare)))
       next10 += time
       logInfo(s"$name: Took $time ms")
       i += 1

@@ -59,6 +59,9 @@ private[spark] object YarnContainerInfoHelper extends Logging {
       val yarnConf = new YarnConfiguration(conf)
       Some(Map(
         "HTTP_SCHEME" -> getYarnHttpScheme(yarnConf),
+        "NM_HOST" -> getNodeManagerHost(container),
+        "NM_PORT" -> getNodeManagerPort(container),
+        "NM_HTTP_PORT" -> getNodeManagerHttpPort(container),
         "NM_HTTP_ADDRESS" -> getNodeManagerHttpAddress(container),
         "CLUSTER_ID" -> getClusterId(yarnConf).getOrElse(""),
         "CONTAINER_ID" -> ConverterUtils.toString(getContainerId(container)),
@@ -97,7 +100,22 @@ private[spark] object YarnContainerInfoHelper extends Logging {
 
   def getNodeManagerHttpAddress(container: Option[Container]): String = container match {
     case Some(c) => c.getNodeHttpAddress
-    case None => System.getenv(Environment.NM_HOST.name()) + ":" +
-      System.getenv(Environment.NM_HTTP_PORT.name())
+    case None => getNodeManagerHost(None) + ":" + getNodeManagerHttpPort(None)
   }
+
+  def getNodeManagerHost(container: Option[Container]): String = container match {
+    case Some(c) => c.getNodeHttpAddress.split(":")(0)
+    case None => System.getenv(Environment.NM_HOST.name())
+  }
+
+  def getNodeManagerHttpPort(container: Option[Container]): String = container match {
+    case Some(c) => c.getNodeHttpAddress.split(":")(1)
+    case None => System.getenv(Environment.NM_HTTP_PORT.name())
+  }
+
+  def getNodeManagerPort(container: Option[Container]): String = container match {
+    case Some(_) => "-1" // Just return invalid port given we cannot retrieve the value
+    case None => System.getenv(Environment.NM_PORT.name())
+  }
+
 }

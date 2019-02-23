@@ -239,6 +239,7 @@ class MLEventsSuite
       events.map(JsonProtocol.sparkEventToJson).foreach { event =>
         assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
       }
+      sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
       events.clear()
       val pipelineReader = Pipeline.read
@@ -297,6 +298,7 @@ class MLEventsSuite
       events.map(JsonProtocol.sparkEventToJson).foreach { event =>
         assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
       }
+      sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
       events.clear()
       val pipelineModelReader = PipelineModel.read

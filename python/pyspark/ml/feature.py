@@ -2290,7 +2290,8 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("mean")
 
 
-class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol):
+class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol,
+                           HasInputCols, HasOutputCols):
     """
     Params for :py:attr:`StringIndexer` and :py:attr:`StringIndexerModel`.
     """
@@ -2298,7 +2299,10 @@ class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputC
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "How to order labels of string column. The first label after " +
                             "ordering is assigned an index of 0. Supported options: " +
-                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc. " +
+                            "Default is frequencyDesc. In case of equal frequency when " +
+                            "under frequencyDesc/Asc, the strings are further sorted " +
+                            "alphabetically",
                             typeConverter=TypeConverters.toString)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
@@ -2371,16 +2375,37 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> sorted(set([(i[0], i[1]) for i in result.select(result.id, result.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 2.0)]
+    >>> testData = sc.parallelize([Row(id=0, label1="a", label2="e"),
+    ...                            Row(id=1, label1="b", label2="f"),
+    ...                            Row(id=2, label1="c", label2="e"),
+    ...                            Row(id=3, label1="a", label2="f"),
+    ...                            Row(id=4, label1="a", label2="f"),
+    ...                            Row(id=5, label1="c", label2="f")], 3)
+    >>> multiRowDf = spark.createDataFrame(testData)
+    >>> inputs = ["label1", "label2"]
+    >>> outputs = ["index1", "index2"]
+    >>> stringIndexer = StringIndexer(inputCols=inputs, outputCols=outputs)
+    >>> model = stringIndexer.fit(multiRowDf)
+    >>> result = model.transform(multiRowDf)
+    >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
+    ...     result.index2).collect()]), key=lambda x: x[0])
+    [(0, 0.0, 1.0), (1, 2.0, 0.0), (2, 1.0, 1.0), (3, 0.0, 0.0), (4, 0.0, 0.0), (5, 1.0, 0.0)]
+    >>> fromlabelsModel = StringIndexerModel.from_arrays_of_labels([["a", "b", "c"], ["e", "f"]],
+    ...     inputCols=inputs, outputCols=outputs)
+    >>> result = fromlabelsModel.transform(multiRowDf)
+    >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
+    ...     result.index2).collect()]), key=lambda x: x[0])
+    [(0, 0.0, 0.0), (1, 1.0, 1.0), (2, 2.0, 0.0), (3, 0.0, 1.0), (4, 0.0, 1.0), (5, 2.0, 1.0)]
 
     .. versionadded:: 1.4.0
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
-                 stringOrderType="frequencyDesc"):
+    def __init__(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None,
+                 handleInvalid="error", stringOrderType="frequencyDesc"):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error", \
-                 stringOrderType="frequencyDesc")
+        __init__(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
+                 handleInvalid="error", stringOrderType="frequencyDesc")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
@@ -2389,11 +2414,11 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
-                  stringOrderType="frequencyDesc"):
+    def setParams(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None,
+                  handleInvalid="error", stringOrderType="frequencyDesc"):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error", \
-                  stringOrderType="frequencyDesc")
+        setParams(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
+                  handleInvalid="error", stringOrderType="frequencyDesc")
         Sets params for this StringIndexer.
         """
         kwargs = self._input_kwargs
@@ -2432,6 +2457,26 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
         model.setInputCol(inputCol)
         if outputCol is not None:
             model.setOutputCol(outputCol)
+        if handleInvalid is not None:
+            model.setHandleInvalid(handleInvalid)
+        return model
+
+    @classmethod
+    @since("3.0.0")
+    def from_arrays_of_labels(cls, arrayOfLabels, inputCols, outputCols=None,
+                              handleInvalid=None):
+        """
+        Construct the model directly from an array of array of label strings,
+        requires an active SparkContext.
+        """
+        sc = SparkContext._active_spark_context
+        java_class = sc._gateway.jvm.java.lang.String
+        jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
+        model = StringIndexerModel._create_from_java_class(
+            "org.apache.spark.ml.feature.StringIndexerModel", jlabels)
+        model.setInputCols(inputCols)
+        if outputCols is not None:
+            model.setOutputCols(outputCols)
         if handleInvalid is not None:
             model.setHandleInvalid(handleInvalid)
         return model
