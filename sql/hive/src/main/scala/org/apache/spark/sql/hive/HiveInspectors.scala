@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 
@@ -461,8 +461,7 @@ private[hive] trait HiveInspectors {
         _ => constant
       case poi: WritableConstantTimestampObjectInspector =>
         val t = poi.getWritableConstantValue
-        val constant = TimeUnit.SECONDS.toMicros(t.getSeconds) +
-          TimeUnit.NANOSECONDS.toMicros(t.getNanos)
+        val constant = SECONDS.toMicros(t.getSeconds) + NANOSECONDS.toMicros(t.getNanos)
         _ => constant
       case poi: WritableConstantIntObjectInspector =>
         val constant = poi.getWritableConstantValue.get()
@@ -631,7 +630,7 @@ private[hive] trait HiveInspectors {
           data: Any => {
             if (data != null) {
               val t = x.getPrimitiveWritableObject(data)
-              TimeUnit.SECONDS.toMicros(t.getSeconds) + TimeUnit.NANOSECONDS.toMicros(t.getNanos)
+              SECONDS.toMicros(t.getSeconds) + NANOSECONDS.toMicros(t.getNanos)
             } else {
               null
             }

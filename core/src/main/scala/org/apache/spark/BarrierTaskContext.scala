@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.util.{Properties, Timer, TimerTask}
-import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -110,7 +109,7 @@ class BarrierTaskContext private[spark] (
       override def run(): Unit = {
         logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) waiting " +
           s"under the global sync since $startTime, has been waiting for " +
-          s"${TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
           s"current barrier epoch is $barrierEpoch.")
       }
     }
@@ -127,13 +126,13 @@ class BarrierTaskContext private[spark] (
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
         "global sync successfully, waited for " +
-        s"${TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+        s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
         s"current barrier epoch is $barrierEpoch.")
     } catch {
       case e: SparkException =>
         logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
           "to perform global sync, waited for " +
-          s"${TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
           s"current barrier epoch is $barrierEpoch.")
         throw e
     } finally {

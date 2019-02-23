@@ -50,7 +50,7 @@ private[spark] object UIUtils extends Logging {
     if (milliseconds < 100) {
       return "%d ms".format(milliseconds)
     }
-    val seconds = milliseconds.toDouble
+    val seconds = milliseconds.toDouble / 1000
     if (seconds < 1) {
       return "%.1f s".format(seconds)
     }
