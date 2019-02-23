@@ -44,6 +44,11 @@ grammar SqlBase;
       return true;
     }
   }
+
+  /**
+   * When true, ANSI SQL parsing mode is enabled.
+   */
+  public boolean ansi = false;
 }
 
 singleStatement
@@ -721,14 +726,15 @@ qualifiedName
 
 identifier
     : strictIdentifier
-    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT | SETMINUS
+    | {ansi}? ansiReserved
+    | {!ansi}? defaultReserved
     ;
 
 strictIdentifier
-    : IDENTIFIER             #unquotedIdentifier
-    | quotedIdentifier       #quotedIdentifierAlternative
-    | nonReserved            #unquotedIdentifier
+    : IDENTIFIER              #unquotedIdentifier
+    | quotedIdentifier        #quotedIdentifierAlternative
+    | {ansi}? ansiNonReserved #unquotedIdentifier
+    | {!ansi}? nonReserved    #unquotedIdentifier
     ;
 
 quotedIdentifier
@@ -743,6 +749,48 @@ number
     | MINUS? TINYINT_LITERAL          #tinyIntLiteral
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
+    ;
+
+// NOTE: You must follow a rule below when you add a new ANTLR taken in this file:
+//  - All the ANTLR tokens = UNION(`ansiReserved`, `ansiNonReserved`) = UNION(`defaultReserved`, `nonReserved`)
+//
+// Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
+// value. In this case, you must add a token `NEWTOKEN` in both `ansiNonReserved` and `nonReserved`.
+
+// The list of the reserved keywords when `spark.sql.parser.ansi.enabled` is true. Currently, we only reserve
+// the ANSI keywords that almost all the ANSI SQL standards (SQL-92, SQL-99, SQL-2003, SQL-2008, SQL-2011,
+// and SQL-2016) and PostgreSQL reserve.
+ansiReserved
+    : ALL | AND | ANTI | ANY | AS | AUTHORIZATION | BOTH | CASE | CAST | CHECK | COLLATE | COLUMN | CONSTRAINT | CREATE
+    | CROSS | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP | CURRENT_USER | DISTINCT | ELSE | END | EXCEPT | FALSE
+    | FETCH | FOR | FOREIGN | FROM | FULL | GRANT | GROUP | HAVING | IN | INNER | INTERSECT | INTO | JOIN | IS
+    | LEADING | LEFT | NATURAL | NOT | NULL | ON | ONLY | OR | ORDER | OUTER | OVERLAPS | PRIMARY | REFERENCES | RIGHT
+    | SELECT | SEMI | SESSION_USER | SETMINUS | SOME | TABLE | THEN | TO | TRAILING | UNION | UNIQUE | USER | USING
+    | WHEN | WHERE | WITH
+    ;
+
+
+// The list of the non-reserved keywords when `spark.sql.parser.ansi.enabled` is true.
+ansiNonReserved
+    : ADD | AFTER | ALTER | ANALYZE | ARCHIVE | ARRAY | ASC | AT | BETWEEN | BUCKET | BUCKETS | BY | CACHE | CASCADE
+    | CHANGE | CLEAR | CLUSTER | CLUSTERED | CODEGEN | COLLECTION | COLUMNS | COMMENT | COMMIT | COMPACT | COMPACTIONS
+    | COMPUTE | CONCATENATE | COST | CUBE | CURRENT | DATA | DATABASE | DATABASES | DBPROPERTIES | DEFINED | DELETE
+    | DELIMITED | DESC | DESCRIBE | DFS | DIRECTORIES | DIRECTORY | DISTRIBUTE | DIV | DROP | ESCAPED | EXCHANGE
+    | EXISTS | EXPLAIN | EXPORT | EXTENDED | EXTERNAL | EXTRACT | FIELDS | FILEFORMAT | FIRST | FOLLOWING | FORMAT
+    | FORMATTED | FUNCTION | FUNCTIONS | GLOBAL | GROUPING | IF | IGNORE | IMPORT | INDEX | INDEXES | INPATH
+    | INPUTFORMAT | INSERT | INTERVAL | ITEMS | KEYS | LAST | LATERAL | LAZY | LIKE | LIMIT | LINES | LIST | LOAD
+    | LOCAL | LOCATION | LOCK | LOCKS | LOGICAL | MACRO | MAP | MSCK | NO | NULLS | OF | OPTION | OPTIONS | OUT
+    | OUTPUTFORMAT | OVER | OVERWRITE | PARTITION | PARTITIONED | PARTITIONS | PERCENT | PERCENTLIT | PIVOT | PRECEDING
+    | PRINCIPALS | PURGE | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFRESH | RENAME | REPAIR | REPLACE
+    | RESET | RESTRICT | REVOKE | RLIKE | ROLE | ROLES | ROLLBACK | ROLLUP | ROW | ROWS | SCHEMA | SEPARATED | SERDE
+    | SERDEPROPERTIES | SET | SETS | SHOW | SKEWED | SORT | SORTED | START | STATISTICS | STORED | STRATIFY | STRUCT
+    | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY | TERMINATED | TOUCH | TRANSACTION | TRANSACTIONS | TRANSFORM
+    | TRUE | TRUNCATE | UNARCHIVE | UNBOUNDED | UNCACHE | UNLOCK | UNSET | USE | VALUES | VIEW | WINDOW
+    ;
+
+defaultReserved
+    : ANTI | CROSS | EXCEPT | FULL | INNER | INTERSECT | JOIN | LEFT | NATURAL | ON | RIGHT | SEMI | SETMINUS | UNION
+    | USING
     ;
 
 nonReserved
@@ -772,7 +820,6 @@ ADD: 'ADD';
 AS: 'AS';
 ALL: 'ALL';
 ANY: 'ANY';
-SOME: 'SOME';
 DISTINCT: 'DISTINCT';
 WHERE: 'WHERE';
 GROUP: 'GROUP';
@@ -1001,6 +1048,24 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
+AUTHORIZATION: 'AUTHORIZATION';
+CHECK: 'CHECK';
+COLLATE: 'COLLATE';
+CONSTRAINT: 'CONSTRAINT';
+CURRENT_DATE: 'CURRENT_DATE';
+CURRENT_TIME: 'CURRENT_TIME';
+CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
+CURRENT_USER: 'CURRENT_USER';
+FETCH: 'FETCH';
+FOREIGN: 'FOREIGN';
+ONLY: 'ONLY';
+OVERLAPS: 'OVERLAPS';
+PRIMARY: 'PRIMARY';
+REFERENCES: 'REFERENCES';
+SESSION_USER: 'SESSION_USER';
+SOME: 'SOME';
+UNIQUE: 'UNIQUE';
+USER: 'USER';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
