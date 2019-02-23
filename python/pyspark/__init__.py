@@ -16,7 +16,7 @@
 #
 
 """
-PySpark is the Python API for Spark
+PySpark is the Python API for Spark.
 
 Public classes:
 
