@@ -477,6 +477,9 @@ private object YarnClusterDriver extends Logging with Matchers {
         val driverAttributes = listener.driverAttributes.get
         val expectationAttributes = Map(
           "HTTP_SCHEME" -> YarnContainerInfoHelper.getYarnHttpScheme(yarnConf),
+          "NM_HOST" -> YarnContainerInfoHelper.getNodeManagerHost(container = None),
+          "NM_PORT" -> YarnContainerInfoHelper.getNodeManagerPort(container = None),
+          "NM_HTTP_PORT" -> YarnContainerInfoHelper.getNodeManagerHttpPort(container = None),
           "NM_HTTP_ADDRESS" -> YarnContainerInfoHelper.getNodeManagerHttpAddress(container = None),
           "CLUSTER_ID" -> YarnContainerInfoHelper.getClusterId(yarnConf).getOrElse(""),
           "CONTAINER_ID" -> ConverterUtils.toString(containerId),

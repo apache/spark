@@ -20,7 +20,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, Table}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 class OrcDataSourceV2 extends FileDataSourceV2 {
 
@@ -34,13 +34,28 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
 
   override def getTable(options: DataSourceOptions): Table = {
     val tableName = getTableName(options)
-    val fileIndex = getFileIndex(options, None)
-    OrcTable(tableName, sparkSession, fileIndex, None)
+    OrcTable(tableName, sparkSession, options, None)
   }
 
   override def getTable(options: DataSourceOptions, schema: StructType): Table = {
     val tableName = getTableName(options)
-    val fileIndex = getFileIndex(options, Some(schema))
-    OrcTable(tableName, sparkSession, fileIndex, Some(schema))
+    OrcTable(tableName, sparkSession, options, Some(schema))
+  }
+}
+
+object OrcDataSourceV2 {
+  def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case st: StructType => st.forall { f => supportsDataType(f.dataType) }
+
+    case ArrayType(elementType, _) => supportsDataType(elementType)
+
+    case MapType(keyType, valueType, _) =>
+      supportsDataType(keyType) && supportsDataType(valueType)
+
+    case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
+
+    case _ => false
   }
 }

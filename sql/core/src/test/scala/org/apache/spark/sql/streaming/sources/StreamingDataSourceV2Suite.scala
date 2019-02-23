@@ -26,7 +26,7 @@ import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2.writer.WriteBuilder
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -71,13 +71,10 @@ trait FakeContinuousReadTable extends Table with SupportsContinuousRead {
   override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new FakeScanBuilder
 }
 
-trait FakeStreamingWriteSupportProvider extends StreamingWriteSupportProvider {
-  override def createStreamingWriteSupport(
-      queryId: String,
-      schema: StructType,
-      mode: OutputMode,
-      options: DataSourceOptions): StreamingWriteSupport = {
-    LastWriteOptions.options = options
+trait FakeStreamingWriteTable extends Table with SupportsStreamingWrite {
+  override def name(): String = "fake"
+  override def schema(): StructType = StructType(Seq())
+  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }
 }
@@ -129,19 +126,32 @@ class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
   }
 }
 
-class FakeWriteSupportProvider
+class FakeWriteOnly
     extends DataSourceRegister
-    with FakeStreamingWriteSupportProvider
+    with TableProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-write-microbatch-continuous"
 
   override def keyPrefix: String = shortName()
+
+  override def getTable(options: DataSourceOptions): Table = {
+    LastWriteOptions.options = options
+    new Table with FakeStreamingWriteTable {
+      override def name(): String = "fake"
+      override def schema(): StructType = StructType(Nil)
+    }
+  }
 }
 
-class FakeNoWrite extends DataSourceRegister {
+class FakeNoWrite extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-write-neither-mode"
+  override def getTable(options: DataSourceOptions): Table = {
+    new Table {
+      override def name(): String = "fake"
+      override def schema(): StructType = StructType(Nil)
+    }
+  }
 }
-
 
 case class FakeWriteV1FallbackException() extends Exception
 
@@ -150,17 +160,24 @@ class FakeSink extends Sink {
 }
 
 class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
-  with FakeStreamingWriteSupportProvider with StreamSinkProvider {
+  with TableProvider with StreamSinkProvider {
 
   override def createSink(
-    sqlContext: SQLContext,
-    parameters: Map[String, String],
-    partitionColumns: Seq[String],
-    outputMode: OutputMode): Sink = {
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      partitionColumns: Seq[String],
+      outputMode: OutputMode): Sink = {
     new FakeSink()
   }
 
   override def shortName(): String = "fake-write-v1-fallback"
+
+  override def getTable(options: DataSourceOptions): Table = {
+    new Table with FakeStreamingWriteTable {
+      override def name(): String = "fake"
+      override def schema(): StructType = StructType(Nil)
+    }
+  }
 }
 
 object LastReadOptions {
@@ -260,7 +277,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     testPositiveCaseWithQuery(
       "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once()) { v2Query =>
       assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
-        .isInstanceOf[FakeWriteSupportProviderV1Fallback])
+        .isInstanceOf[Table])
     }
 
     // Ensure we create a V1 sink with the config. Note the config is a comma separated
@@ -319,19 +336,20 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
-      val table = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
+      val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
         .newInstance().asInstanceOf[TableProvider].getTable(DataSourceOptions.empty())
-      val writeSource = DataSource.lookupDataSource(write, spark.sqlContext.conf).
-        getConstructor().newInstance()
 
-      (table, writeSource, trigger) match {
+      val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
+        .newInstance().asInstanceOf[TableProvider].getTable(DataSourceOptions.empty())
+
+      (sourceTable, sinkTable, trigger) match {
         // Valid microbatch queries.
-        case (_: SupportsMicroBatchRead, _: StreamingWriteSupportProvider, t)
+        case (_: SupportsMicroBatchRead, _: SupportsStreamingWrite, t)
             if !t.isInstanceOf[ContinuousTrigger] =>
           testPositiveCase(read, write, trigger)
 
         // Valid continuous queries.
-        case (_: SupportsContinuousRead, _: StreamingWriteSupportProvider,
+        case (_: SupportsContinuousRead, _: SupportsStreamingWrite,
               _: ContinuousTrigger) =>
           testPositiveCase(read, write, trigger)
 
@@ -342,12 +360,12 @@ class StreamingDataSourceV2Suite extends StreamTest {
             s"Data source $read does not support streamed reading")
 
         // Invalid - can't write
-        case (_, w, _) if !w.isInstanceOf[StreamingWriteSupportProvider] =>
+        case (_, w, _) if !w.isInstanceOf[SupportsStreamingWrite] =>
           testNegativeCase(read, write, trigger,
             s"Data source $write does not support streamed writing")
 
         // Invalid - trigger is continuous but reader is not
-        case (r, _: StreamingWriteSupportProvider, _: ContinuousTrigger)
+        case (r, _: SupportsStreamingWrite, _: ContinuousTrigger)
             if !r.isInstanceOf[SupportsContinuousRead] =>
           testNegativeCase(read, write, trigger,
             s"Data source $read does not support continuous processing")
