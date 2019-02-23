@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
@@ -132,7 +133,7 @@ package object util extends Logging {
     val ret = f
     val endTime = System.nanoTime()
     // scalastyle:off println
-    println(s"${(endTime - startTime).toDouble / 1000000}ms")
+    println(s"${(endTime - startTime).toDouble / TimeUnit.MILLISECONDS.toNanos(1)} ms")
     // scalastyle:on println
     ret
   }
