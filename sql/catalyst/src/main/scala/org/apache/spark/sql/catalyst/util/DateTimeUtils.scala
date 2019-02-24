@@ -46,6 +46,7 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
   final val NANOS_PER_MICROS = MICROSECONDS.toNanos(1)
+  final val NANOS_PER_MILLIS = MILLISECONDS.toNanos(1)
   final val NANOS_PER_SECOND = SECONDS.toNanos(1)
   final val MICROS_PER_MILLIS = MILLISECONDS.toMicros(1)
   final val MICROS_PER_SECOND = SECONDS.toMicros(1)
