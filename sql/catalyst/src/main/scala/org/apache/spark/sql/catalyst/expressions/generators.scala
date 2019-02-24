@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -101,7 +102,7 @@ case class UserDefinedGenerator(
     inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map { e =>
-        StructField(e.simpleString, e.dataType, nullable = true)
+        StructField(e.simpleString(SQLConf.get.maxToStringFields), e.dataType, nullable = true)
       })
       CatalystTypeConverters.createToScalaConverter(inputSchema)
     }.asInstanceOf[InternalRow => Row]

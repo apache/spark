@@ -631,8 +631,11 @@ object ScalaReflection extends ScalaReflection {
               "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
           }
 
-          val fieldValue = Invoke(
-            AssertNotNull(inputObject, walkedTypePath), fieldName, dataTypeFor(fieldType),
+          // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
+          // is necessary here. Because for a nullable nested inputObject with struct data
+          // type, e.g. StructType(IntegerType, StringType), it will return nullable=true
+          // for IntegerType without KnownNotNull. And that's what we do not expect to.
+          val fieldValue = Invoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
             returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
@@ -955,23 +958,6 @@ trait ScalaReflection extends Logging {
    */
   def getClassNameFromType(tpe: `Type`): String = {
     tpe.dealias.erasure.typeSymbol.asClass.fullName
-  }
-
-  /**
-   * Returns the nullability of the input parameter types of the scala function object.
-   *
-   * Note that this only works with Scala 2.11, and the information returned may be inaccurate if
-   * used with a different Scala version.
-   */
-  def getParameterTypeNullability(func: AnyRef): Seq[Boolean] = {
-    if (!Properties.versionString.contains("2.11")) {
-      logWarning(s"Scala ${Properties.versionString} cannot get type nullability correctly via " +
-        "reflection, thus Spark cannot add proper input null check for UDF. To avoid this " +
-        "problem, use the typed UDF interfaces instead.")
-    }
-    val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
-    assert(methods.length == 1)
-    methods.head.getParameterTypes.map(!_.isPrimitive)
   }
 
   /**

@@ -1,4 +1,19 @@
 [ {
+  "id" : "application_1538416563558_0014",
+  "name" : "PythonBisectingKMeansExample",
+  "attempts" : [ {
+    "startTime" : "2018-10-02T00:42:39.580GMT",
+    "endTime" : "2018-10-02T00:44:02.338GMT",
+    "lastUpdated" : "",
+    "duration" : 82758,
+    "sparkUser" : "root",
+    "completed" : true,
+    "appSparkVersion" : "2.5.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1538440959580,
+    "endTimeEpoch" : 1538441042338
+  } ]
+}, {
   "id" : "application_1506645932520_24630151",
   "name" : "Spark shell",
   "attempts" : [ {
@@ -27,20 +42,5 @@
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1516300235119,
     "endTimeEpoch" : 1516300707938
-  } ]
-}, {
-  "id" : "app-20180109111548-0000",
-  "name" : "Spark shell",
-  "attempts" : [ {
-    "startTime" : "2018-01-09T10:15:42.372GMT",
-    "endTime" : "2018-01-09T10:24:37.606GMT",
-    "lastUpdated" : "",
-    "duration" : 535234,
-    "sparkUser" : "attilapiros",
-    "completed" : true,
-    "appSparkVersion" : "2.3.0-SNAPSHOT",
-    "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1515492942372,
-    "endTimeEpoch" : 1515493477606
   } ]
 } ]

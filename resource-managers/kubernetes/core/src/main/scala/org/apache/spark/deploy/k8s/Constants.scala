@@ -87,25 +87,22 @@ private[spark] object Constants {
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
 
   // Hadoop Configuration
-  val HADOOP_FILE_VOLUME = "hadoop-properties"
+  val HADOOP_CONF_VOLUME = "hadoop-properties"
   val KRB_FILE_VOLUME = "krb5-file"
   val HADOOP_CONF_DIR_PATH = "/opt/hadoop/conf"
   val KRB_FILE_DIR_PATH = "/etc"
   val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
   val HADOOP_CONFIG_MAP_NAME =
     "spark.kubernetes.executor.hadoopConfigMapName"
-  val KRB5_CONFIG_MAP_NAME =
-    "spark.kubernetes.executor.krb5ConfigMapName"
 
   // Kerberos Configuration
-  val KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME = "delegation-tokens"
   val KERBEROS_DT_SECRET_NAME =
     "spark.kubernetes.kerberos.dt-secret-name"
   val KERBEROS_DT_SECRET_KEY =
     "spark.kubernetes.kerberos.dt-secret-key"
-  val KERBEROS_SPARK_USER_NAME =
-    "spark.kubernetes.kerberos.spark-user-name"
   val KERBEROS_SECRET_KEY = "hadoop-tokens"
+  val KERBEROS_KEYTAB_VOLUME = "kerberos-keytab"
+  val KERBEROS_KEYTAB_MOUNT_POINT = "/mnt/secrets/kerberos-keytab"
 
   // Hadoop credentials secrets for the Spark app.
   val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"

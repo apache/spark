@@ -17,17 +17,19 @@
 
 package org.apache.spark.serializer
 
+import org.apache.spark.internal.config.Kryo._
+
 class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
 
   // This test suite should run all tests in KryoSerializerSuite with kryo unsafe.
 
   override def beforeAll() {
-    conf.set("spark.kryo.unsafe", "true")
+    conf.set(KRYO_USE_UNSAFE, true)
     super.beforeAll()
   }
 
   override def afterAll() {
-    conf.set("spark.kryo.unsafe", "false")
+    conf.set(KRYO_USE_UNSAFE, false)
     super.afterAll()
   }
 }

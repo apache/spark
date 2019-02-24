@@ -20,6 +20,7 @@ package org.apache.spark.network;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.codahale.metrics.Counter;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
@@ -66,6 +67,8 @@ public class TransportContext {
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
   private final boolean isClientOnly;
+  // Number of registered connections to the shuffle service
+  private Counter registeredConnections = new Counter();
 
   /**
    * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
@@ -85,7 +88,7 @@ public class TransportContext {
   // Separate thread pool for handling ChunkFetchRequest. This helps to enable throttling
   // max number of TransportServer worker threads that are blocked on writing response
   // of ChunkFetchRequest message back to the client via the underlying channel.
-  private static EventLoopGroup chunkFetchWorkers;
+  private final EventLoopGroup chunkFetchWorkers;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this(conf, rpcHandler, false, false);
@@ -119,16 +122,15 @@ public class TransportContext {
     this.closeIdleConnections = closeIdleConnections;
     this.isClientOnly = isClientOnly;
 
-    synchronized(TransportContext.class) {
-      if (chunkFetchWorkers == null &&
-          conf.getModuleName() != null &&
-          conf.getModuleName().equalsIgnoreCase("shuffle") &&
-          !isClientOnly) {
-        chunkFetchWorkers = NettyUtils.createEventLoop(
-            IOMode.valueOf(conf.ioMode()),
-            conf.chunkFetchHandlerThreads(),
-            "shuffle-chunk-fetch-handler");
-      }
+    if (conf.getModuleName() != null &&
+        conf.getModuleName().equalsIgnoreCase("shuffle") &&
+        !isClientOnly) {
+      chunkFetchWorkers = NettyUtils.createEventLoop(
+          IOMode.valueOf(conf.ioMode()),
+          conf.chunkFetchHandlerThreads(),
+          "shuffle-chunk-fetch-handler");
+    } else {
+      chunkFetchWorkers = null;
     }
   }
 
@@ -221,7 +223,7 @@ public class TransportContext {
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler, conf.maxChunksBeingTransferred());
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs(), closeIdleConnections);
+      conf.connectionTimeoutMs(), closeIdleConnections, this);
   }
 
   /**
@@ -234,4 +236,8 @@ public class TransportContext {
   }
 
   public TransportConf getConf() { return conf; }
+
+  public Counter getRegisteredConnections() {
+    return registeredConnections;
+  }
 }

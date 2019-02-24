@@ -20,7 +20,7 @@ import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentMatcher, Matchers, Mock, MockitoAnnotations}
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -80,8 +80,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(driverPodName)).thenReturn(driverPodOperations)
     when(driverPodOperations.get).thenReturn(driverPod)
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr)))
-      .thenAnswer(executorPodAnswer())
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      meq(kubernetesClient))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     waitForExecutorPodsClock = new ManualClock(0L)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -156,7 +156,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private def executorPodAnswer(): Answer[SparkPod] = {
     new Answer[SparkPod] {
       override def answer(invocation: InvocationOnMock): SparkPod = {
-        val k8sConf = invocation.getArgumentAt(0, classOf[KubernetesExecutorConf])
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
         executorPodWithId(k8sConf.executorId.toInt)
       }
     }

@@ -549,6 +549,8 @@ SparkR supports the following machine learning models and algorithms.
 
 * Latent Dirichlet Allocation (LDA)
 
+* Power Iteration Clustering (PIC)
+
 #### Collaborative Filtering
 
 * Alternating Least Squares (ALS)
@@ -980,6 +982,18 @@ Make predictions.
 ```{r, eval=FALSE}
 predicted <- predict(model, df)
 head(predicted)
+```
+
+#### Power Iteration Clustering
+
+Power Iteration Clustering (PIC) is a scalable graph clustering algorithm. `spark.assignClusters` method runs the PIC algorithm and returns a cluster assignment for each input vertex.
+
+```{r}
+df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
+                           list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+                           list(4L, 0L, 0.1)),
+                      schema = c("src", "dst", "weight"))
+head(spark.assignClusters(df, initMode = "degree", weightCol = "weight"))
 ```
 
 #### FP-growth

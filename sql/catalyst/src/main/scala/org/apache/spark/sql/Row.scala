@@ -57,6 +57,7 @@ object Row {
   /**
    * Merge multiple rows into a single row, one after another.
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.0.0")
   def merge(rows: Row*): Row = {
     // TODO: Improve the performance of this if used in performance critical part.
     new GenericRow(rows.flatMap(_.toSeq).toArray)

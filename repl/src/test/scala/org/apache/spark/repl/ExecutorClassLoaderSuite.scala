@@ -30,7 +30,7 @@ import scala.io.Source
 import scala.language.implicitConversions
 
 import com.google.common.io.Files
-import org.mockito.Matchers.anyString
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -207,6 +207,17 @@ class ExecutorClassLoaderSuite
     assert(fakeClassVersion === "1")
     intercept[java.lang.ClassNotFoundException] {
       classLoader.loadClass("ReplFakeClassDoesNotExist").getConstructor().newInstance()
+    }
+
+    // classLoader.getResourceAsStream() should also be able to fetch the Class file
+    val fakeClassInputStream = classLoader.getResourceAsStream("ReplFakeClass2.class")
+    try {
+      val magic = new Array[Byte](4)
+      fakeClassInputStream.read(magic)
+      // first 4 bytes should match the magic number of Class file
+      assert(magic === Array[Byte](0xCA.toByte, 0xFE.toByte, 0xBA.toByte, 0xBE.toByte))
+    } finally {
+      if (fakeClassInputStream != null) fakeClassInputStream.close()
     }
   }
 

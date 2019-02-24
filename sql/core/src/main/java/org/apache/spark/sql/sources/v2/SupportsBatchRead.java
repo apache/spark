@@ -24,10 +24,10 @@ import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 /**
  * An empty mix-in interface for {@link Table}, to indicate this table supports batch scan.
  * <p>
- * If a {@link Table} implements this interface, its {@link Table#newScanBuilder(DataSourceOptions)}
- * must return a {@link ScanBuilder} that builds {@link Scan} with {@link Scan#toBatch()}
- * implemented.
+ * If a {@link Table} implements this interface, the
+ * {@link SupportsRead#newScanBuilder(DataSourceOptions)} must return a {@link ScanBuilder} that
+ * builds {@link Scan} with {@link Scan#toBatch()} implemented.
  * </p>
  */
 @Evolving
-public interface SupportsBatchRead extends Table { }
+public interface SupportsBatchRead extends SupportsRead { }

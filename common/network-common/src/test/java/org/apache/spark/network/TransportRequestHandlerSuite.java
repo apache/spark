@@ -58,8 +58,10 @@ public class TransportRequestHandlerSuite {
     managedBuffers.add(new TestManagedBuffer(20));
     managedBuffers.add(new TestManagedBuffer(30));
     managedBuffers.add(new TestManagedBuffer(40));
-    long streamId = streamManager.registerStream("test-app", managedBuffers.iterator());
-    streamManager.registerChannel(channel, streamId);
+    long streamId = streamManager.registerStream("test-app", managedBuffers.iterator(), channel);
+
+    assert streamManager.numStreamStates() == 1;
+
     TransportClient reverseClient = mock(TransportClient.class);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
       rpcHandler, 2L);
@@ -94,5 +96,8 @@ public class TransportRequestHandlerSuite {
     requestHandler.handle(request3);
     verify(channel, times(1)).close();
     assert responseAndPromisePairs.size() == 3;
+
+    streamManager.connectionTerminated(channel);
+    assert streamManager.numStreamStates() == 0;
   }
 }

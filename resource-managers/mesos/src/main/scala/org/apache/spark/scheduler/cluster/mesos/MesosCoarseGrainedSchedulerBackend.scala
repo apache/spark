@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
 import java.util.{Collections, List => JList}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.ReentrantLock
 
@@ -33,11 +34,11 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkExceptio
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
-import org.apache.spark.rpc.RpcEndpointAddress
+import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -63,9 +64,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
 
-  private val maxCoresOption = conf.getOption("spark.cores.max").map(_.toInt)
+  private val maxCoresOption = conf.get(config.CORES_MAX)
 
-  private val executorCoresOption = conf.getOption("spark.executor.cores").map(_.toInt)
+  private val executorCoresOption = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
 
   private val minCoresPerExecutor = executorCoresOption.getOrElse(1)
 
@@ -76,15 +77,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     cores - (cores % minCoresPerExecutor)
   }
 
-  private val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
+  private val useFetcherCache = conf.get(ENABLE_FETCHER_CACHE)
 
-  private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+  private val maxGpus = conf.get(MAX_GPUS)
 
-  private val taskLabels = conf.get("spark.mesos.task.labels", "")
+  private val taskLabels = conf.get(TASK_LABELS)
 
-  private[this] val shutdownTimeoutMS =
-    conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
-      .ensuring(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
+  private[this] val shutdownTimeoutMS = conf.get(COARSE_SHUTDOWN_TIMEOUT)
 
   // Synchronization protected by stateLock
   private[this] var stopCalled: Boolean = false
@@ -109,9 +108,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private var totalGpusAcquired = 0
 
   // The amount of time to wait for locality scheduling
-  private val localityWait = conf.get(config.LOCALITY_WAIT)
+  private val localityWaitNs = TimeUnit.MILLISECONDS.toNanos(conf.get(config.LOCALITY_WAIT))
   // The start of the waiting, for data local scheduling
-  private var localityWaitStartTime = System.currentTimeMillis()
+  private var localityWaitStartTimeNs = System.nanoTime()
   // If true, the scheduler is in the process of launching executors to reach the requested
   // executor limit
   private var launchingExecutors = false
@@ -144,11 +143,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // may lead to deadlocks since the superclass might also try to lock
   private val stateLock = new ReentrantLock
 
-  private val extraCoresPerExecutor = conf.getInt("spark.mesos.extra.cores", 0)
+  private val extraCoresPerExecutor = conf.get(EXTRA_CORES_PER_EXECUTOR)
 
   // Offer constraints
   private val slaveOfferConstraints =
-    parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
+    parseConstraintString(sc.conf.get(CONSTRAINTS))
 
   // Reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =
@@ -208,10 +207,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.webUrl)),
+      sc.conf.get(DRIVER_WEBUI_URL).orElse(sc.ui.map(_.webUrl)),
       None,
       Some(sc.conf.get(DRIVER_FAILOVER_TIMEOUT)),
-      sc.conf.getOption("spark.mesos.driver.frameworkId").map(_ + suffix)
+      sc.conf.get(DRIVER_FRAMEWORK_ID).map(_ + suffix)
     )
 
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -220,18 +219,18 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int, taskId: String): CommandInfo = {
     val environment = Environment.newBuilder()
-    val extraClassPath = conf.getOption("spark.executor.extraClassPath")
+    val extraClassPath = conf.get(config.EXECUTOR_CLASS_PATH)
     extraClassPath.foreach { cp =>
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions").map {
+    val extraJavaOpts = conf.get(config.EXECUTOR_JAVA_OPTIONS).map {
       Utils.substituteAppNExecIds(_, appId, taskId)
     }.getOrElse("")
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
-    val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
+    val prefixEnv = conf.get(config.EXECUTOR_LIBRARY_PATH).map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
     }.getOrElse("")
 
@@ -261,14 +260,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
 
-    val uri = conf.getOption("spark.executor.uri")
-      .orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
+    val uri = conf.get(EXECUTOR_URI).orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
 
     if (uri.isEmpty) {
-      val executorSparkHome = conf.getOption("spark.mesos.executor.home")
+      val executorSparkHome = conf.get(EXECUTOR_HOME)
         .orElse(sc.getSparkHome())
         .getOrElse {
-          throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+          throw new SparkException(s"Executor Spark home `$EXECUTOR_HOME` is not set!")
         }
       val runScript = new File(executorSparkHome, "./bin/spark-class").getPath
       command.setValue(
@@ -294,18 +292,18 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
     }
 
-    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command, useFetcherCache))
+    setupUris(conf.get(URIS_TO_DOWNLOAD), command, useFetcherCache)
 
     command.build()
   }
 
   protected def driverURL: String = {
-    if (conf.contains("spark.testing")) {
+    if (conf.contains(IS_TESTING)) {
       "driverURL"
     } else {
       RpcEndpointAddress(
-        conf.get("spark.driver.host"),
-        conf.get("spark.driver.port").toInt,
+        conf.get(config.DRIVER_HOST_ADDRESS),
+        conf.get(config.DRIVER_PORT),
         CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     }
   }
@@ -360,7 +358,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       } else {
         if (!launchingExecutors) {
           launchingExecutors = true
-          localityWaitStartTime = System.currentTimeMillis()
+          localityWaitStartTimeNs = System.nanoTime()
         }
       }
 
@@ -594,7 +592,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // increase coverage.
     val remainingHosts = allDesiredHosts -- currentHosts
     if (!remainingHosts.contains(offerHostname) &&
-      (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
+      (System.nanoTime() - localityWaitStartTimeNs <= localityWaitNs)) {
       logDebug("Skipping host and waiting for locality. host: " + offerHostname)
       return false
     }
@@ -631,9 +629,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           .registerDriverWithShuffleService(
             slave.hostname,
             externalShufflePort,
-            sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-              s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s"),
-            sc.conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
+            sc.conf.get(config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT),
+            sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL))
         slave.shuffleRegistered = true
       }
 
@@ -754,7 +751,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     logInfo("Capping the total amount of executors to " + requestedTotal)
     executorLimitOption = Some(requestedTotal)
     // Update the locality wait start time to continue trying for locality.
-    localityWaitStartTime = System.currentTimeMillis()
+    localityWaitStartTimeNs = System.nanoTime()
     true
   }
 
@@ -775,7 +772,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
-    Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration))
+    Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   private def numExecutors(): Int = {

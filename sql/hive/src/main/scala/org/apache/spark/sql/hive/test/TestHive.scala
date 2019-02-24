@@ -33,6 +33,8 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
@@ -59,8 +61,8 @@ object TestHive
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")
-        .set("spark.unsafe.exceptionOnMemoryLeak", "true")
+        .set(UI_ENABLED, false)
+        .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
         // Disable ConvertToLocalRelation for better test coverage. Test cases built on
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
@@ -88,7 +90,7 @@ private[hive] class TestHiveExternalCatalog(
 private[hive] class TestHiveSharedState(
     sc: SparkContext,
     hiveClient: Option[HiveClient] = None)
-  extends SharedState(sc) {
+  extends SharedState(sc, initialConfigs = Map.empty[String, String]) {
 
   override lazy val externalCatalog: ExternalCatalogWithListener = {
     new ExternalCatalogWithListener(new TestHiveExternalCatalog(
@@ -297,7 +299,7 @@ private[hive] class TestHiveSparkSession(
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new TestHiveQueryExecution(sql).hiveResultString(): Unit
+      () => new TestHiveQueryExecution(sql).executedPlan.executeCollect(): Unit
     }
   }
 

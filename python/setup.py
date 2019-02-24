@@ -20,7 +20,7 @@ from __future__ import print_function
 import glob
 import os
 import sys
-from setuptools import setup, find_packages
+from setuptools import setup
 from shutil import copyfile, copytree, rmtree
 
 if sys.version_info < (2, 7):

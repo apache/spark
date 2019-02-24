@@ -17,11 +17,9 @@
 
 import sys
 
-import numpy
-from numpy import array
 from collections import namedtuple
 
-from pyspark import SparkContext, since
+from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc

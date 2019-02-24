@@ -29,11 +29,11 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Quali
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -244,27 +244,19 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     })
   }
 
-  private def readHiveTable(table: CatalogTable): LogicalPlan = {
-    HiveTableRelation(
-      table,
-      // Hive table columns are always nullable.
-      table.dataSchema.asNullable.toAttributes,
-      table.partitionSchema.asNullable.toAttributes)
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta))
 
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
-      i.copy(table = readHiveTable(tableMeta))
+      i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta)
 
     case UnresolvedCatalogRelation(tableMeta) =>
-      readHiveTable(tableMeta)
+      DDLUtils.readHiveTable(tableMeta)
   }
 }
 
@@ -416,7 +408,10 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
+      val converters = RowEncoder(StructType.fromAttributes(output))
+      rdd.mapPartitions { iterator =>
+        iterator.map(converters.toRow)
+      }
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
     }
@@ -431,6 +426,22 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 }
 
 object DataSourceStrategy {
+  /**
+   * The attribute name of predicate could be different than the one in schema in case of
+   * case insensitive, we should change them to match the one in schema, so we do not need to
+   * worry about case sensitivity anymore.
+   */
+  protected[sql] def normalizeFilters(
+      filters: Seq[Expression],
+      attributes: Seq[AttributeReference]): Seq[Expression] = {
+    filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
+      e transform {
+        case a: AttributeReference =>
+          a.withName(attributes.find(_.semanticEquals(a)).get.name)
+      }
+    }
+  }
+
   /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
@@ -517,6 +528,12 @@ object DataSourceStrategy {
 
       case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
         Some(sources.StringContains(a.name, v.toString))
+
+      case expressions.Literal(true, BooleanType) =>
+        Some(sources.AlwaysTrue)
+
+      case expressions.Literal(false, BooleanType) =>
+        Some(sources.AlwaysFalse)
 
       case _ => None
     }

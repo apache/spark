@@ -64,6 +64,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
+  private val badAfterGoodFile = "test-data/bad_after_good.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -2026,5 +2027,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val files = new File(path).listFiles()
       assert(!files.exists(_.getName.endsWith("csv")))
     }
+  }
+
+  test("Do not reuse last good value for bad input field") {
+    val schema = StructType(
+      StructField("col1", StringType) ::
+      StructField("col2", DateType) ::
+      Nil
+    )
+    val rows = spark.read
+      .schema(schema)
+      .format("csv")
+      .load(testFile(badAfterGoodFile))
+
+    val expectedRows = Seq(
+      Row("good record", java.sql.Date.valueOf("1999-08-01")),
+      Row("bad record", null))
+
+    checkAnswer(rows, expectedRows)
   }
 }

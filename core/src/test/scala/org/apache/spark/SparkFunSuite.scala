@@ -23,6 +23,7 @@ import java.io.File
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 /**
@@ -59,7 +60,7 @@ abstract class SparkFunSuite
   protected val enableAutoThreadAudit = true
 
   protected override def beforeAll(): Unit = {
-    System.setProperty("spark.testing", "true")
+    System.setProperty(IS_TESTING.key, "true")
     if (enableAutoThreadAudit) {
       doThreadPreAudit()
     }

@@ -246,22 +246,6 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
-  testBothCodegenAndInterpreted("NaN canonicalization") {
-    val factory = UnsafeProjection
-    val fieldTypes: Array[DataType] = Array(FloatType, DoubleType)
-
-    val row1 = new SpecificInternalRow(fieldTypes)
-    row1.setFloat(0, java.lang.Float.intBitsToFloat(0x7f800001))
-    row1.setDouble(1, java.lang.Double.longBitsToDouble(0x7ff0000000000001L))
-
-    val row2 = new SpecificInternalRow(fieldTypes)
-    row2.setFloat(0, java.lang.Float.intBitsToFloat(0x7fffffff))
-    row2.setDouble(1, java.lang.Double.longBitsToDouble(0x7fffffffffffffffL))
-
-    val converter = factory.create(fieldTypes)
-    assert(converter.apply(row1).getBytes === converter.apply(row2).getBytes)
-  }
-
   testBothCodegenAndInterpreted("basic conversion with struct type") {
     val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(

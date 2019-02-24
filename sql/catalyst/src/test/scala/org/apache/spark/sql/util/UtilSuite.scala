@@ -26,6 +26,6 @@ class UtilSuite extends SparkFunSuite {
     assert(truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
     assert(truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
     assert(truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
-    assert(truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
+    assert(truncatedString(Seq(1, 2, 3), ", ", 10) == "1, 2, 3")
   }
 }

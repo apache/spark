@@ -74,7 +74,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
   }
 
   private long getElementOffset(int ordinal) {
-    return startingOffset + headerInBytes + ordinal * elementSize;
+    return startingOffset + headerInBytes + ordinal * (long) elementSize;
   }
 
   private void setNullBit(int ordinal) {

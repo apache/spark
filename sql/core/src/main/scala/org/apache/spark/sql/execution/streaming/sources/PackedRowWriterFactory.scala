@@ -21,12 +21,12 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.{BatchWriteSupport, DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingDataWriterFactory
 
 /**
  * A simple [[DataWriterFactory]] whose tasks just pack rows into the commit message for delivery
- * to a [[BatchWriteSupport]] on the driver.
+ * to a [[BatchWrite]] on the driver.
  *
  * Note that, because it sends all rows to the driver, this factory will generally be unsuitable
  * for production-quality sinks. It's intended for use in tests.

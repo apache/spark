@@ -104,7 +104,7 @@ private[spark] class Client(
     watcher: LoggingPodStatusWatcher) extends Logging {
 
   def run(): Unit = {
-    val resolvedDriverSpec = builder.buildFromFeatures(conf)
+    val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
     val configMapName = s"${conf.resourceNamePrefix}-driver-conf-map"
     val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
@@ -232,7 +232,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       None)) { kubernetesClient =>
         val client = new Client(
           kubernetesConf,
-          KubernetesDriverBuilder(kubernetesClient, kubernetesConf.sparkConf),
+          new KubernetesDriverBuilder(),
           kubernetesClient,
           waitForAppCompletion,
           watcher)

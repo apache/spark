@@ -18,7 +18,12 @@
 import datetime
 import unittest
 
+from collections import OrderedDict
+from decimal import Decimal
+from distutils.version import LooseVersion
+
 from pyspark.sql import Row
+from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -32,16 +37,12 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def data(self):
-        from pyspark.sql.functions import array, explode, col, lit
         return self.spark.range(10).toDF('id') \
             .withColumn("vs", array([lit(i) for i in range(20, 30)])) \
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_supported_types(self):
-        from decimal import Decimal
-        from distutils.version import LooseVersion
         import pyarrow as pa
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         values = [
             1, 2, 3,
@@ -131,8 +132,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected3, result3)
 
     def test_array_type_correct(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
-
         df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
 
         output_schema = StructType(
@@ -151,8 +150,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected, result)
 
     def test_register_grouped_map_udf(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
@@ -161,7 +158,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 self.spark.catalog.registerFunction("foo_udf", foo_udf)
 
     def test_decorator(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         @pandas_udf(
@@ -176,7 +172,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected, result)
 
     def test_coerce(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         foo = pandas_udf(
@@ -191,7 +186,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected, result)
 
     def test_complex_groupby(self):
-        from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         df = self.data
 
         @pandas_udf(
@@ -204,13 +198,12 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         result = df.groupby(col('id') % 2 == 0).apply(normalize).sort('id', 'v').toPandas()
         pdf = df.toPandas()
-        expected = pdf.groupby(pdf['id'] % 2 == 0).apply(normalize.func)
+        expected = pdf.groupby(pdf['id'] % 2 == 0, as_index=False).apply(normalize.func)
         expected = expected.sort_values(['id', 'v']).reset_index(drop=True)
         expected = expected.assign(norm=expected.norm.astype('float64'))
         self.assertPandasEqual(expected, result)
 
     def test_empty_groupby(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         @pandas_udf(
@@ -229,7 +222,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected, result)
 
     def test_datatype_string(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         foo_udf = pandas_udf(
@@ -243,8 +235,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected, result)
 
     def test_wrong_return_type(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
@@ -255,7 +245,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                     PandasUDFType.GROUPED_MAP)
 
     def test_wrong_args(self):
-        from pyspark.sql.functions import udf, pandas_udf, sum, PandasUDFType
         df = self.data
 
         with QuietTest(self.sc):
@@ -277,9 +266,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
-        from distutils.version import LooseVersion
         import pyarrow as pa
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         common_err_msg = 'Invalid returnType.*grouped map Pandas UDF.*'
         unsupported_types = [
@@ -300,7 +287,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
         dt = [datetime.datetime(2015, 11, 1, 0, 30),
               datetime.datetime(2015, 11, 1, 1, 30),
@@ -311,12 +297,12 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(df.toPandas(), result.toPandas())
 
     def test_udf_with_key(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        import numpy as np
+
         df = self.data
         pdf = df.toPandas()
 
         def foo1(key, pdf):
-            import numpy as np
             assert type(key) == tuple
             assert type(key[0]) == np.int64
 
@@ -326,7 +312,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                               v4=pdf.v * pdf.id.mean())
 
         def foo2(key, pdf):
-            import numpy as np
             assert type(key) == tuple
             assert type(key[0]) == np.int64
             assert type(key[1]) == np.int32
@@ -360,21 +345,21 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         # Test groupby column
         result1 = df.groupby('id').apply(udf1).sort('id', 'v').toPandas()
-        expected1 = pdf.groupby('id')\
+        expected1 = pdf.groupby('id', as_index=False)\
             .apply(lambda x: udf1.func((x.id.iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected1, result1)
 
         # Test groupby expression
         result2 = df.groupby(df.id % 2).apply(udf1).sort('id', 'v').toPandas()
-        expected2 = pdf.groupby(pdf.id % 2)\
+        expected2 = pdf.groupby(pdf.id % 2, as_index=False)\
             .apply(lambda x: udf1.func((x.id.iloc[0] % 2,), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected2, result2)
 
         # Test complex groupby
         result3 = df.groupby(df.id, df.v % 2).apply(udf2).sort('id', 'v').toPandas()
-        expected3 = pdf.groupby([pdf.id, pdf.v % 2])\
+        expected3 = pdf.groupby([pdf.id, pdf.v % 2], as_index=False)\
             .apply(lambda x: udf2.func((x.id.iloc[0], (x.v % 2).iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected3, result3)
@@ -385,9 +370,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected4, result4)
 
     def test_column_order(self):
-        from collections import OrderedDict
         import pandas as pd
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         # Helper function to set column names from a list
         def rename_pdf(pdf, names):
@@ -396,7 +379,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         df = self.data
         grouped_df = df.groupby('id')
-        grouped_pdf = df.toPandas().groupby('id')
+        grouped_pdf = df.toPandas().groupby('id', as_index=False)
 
         # Function returns a pdf with required column names, but order could be arbitrary using dict
         def change_col_order(pdf):
@@ -468,12 +451,17 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
                 grouped_df.apply(column_name_typo).collect()
-            with self.assertRaisesRegexp(Exception, "No cast implemented"):
-                grouped_df.apply(invalid_positional_types).collect()
+            import pyarrow as pa
+            if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+                # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
+                with self.assertRaisesRegexp(Exception, "No cast implemented"):
+                    grouped_df.apply(invalid_positional_types).collect()
+            else:
+                with self.assertRaisesRegexp(Exception, "an integer is required"):
+                    grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
         import pandas as pd
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         with self.sql_conf({
                 "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}):
@@ -489,9 +477,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 self.assertEqual(r.b, 1)
 
     def test_self_join_with_pandas(self):
-        import pyspark.sql.functions as F
-
-        @F.pandas_udf('key long, col string', F.PandasUDFType.GROUPED_MAP)
+        @pandas_udf('key long, col string', PandasUDFType.GROUPED_MAP)
         def dummy_pandas_udf(df):
             return df[['key', 'col']]
 
@@ -501,12 +487,11 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         # this was throwing an AnalysisException before SPARK-24208
         res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
-                                                 F.col('temp0.key') == F.col('temp1.key'))
+                                                 col('temp0.key') == col('temp1.key'))
         self.assertEquals(res.count(), 5)
 
     def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
         import pandas as pd
-        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 
         df = self.spark.range(0, 10).toDF('v1')
         df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \

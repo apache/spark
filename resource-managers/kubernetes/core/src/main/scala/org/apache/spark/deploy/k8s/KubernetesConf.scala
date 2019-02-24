@@ -42,10 +42,6 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
 
   def appName: String = get("spark.app.name", "spark")
 
-  def hadoopConfigMapName: String = s"$resourceNamePrefix-hadoop-config"
-
-  def krbConfigMapName: String = s"$resourceNamePrefix-krb5-file"
-
   def namespace: String = get(KUBERNETES_NAMESPACE)
 
   def imagePullPolicy: String = get(CONTAINER_IMAGE_PULL_POLICY)

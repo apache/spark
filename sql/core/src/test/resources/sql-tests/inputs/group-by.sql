@@ -141,8 +141,3 @@ SELECT every("true");
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
-
--- simple explain of queries having every/some/any agregates. Optimized
--- plan should show the rewritten aggregate expression.
-EXPLAIN EXTENDED SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k;
-

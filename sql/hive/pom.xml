@@ -229,7 +229,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx3g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
         </configuration>
       </plugin>
       <plugin>

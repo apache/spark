@@ -131,7 +131,7 @@ object Cast {
   private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
     val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
-    toPrecedence > 0 && fromPrecedence > toPrecedence
+    toPrecedence >= 0 && fromPrecedence > toPrecedence
   }
 
   /**
@@ -230,12 +230,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
+  private lazy val dateFormatter = DateFormatter()
+  private lazy val timestampFormatter = TimestampFormatter(timeZone)
+
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
+      t => UTF8String.fromString(DateTimeUtils.timestampToString(timestampFormatter, t)))
     case ArrayType(et, _) =>
       buildCast[ArrayData](_, array => {
         val builder = new UTF8StringBuilder
@@ -393,7 +396,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // converting seconds to us
   private[this] def longToTimestamp(t: Long): Long = t * 1000000L
   // converting us to seconds
-  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
+  private[this] def timestampToLong(ts: Long): Long = {
+    Math.floorDiv(ts, DateTimeUtils.MICROS_PER_SECOND)
+  }
   // converting us to seconds in double
   private[this] def timestampToDouble(ts: Long): Double = {
     ts / 1000000.0
@@ -843,12 +848,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case BinaryType =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
       case DateType =>
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c));"""
+        val df = JavaCode.global(
+          ctx.addReferenceObj("dateFormatter", dateFormatter),
+          dateFormatter.getClass)
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(${df}.format($c));"""
       case TimestampType =>
-        val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
+          timestampFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($tf, $c));"""
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
@@ -1065,7 +1074,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
   private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * 1000000L"
   private[this] def timestampToIntegerCode(ts: ExprValue): Block =
-    code"java.lang.Math.floor((double) $ts / 1000000L)"
+    code"java.lang.Math.floorDiv($ts, 1000000L)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / 1000000.0"
 

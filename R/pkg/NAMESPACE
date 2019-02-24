@@ -67,7 +67,8 @@ exportMethods("glm",
               "spark.fpGrowth",
               "spark.freqItemsets",
               "spark.associationRules",
-              "spark.findFrequentSequentialPatterns")
+              "spark.findFrequentSequentialPatterns",
+              "spark.assignClusters")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -311,8 +312,10 @@ exportMethods("%<=>%",
               "lower",
               "lpad",
               "ltrim",
+              "map_concat",
               "map_entries",
               "map_from_arrays",
+              "map_from_entries",
               "map_keys",
               "map_values",
               "max",

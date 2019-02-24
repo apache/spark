@@ -244,6 +244,13 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     }
     testPMMLWrite(sc, kmeansModel, checkModel)
   }
+
+  test("prediction on single instance") {
+    val kmeans = new KMeans().setSeed(123L)
+    val model = kmeans.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
+  }
 }
 
 object KMeansSuite {

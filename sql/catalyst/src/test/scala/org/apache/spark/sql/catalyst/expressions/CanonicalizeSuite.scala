@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -49,5 +50,33 @@ class CanonicalizeSuite extends SparkFunSuite {
 
     assert(range.where(arrays1).sameResult(range.where(arrays2)))
     assert(!range.where(arrays1).sameResult(range.where(arrays3)))
+  }
+
+  test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
+    val expId = NamedExpression.newExprId
+    val qualifier = Seq.empty[String]
+    val structType = StructType(
+      StructField("a", StructType(StructField("b", IntegerType, false) :: Nil), false) :: Nil)
+
+    // GetStructField with different names are semantically equal
+    val fieldA1 = GetStructField(
+      AttributeReference("data1", structType, false)(expId, qualifier),
+      0, Some("a1"))
+    val fieldA2 = GetStructField(
+      AttributeReference("data2", structType, false)(expId, qualifier),
+      0, Some("a2"))
+    assert(fieldA1.semanticEquals(fieldA2))
+
+    val fieldB1 = GetStructField(
+      GetStructField(
+        AttributeReference("data1", structType, false)(expId, qualifier),
+        0, Some("a1")),
+      0, Some("b1"))
+    val fieldB2 = GetStructField(
+      GetStructField(
+        AttributeReference("data2", structType, false)(expId, qualifier),
+        0, Some("a2")),
+      0, Some("b2"))
+    assert(fieldB1.semanticEquals(fieldB2))
   }
 }
