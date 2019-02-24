@@ -3329,7 +3329,7 @@ test_that("dapply() Arrow optimization", {
                     stopifnot(class(rdf) == "data.frame")
                     # mtcars' hp is more then 50.
                     stopifnot(all(rdf$hp > 50))
-                     rdf
+                    rdf
                   },
                   schema(df))
     actual <- collect(ret)
@@ -3351,7 +3351,8 @@ test_that("dapply() Arrow optimization - type specification", {
                               c = TRUE,
                               d = 1.1,
                               e = 1L)))
-  df <- createDataFrame(rdf)
+  # numPartitions are set to 8 intentionally to test empty partitions as well.
+  df <- createDataFrame(rdf, numPartitions = 8)
 
   conf <- callJMethod(sparkSession, "conf")
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
