@@ -29,12 +29,12 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.Histogram
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -495,13 +495,16 @@ case class TruncateTableCommand(
 }
 
 /**
- * Command that looks like
+ * Commands can of the following forms.
  * {{{
  *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
+ *   DESCRIBE QUERY <query>
+ *   DESCRIBE <query>
  * }}}
  */
 case class DescribeTableCommand(
-    table: TableIdentifier,
+    tableIdent: Option[TableIdentifier],
+    query: Option[LogicalPlan],
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean)
   extends RunnableCommand {
@@ -518,8 +521,32 @@ case class DescribeTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val catalog = sparkSession.sessionState.catalog
+    if (query.isDefined) {
+      query.get match {
+        case _: InsertIntoTable | _: InsertIntoDir =>
+          throw new AnalysisException("Describe command is not supported for insert statements.")
+        case u @ Union(children) if children.forall(_.isInstanceOf[InsertIntoTable]) =>
+          throw new AnalysisException("Describe command is not supported for insert statements.")
+        case u: UnresolvedRelation =>
+          describeTable(sparkSession, u.tableIdentifier, partitionSpec, isExtended, result)
+        case _ =>
+          val queryExecution = sparkSession.sessionState.executePlan(query.get)
+          describeSchema(queryExecution.analyzed.schema, result, header = false)
+      }
+    } else {
+      describeTable(sparkSession, tableIdent.get, partitionSpec, isExtended, result)
+    }
 
+    result
+  }
+
+  def describeTable(
+      sparkSession: SparkSession,
+      table: TableIdentifier,
+      partitionSpec: TablePartitionSpec,
+      isExtended: Boolean,
+      result: ArrayBuffer[Row]): Unit = {
+    val catalog = sparkSession.sessionState.catalog
     if (catalog.isTemporaryTable(table)) {
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException(
@@ -546,8 +573,6 @@ case class DescribeTableCommand(
         describeFormattedTableInfo(metadata, result)
       }
     }
-
-    result
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -577,11 +602,13 @@ case class DescribeTableCommand(
       result: ArrayBuffer[Row]): Unit = {
     if (metadata.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(
-        s"DESC PARTITION is not allowed on a view: ${table.identifier}")
+        s"DESC PARTITION is not allowed on a view: ${metadata.identifier.identifier}")
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
-    val partition = catalog.getPartition(table, partitionSpec)
-    if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
+    val partition = catalog.getPartition(metadata.identifier, partitionSpec)
+    if (isExtended) {
+      describeFormattedDetailedPartitionInfo(metadata.identifier, metadata, partition, result)
+    }
   }
 
   private def describeFormattedDetailedPartitionInfo(
