@@ -156,15 +156,18 @@ class SorterSuite extends SparkFunSuite with Logging {
     // Those 1 must be placed at the end of arrayToSort after sorting.
     var i: Int = 0
     sum = 0
+    val amountOfZeros = arrayToSort.length - runLengths.length
     do {
       sum += arrayToSort(i)
       i += 1
-    } while (i < arrayToSort.length - runLengths.length)
+    } while (i < amountOfZeros)
     assert(sum === 0)
+
+    val sizeOfArrayToSort = arrayToSort.length
     do {
       sum += arrayToSort(i)
       i += 1
-    } while (i < arrayToSort.length)
+    } while (i < sizeOfArrayToSort)
     assert(sum === runLengths.length)
   }
 
