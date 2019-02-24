@@ -39,10 +39,16 @@ class MetadataLogFileIndex(
     userSpecifiedSchema: Option[StructType])
   extends PartitioningAwareFileIndex(sparkSession, Map.empty, userSpecifiedSchema) {
 
-  private val metadataDirectory = new Path(path, FileStreamSink.metadataDir)
+  private val metadataDirectory = {
+    val metadataDir = new Path(path, FileStreamSink.metadataDir)
+    val fs = metadataDir.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sparkSession.sessionState.conf)
+    metadataDir
+  }
+
   logInfo(s"Reading streaming file log from $metadataDirectory")
   private val metadataLog =
-    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, metadataDirectory.toUri.toString)
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, metadataDirectory.toString)
   private val allFilesFromLog = metadataLog.allFiles().map(_.toFileStatus).filterNot(_.isDirectory)
   private var cachedPartitionSpec: PartitionSpec = _
 

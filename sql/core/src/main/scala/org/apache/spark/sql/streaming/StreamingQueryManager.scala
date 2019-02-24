@@ -217,10 +217,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       triggerClock: Clock): StreamingQueryWrapper = {
     var deleteCheckpointOnStop = false
     val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
-      new Path(userSpecified).toUri.toString
+      new Path(userSpecified).toString
     }.orElse {
       df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
-        new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toUri.toString
+        new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toString
       }
     }.getOrElse {
       if (useTempCheckpointLocation) {
