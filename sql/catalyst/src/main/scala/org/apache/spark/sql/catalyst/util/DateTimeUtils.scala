@@ -44,14 +44,17 @@ object DateTimeUtils {
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
-  final val SECONDS_PER_DAY = DAYS.toSeconds(1)
+
+  final val NANOS_PER_MICROS = MICROSECONDS.toNanos(1)
+  final val NANOS_PER_SECOND = SECONDS.toNanos(1)
   final val MICROS_PER_MILLIS = MILLISECONDS.toMicros(1)
   final val MICROS_PER_SECOND = SECONDS.toMicros(1)
-  final val MILLIS_PER_SECOND = SECONDS.toMillis(1)
-  final val NANOS_PER_SECOND = SECONDS.toNanos(1)
   final val MICROS_PER_DAY = DAYS.toMicros(1)
-  final val NANOS_PER_MICROS = MICROSECONDS.toNanos(1)
+  final val MILLIS_PER_SECOND = SECONDS.toMillis(1)
+  final val MILLIS_PER_MINUTE = MINUTES.toMillis(1)
+  final val MILLIS_PER_HOUR = HOURS.toMillis(1)
   final val MILLIS_PER_DAY = DAYS.toMillis(1)
+  final val SECONDS_PER_DAY = DAYS.toSeconds(1)
 
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
@@ -700,13 +703,13 @@ object DateTimeUtils {
       case TRUNC_TO_DAY =>
         val offset = timeZone.getOffset(millis)
         millis += offset
-        millis - millis % DAYS.toMillis(1) - offset
+        millis - millis % MILLIS_PER_DAY - offset
       case TRUNC_TO_HOUR =>
         val offset = timeZone.getOffset(millis)
         millis += offset
-        millis - millis % HOURS.toMillis(1) - offset
+        millis - millis % MILLIS_PER_HOUR - offset
       case TRUNC_TO_MINUTE =>
-        millis - millis % MINUTES.toMillis(1)
+        millis - millis % MILLIS_PER_MINUTE
       case TRUNC_TO_SECOND =>
         millis - millis % MILLIS_PER_SECOND
       case TRUNC_TO_WEEK =>
