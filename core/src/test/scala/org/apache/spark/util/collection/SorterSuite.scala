@@ -144,7 +144,7 @@ class SorterSuite extends SparkFunSuite with Logging {
     // scalastyle:on
     val arrayToSortSize = 1091482190
     val arrayToSort = new Array[Byte](arrayToSortSize)
-    var sum = -1
+    var sum: Int = -1
     for (i <- runLengths) {
       sum += i
       arrayToSort(sum) = 1
@@ -154,18 +154,18 @@ class SorterSuite extends SparkFunSuite with Logging {
     // The sort must finish without ArrayIndexOutOfBoundsException
     // The arrayToSort contains runLengths.length elements of 1, and others are 0.
     // Those 1 must be placed at the end of arrayToSort after sorting.
-    var i = 0
-    var (zeros, ones) = (0, 0)
-    while (i < arrayToSort.length) {
-      if (i < arrayToSort.length - runLengths.length) {
-        zeros += arrayToSort(i) + 1
-      } else {
-        ones += arrayToSort(i)
-      }
+    var i: Int = 0
+    sum = 0
+    do {
+      sum += arrayToSort(i)
       i += 1
-    }
-    assert(zeros === (arrayToSort.length - runLengths.length))
-    assert(ones === runLengths.length)
+    } while (i < arrayToSort.length - runLengths.length)
+    assert(sum === 0)
+    do {
+      sum += arrayToSort(i)
+      i += 1
+    } while (i < arrayToSort.length)
+    assert(sum === runLengths.length)
   }
 
   /** Runs an experiment several times. */
