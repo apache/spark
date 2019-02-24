@@ -904,7 +904,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     // Unpersist RDD2.
-    listener.onUnpersistRDD(SparkListenerUnpersistRDD(rdd2b1.rddId))
+    listener.onUnpersistRDD(SparkListenerUnpersistRDD(rdd2b1.rddId, Seq.empty[String]))
     intercept[NoSuchElementException] {
       check[RDDStorageInfoWrapper](rdd2b1.rddId) { _ => () }
     }
