@@ -82,28 +82,21 @@ private[spark] abstract class Task[T](
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
+    val taskContext = new TaskContextImpl(
+      stageId,
+      stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
+      partitionId,
+      taskAttemptId,
+      attemptNumber,
+      taskMemoryManager,
+      localProperties,
+      metricsSystem,
+      metrics)
+
     context = if (isBarrier) {
-      new BarrierTaskContext(
-        stageId,
-        stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
-        partitionId,
-        taskAttemptId,
-        attemptNumber,
-        taskMemoryManager,
-        localProperties,
-        metricsSystem,
-        metrics)
+      new BarrierTaskContext(taskContext)
     } else {
-      new TaskContextImpl(
-        stageId,
-        stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
-        partitionId,
-        taskAttemptId,
-        attemptNumber,
-        taskMemoryManager,
-        localProperties,
-        metricsSystem,
-        metrics)
+      taskContext
     }
 
     TaskContext.setTaskContext(context)
@@ -180,7 +173,7 @@ private[spark] abstract class Task[T](
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient var context: TaskContextImpl = _
+  @transient var context: TaskContext = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
@@ -189,7 +182,7 @@ private[spark] abstract class Task[T](
   // context is not yet initialized when kill() is invoked.
   @volatile @transient private var _reasonIfKilled: String = null
 
-  protected var _executorDeserializeTime: Long = 0
+  protected var _executorDeserializeTimeNs: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
 
   /**
@@ -200,7 +193,7 @@ private[spark] abstract class Task[T](
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
-  def executorDeserializeTime: Long = _executorDeserializeTime
+  def executorDeserializeTimeNs: Long = _executorDeserializeTimeNs
   def executorDeserializeCpuTime: Long = _executorDeserializeCpuTime
 
   /**

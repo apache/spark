@@ -124,3 +124,35 @@ test_that("SerDe of list of lists", {
 })
 
 sparkR.session.stop()
+
+# Note that this test should be at the end of tests since the configruations used here are not
+# specific to sessions, and the Spark context is restarted.
+test_that("createDataFrame large objects", {
+  for (encryptionEnabled in list("true", "false")) {
+    # To simulate a large object scenario, we set spark.r.maxAllocationLimit to a smaller value
+    conf <- list(spark.r.maxAllocationLimit = "100",
+                 spark.io.encryption.enabled = encryptionEnabled)
+
+    suppressWarnings(sparkR.session(master = sparkRTestMaster,
+                                    sparkConfig = conf,
+                                    enableHiveSupport = FALSE))
+
+    sc <- getSparkContext()
+    actual <- callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)
+    expected <- as.logical(encryptionEnabled)
+    expect_equal(actual, expected)
+
+    tryCatch({
+      # suppress warnings from dot in the field names. See also SPARK-21536.
+      df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
+      expect_equal(getNumPartitions(df), 3)
+      expect_equal(dim(df), dim(iris))
+
+      df <- createDataFrame(cars, numPartitions = 3)
+      expect_equal(collect(df), cars)
+    },
+    finally = {
+      sparkR.stop()
+    })
+  }
+})

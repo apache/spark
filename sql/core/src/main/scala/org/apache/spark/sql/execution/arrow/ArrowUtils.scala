@@ -131,11 +131,10 @@ object ArrowUtils {
     } else {
       Nil
     }
-    val pandasColsByPosition = if (conf.pandasGroupedMapAssignColumnssByPosition) {
-      Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_POSITION.key -> "true")
-    } else {
-      Nil
-    }
-    Map(timeZoneConf ++ pandasColsByPosition: _*)
+    val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
+      conf.pandasGroupedMapAssignColumnsByName.toString)
+    val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
+      conf.arrowSafeTypeConversion.toString)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
   }
 }

@@ -570,13 +570,11 @@ abstract class LDAModel private[ml] (
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
-    private[clustering] val oldLocalModel_ : OldLocalLDAModel,
+    private[clustering] val oldLocalModel : OldLocalLDAModel,
     sparkSession: SparkSession)
   extends LDAModel(uid, vocabSize, sparkSession) {
 
-  override private[clustering] def oldLocalModel: OldLocalLDAModel = {
-    oldLocalModel_.setSeed(getSeed)
-  }
+  oldLocalModel.setSeed(getSeed)
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): LocalLDAModel = {

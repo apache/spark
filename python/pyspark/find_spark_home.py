@@ -27,7 +27,7 @@ import sys
 
 def _find_spark_home():
     """Find the SPARK_HOME."""
-    # If the enviroment has SPARK_HOME set trust it.
+    # If the environment has SPARK_HOME set trust it.
     if "SPARK_HOME" in os.environ:
         return os.environ["SPARK_HOME"]
 

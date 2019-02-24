@@ -95,12 +95,12 @@ def grouped_map_pandas_udf_example(spark):
         ("id", "v"))
 
     @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)
-    def substract_mean(pdf):
+    def subtract_mean(pdf):
         # pdf is a pandas.DataFrame
         v = pdf.v
         return pdf.assign(v=v - v.mean())
 
-    df.groupby("id").apply(substract_mean).show()
+    df.groupby("id").apply(subtract_mean).show()
     # +---+----+
     # | id|   v|
     # +---+----+

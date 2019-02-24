@@ -24,13 +24,13 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsLifecycleManager(
-    conf: SparkConf,
-    executorBuilder: KubernetesExecutorBuilder,
+    val conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     // Use a best-effort to track which executors have been removed already. It's not generally
@@ -42,6 +42,8 @@ private[spark] class ExecutorPodsLifecycleManager(
   import ExecutorPodsLifecycleManager._
 
   private val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
+
+  private lazy val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     snapshotsStore.addSubscriber(eventProcessingInterval) {
@@ -99,8 +101,11 @@ private[spark] class ExecutorPodsLifecycleManager(
         }
       }
     }
-    logDebug(s"Removed executors with ids ${execIdsRemovedInThisRound.mkString(",")}" +
-      s" from Spark that were either found to be deleted or non-existent in the cluster.")
+
+    if (execIdsRemovedInThisRound.nonEmpty) {
+      logDebug(s"Removed executors with ids ${execIdsRemovedInThisRound.mkString(",")}" +
+        s" from Spark that were either found to be deleted or non-existent in the cluster.")
+    }
   }
 
   private def onFinalNonDeletedState(
@@ -108,8 +113,10 @@ private[spark] class ExecutorPodsLifecycleManager(
       execId: Long,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       execIdsRemovedInRound: mutable.Set[Long]): Unit = {
-    removeExecutorFromK8s(podState.pod)
     removeExecutorFromSpark(schedulerBackend, podState, execId)
+    if (shouldDeleteExecutors) {
+      removeExecutorFromK8s(podState.pod)
+    }
     execIdsRemovedInRound += execId
   }
 
@@ -151,13 +158,15 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private def exitReasonMessage(podState: FinalPodState, execId: Long, exitCode: Int) = {
     val pod = podState.pod
+    val reason = Option(pod.getStatus.getReason)
+    val message = Option(pod.getStatus.getMessage)
     s"""
        |The executor with id $execId exited with exit code $exitCode.
-       |The API gave the following brief reason: ${pod.getStatus.getReason}
-       |The API gave the following message: ${pod.getStatus.getMessage}
+       |The API gave the following brief reason: ${reason.getOrElse("N/A")}
+       |The API gave the following message: ${message.getOrElse("N/A")}
        |The API gave the following container statuses:
        |
-       |${pod.getStatus.getContainerStatuses.asScala.map(_.toString).mkString("\n===\n")}
+       |${containersDescription(pod)}
       """.stripMargin
   }
 

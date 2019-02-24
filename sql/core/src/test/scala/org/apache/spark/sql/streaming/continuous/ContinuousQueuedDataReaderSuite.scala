@@ -22,16 +22,15 @@ import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 
-import org.apache.spark.{SparkEnv, SparkFunSuite, TaskContext}
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.sources.v2.reader.InputPartition
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, PartitionOffset}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReader, ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.StreamTest
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
   case class LongPartitionOffset(offset: Long) extends PartitionOffset
@@ -44,8 +43,8 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
   override def beforeEach(): Unit = {
     super.beforeEach()
     epochEndpoint = EpochCoordinatorRef.create(
-      mock[StreamWriter],
-      mock[ContinuousReader],
+      mock[StreamingWrite],
+      mock[ContinuousStream],
       mock[ContinuousExecution],
       coordinatorId,
       startEpoch,
@@ -73,26 +72,26 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
    */
   private def setup(): (BlockingQueue[UnsafeRow], ContinuousQueuedDataReader) = {
     val queue = new ArrayBlockingQueue[UnsafeRow](1024)
-    val factory = new InputPartition[InternalRow] {
-      override def createPartitionReader() = new ContinuousInputPartitionReader[InternalRow] {
-        var index = -1
-        var curr: UnsafeRow = _
+    val partitionReader = new ContinuousPartitionReader[InternalRow] {
+      var index = -1
+      var curr: UnsafeRow = _
 
-        override def next() = {
-          curr = queue.take()
-          index += 1
-          true
-        }
-
-        override def get = curr
-
-        override def getOffset = LongPartitionOffset(index)
-
-        override def close() = {}
+      override def next() = {
+        curr = queue.take()
+        index += 1
+        true
       }
+
+      override def get = curr
+
+      override def getOffset = LongPartitionOffset(index)
+
+      override def close() = {}
     }
     val reader = new ContinuousQueuedDataReader(
-      new ContinuousDataSourceRDDPartition(0, factory),
+      0,
+      partitionReader,
+      new StructType().add("i", "int"),
       mockContext,
       dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize,
       epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs)

@@ -23,15 +23,15 @@ import scala.concurrent.duration.Duration
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
+import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at
  * the specified interval.
  */
-@InterfaceStability.Evolving
+@Evolving
 case class ContinuousTrigger(intervalMs: Long) extends Trigger {
   require(intervalMs >= 0, "the interval of trigger should not be negative")
 }

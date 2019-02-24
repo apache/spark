@@ -40,12 +40,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
   override val streamingTimeout = 30.seconds
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    testUtils = new KafkaTestUtils(
-      withBrokerProps = Map("auto.create.topics.enable" -> "false"))
-    testUtils.setup()
-  }
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
 
   override def afterAll(): Unit = {
     if (testUtils != null) {
@@ -414,7 +409,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     */
     val topic = newTopic()
     testUtils.createTopic(topic, 1)
-    val options = new java.util.HashMap[String, String]
+    val options = new java.util.HashMap[String, Object]
     options.put("bootstrap.servers", testUtils.brokerAddress)
     options.put("buffer.memory", "16384") // min buffer size
     options.put("block.on.buffer.full", "true")
@@ -422,7 +417,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     options.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
     val data = new Array[Byte](15000) // large value
-    val writeTask = new KafkaStreamDataWriter(Some(topic), options.asScala.toMap, inputSchema)
+    val writeTask = new KafkaStreamDataWriter(Some(topic), options, inputSchema)
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)

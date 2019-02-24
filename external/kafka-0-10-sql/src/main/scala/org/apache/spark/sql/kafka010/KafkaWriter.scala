@@ -52,7 +52,7 @@ private[kafka010] object KafkaWriter extends Logging {
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
           s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a topic.")
       } else {
-        Literal(topic.get, StringType)
+        Literal.create(topic.get, StringType)
       }
     ).dataType match {
       case StringType => // good

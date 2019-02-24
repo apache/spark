@@ -236,6 +236,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       fitIntercept, maxIter, tol, aggregationDepth)
     instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
     instr.logNumFeatures(numFeatures)
+    instr.logNumExamples(featuresSummarizer.count)
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
         featuresStd(i) == 0.0 && featuresSummarizer.mean(i) != 0.0 }) {
@@ -274,7 +275,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       state.x.toArray.clone()
     }
 
-    bcFeaturesStd.destroy(blocking = false)
+    bcFeaturesStd.destroy()
     if (handlePersistence) instances.unpersist()
 
     val rawCoefficients = parameters.slice(2, parameters.length)
@@ -632,7 +633,7 @@ private class AFTCostFun(
         case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
       }, depth = aggregationDepth)
 
-    bcParameters.destroy(blocking = false)
+    bcParameters.destroy()
     (aftAggregator.loss, aftAggregator.gradient)
   }
 }

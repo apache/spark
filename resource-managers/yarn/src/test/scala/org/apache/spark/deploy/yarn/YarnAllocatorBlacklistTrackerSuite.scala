@@ -87,7 +87,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     // expired blacklisted nodes (simulating a resource request)
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host1", "host2"))
     // no change is communicated to YARN regarding the blacklisting
-    verify(amClientMock).updateBlacklist(Collections.emptyList(), Collections.emptyList())
+    verify(amClientMock, times(0)).updateBlacklist(Collections.emptyList(), Collections.emptyList())
   }
 
   test("combining scheduler and allocation blacklist") {

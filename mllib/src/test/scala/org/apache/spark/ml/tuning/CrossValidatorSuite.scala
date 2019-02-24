@@ -190,8 +190,8 @@ class CrossValidatorSuite
         assert(lr.uid === lr2.uid)
         assert(lr.getMaxIter === lr2.getMaxIter)
       case other =>
-        throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
-          s" LogisticRegression but found ${other.getClass.getName}")
+        fail("Loaded CrossValidator expected estimator of type LogisticRegression" +
+          s" but found ${other.getClass.getName}")
     }
 
     ValidatorParamsSuiteHelpers
@@ -281,13 +281,13 @@ class CrossValidatorSuite
             assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
               === lr.getMaxIter)
           case other =>
-            throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
-              s" LogisticRegression but found ${other.getClass.getName}")
+            fail("Loaded CrossValidator expected estimator of type LogisticRegression" +
+              s" but found ${other.getClass.getName}")
         }
 
       case other =>
-        throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
-          s" OneVsRest but found ${other.getClass.getName}")
+        fail("Loaded CrossValidator expected estimator of type OneVsRest but " +
+          s"found ${other.getClass.getName}")
     }
 
     ValidatorParamsSuiteHelpers
@@ -364,8 +364,8 @@ class CrossValidatorSuite
                 assert(lr.uid === lr2.uid)
                 assert(lr.getMaxIter === lr2.getMaxIter)
               case other =>
-                throw new AssertionError(s"Loaded internal CrossValidator expected to be" +
-                  s" LogisticRegression but found type ${other.getClass.getName}")
+                fail("Loaded internal CrossValidator expected to be LogisticRegression" +
+                  s" but found type ${other.getClass.getName}")
             }
             assert(lrcv.uid === lrcv2.uid)
             assert(lrcv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
@@ -373,12 +373,12 @@ class CrossValidatorSuite
             ValidatorParamsSuiteHelpers
               .compareParamMaps(lrParamMaps, lrcv2.getEstimatorParamMaps)
           case other =>
-            throw new AssertionError("Loaded Pipeline expected stages (HashingTF, CrossValidator)" +
-              " but found: " + other.map(_.getClass.getName).mkString(", "))
+            fail("Loaded Pipeline expected stages (HashingTF, CrossValidator) but found: " +
+              other.map(_.getClass.getName).mkString(", "))
         }
       case other =>
-        throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
-          s" CrossValidator but found ${other.getClass.getName}")
+        fail("Loaded CrossValidator expected estimator of type CrossValidator but found" +
+          s" ${other.getClass.getName}")
     }
   }
 
@@ -433,8 +433,8 @@ class CrossValidatorSuite
         assert(lr.uid === lr2.uid)
         assert(lr.getThreshold === lr2.getThreshold)
       case other =>
-        throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
-          s" LogisticRegression but found ${other.getClass.getName}")
+        fail("Loaded CrossValidator expected estimator of type LogisticRegression" +
+          s" but found ${other.getClass.getName}")
     }
 
    ValidatorParamsSuiteHelpers
@@ -447,8 +447,8 @@ class CrossValidatorSuite
         assert(lrModel.coefficients === lrModel2.coefficients)
         assert(lrModel.intercept === lrModel2.intercept)
       case other =>
-        throw new AssertionError(s"Loaded CrossValidator expected bestModel of type" +
-          s" LogisticRegressionModel but found ${other.getClass.getName}")
+        fail("Loaded CrossValidator expected bestModel of type LogisticRegressionModel" +
+          s" but found ${other.getClass.getName}")
     }
     assert(cv.avgMetrics === cv2.avgMetrics)
   }

@@ -72,6 +72,7 @@ class HeaderCSVReadSchemaSuite
 
 class JsonReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
   with ChangePositionTest
   with IntegralTypeTest
@@ -84,6 +85,7 @@ class JsonReadSchemaSuite
 
 class OrcReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
   with ChangePositionTest {
 
@@ -103,6 +105,7 @@ class OrcReadSchemaSuite
 
 class VectorizedOrcReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
   with ChangePositionTest
   with BooleanTypeTest
@@ -125,6 +128,7 @@ class VectorizedOrcReadSchemaSuite
 
 class ParquetReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
   with ChangePositionTest {
 
@@ -144,6 +148,7 @@ class ParquetReadSchemaSuite
 
 class VectorizedParquetReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
   with ChangePositionTest {
 
@@ -163,6 +168,7 @@ class VectorizedParquetReadSchemaSuite
 
 class MergedParquetReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
   with ChangePositionTest {
 

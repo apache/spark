@@ -25,19 +25,19 @@ class RDDBarrierSuite extends SparkFunSuite with SharedSparkContext {
     val rdd = sc.parallelize(1 to 10, 4)
     assert(rdd.isBarrier() === false)
 
-    val rdd2 = rdd.barrier().mapPartitions((iter, context) => iter)
+    val rdd2 = rdd.barrier().mapPartitions(iter => iter)
     assert(rdd2.isBarrier() === true)
   }
 
   test("create an RDDBarrier in the middle of a chain of RDDs") {
     val rdd = sc.parallelize(1 to 10, 4).map(x => x * 2)
-    val rdd2 = rdd.barrier().mapPartitions((iter, context) => iter).map(x => (x, x + 1))
+    val rdd2 = rdd.barrier().mapPartitions(iter => iter).map(x => (x, x + 1))
     assert(rdd2.isBarrier() === true)
   }
 
   test("RDDBarrier with shuffle") {
     val rdd = sc.parallelize(1 to 10, 4)
-    val rdd2 = rdd.barrier().mapPartitions((iter, context) => iter).repartition(2)
+    val rdd2 = rdd.barrier().mapPartitions(iter => iter).repartition(2)
     assert(rdd2.isBarrier() === false)
   }
 }

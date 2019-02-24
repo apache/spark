@@ -18,13 +18,21 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.Timestamp
 import java.util.Locale
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS
+import org.apache.orc.OrcFile
+import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
+import org.apache.orc.OrcProto.Stream.Kind
+import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.Row
+import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -48,6 +56,136 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       .map(i => OrcData(i, s"part-$i"))
       .toDF()
       .createOrReplaceTempView("orc_temp_table")
+  }
+
+  protected def testBloomFilterCreation(bloomFilterKind: Kind) {
+    val tableName = "bloomFilter"
+
+    withTempDir { dir =>
+      withTable(tableName) {
+        val sqlStatement = orcImp match {
+          case "native" =>
+            s"""
+               |CREATE TABLE $tableName (a INT, b STRING)
+               |USING ORC
+               |OPTIONS (
+               |  path '${dir.toURI}',
+               |  orc.bloom.filter.columns '*',
+               |  orc.bloom.filter.fpp 0.1
+               |)
+            """.stripMargin
+          case "hive" =>
+            s"""
+               |CREATE TABLE $tableName (a INT, b STRING)
+               |STORED AS ORC
+               |LOCATION '${dir.toURI}'
+               |TBLPROPERTIES (
+               |  orc.bloom.filter.columns='*',
+               |  orc.bloom.filter.fpp=0.1
+               |)
+            """.stripMargin
+          case impl =>
+            throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
+        }
+
+        sql(sqlStatement)
+        sql(s"INSERT INTO $tableName VALUES (1, 'str')")
+
+        val partFiles = dir.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        val orcFilePath = new Path(partFiles.head.getAbsolutePath)
+        val readerOptions = OrcFile.readerOptions(new Configuration())
+        val reader = OrcFile.createReader(orcFilePath, readerOptions)
+        var recordReader: RecordReaderImpl = null
+        try {
+          recordReader = reader.rows.asInstanceOf[RecordReaderImpl]
+
+          // BloomFilter array is created for all types; `struct`, int (`a`), string (`b`)
+          val sargColumns = Array(true, true, true)
+          val orcIndex = recordReader.readRowIndex(0, null, sargColumns)
+
+          // Check the types and counts of bloom filters
+          assert(orcIndex.getBloomFilterKinds.forall(_ === bloomFilterKind))
+          assert(orcIndex.getBloomFilterIndex.forall(_.getBloomFilterCount > 0))
+        } finally {
+          if (recordReader != null) {
+            recordReader.close()
+          }
+        }
+      }
+    }
+  }
+
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean) {
+    val tableName = "orcTable"
+
+    withTempDir { dir =>
+      withTable(tableName) {
+        val sqlStatement = orcImp match {
+          case "native" =>
+            s"""
+               |CREATE TABLE $tableName (zipcode STRING, uniqColumn STRING, value DOUBLE)
+               |USING ORC
+               |OPTIONS (
+               |  path '${dir.toURI}',
+               |  orc.dictionary.key.threshold '1.0',
+               |  orc.column.encoding.direct 'uniqColumn'
+               |)
+            """.stripMargin
+          case "hive" =>
+            s"""
+               |CREATE TABLE $tableName (zipcode STRING, uniqColumn STRING, value DOUBLE)
+               |STORED AS ORC
+               |LOCATION '${dir.toURI}'
+               |TBLPROPERTIES (
+               |  orc.dictionary.key.threshold '1.0',
+               |  hive.exec.orc.dictionary.key.size.threshold '1.0',
+               |  orc.column.encoding.direct 'uniqColumn'
+               |)
+            """.stripMargin
+          case impl =>
+            throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
+        }
+
+        sql(sqlStatement)
+        sql(s"INSERT INTO $tableName VALUES ('94086', 'random-uuid-string', 0.0)")
+
+        val partFiles = dir.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        val orcFilePath = new Path(partFiles.head.getAbsolutePath)
+        val readerOptions = OrcFile.readerOptions(new Configuration())
+        val reader = OrcFile.createReader(orcFilePath, readerOptions)
+        var recordReader: RecordReaderImpl = null
+        try {
+          recordReader = reader.rows.asInstanceOf[RecordReaderImpl]
+
+          // Check the kind
+          val stripe = recordReader.readStripeFooter(reader.getStripes.get(0))
+
+          // The encodings are divided into direct or dictionary-based categories and
+          // further refined as to whether they use RLE v1 or v2. RLE v1 is used by
+          // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
+          // For more details, see https://orc.apache.org/specification/
+          assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
+          if (isSelective) {
+            assert(stripe.getColumns(2).getKind === DIRECT_V2)
+          } else {
+            assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
+          }
+          // Floating point types are stored with DIRECT encoding in IEEE 754 floating
+          // point bit layout.
+          assert(stripe.getColumns(3).getKind === DIRECT)
+        } finally {
+          if (recordReader != null) {
+            recordReader.close()
+          }
+        }
+      }
+    }
   }
 
   test("create temporary orc table") {
@@ -178,6 +316,22 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       checkAnswer(spark.read.orc(path.getCanonicalPath), Row(ts))
     }
   }
+
+  test("Write Spark version into ORC file metadata") {
+    withTempPath { path =>
+      spark.range(1).repartition(1).write.orc(path.getCanonicalPath)
+
+      val partFiles = path.listFiles()
+        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+      assert(partFiles.length === 1)
+
+      val orcFilePath = new Path(partFiles.head.getAbsolutePath)
+      val readerOptions = OrcFile.readerOptions(new Configuration())
+      val reader = OrcFile.createReader(orcFilePath, readerOptions)
+      val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
+      assert(version === SPARK_VERSION_SHORT)
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {
@@ -214,5 +368,13 @@ class OrcSourceSuite extends OrcSuite with SharedSQLContext {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
+  }
+
+  test("Check BloomFilter creation") {
+    testBloomFilterCreation(Kind.BLOOM_FILTER_UTF8) // After ORC-101
+  }
+
+  test("Enforce direct encoding column-wise selectively") {
+    testSelectiveDictionaryEncoding(isSelective = true)
   }
 }

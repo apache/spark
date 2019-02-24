@@ -17,12 +17,13 @@
 
 package org.apache.spark.unsafe.array;
 
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * An array of long values. Compared with native JVM arrays, this:
  * <ul>
- *   <li>supports using both in-heap and off-heap memory</li>
+ *   <li>supports using both on-heap and off-heap memory</li>
  *   <li>has no bound checking, and thus can crash the JVM process when assert is turned off</li>
  * </ul>
  */
@@ -32,12 +33,16 @@ public final class LongArray {
   private static final long WIDTH = 8;
 
   private final MemoryBlock memory;
+  private final Object baseObj;
+  private final long baseOffset;
 
   private final long length;
 
   public LongArray(MemoryBlock memory) {
     assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size >= Integer.MAX_VALUE elements";
     this.memory = memory;
+    this.baseObj = memory.getBaseObject();
+    this.baseOffset = memory.getBaseOffset();
     this.length = memory.size() / WIDTH;
   }
 
@@ -46,11 +51,11 @@ public final class LongArray {
   }
 
   public Object getBaseObject() {
-    return memory.getBaseObject();
+    return baseObj;
   }
 
   public long getBaseOffset() {
-    return memory.getBaseOffset();
+    return baseOffset;
   }
 
   /**
@@ -64,8 +69,8 @@ public final class LongArray {
    * Fill this all with 0L.
    */
   public void zeroOut() {
-    for (long off = 0; off < length * WIDTH; off += WIDTH) {
-      memory.putLong(off, 0);
+    for (long off = baseOffset; off < baseOffset + length * WIDTH; off += WIDTH) {
+      Platform.putLong(baseObj, off, 0);
     }
   }
 
@@ -75,7 +80,7 @@ public final class LongArray {
   public void set(int index, long value) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    memory.putLong(index * WIDTH, value);
+    Platform.putLong(baseObj, baseOffset + index * WIDTH, value);
   }
 
   /**
@@ -84,6 +89,6 @@ public final class LongArray {
   public long get(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    return memory.getLong(index * WIDTH);
+    return Platform.getLong(baseObj, baseOffset + index * WIDTH);
   }
 }

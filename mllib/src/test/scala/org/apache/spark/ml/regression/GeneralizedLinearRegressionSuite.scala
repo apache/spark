@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.feature.{LabeledPoint, RFormula}
@@ -29,6 +29,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.random._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.FloatType
@@ -1686,6 +1687,14 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     assert(evalSummary.nullDeviance === summary.nullDeviance)
     assert(evalSummary.deviance === summary.deviance)
     assert(evalSummary.aic === summary.aic)
+  }
+
+  test("SPARK-23131 Kryo raises StackOverflow during serializing GLR model") {
+    val conf = new SparkConf(false)
+    val ser = new KryoSerializer(conf).newInstance()
+    val trainer = new GeneralizedLinearRegression()
+    val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF)
+    ser.serialize[GeneralizedLinearRegressionModel](model)
   }
 }
 

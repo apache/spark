@@ -146,7 +146,7 @@ class NaiveBayes @Since("1.5.0") (
           requireZeroOneBernoulliValues
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
     }
 
@@ -162,19 +162,21 @@ class NaiveBayes @Since("1.5.0") (
     // TODO: similar to reduceByKeyLocally to save one stage.
     val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
       .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
-      }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
+      }.aggregateByKey[(Double, DenseVector, Long)]((0.0, Vectors.zeros(numFeatures).toDense, 0L))(
       seqOp = {
-         case ((weightSum: Double, featureSum: DenseVector), (weight, features)) =>
+         case ((weightSum, featureSum, count), (weight, features)) =>
            requireValues(features)
            BLAS.axpy(weight, features, featureSum)
-           (weightSum + weight, featureSum)
+           (weightSum + weight, featureSum, count + 1)
       },
       combOp = {
-         case ((weightSum1, featureSum1), (weightSum2, featureSum2)) =>
+         case ((weightSum1, featureSum1, count1), (weightSum2, featureSum2, count2)) =>
            BLAS.axpy(1.0, featureSum2, featureSum1)
-           (weightSum1 + weightSum2, featureSum1)
+           (weightSum1 + weightSum2, featureSum1, count1 + count2)
       }).collect().sortBy(_._1)
 
+    val numSamples = aggregated.map(_._2._3).sum
+    instr.logNumExamples(numSamples)
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
     val numDocuments = aggregated.map(_._2._1).sum
@@ -186,7 +188,7 @@ class NaiveBayes @Since("1.5.0") (
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
-    aggregated.foreach { case (label, (n, sumTermFreqs)) =>
+    aggregated.foreach { case (label, (n, sumTermFreqs, _)) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = $(modelType) match {
@@ -194,7 +196,7 @@ class NaiveBayes @Since("1.5.0") (
         case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
       var j = 0
       while (j < numFeatures) {
@@ -293,7 +295,7 @@ class NaiveBayesModel private[ml] (
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
       // This should never happen.
-      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
   }
 
   @Since("1.6.0")
@@ -327,7 +329,7 @@ class NaiveBayesModel private[ml] (
         bernoulliCalculation(features)
       case _ =>
         // This should never happen.
-        throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
     }
   }
 

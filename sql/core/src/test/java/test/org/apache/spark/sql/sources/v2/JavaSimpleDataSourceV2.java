@@ -17,72 +17,31 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
-import java.io.IOException;
-import java.util.List;
-
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.ReadSupport;
-import org.apache.spark.sql.sources.v2.reader.InputPartitionReader;
-import org.apache.spark.sql.sources.v2.reader.InputPartition;
-import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.TableProvider;
+import org.apache.spark.sql.sources.v2.reader.*;
 
-public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
+public class JavaSimpleDataSourceV2 implements TableProvider {
 
-  class Reader implements DataSourceReader {
-    private final StructType schema = new StructType().add("i", "int").add("j", "int");
+  class MyScanBuilder extends JavaSimpleScanBuilder {
 
     @Override
-    public StructType readSchema() {
-      return schema;
-    }
-
-    @Override
-    public List<InputPartition<InternalRow>> planInputPartitions() {
-      return java.util.Arrays.asList(
-        new JavaSimpleInputPartition(0, 5),
-        new JavaSimpleInputPartition(5, 10));
-    }
-  }
-
-  static class JavaSimpleInputPartition implements InputPartition<InternalRow>,
-    InputPartitionReader<InternalRow> {
-
-    private int start;
-    private int end;
-
-    JavaSimpleInputPartition(int start, int end) {
-      this.start = start;
-      this.end = end;
-    }
-
-    @Override
-    public InputPartitionReader<InternalRow> createPartitionReader() {
-      return new JavaSimpleInputPartition(start - 1, end);
-    }
-
-    @Override
-    public boolean next() {
-      start += 1;
-      return start < end;
-    }
-
-    @Override
-    public InternalRow get() {
-      return new GenericInternalRow(new Object[] {start, -start});
-    }
-
-    @Override
-    public void close() throws IOException {
-
+    public InputPartition[] planInputPartitions() {
+      InputPartition[] partitions = new InputPartition[2];
+      partitions[0] = new JavaRangeInputPartition(0, 5);
+      partitions[1] = new JavaRangeInputPartition(5, 10);
+      return partitions;
     }
   }
 
   @Override
-  public DataSourceReader createReader(DataSourceOptions options) {
-    return new Reader();
+  public Table getTable(DataSourceOptions options) {
+    return new JavaSimpleBatchTable() {
+      @Override
+      public ScanBuilder newScanBuilder(DataSourceOptions options) {
+        return new MyScanBuilder();
+      }
+    };
   }
 }

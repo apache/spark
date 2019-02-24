@@ -225,11 +225,18 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row3 = create_row("aa2bb3cc", null)
 
     checkEvaluation(
-      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+")), Seq("aa", "bb", "cc"), row1)
+      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(
-      StringSplit(s1, s2), Seq("aa", "bb", "cc"), row1)
-    checkEvaluation(StringSplit(s1, s2), null, row2)
-    checkEvaluation(StringSplit(s1, s2), null, row3)
+      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), 2), Seq("aa", "bb3cc"), row1)
+    // limit = 0 should behave just like limit = -1
+    checkEvaluation(
+      StringSplit(Literal("aacbbcddc"), Literal("c"), 0), Seq("aa", "bb", "dd", ""), row1)
+    checkEvaluation(
+      StringSplit(Literal("aacbbcddc"), Literal("c"), -1), Seq("aa", "bb", "dd", ""), row1)
+    checkEvaluation(
+      StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
+    checkEvaluation(StringSplit(s1, s2, -1), null, row2)
+    checkEvaluation(StringSplit(s1, s2, -1), null, row3)
   }
 
 }

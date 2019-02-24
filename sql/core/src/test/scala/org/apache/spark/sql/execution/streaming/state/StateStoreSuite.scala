@@ -35,6 +35,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.internal.config.Network.RPC_NUM_RETRIES
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -317,6 +318,22 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(store.metrics.memoryUsedBytes > noDataMemoryUsed)
   }
 
+  test("reports memory usage on current version") {
+    def getSizeOfStateForCurrentVersion(metrics: StateStoreMetrics): Long = {
+      val metricPair = metrics.customMetrics.find(_._1.name == "stateOnCurrentVersionSizeBytes")
+      assert(metricPair.isDefined)
+      metricPair.get._2
+    }
+
+    val provider = newStoreProvider()
+    val store = provider.getStore(0)
+    val noDataMemoryUsed = getSizeOfStateForCurrentVersion(store.metrics)
+
+    put(store, "a", 1)
+    store.commit()
+    assert(getSizeOfStateForCurrentVersion(store.metrics) > noDataMemoryUsed)
+  }
+
   test("StateStore.get") {
     quietly {
       val dir = newDir()
@@ -377,7 +394,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
       // Make sure that when SparkContext stops, the StateStore maintenance thread 'quickly'
       // fails to talk to the StateStoreCoordinator and unloads all the StateStores
-      .set("spark.rpc.numRetries", "1")
+      .set(RPC_NUM_RETRIES, 1)
     val opId = 0
     val dir = newDir()
     val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
@@ -629,6 +646,90 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     put(store2, "11", 11)
     store2.abort()
     assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
+  }
+
+  test("expose metrics with custom metrics to StateStoreMetrics") {
+    def getCustomMetric(metrics: StateStoreMetrics, name: String): Long = {
+      val metricPair = metrics.customMetrics.find(_._1.name == name)
+      assert(metricPair.isDefined)
+      metricPair.get._2
+    }
+
+    def getLoadedMapSizeMetric(metrics: StateStoreMetrics): Long = {
+      metrics.memoryUsedBytes
+    }
+
+    def assertCacheHitAndMiss(
+        metrics: StateStoreMetrics,
+        expectedCacheHitCount: Long,
+        expectedCacheMissCount: Long): Unit = {
+      val cacheHitCount = getCustomMetric(metrics, "loadedMapCacheHitCount")
+      val cacheMissCount = getCustomMetric(metrics, "loadedMapCacheMissCount")
+      assert(cacheHitCount === expectedCacheHitCount)
+      assert(cacheMissCount === expectedCacheMissCount)
+    }
+
+    val provider = newStoreProvider()
+
+    // Verify state before starting a new set of updates
+    assert(getLatestData(provider).isEmpty)
+
+    val store = provider.getStore(0)
+    assert(!store.hasCommitted)
+
+    assert(store.metrics.numKeys === 0)
+
+    val initialLoadedMapSize = getLoadedMapSizeMetric(store.metrics)
+    assert(initialLoadedMapSize >= 0)
+    assertCacheHitAndMiss(store.metrics, expectedCacheHitCount = 0, expectedCacheMissCount = 0)
+
+    put(store, "a", 1)
+    assert(store.metrics.numKeys === 1)
+
+    put(store, "b", 2)
+    put(store, "aa", 3)
+    assert(store.metrics.numKeys === 3)
+    remove(store, _.startsWith("a"))
+    assert(store.metrics.numKeys === 1)
+    assert(store.commit() === 1)
+
+    assert(store.hasCommitted)
+
+    val loadedMapSizeForVersion1 = getLoadedMapSizeMetric(store.metrics)
+    assert(loadedMapSizeForVersion1 > initialLoadedMapSize)
+    assertCacheHitAndMiss(store.metrics, expectedCacheHitCount = 0, expectedCacheMissCount = 0)
+
+    val storeV2 = provider.getStore(1)
+    assert(!storeV2.hasCommitted)
+    assert(storeV2.metrics.numKeys === 1)
+
+    put(storeV2, "cc", 4)
+    assert(storeV2.metrics.numKeys === 2)
+    assert(storeV2.commit() === 2)
+
+    assert(storeV2.hasCommitted)
+
+    val loadedMapSizeForVersion1And2 = getLoadedMapSizeMetric(storeV2.metrics)
+    assert(loadedMapSizeForVersion1And2 > loadedMapSizeForVersion1)
+    assertCacheHitAndMiss(storeV2.metrics, expectedCacheHitCount = 1, expectedCacheMissCount = 0)
+
+    val reloadedProvider = newStoreProvider(store.id)
+    // intended to load version 2 instead of 1
+    // version 2 will not be loaded to the cache in provider
+    val reloadedStore = reloadedProvider.getStore(1)
+    assert(reloadedStore.metrics.numKeys === 1)
+
+    assert(getLoadedMapSizeMetric(reloadedStore.metrics) === loadedMapSizeForVersion1)
+    assertCacheHitAndMiss(reloadedStore.metrics, expectedCacheHitCount = 0,
+      expectedCacheMissCount = 1)
+
+    // now we are loading version 2
+    val reloadedStoreV2 = reloadedProvider.getStore(2)
+    assert(reloadedStoreV2.metrics.numKeys === 2)
+
+    assert(getLoadedMapSizeMetric(reloadedStoreV2.metrics) > loadedMapSizeForVersion1)
+    assertCacheHitAndMiss(reloadedStoreV2.metrics, expectedCacheHitCount = 0,
+      expectedCacheMissCount = 2)
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {

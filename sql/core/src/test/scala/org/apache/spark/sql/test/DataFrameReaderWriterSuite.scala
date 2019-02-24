@@ -23,6 +23,13 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.schema.PrimitiveType
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
+import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkContext
@@ -31,6 +38,7 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -522,11 +530,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       Seq("json", "orc", "parquet", "csv").foreach { format =>
         val schema = StructType(
           StructField("cl1", IntegerType, nullable = false).withComment("test") ::
-            StructField("cl2", IntegerType, nullable = true) ::
-            StructField("cl3", IntegerType, nullable = true) :: Nil)
+          StructField("cl2", IntegerType, nullable = true) ::
+          StructField("cl3", IntegerType, nullable = true) :: Nil)
         val row = Row(3, null, 4)
         val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
 
+        // if we write and then read, the read will enforce schema to be nullable
         val tableName = "tab"
         withTable(tableName) {
           df.write.format(format).mode("overwrite").saveAsTable(tableName)
@@ -536,10 +545,39 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
             Row("cl1", "test") :: Nil)
           // Verify the schema
           val expectedFields = schema.fields.map(f => f.copy(nullable = true))
-          assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+          assert(spark.table(tableName).schema === schema.copy(fields = expectedFields))
         }
       }
     }
+  }
+
+  test("parquet - column nullability -- write only") {
+    val schema = StructType(
+      StructField("cl1", IntegerType, nullable = false) ::
+      StructField("cl2", IntegerType, nullable = true) :: Nil)
+    val row = Row(3, 4)
+    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      df.write.mode("overwrite").parquet(path)
+      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+
+      val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), new Configuration())
+      val f = ParquetFileReader.open(hadoopInputFile)
+      val parquetSchema = f.getFileMetaData.getSchema.getColumns.asScala
+                          .map(_.getPrimitiveType)
+      f.close()
+
+      // the write keeps nullable info from the schema
+      val expectedParquetSchema = Seq(
+        new PrimitiveType(Repetition.REQUIRED, PrimitiveTypeName.INT32, "cl1"),
+        new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "cl2")
+      )
+
+      assert (expectedParquetSchema === parquetSchema)
+    }
+
   }
 
   test("SPARK-17230: write out results of decimal calculation") {
@@ -801,6 +839,80 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
             Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
           checkReadPartitionColumnDuplication("parquet", c0, c1, src)
         }
+      }
+    }
+  }
+
+  test("Insert overwrite table command should output correct schema: basic") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).toDF("id")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+        spark.sql("CREATE TABLE tbl2(ID long) USING parquet")
+        spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
+      }
+    }
+  }
+
+  test("Insert overwrite table command should output correct schema: complex") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).map(x => (x, x.toInt, x.toInt)).toDF("col1", "col2", "col3")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT * FROM tbl")
+        spark.sql("CREATE TABLE tbl2(COL1 long, COL2 int, COL3 int) USING parquet PARTITIONED " +
+          "BY (COL2) CLUSTERED BY (COL3) INTO 3 BUCKETS")
+        spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT COL1, COL2, COL3 FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(
+          StructField("COL1", LongType, true),
+          StructField("COL3", IntegerType, true),
+          StructField("COL2", IntegerType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
+      }
+    }
+  }
+
+  test("Create table as select command should output correct schema: basic") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).toDF("id")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+        spark.sql("CREATE TABLE tbl2 USING parquet AS SELECT ID FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
+      }
+    }
+  }
+
+  test("Create table as select command should output correct schema: complex") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).map(x => (x, x.toInt, x.toInt)).toDF("col1", "col2", "col3")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT * FROM tbl")
+        spark.sql("CREATE TABLE tbl2 USING parquet PARTITIONED BY (COL2) " +
+          "CLUSTERED BY (COL3) INTO 3 BUCKETS AS SELECT COL1, COL2, COL3 FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(
+          StructField("COL1", LongType, true),
+          StructField("COL3", IntegerType, true),
+          StructField("COL2", IntegerType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
       }
     }
   }

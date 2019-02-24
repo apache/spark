@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -42,7 +43,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
+  def references: AttributeSet = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -172,9 +173,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
-  override def simpleString: String = statePrefix + super.simpleString
+  override def simpleString(maxFields: Int): String = statePrefix + super.simpleString(maxFields)
 
-  override def verboseString: String = simpleString
+  override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   /**
    * All the subqueries of current plan.
@@ -299,6 +300,22 @@ object QueryPlan extends PredicateHelper {
       splitConjunctivePredicates(normalized)
     } else {
       Nil
+    }
+  }
+
+  /**
+   * Converts the query plan to string and appends it via provided function.
+   */
+  def append[T <: QueryPlan[T]](
+      plan: => QueryPlan[T],
+      append: String => Unit,
+      verbose: Boolean,
+      addSuffix: Boolean,
+      maxFields: Int = SQLConf.get.maxToStringFields): Unit = {
+    try {
+      plan.treeString(append, verbose, addSuffix, maxFields)
+    } catch {
+      case e: AnalysisException => append(e.toString)
     }
   }
 }

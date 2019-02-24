@@ -41,6 +41,8 @@ import org.apache.spark.util.Utils;
 public class SparkLauncherSuite extends BaseSuite {
 
   private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
+  private static final String EXCEPTION_MESSAGE = "dummy-exception";
+  private static final RuntimeException DUMMY_EXCEPTION = new RuntimeException(EXCEPTION_MESSAGE);
 
   private final SparkLauncher launcher = new SparkLauncher();
 
@@ -130,17 +132,8 @@ public class SparkLauncherSuite extends BaseSuite {
     try {
       inProcessLauncherTestImpl();
     } finally {
-      Properties p = new Properties();
-      for (Map.Entry<Object, Object> e : properties.entrySet()) {
-        p.put(e.getKey(), e.getValue());
-      }
-      System.setProperties(p);
-      // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
-      // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
-      // See SPARK-23019 and SparkContext.stop() for details.
-      eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
-        assertTrue("SparkContext is still alive.", SparkContext$.MODULE$.getActive().isEmpty());
-      });
+      restoreSystemProperties(properties);
+      waitForSparkContextShutdown();
     }
   }
 
@@ -227,6 +220,82 @@ public class SparkLauncherSuite extends BaseSuite {
     assertEquals(SparkAppHandle.State.LOST, handle.getState());
   }
 
+  @Test
+  public void testInProcessLauncherGetError() throws Exception {
+    // Because this test runs SparkLauncher in process and in client mode, it pollutes the system
+    // properties, and that can cause test failures down the test pipeline. So restore the original
+    // system properties after this test runs.
+    Map<Object, Object> properties = new HashMap<>(System.getProperties());
+
+    SparkAppHandle handle = null;
+    try {
+      handle = new InProcessLauncher()
+        .setMaster("local")
+        .setAppResource(SparkLauncher.NO_RESOURCE)
+        .setMainClass(ErrorInProcessTestApp.class.getName())
+        .addAppArgs("hello")
+        .startApplication();
+
+      final SparkAppHandle _handle = handle;
+      eventually(Duration.ofSeconds(60), Duration.ofMillis(1000), () -> {
+        assertEquals(SparkAppHandle.State.FAILED, _handle.getState());
+      });
+
+      assertNotNull(handle.getError());
+      assertTrue(handle.getError().isPresent());
+      assertSame(handle.getError().get(), DUMMY_EXCEPTION);
+    } finally {
+      if (handle != null) {
+        handle.kill();
+      }
+      restoreSystemProperties(properties);
+      waitForSparkContextShutdown();
+    }
+  }
+
+  @Test
+  public void testSparkLauncherGetError() throws Exception {
+    SparkAppHandle handle = null;
+    try {
+      handle = new SparkLauncher()
+        .setMaster("local")
+        .setAppResource(SparkLauncher.NO_RESOURCE)
+        .setMainClass(ErrorInProcessTestApp.class.getName())
+        .addAppArgs("hello")
+        .startApplication();
+
+      final SparkAppHandle _handle = handle;
+      eventually(Duration.ofSeconds(60), Duration.ofMillis(1000), () -> {
+        assertEquals(SparkAppHandle.State.FAILED, _handle.getState());
+      });
+
+      assertNotNull(handle.getError());
+      assertTrue(handle.getError().isPresent());
+      assertTrue(handle.getError().get().getMessage().contains(EXCEPTION_MESSAGE));
+    } finally {
+      if (handle != null) {
+        handle.kill();
+      }
+    }
+  }
+
+  private void restoreSystemProperties(Map<Object, Object> properties) {
+    Properties p = new Properties();
+    for (Map.Entry<Object, Object> e : properties.entrySet()) {
+      p.put(e.getKey(), e.getValue());
+    }
+    System.setProperties(p);
+  }
+
+  private void waitForSparkContextShutdown() throws Exception {
+    // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
+    // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
+    // See SPARK-23019 and SparkContext.stop() for details.
+    eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
+      assertTrue("SparkContext is still alive.", SparkContext$.MODULE$.getActive().isEmpty());
+    });
+  }
+
   public static class SparkLauncherTestApp {
 
     public static void main(String[] args) throws Exception {
@@ -264,4 +333,15 @@ public class SparkLauncherSuite extends BaseSuite {
 
   }
 
+  /**
+   * Similar to {@link InProcessTestApp} except it throws an exception
+   */
+  public static class ErrorInProcessTestApp {
+
+    public static void main(String[] args) {
+      assertNotEquals(0, args.length);
+      assertEquals(args[0], "hello");
+      throw DUMMY_EXCEPTION;
+    }
+  }
 }

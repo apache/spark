@@ -53,7 +53,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       sharesHadoopClasses: Boolean = true): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
     // We will first try to share Hadoop classes. If we cannot resolve the Hadoop artifact
-    // with the given version, we will use Hadoop 2.6 and then will not share Hadoop classes.
+    // with the given version, we will use Hadoop 2.7 and then will not share Hadoop classes.
     var _sharesHadoopClasses = sharesHadoopClasses
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
@@ -65,13 +65,14 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. " +
-              s"We will change the hadoop version from $hadoopVersion to 2.6.0 and try again. " +
-              "Hadoop classes will not be shared between Spark and Hive metastore client. " +
+            val fallbackVersion = "2.7.4"
+            logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
+              s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
+              "again. Hadoop classes will not be shared between Spark and Hive metastore client. " +
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
             _sharesHadoopClasses = false
-            (downloadVersion(resolvedVersion, "2.6.5", ivyPath), "2.6.5")
+            (downloadVersion(resolvedVersion, fallbackVersion, ivyPath), fallbackVersion)
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -98,7 +99,11 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
     case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
     case "2.2" | "2.2.0" => hive.v2_2
-    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" => hive.v2_3
+    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" | "2.3.4" => hive.v2_3
+    case "3.1" | "3.1.0" | "3.1.1" => hive.v3_1
+    case version =>
+      throw new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
+        s"Please set ${HiveUtils.HIVE_METASTORE_VERSION.key} with a valid version.")
   }
 
   private def downloadVersion(
@@ -182,7 +187,6 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("org.slf4j") ||
     name.startsWith("org.apache.log4j") || // log4j1.x
     name.startsWith("org.apache.logging.log4j") || // log4j2
-    name.startsWith("org.apache.derby.") ||
     name.startsWith("org.apache.spark.") ||
     (sharesHadoopClasses && isHadoopClass) ||
     name.startsWith("scala.") ||

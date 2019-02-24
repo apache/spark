@@ -281,6 +281,8 @@ class DenseVector(Vector):
     DenseVector([3.0, 2.0])
     >>> u % 2
     DenseVector([1.0, 0.0])
+    >>> -v
+    DenseVector([-1.0, -2.0])
     """
     def __init__(self, ar):
         if isinstance(ar, bytes):
@@ -480,6 +482,9 @@ class DenseVector(Vector):
     def __getattr__(self, item):
         return getattr(self.array, item)
 
+    def __neg__(self):
+        return DenseVector(-self.array)
+
     def _delegate(op):
         def func(self, other):
             if isinstance(other, DenseVector):
@@ -487,7 +492,6 @@ class DenseVector(Vector):
             return DenseVector(getattr(self.array, op)(other))
         return func
 
-    __neg__ = _delegate("__neg__")
     __add__ = _delegate("__add__")
     __sub__ = _delegate("__sub__")
     __mul__ = _delegate("__mul__")

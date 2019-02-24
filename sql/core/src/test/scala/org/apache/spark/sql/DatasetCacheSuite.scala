@@ -49,7 +49,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assert(ds1.storageLevel == StorageLevel.MEMORY_AND_DISK)
     assert(ds2.storageLevel == StorageLevel.MEMORY_AND_DISK)
     // unpersist
-    ds1.unpersist()
+    ds1.unpersist(blocking = true)
     assert(ds1.storageLevel == StorageLevel.NONE)
     // non-default storage level
     ds1.persist(StorageLevel.MEMORY_ONLY_2)
@@ -71,7 +71,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
       cached,
       2, 3, 4)
     // Drop the cache.
-    cached.unpersist()
+    cached.unpersist(blocking = true)
     assert(cached.storageLevel == StorageLevel.NONE, "The Dataset should not be cached.")
   }
 
@@ -88,9 +88,9 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     checkDataset(joined, ("2", 2))
     assertCached(joined, 2)
 
-    ds1.unpersist()
+    ds1.unpersist(blocking = true)
     assert(ds1.storageLevel == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
-    ds2.unpersist()
+    ds2.unpersist(blocking = true)
     assert(ds2.storageLevel == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
   }
 
@@ -105,9 +105,9 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
       ("b", 3))
     assertCached(agged.filter(_._1 == "b"))
 
-    ds.unpersist()
+    ds.unpersist(blocking = true)
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
-    agged.unpersist()
+    agged.unpersist(blocking = true)
     assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
   }
 
@@ -122,13 +122,13 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     df.count()
     assertCached(df2)
 
-    df.unpersist()
+    df.unpersist(blocking = true)
     assert(df.storageLevel == StorageLevel.NONE)
   }
 
   test("cache UDF result correctly") {
-    val expensiveUDF = udf({x: Int => Thread.sleep(5000); x})
-    val df = spark.range(0, 10).toDF("a").withColumn("b", expensiveUDF($"a"))
+    val expensiveUDF = udf({x: Int => Thread.sleep(2000); x})
+    val df = spark.range(0, 2).toDF("a").repartition(1).withColumn("b", expensiveUDF($"a"))
     val df2 = df.agg(sum(df("b")))
 
     df.cache()
@@ -136,11 +136,11 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assertCached(df2)
 
     // udf has been evaluated during caching, and thus should not be re-evaluated here
-    failAfter(3 seconds) {
+    failAfter(2 seconds) {
       df2.collect()
     }
 
-    df.unpersist()
+    df.unpersist(blocking = true)
     assert(df.storageLevel == StorageLevel.NONE)
   }
 
@@ -166,7 +166,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     df.count()
     df3.cache()
 
-    df.unpersist()
+    df.unpersist(blocking = true)
 
     // df un-cached; df2 and df3's cache plan re-compiled
     assert(df.storageLevel == StorageLevel.NONE)
@@ -190,9 +190,9 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
 
     df1.unpersist(blocking = true)
 
-    // df1 un-cached; df2's cache plan re-compiled
+    // df1 un-cached; df2's cache plan stays the same
     assert(df1.storageLevel == StorageLevel.NONE)
-    assertCacheDependency(df1.groupBy('a).agg(sum('b)), 0)
+    assertCacheDependency(df1.groupBy('a).agg(sum('b)))
 
     val df4 = df1.groupBy('a).agg(sum('b)).agg(sum("sum(b)"))
     assertCached(df4)
@@ -207,14 +207,43 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     checkDataset(df5, Row(10))
   }
 
-  test("SPARK-24850 InMemoryRelation string representation does not include cached plan") {
-    val df = Seq(1).toDF("a").cache()
-    val outputStream = new java.io.ByteArrayOutputStream()
-    Console.withOut(outputStream) {
-      df.explain(false)
+  test("SPARK-26708 Cache data and cached plan should stay consistent") {
+    val df = spark.range(0, 5).toDF("a")
+    val df1 = df.withColumn("b", 'a + 1)
+    val df2 = df.filter('a > 1)
+
+    df.cache()
+    // Add df1 to the CacheManager; the buffer is currently empty.
+    df1.cache()
+    // After calling collect(), df1's buffer has been loaded.
+    df1.collect()
+    // Add df2 to the CacheManager; the buffer is currently empty.
+    df2.cache()
+
+    // Verify that df1 is a InMemoryRelation plan with dependency on another cached plan.
+    assertCacheDependency(df1)
+    val df1InnerPlan = df1.queryExecution.withCachedData
+      .asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
+    // Verify that df2 is a InMemoryRelation plan with dependency on another cached plan.
+    assertCacheDependency(df2)
+
+    df.unpersist(blocking = true)
+
+    // Verify that df1's cache has stayed the same, since df1's cache already has data
+    // before df.unpersist().
+    val df1Limit = df1.limit(2)
+    val df1LimitInnerPlan = df1Limit.queryExecution.withCachedData.collectFirst {
+      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
-    assert(outputStream.toString.replaceAll("#\\d+", "#x").contains(
-      "InMemoryRelation [a#x], StorageLevel(disk, memory, deserialized, 1 replicas)"
-    ))
+    assert(df1LimitInnerPlan.isDefined && df1LimitInnerPlan.get == df1InnerPlan)
+
+    // Verify that df2's cache has been re-cached, with a new physical plan rid of dependency
+    // on df, since df2's cache had not been loaded before df.unpersist().
+    val df2Limit = df2.limit(2)
+    val df2LimitInnerPlan = df2Limit.queryExecution.withCachedData.collectFirst {
+      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+    }
+    assert(df2LimitInnerPlan.isDefined &&
+      df2LimitInnerPlan.get.find(_.isInstanceOf[InMemoryTableScanExec]).isEmpty)
   }
 }

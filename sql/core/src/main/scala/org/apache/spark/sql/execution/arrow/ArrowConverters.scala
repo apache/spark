@@ -17,73 +17,76 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import java.io.ByteArrayOutputStream
-import java.nio.channels.Channels
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
+import java.nio.channels.{Channels, ReadableByteChannel}
 
 import scala.collection.JavaConverters._
 
+import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
-import org.apache.arrow.vector.ipc.{ArrowFileReader, ArrowFileWriter}
-import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
+import org.apache.arrow.vector.ipc.{ArrowStreamWriter, ReadChannel, WriteChannel}
+import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ByteBufferOutputStream, Utils}
 
 
 /**
- * Store Arrow data in a form that can be serialized by Spark and served to a Python process.
+ * Writes serialized ArrowRecordBatches to a DataOutputStream in the Arrow stream format.
  */
-private[sql] class ArrowPayload private[sql] (payload: Array[Byte]) extends Serializable {
+private[sql] class ArrowBatchStreamWriter(
+    schema: StructType,
+    out: OutputStream,
+    timeZoneId: String) {
+
+  val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+  val writeChannel = new WriteChannel(Channels.newChannel(out))
+
+  // Write the Arrow schema first, before batches
+  MessageSerializer.serialize(writeChannel, arrowSchema)
 
   /**
-   * Convert the ArrowPayload to an ArrowRecordBatch.
+   * Consume iterator to write each serialized ArrowRecordBatch to the stream.
    */
-  def loadBatch(allocator: BufferAllocator): ArrowRecordBatch = {
-    ArrowConverters.byteArrayToBatch(payload, allocator)
+  def writeBatches(arrowBatchIter: Iterator[Array[Byte]]): Unit = {
+    arrowBatchIter.foreach(writeChannel.write)
   }
 
   /**
-   * Get the ArrowPayload as a type that can be served to Python.
+   * End the Arrow stream, does not close output stream.
    */
-  def asPythonSerializable: Array[Byte] = payload
-}
-
-/**
- * Iterator interface to iterate over Arrow record batches and return rows
- */
-private[sql] trait ArrowRowIterator extends Iterator[InternalRow] {
-
-  /**
-   * Return the schema loaded from the Arrow record batch being iterated over
-   */
-  def schema: StructType
+  def end(): Unit = {
+    ArrowStreamWriter.writeEndOfStream(writeChannel)
+  }
 }
 
 private[sql] object ArrowConverters {
 
   /**
-   * Maps Iterator from InternalRow to ArrowPayload. Limit ArrowRecordBatch size in ArrowPayload
-   * by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
+   * Maps Iterator from InternalRow to serialized ArrowRecordBatches. Limit ArrowRecordBatch size
+   * in a batch by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
    */
-  private[sql] def toPayloadIterator(
+  private[sql] def toBatchIterator(
       rowIter: Iterator[InternalRow],
       schema: StructType,
       maxRecordsPerBatch: Int,
       timeZoneId: String,
-      context: TaskContext): Iterator[ArrowPayload] = {
+      context: TaskContext): Iterator[Array[Byte]] = {
 
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val allocator =
-      ArrowUtils.rootAllocator.newChildAllocator("toPayloadIterator", 0, Long.MaxValue)
+      ArrowUtils.rootAllocator.newChildAllocator("toBatchIterator", 0, Long.MaxValue)
 
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val unloader = new VectorUnloader(root)
     val arrowWriter = ArrowWriter.create(root)
 
     context.addTaskCompletionListener[Unit] { _ =>
@@ -91,7 +94,7 @@ private[sql] object ArrowConverters {
       allocator.close()
     }
 
-    new Iterator[ArrowPayload] {
+    new Iterator[Array[Byte]] {
 
       override def hasNext: Boolean = rowIter.hasNext || {
         root.close()
@@ -99,9 +102,9 @@ private[sql] object ArrowConverters {
         false
       }
 
-      override def next(): ArrowPayload = {
+      override def next(): Array[Byte] = {
         val out = new ByteArrayOutputStream()
-        val writer = new ArrowFileWriter(root, null, Channels.newChannel(out))
+        val writeChannel = new WriteChannel(Channels.newChannel(out))
 
         Utils.tryWithSafeFinally {
           var rowCount = 0
@@ -111,45 +114,46 @@ private[sql] object ArrowConverters {
             rowCount += 1
           }
           arrowWriter.finish()
-          writer.writeBatch()
+          val batch = unloader.getRecordBatch()
+          MessageSerializer.serialize(writeChannel, batch)
+          batch.close()
         } {
           arrowWriter.reset()
-          writer.close()
         }
 
-        new ArrowPayload(out.toByteArray)
+        out.toByteArray
       }
     }
   }
 
   /**
-   * Maps Iterator from ArrowPayload to InternalRow. Returns a pair containing the row iterator
-   * and the schema from the first batch of Arrow data read.
+   * Maps iterator from serialized ArrowRecordBatches to InternalRows.
    */
-  private[sql] def fromPayloadIterator(
-      payloadIter: Iterator[ArrowPayload],
-      context: TaskContext): ArrowRowIterator = {
+  private[sql] def fromBatchIterator(
+      arrowBatchIter: Iterator[Array[Byte]],
+      schema: StructType,
+      timeZoneId: String,
+      context: TaskContext): Iterator[InternalRow] = {
     val allocator =
-      ArrowUtils.rootAllocator.newChildAllocator("fromPayloadIterator", 0, Long.MaxValue)
+      ArrowUtils.rootAllocator.newChildAllocator("fromBatchIterator", 0, Long.MaxValue)
 
-    new ArrowRowIterator {
-      private var reader: ArrowFileReader = null
-      private var schemaRead = StructType(Seq.empty)
-      private var rowIter = if (payloadIter.hasNext) nextBatch() else Iterator.empty
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+
+    new Iterator[InternalRow] {
+      private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
 
       context.addTaskCompletionListener[Unit] { _ =>
-        closeReader()
+        root.close()
         allocator.close()
       }
 
-      override def schema: StructType = schemaRead
-
       override def hasNext: Boolean = rowIter.hasNext || {
-        closeReader()
-        if (payloadIter.hasNext) {
+        if (arrowBatchIter.hasNext) {
           rowIter = nextBatch()
           true
         } else {
+          root.close()
           allocator.close()
           false
         }
@@ -157,19 +161,11 @@ private[sql] object ArrowConverters {
 
       override def next(): InternalRow = rowIter.next()
 
-      private def closeReader(): Unit = {
-        if (reader != null) {
-          reader.close()
-          reader = null
-        }
-      }
-
       private def nextBatch(): Iterator[InternalRow] = {
-        val in = new ByteArrayReadableSeekableByteChannel(payloadIter.next().asPythonSerializable)
-        reader = new ArrowFileReader(in, allocator)
-        reader.loadNextBatch()  // throws IOException
-        val root = reader.getVectorSchemaRoot  // throws IOException
-        schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
+        val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
+        val vectorLoader = new VectorLoader(root)
+        vectorLoader.load(arrowRecordBatch)
+        arrowRecordBatch.close()
 
         val columns = root.getFieldVectors.asScala.map { vector =>
           new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
@@ -183,34 +179,106 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Convert a byte array to an ArrowRecordBatch.
+   * Load a serialized ArrowRecordBatch.
    */
-  private[arrow] def byteArrayToBatch(
+  private[arrow] def loadBatch(
       batchBytes: Array[Byte],
       allocator: BufferAllocator): ArrowRecordBatch = {
-    val in = new ByteArrayReadableSeekableByteChannel(batchBytes)
-    val reader = new ArrowFileReader(in, allocator)
+    val in = new ByteArrayInputStream(batchBytes)
+    MessageSerializer.deserializeRecordBatch(
+      new ReadChannel(Channels.newChannel(in)), allocator)  // throws IOException
+  }
 
-    // Read a batch from a byte stream, ensure the reader is closed
-    Utils.tryWithSafeFinally {
-      val root = reader.getVectorSchemaRoot  // throws IOException
-      val unloader = new VectorUnloader(root)
-      reader.loadNextBatch()  // throws IOException
-      unloader.getRecordBatch
-    } {
-      reader.close()
+  /**
+   * Create a DataFrame from an RDD of serialized ArrowRecordBatches.
+   */
+  private[sql] def toDataFrame(
+      arrowBatchRDD: JavaRDD[Array[Byte]],
+      schemaString: String,
+      sqlContext: SQLContext): DataFrame = {
+    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
+    val timeZoneId = sqlContext.sessionState.conf.sessionLocalTimeZone
+    val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
+      val context = TaskContext.get()
+      ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
+    }
+    sqlContext.internalCreateDataFrame(rdd.setName("arrow"), schema)
+  }
+
+  /**
+   * Read a file as an Arrow stream and parallelize as an RDD of serialized ArrowRecordBatches.
+   */
+  private[sql] def readArrowStreamFromFile(
+      sqlContext: SQLContext,
+      filename: String): JavaRDD[Array[Byte]] = {
+    Utils.tryWithResource(new FileInputStream(filename)) { fileStream =>
+      // Create array to consume iterator so that we can safely close the file
+      val batches = getBatchesFromStream(fileStream.getChannel).toArray
+      // Parallelize the record batches to create an RDD
+      JavaRDD.fromRDD(sqlContext.sparkContext.parallelize(batches, batches.length))
     }
   }
 
-  private[sql] def toDataFrame(
-      payloadRDD: JavaRDD[Array[Byte]],
-      schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
-    val rdd = payloadRDD.rdd.mapPartitions { iter =>
-      val context = TaskContext.get()
-      ArrowConverters.fromPayloadIterator(iter.map(new ArrowPayload(_)), context)
+  /**
+   * Read an Arrow stream input and return an iterator of serialized ArrowRecordBatches.
+   */
+  private[sql] def getBatchesFromStream(in: ReadableByteChannel): Iterator[Array[Byte]] = {
+
+    // Iterate over the serialized Arrow RecordBatch messages from a stream
+    new Iterator[Array[Byte]] {
+      var batch: Array[Byte] = readNextBatch()
+
+      override def hasNext: Boolean = batch != null
+
+      override def next(): Array[Byte] = {
+        val prevBatch = batch
+        batch = readNextBatch()
+        prevBatch
+      }
+
+      // This gets the next serialized ArrowRecordBatch by reading message metadata to check if it
+      // is a RecordBatch message and then returning the complete serialized message which consists
+      // of a int32 length, serialized message metadata and a serialized RecordBatch message body
+      def readNextBatch(): Array[Byte] = {
+        val msgMetadata = MessageSerializer.readMessage(new ReadChannel(in))
+        if (msgMetadata == null) {
+          return null
+        }
+
+        // Get the length of the body, which has not been read at this point
+        val bodyLength = msgMetadata.getMessageBodyLength.toInt
+
+        // Only care about RecordBatch messages, skip Schema and unsupported Dictionary messages
+        if (msgMetadata.getMessage.headerType() == MessageHeader.RecordBatch) {
+
+          // Buffer backed output large enough to hold the complete serialized message
+          val bbout = new ByteBufferOutputStream(4 + msgMetadata.getMessageLength + bodyLength)
+
+          // Write message metadata to ByteBuffer output stream
+          MessageSerializer.writeMessageBuffer(
+            new WriteChannel(Channels.newChannel(bbout)),
+            msgMetadata.getMessageLength,
+            msgMetadata.getMessageBuffer)
+
+          // Get a zero-copy ByteBuffer with already contains message metadata, must close first
+          bbout.close()
+          val bb = bbout.toByteBuffer
+          bb.position(bbout.getCount())
+
+          // Read message body directly into the ByteBuffer to avoid copy, return backed byte array
+          bb.limit(bb.capacity())
+          JavaUtils.readFully(in, bb)
+          bb.array()
+        } else {
+          if (bodyLength > 0) {
+            // Skip message body if not a RecordBatch
+            Channels.newInputStream(in).skip(bodyLength)
+          }
+
+          // Proceed to next message
+          readNextBatch()
+        }
+      }
     }
-    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
-    sqlContext.internalCreateDataFrame(rdd, schema)
   }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.ml.fpm
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{PrefixSpan => mllibPrefixSpan}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
@@ -30,7 +31,7 @@ import org.apache.spark.sql.types.{ArrayType, LongType, StructField, StructType}
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth
- * (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+ * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
  * This class is not yet an Estimator/Transformer, use `findFrequentSequentialPatterns` method to
  * run the PrefixSpan algorithm.
  *
@@ -135,7 +136,10 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
    *          - `freq: Long`
    */
   @Since("2.4.0")
-  def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = {
+  def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = instrumented { instr =>
+    instr.logDataset(dataset)
+    instr.logParams(this, params: _*)
+
     val sequenceColParam = $(sequenceCol)
     val inputType = dataset.schema(sequenceColParam).dataType
     require(inputType.isInstanceOf[ArrayType] &&

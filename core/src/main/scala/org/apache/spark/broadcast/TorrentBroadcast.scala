@@ -18,6 +18,7 @@
 package org.apache.spark.broadcast
 
 import java.io._
+import java.lang.ref.SoftReference
 import java.nio.ByteBuffer
 import java.util.zip.Adler32
 
@@ -26,7 +27,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
@@ -61,9 +62,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * Value of the broadcast object on executors. This is reconstructed by [[readBroadcastBlock]],
    * which builds this value by reading blocks from the driver and/or other executors.
    *
-   * On the driver, if the value is required, it is read lazily from the block manager.
+   * On the driver, if the value is required, it is read lazily from the block manager. We hold
+   * a soft reference so that it can be garbage collected if required, as we can always reconstruct
+   * in the future.
    */
-  @transient private lazy val _value: T = readBroadcastBlock()
+  @transient private var _value: SoftReference[T] = _
 
   /** The compression codec to use, or None if compression is disabled */
   @transient private var compressionCodec: Option[CompressionCodec] = _
@@ -71,14 +74,14 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   @transient private var blockSize: Int = _
 
   private def setConf(conf: SparkConf) {
-    compressionCodec = if (conf.getBoolean("spark.broadcast.compress", true)) {
+    compressionCodec = if (conf.get(config.BROADCAST_COMPRESS)) {
       Some(CompressionCodec.createCodec(conf))
     } else {
       None
     }
     // Note: use getSizeAsKb (not bytes) to maintain compatibility if no units are provided
-    blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
-    checksumEnabled = conf.getBoolean("spark.broadcast.checksum", true)
+    blockSize = conf.get(config.BROADCAST_BLOCKSIZE).toInt * 1024
+    checksumEnabled = conf.get(config.BROADCAST_CHECKSUM)
   }
   setConf(SparkEnv.get.conf)
 
@@ -92,8 +95,15 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** The checksum for all the blocks. */
   private var checksums: Array[Int] = _
 
-  override protected def getValue() = {
-    _value
+  override protected def getValue() = synchronized {
+    val memoized: T = if (_value == null) null.asInstanceOf[T] else _value.get
+    if (memoized != null) {
+      memoized
+    } else {
+      val newlyRead = readBroadcastBlock()
+      _value = new SoftReference[T](newlyRead)
+      newlyRead
+    }
   }
 
   private def calcChecksum(block: ByteBuffer): Int = {
@@ -205,8 +215,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
-    TorrentBroadcast.synchronized {
-      val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
+    val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
+    broadcastCache.synchronized {
 
       Option(broadcastCache.get(broadcastId)).map(_.asInstanceOf[T]).getOrElse {
         setConf(SparkEnv.get.conf)
@@ -226,10 +236,12 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
               throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
             }
           case None =>
-            logInfo("Started reading broadcast variable " + id)
-            val startTimeMs = System.currentTimeMillis()
+            val estimatedTotalSize = Utils.bytesToString(numBlocks * blockSize)
+            logInfo(s"Started reading broadcast variable $id with $numBlocks pieces " +
+              s"(estimated total size $estimatedTotalSize)")
+            val startTimeNs = System.nanoTime()
             val blocks = readBlocks()
-            logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
+            logInfo(s"Reading broadcast variable $id took ${Utils.getUsedTimeNs(startTimeNs)}")
 
             try {
               val obj = TorrentBroadcast.unBlockifyObject[T](

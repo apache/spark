@@ -202,7 +202,7 @@ private[ui] class SparkPlanGraphCluster(
 
 
 /**
- * Represent an edge in the SparkPlan tree. `fromId` is the parent node id, and `toId` is the child
+ * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
  * node id.
  */
 private[ui] case class SparkPlanGraphEdge(fromId: Long, toId: Long) {

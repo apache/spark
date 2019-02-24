@@ -19,10 +19,10 @@ package org.apache.spark.sql.sources.v2.writer;
 
 import java.io.IOException;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
- * A data writer returned by {@link DataWriterFactory#createDataWriter(int, long, long)} and is
+ * A data writer returned by {@link DataWriterFactory#createWriter(int, long)} and is
  * responsible for writing data for an input RDD partition.
  *
  * One Spark task has one exclusive data writer, so there is no thread-safe concern.
@@ -36,11 +36,11 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * If this data writer succeeds(all records are successfully written and {@link #commit()}
  * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
- * {@link DataSourceWriter#commit(WriterCommitMessage[])} with commit messages from other data
+ * {@link BatchWrite#commit(WriterCommitMessage[])} with commit messages from other data
  * writers. If this data writer fails(one record fails to write or {@link #commit()} fails), an
  * exception will be sent to the driver side, and Spark may retry this writing task a few times.
- * In each retry, {@link DataWriterFactory#createDataWriter(int, long, long)} will receive a
- * different `taskId`. Spark will call {@link DataSourceWriter#abort(WriterCommitMessage[])}
+ * In each retry, {@link DataWriterFactory#createWriter(int, long)} will receive a
+ * different `taskId`. Spark will call {@link BatchWrite#abort(WriterCommitMessage[])}
  * when the configured number of retries is exhausted.
  *
  * Besides the retry mechanism, Spark may launch speculative tasks if the existing writing task
@@ -55,7 +55,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface DataWriter<T> {
 
   /**
@@ -71,11 +71,11 @@ public interface DataWriter<T> {
   /**
    * Commits this writer after all records are written successfully, returns a commit message which
    * will be sent back to driver side and passed to
-   * {@link DataSourceWriter#commit(WriterCommitMessage[])}.
+   * {@link BatchWrite#commit(WriterCommitMessage[])}.
    *
    * The written data should only be visible to data source readers after
-   * {@link DataSourceWriter#commit(WriterCommitMessage[])} succeeds, which means this method
-   * should still "hide" the written data and ask the {@link DataSourceWriter} at driver side to
+   * {@link BatchWrite#commit(WriterCommitMessage[])} succeeds, which means this method
+   * should still "hide" the written data and ask the {@link BatchWrite} at driver side to
    * do the final commit via {@link WriterCommitMessage}.
    *
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
@@ -93,7 +93,7 @@ public interface DataWriter<T> {
    * failed.
    *
    * If this method fails(by throwing an exception), the underlying data source may have garbage
-   * that need to be cleaned by {@link DataSourceWriter#abort(WriterCommitMessage[])} or manually,
+   * that need to be cleaned by {@link BatchWrite#abort(WriterCommitMessage[])} or manually,
    * but these garbage should not be visible to data source readers.
    *
    * @throws IOException if failure happens during disk/network IO like writing files.

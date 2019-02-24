@@ -38,7 +38,9 @@ select a, b, sum(b) from data group by 3;
 select a, b, sum(b) + 2 from data group by 3;
 
 -- negative case: nondeterministic expression
-select a, rand(0), sum(b) from data group by a, 2;
+select a, rand(0), sum(b)
+from 
+(select /*+ REPARTITION(1) */ a, b from data) group by a, 2;
 
 -- negative case: star
 select * from data group by a, b, 1;

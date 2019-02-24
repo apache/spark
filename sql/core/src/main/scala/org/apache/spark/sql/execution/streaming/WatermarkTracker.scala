@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
@@ -36,7 +38,7 @@ object MultipleWatermarkPolicy {
   val DEFAULT_POLICY_NAME = "min"
 
   def apply(policyName: String): MultipleWatermarkPolicy = {
-    policyName.toLowerCase match {
+    policyName.toLowerCase(Locale.ROOT) match {
       case DEFAULT_POLICY_NAME => MinWatermark
       case "max" => MaxWatermark
       case _ =>

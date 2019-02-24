@@ -71,19 +71,42 @@ if [[ $IMAGE_TAG == "N/A" ]];
 then
   IMAGE_TAG=$(uuidgen);
   cd $UNPACKED_SPARK_TGZ
-  if [[ $DEPLOY_MODE == cloud ]] ;
-  then
-    $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG build
-    if  [[ $IMAGE_REPO == gcr.io* ]] ;
-    then
-      gcloud docker -- push $IMAGE_REPO/spark:$IMAGE_TAG
-    else
-      $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG push
-    fi
-  else
-    # -m option for minikube.
-    $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG build
-  fi
+
+  # Build PySpark image
+  LANGUAGE_BINDING_BUILD_ARGS="-p $UNPACKED_SPARK_TGZ/kubernetes/dockerfiles/spark/bindings/python/Dockerfile"
+
+  # Build SparkR image
+  LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $UNPACKED_SPARK_TGZ/kubernetes/dockerfiles/spark/bindings/R/Dockerfile"
+
+  case $DEPLOY_MODE in
+    cloud)
+      # Build images
+      $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+
+      # Push images appropriately
+      if [[ $IMAGE_REPO == gcr.io* ]] ;
+      then
+        gcloud docker -- push $IMAGE_REPO/spark:$IMAGE_TAG
+      else
+        $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG push
+      fi
+      ;;
+
+    docker-for-desktop)
+       # Only need to build as this will place it in our local Docker repo which is all
+       # we need for Docker for Desktop to work so no need to also push
+       $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+       ;;
+
+    minikube)
+       # Only need to build and if we do this with the -m option for minikube we will
+       # build the images directly using the minikube Docker daemon so no need to push
+       $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+       ;;
+    *)
+       echo "Unrecognized deploy mode $DEPLOY_MODE" && exit 1
+       ;;
+  esac
   cd -
 fi
 

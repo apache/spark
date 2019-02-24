@@ -36,7 +36,9 @@ class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def this() = this(Identifiable.randomUID("tok"))
 
   override protected def createTransformFunc: String => Seq[String] = {
+    // scalastyle:off caselocale
     _.toLowerCase.split("\\s")
+    // scalastyle:on caselocale
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
@@ -140,7 +142,9 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def createTransformFunc: String => Seq[String] = { originStr =>
     val re = $(pattern).r
+    // scalastyle:off caselocale
     val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
+    // scalastyle:on caselocale
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
     val minLength = $(minTokenLength)
     tokens.filter(_.length >= minLength)

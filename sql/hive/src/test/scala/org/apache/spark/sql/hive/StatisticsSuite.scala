@@ -19,19 +19,21 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 import java.sql.Timestamp
+import java.util.Locale
 
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.hadoop.hive.common.StatsSetupConst
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -144,6 +146,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
       intercept[AnalysisException] {
         sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
+      }
+    }
+  }
+
+  test("SPARK-24626 parallel file listing in Stats computation") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2",
+      SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION.key -> "True") {
+      val checkSizeTable = "checkSizeTable"
+      withTable(checkSizeTable) {
+          sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-01') SELECT * FROM src")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-02') SELECT * FROM src")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-03') SELECT * FROM src")
+          val tableMeta = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier(checkSizeTable))
+          HiveCatalogMetrics.reset()
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+          val size = CommandUtils.calculateTotalSize(spark, tableMeta)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
+          assert(size === BigInt(17436))
       }
     }
   }
@@ -468,7 +490,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
         }.getMessage
         assert(message.contains(
-          s"DS is not a valid partition column in table `default`.`${tableName.toLowerCase}`"))
+          "DS is not a valid partition column in table " +
+            s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -482,8 +505,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName $partitionSpec COMPUTE STATISTICS")
       }.getMessage
       assert(message.contains("The list of partition columns with values " +
-        s"in partition specification for table '${tableName.toLowerCase}' in database 'default' " +
-        "is not a prefix of the list of partition columns defined in the table schema"))
+        s"in partition specification for table '${tableName.toLowerCase(Locale.ROOT)}' in " +
+        "database 'default' is not a prefix of the list of partition columns defined in " +
+        "the table schema"))
     }
 
     withTable(tableName) {
@@ -529,12 +553,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+        "hour is not a valid partition column in table " +
+          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+        "hour is not a valid partition column in table " +
+          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       intercept[NoSuchPartitionException] {
@@ -630,6 +656,51 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         "c3" -> CatalogColumnStat(distinctCount = Some(2), min = Some("10.0"), max = Some("20.0"),
           nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))))
     }
+  }
+
+  test("collecting statistics for all columns") {
+    val table = "update_col_stats_table"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 INT, c2 STRING, c3 DOUBLE)")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+      val fetchedStats0 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetchedStats0.get.colStats == Map(
+        "c1" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(20), maxLen = Some(20))))
+
+      // Insert new data and analyze: have the latest column stats.
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'b', null")
+
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+      val fetchedStats1 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
+      assert(fetchedStats1.get.colStats == Map(
+        "c1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(1), min = Some("10.0"), max = Some("10.0"),
+          nullCount = Some(1), avgLen = Some(8), maxLen = Some(8)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(2), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))))
+    }
+  }
+
+  test("analyze column command paramaters validation") {
+    val e1 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), Option(Seq("c1")), true).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
+    val e2 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
   }
 
   private def createNonPartitionedTable(

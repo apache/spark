@@ -190,7 +190,7 @@ class GradientDescentClusterSuite extends SparkFunSuite with LocalClusterSparkCo
       iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
-    // greater than 1MB and hence Spark would throw an error.
+    // greater than 1MiB and hence Spark would throw an error.
     val (weights, loss) = GradientDescent.runMiniBatchSGD(
       points,
       new LogisticGradient,

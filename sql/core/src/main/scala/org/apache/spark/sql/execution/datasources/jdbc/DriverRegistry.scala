@@ -50,7 +50,7 @@ object DriverRegistry extends Logging {
     } else {
       synchronized {
         if (wrapperMap.get(className).isEmpty) {
-          val wrapper = new DriverWrapper(cls.newInstance().asInstanceOf[Driver])
+          val wrapper = new DriverWrapper(cls.getConstructor().newInstance().asInstanceOf[Driver])
           DriverManager.registerDriver(wrapper)
           wrapperMap(className) = wrapper
           logTrace(s"Wrapper for $className registered")

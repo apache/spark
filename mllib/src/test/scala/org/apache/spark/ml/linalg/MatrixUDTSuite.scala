@@ -31,7 +31,7 @@ class MatrixUDTSuite extends SparkFunSuite {
     val sm3 = dm3.toSparse
 
     for (m <- Seq(dm1, dm2, dm3, sm1, sm2, sm3)) {
-      val udt = UDTRegistration.getUDTFor(m.getClass.getName).get.newInstance()
+      val udt = UDTRegistration.getUDTFor(m.getClass.getName).get.getConstructor().newInstance()
         .asInstanceOf[MatrixUDT]
       assert(m === udt.deserialize(udt.serialize(m)))
       assert(udt.typeName == "matrix")

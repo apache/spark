@@ -17,10 +17,7 @@
 
 from __future__ import print_function
 
-import os
-import sys
-
-from py4j.java_gateway import java_import, JavaObject
+from py4j.java_gateway import java_import
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
@@ -343,9 +340,11 @@ class StreamingContext(object):
             raise ValueError("All DStreams should have same serializer")
         if len(set(s._slideDuration for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same slide duration")
-        first = dstreams[0]
-        jrest = [d._jdstream for d in dstreams[1:]]
-        return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+        cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream
+        jdstreams = SparkContext._gateway.new_array(cls, len(dstreams))
+        for i in range(0, len(dstreams)):
+            jdstreams[i] = dstreams[i]._jdstream
+        return DStream(self._jssc.union(jdstreams), self, dstreams[0]._jrdd_deserializer)
 
     def addStreamingListener(self, streamingListener):
         """

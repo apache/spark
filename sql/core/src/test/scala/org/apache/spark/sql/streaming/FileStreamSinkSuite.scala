@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
@@ -452,6 +453,29 @@ class FileStreamSinkSuite extends StreamTest {
           }
         }
       }
+    }
+  }
+
+  test("special characters in output path") {
+    withTempDir { tempDir =>
+      val checkpointDir = new File(tempDir, "chk")
+      val outputDir = new File(tempDir, "output @#output")
+      val inputData = MemoryStream[Int]
+      inputData.addData(1, 2, 3)
+      val q = inputData.toDF()
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .format("parquet")
+        .start(outputDir.getCanonicalPath)
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+      // The "_spark_metadata" directory should be in "outputDir"
+      assert(outputDir.listFiles.map(_.getName).contains(FileStreamSink.metadataDir))
+      val outputDf = spark.read.parquet(outputDir.getCanonicalPath).as[Int]
+      checkDatasetUnorderly(outputDf, 1, 2, 3)
     }
   }
 }

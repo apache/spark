@@ -19,12 +19,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
+import org.apache.log4j.{Appender, AppenderSkeleton, Logger}
+import org.apache.log4j.spi.LoggingEvent
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
@@ -109,7 +113,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = UTF8String.fromString("abc")
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -122,7 +126,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = UnsafeArrayData.fromPrimitiveArray(Array.fill(length)(true))
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -138,7 +142,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = ArrayBasedMapData((0 until length).toArray, Array.fill(length)(true))
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -150,7 +154,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
 
-    if (!checkResult(actual, expected, expressions.head.dataType)) {
+    if (!checkResult(actual, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -166,7 +170,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = InternalRow(Seq.fill(length)(true): _*)
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -247,7 +251,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       UTF8String.fromString("c"))
     assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getInt(1) === 3)
 
-    val fromUnsafe = FromUnsafeProjection(schema)
+    val fromUnsafe = SafeProjection.create(schema)
     val internalRow2 = fromUnsafe(unsafeRow)
     assert(internalRow === internalRow2)
 
@@ -342,6 +346,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     projection(row)
   }
 
+  test("SPARK-22226: splitExpressions should not generate codes beyond 64KB") {
+    val colNumber = 10000
+    val attrs = (1 to colNumber).map(colIndex => AttributeReference(s"_$colIndex", IntegerType)())
+    val lit = Literal(1000)
+    val exprs = attrs.flatMap { a =>
+      Seq(If(lit < a, lit, a), sqrt(a))
+    }
+    UnsafeProjection.create(exprs, attrs)
+  }
+
   test("SPARK-22543: split large predicates into blocks due to JVM code size limit") {
     val length = 600
 
@@ -361,7 +375,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actualOr.length == 1)
     val expectedOr = false
 
-    if (!checkResult(actualOr.head, expectedOr, exprOr.dataType)) {
+    if (!checkResult(actualOr.head, expectedOr, exprOr)) {
       fail(s"Incorrect Evaluation: expressions: $exprOr, actual: $actualOr, expected: $expectedOr")
     }
 
@@ -375,7 +389,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actualAnd.length == 1)
     val expectedAnd = false
 
-    if (!checkResult(actualAnd.head, expectedAnd, exprAnd.dataType)) {
+    if (!checkResult(actualAnd.head, expectedAnd, exprAnd)) {
       fail(
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
     }
@@ -498,5 +512,65 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val names2 = ctx.freshName("a") :: ctx.freshName("a") ::
       ctx.freshName("a_1") :: ctx.freshName("a_0") :: Nil
     assert(names2.distinct.length == 4)
+  }
+
+  test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
+    class MockAppender extends AppenderSkeleton {
+      var seenMessage = false
+
+      override def append(loggingEvent: LoggingEvent): Unit = {
+        if (loggingEvent.getRenderedMessage().contains("Generated method too long")) {
+          seenMessage = true
+        }
+      }
+
+      override def close(): Unit = {}
+      override def requiresLayout(): Boolean = false
+    }
+
+    val appender = new MockAppender()
+    withLogAppender(appender) {
+      val x = 42
+      val expr = HugeCodeIntExpression(x)
+      val proj = GenerateUnsafeProjection.generate(Seq(expr))
+      val actual = proj(null)
+      assert(actual.getInt(0) == x)
+    }
+    assert(appender.seenMessage)
+  }
+
+  private def withLogAppender(appender: Appender)(f: => Unit): Unit = {
+    val logger =
+      Logger.getLogger(classOf[CodeGenerator[_, _]].getName)
+    logger.addAppender(appender)
+    try f finally {
+      logger.removeAppender(appender)
+    }
+  }
+}
+
+case class HugeCodeIntExpression(value: Int) extends Expression {
+  override def nullable: Boolean = true
+  override def dataType: DataType = IntegerType
+  override def children: Seq[Expression] = Nil
+  override def eval(input: InternalRow): Any = value
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Assuming HugeMethodLimit to be 8000
+    val HugeMethodLimit = CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
+    // A single "int dummyN = 0;" will be at least 2 bytes of bytecode:
+    //   0: iconst_0
+    //   1: istore_1
+    // and it'll become bigger as the number of local variables increases.
+    // So 4000 such dummy local variable definitions are sufficient to bump the bytecode size
+    // of a generated method to above 8000 bytes.
+    val hugeCode = (0 until (HugeMethodLimit / 2)).map(i => s"int dummy$i = 0;").mkString("\n")
+    val code =
+      code"""{
+         |  $hugeCode
+         |}
+         |boolean ${ev.isNull} = false;
+         |int ${ev.value} = $value;
+       """.stripMargin
+    ev.copy(code = code)
   }
 }

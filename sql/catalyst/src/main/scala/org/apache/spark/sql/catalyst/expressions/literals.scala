@@ -40,9 +40,10 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
+import org.apache.spark.util.Utils
 
 object Literal {
   val TrueLiteral: Literal = Literal(true, BooleanType)
@@ -66,6 +67,7 @@ object Literal {
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
+    case a: collection.mutable.WrappedArray[_] => apply(a.array)
     case a: Array[_] =>
       val elementType = componentTypeToDataType(a.getClass.getComponentType())
       val dataType = ArrayType(elementType)
@@ -124,34 +126,6 @@ object Literal {
   def fromObject(obj: Any, objType: DataType): Literal = new Literal(obj, objType)
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
 
-  def fromJSON(json: JValue): Literal = {
-    val dataType = DataType.parseDataType(json \ "dataType")
-    json \ "value" match {
-      case JNull => Literal.create(null, dataType)
-      case JString(str) =>
-        val value = dataType match {
-          case BooleanType => str.toBoolean
-          case ByteType => str.toByte
-          case ShortType => str.toShort
-          case IntegerType => str.toInt
-          case LongType => str.toLong
-          case FloatType => str.toFloat
-          case DoubleType => str.toDouble
-          case StringType => UTF8String.fromString(str)
-          case DateType => java.sql.Date.valueOf(str)
-          case TimestampType => java.sql.Timestamp.valueOf(str)
-          case CalendarIntervalType => CalendarInterval.fromString(str)
-          case t: DecimalType =>
-            val d = Decimal(str)
-            assert(d.changePrecision(t.precision, t.scale))
-            d
-          case _ => null
-        }
-        Literal.create(value, dataType)
-      case other => sys.error(s"$other is not a valid Literal json value")
-    }
-  }
-
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
@@ -189,6 +163,47 @@ object Literal {
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
       throw new RuntimeException(s"no default for type $dataType")
+  }
+
+  private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
+    def doValidate(v: Any, dataType: DataType): Boolean = dataType match {
+      case _ if v == null => true
+      case BooleanType => v.isInstanceOf[Boolean]
+      case ByteType => v.isInstanceOf[Byte]
+      case ShortType => v.isInstanceOf[Short]
+      case IntegerType | DateType => v.isInstanceOf[Int]
+      case LongType | TimestampType => v.isInstanceOf[Long]
+      case FloatType => v.isInstanceOf[Float]
+      case DoubleType => v.isInstanceOf[Double]
+      case _: DecimalType => v.isInstanceOf[Decimal]
+      case CalendarIntervalType => v.isInstanceOf[CalendarInterval]
+      case BinaryType => v.isInstanceOf[Array[Byte]]
+      case StringType => v.isInstanceOf[UTF8String]
+      case st: StructType =>
+        v.isInstanceOf[InternalRow] && {
+          val row = v.asInstanceOf[InternalRow]
+          st.fields.map(_.dataType).zipWithIndex.forall {
+            case (dt, i) => doValidate(row.get(i, dt), dt)
+          }
+        }
+      case at: ArrayType =>
+        v.isInstanceOf[ArrayData] && {
+          val ar = v.asInstanceOf[ArrayData]
+          ar.numElements() == 0 || doValidate(ar.get(0, at.elementType), at.elementType)
+        }
+      case mt: MapType =>
+        v.isInstanceOf[MapData] && {
+          val map = v.asInstanceOf[MapData]
+          doValidate(map.keyArray(), ArrayType(mt.keyType)) &&
+            doValidate(map.valueArray(), ArrayType(mt.valueType))
+        }
+      case ObjectType(cls) => cls.isInstance(v)
+      case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
+      case _ => false
+    }
+    require(doValidate(value, dataType),
+      s"Literal must have a corresponding value to ${dataType.catalogString}, " +
+      s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
 }
 
@@ -233,6 +248,8 @@ object DecimalLiteral {
  * In order to do type checking, use Literal.create() instead of constructor
  */
 case class Literal (value: Any, dataType: DataType) extends LeafExpression {
+
+  Literal.validateLiteralValue(value, dataType)
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null

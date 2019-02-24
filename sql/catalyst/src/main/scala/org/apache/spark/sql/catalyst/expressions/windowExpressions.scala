@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
@@ -205,7 +206,7 @@ case class SpecifiedWindowFrame(
     // Check combination (of expressions).
     (lower, upper) match {
       case (l: Expression, u: Expression) if !isValidFrameBoundary(l, u) =>
-        TypeCheckFailure(s"Window frame upper bound '$upper' does not followes the lower bound " +
+        TypeCheckFailure(s"Window frame upper bound '$upper' does not follow the lower bound " +
           s"'$lower'.")
       case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
       case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
@@ -241,8 +242,12 @@ case class SpecifiedWindowFrame(
     case e: Expression => e.sql + " FOLLOWING"
   }
 
-  private def isGreaterThan(l: Expression, r: Expression): Boolean = {
-    GreaterThan(l, r).eval().asInstanceOf[Boolean]
+  // Check whether the left boundary value is greater than the right boundary value. It's required
+  // that the both expressions have the same data type.
+  // Since CalendarIntervalType is not comparable, we only compare expressions that are AtomicType.
+  private def isGreaterThan(l: Expression, r: Expression): Boolean = l.dataType match {
+    case _: AtomicType => GreaterThan(l, r).eval().asInstanceOf[Boolean]
+    case _ => false
   }
 
   private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
@@ -476,7 +481,7 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
-  override val updateExpressions: Seq[Expression] = Add(rowNumber, one) :: Nil
+  override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
 }
 
 /**
@@ -527,7 +532,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
   // return the same value for equal values in the partition.
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-  override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
+  override val evaluateExpression = rowNumber.cast(DoubleType) / n.cast(DoubleType)
   override def prettyName: String = "cume_dist"
 }
 
@@ -587,8 +592,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
   private val bucketSize = AttributeReference("bucketSize", IntegerType, nullable = false)()
   private val bucketsWithPadding =
     AttributeReference("bucketsWithPadding", IntegerType, nullable = false)()
-  private def bucketOverflow(e: Expression) =
-    If(GreaterThanOrEqual(rowNumber, bucketThreshold), e, zero)
+  private def bucketOverflow(e: Expression) = If(rowNumber >= bucketThreshold, e, zero)
 
   override val aggBufferAttributes = Seq(
     rowNumber,
@@ -602,15 +606,14 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
     zero,
     zero,
     zero,
-    Cast(Divide(n, buckets), IntegerType),
-    Cast(Remainder(n, buckets), IntegerType)
+    (n / buckets).cast(IntegerType),
+    (n % buckets).cast(IntegerType)
   )
 
   override val updateExpressions = Seq(
-    Add(rowNumber, one),
-    Add(bucket, bucketOverflow(one)),
-    Add(bucketThreshold, bucketOverflow(
-      Add(bucketSize, If(LessThan(bucket, bucketsWithPadding), one, zero)))),
+    rowNumber + one,
+    bucket + bucketOverflow(one),
+    bucketThreshold + bucketOverflow(bucketSize + If(bucket < bucketsWithPadding, one, zero)),
     NoOp,
     NoOp
   )
@@ -644,7 +647,7 @@ abstract class RankLike extends AggregateWindowFunction {
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
   protected val zero = Literal(0)
   protected val one = Literal(1)
-  protected val increaseRowNumber = Add(rowNumber, one)
+  protected val increaseRowNumber = rowNumber + one
 
   /**
    * Different RankLike implementations use different source expressions to update their rank value.
@@ -653,7 +656,7 @@ abstract class RankLike extends AggregateWindowFunction {
   protected def rankSource: Expression = rowNumber
 
   /** Increase the rank when the current rank == 0 or when the one of order attributes changes. */
-  protected val increaseRank = If(And(orderEquals, Not(EqualTo(rank, zero))), rank, rankSource)
+  protected val increaseRank = If(orderEquals && rank =!= zero, rank, rankSource)
 
   override val aggBufferAttributes: Seq[AttributeReference] = rank +: rowNumber +: orderAttrs
   override val initialValues = zero +: one +: orderInit
@@ -707,7 +710,7 @@ case class Rank(children: Seq[Expression]) extends RankLike {
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
-  override protected def rankSource = Add(rank, one)
+  override protected def rankSource = rank + one
   override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
@@ -736,8 +739,7 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
   override def dataType: DataType = DoubleType
-  override val evaluateExpression = If(GreaterThan(n, one),
-      Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
-      Literal(0.0d))
+  override val evaluateExpression =
+    If(n > one, (rank - one).cast(DoubleType) / (n - one).cast(DoubleType), 0.0d)
   override def prettyName: String = "percent_rank"
 }

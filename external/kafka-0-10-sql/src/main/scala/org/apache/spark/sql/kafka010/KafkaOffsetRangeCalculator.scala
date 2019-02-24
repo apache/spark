@@ -29,7 +29,6 @@ import org.apache.spark.sql.sources.v2.DataSourceOptions
 private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int]) {
   require(minPartitions.isEmpty || minPartitions.get > 0)
 
-  import KafkaOffsetRangeCalculator._
   /**
    * Calculate the offset ranges that we are going to process this batch. If `minPartitions`
    * is not set or is set less than or equal the number of `topicPartitions` that we're going to
@@ -38,6 +37,8 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
    * the read tasks of the skewed partitions to multiple Spark tasks.
    * The number of Spark tasks will be *approximately* `numPartitions`. It can be less or more
    * depending on rounding errors or Kafka partitions that didn't receive any new data.
+   *
+   * Empty ranges (`KafkaOffsetRange.size <= 0`) will be dropped.
    */
   def getRanges(
       fromOffsets: PartitionOffsetMap,

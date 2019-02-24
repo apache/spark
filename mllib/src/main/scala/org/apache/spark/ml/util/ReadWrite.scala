@@ -31,7 +31,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -46,18 +46,6 @@ import org.apache.spark.util.{Utils, VersionUtils}
  */
 private[util] sealed trait BaseReadWrite {
   private var optionSparkSession: Option[SparkSession] = None
-
-  /**
-   * Sets the Spark SQLContext to use for saving/loading.
-   *
-   * @deprecated Use session instead. This method will be removed in 3.0.0.
-   */
-  @Since("1.6.0")
-  @deprecated("Use session instead. This method will be removed in 3.0.0.", "2.0.0")
-  def context(sqlContext: SQLContext): this.type = {
-    optionSparkSession = Option(sqlContext.sparkSession)
-    this
-  }
 
   /**
    * Sets the Spark Session to use for saving/loading.
@@ -96,7 +84,7 @@ private[util] sealed trait BaseReadWrite {
  *
  * @since 2.4.0
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 trait MLWriterFormat {
   /**
@@ -120,7 +108,7 @@ trait MLWriterFormat {
  *
  * @since 2.4.0
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 trait MLFormatRegister extends MLWriterFormat {
   /**
@@ -215,16 +203,12 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   // override for Java compatibility
   @Since("1.6.0")
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
-
-  // override for Java compatibility
-  @Since("1.6.0")
-  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
  * A ML Writer which delegates based on the requested format.
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
   private var source: String = "internal"
@@ -272,7 +256,7 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
           s"Multiple writers found for $source+$stageName, try using the class name of the writer")
     }
     if (classOf[MLWriterFormat].isAssignableFrom(writerCls)) {
-      val writer = writerCls.newInstance().asInstanceOf[MLWriterFormat]
+      val writer = writerCls.getConstructor().newInstance().asInstanceOf[MLWriterFormat]
       writer.write(path, sparkSession, optionMap, stage)
     } else {
       throw new SparkException(s"ML source $source is not a valid MLWriterFormat")
@@ -281,9 +265,6 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
 
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
-
-  // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
@@ -310,7 +291,7 @@ trait MLWritable {
  * Trait for classes that provide `GeneralMLWriter`.
  */
 @Since("2.4.0")
-@InterfaceStability.Unstable
+@Unstable
 trait GeneralMLWritable extends MLWritable {
   /**
    * Returns an `MLWriter` instance for this ML instance.
@@ -352,9 +333,6 @@ abstract class MLReader[T] extends BaseReadWrite {
 
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
-
-  // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
@@ -646,10 +624,17 @@ private[ml] object DefaultParamsReader {
    * Load a `Params` instance from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
-  def loadParamsInstance[T](path: String, sc: SparkContext): T = {
+  def loadParamsInstance[T](path: String, sc: SparkContext): T =
+    loadParamsInstanceReader(path, sc).load(path)
+
+  /**
+   * Load a `Params` instance reader from the given path, and return it.
+   * This assumes the instance implements [[MLReadable]].
+   */
+  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] = {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
-    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
   }
 }
 

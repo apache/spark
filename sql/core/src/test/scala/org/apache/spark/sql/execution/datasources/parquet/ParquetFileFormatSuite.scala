@@ -51,9 +51,9 @@ class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSQLCo
     }
 
     testReadFooters(true)
-    val exception = intercept[java.io.IOException] {
+    val exception = intercept[SparkException] {
       testReadFooters(false)
-    }
+    }.getCause
     assert(exception.getMessage().contains("Could not read footer for file"))
   }
 }

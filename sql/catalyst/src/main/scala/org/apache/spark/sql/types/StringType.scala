@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class StringType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
@@ -48,6 +48,6 @@ class StringType private() extends AtomicType {
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case object StringType extends StringType
 
