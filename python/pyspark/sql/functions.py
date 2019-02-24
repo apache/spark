@@ -1438,22 +1438,6 @@ def hash(*cols):
 
 # ---------------------- String/Binary functions ------------------------------
 
-_string_functions = {
-    'ascii': 'Computes the numeric value of the first character of the string column.',
-    'base64': 'Computes the BASE64 encoding of a binary column and returns it as a string column.',
-    'unbase64': 'Decodes a BASE64 encoded string column and returns it as a binary column.',
-    'initcap': 'Returns a new string column by converting the first letter of each word to ' +
-               'uppercase. Words are delimited by whitespace.',
-    'ltrim': 'Trim the spaces from left end for the specified string value.',
-    'rtrim': 'Trim the spaces from right end for the specified string value.',
-    'trim': 'Trim the spaces from both ends for the specified string column.',
-}
-
-
-for _name, _doc in _string_functions.items():
-    globals()[_name] = since(1.5)(_create_function(_name, _doc))
-del _name, _doc
-
 
 @since(1.3)
 def lower(col):
@@ -1471,6 +1455,60 @@ def upper(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.upper(_to_java_column(col)))
+
+
+@since(1.5)
+def ltrim(col):
+    """
+    Trim the spaces from left end for the specified string value.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.ltrim(_to_java_column(col)))
+
+
+@since(1.5)
+def rtrim(col):
+    """
+    Trim the spaces from right end for the specified string value.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.rtrim(_to_java_column(col)))
+
+
+@since(1.5)
+def trim(col):
+    """
+    Trim the spaces from both ends for the specified string column.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.trim(_to_java_column(col)))
+
+
+@since(1.5)
+def ascii(col):
+    """
+    Computes the numeric value of the first character of the string column.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.ascii(_to_java_column(col)))
+
+
+@since(1.5)
+def base64(col):
+    """
+    Computes the BASE64 encoding of a binary column and returns it as a string column.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.base64(_to_java_column(col)))
+
+
+@since(1.5)
+def unbase64(col):
+    """
+    Decodes a BASE64 encoded string column and returns it as a binary column.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.unbase64(_to_java_column(col)))
 
 
 @since(1.5)
