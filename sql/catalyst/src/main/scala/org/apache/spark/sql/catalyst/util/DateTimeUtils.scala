@@ -22,9 +22,7 @@ import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
-import java.util.function.{Function => JFunction}
 
 import scala.util.control.NonFatal
 
@@ -68,13 +66,9 @@ object DateTimeUtils {
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
-  private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
-  private val computeTimeZone = new JFunction[String, TimeZone] {
-    override def apply(timeZoneId: String): TimeZone = TimeZone.getTimeZone(timeZoneId)
-  }
-
   def getTimeZone(timeZoneId: String): TimeZone = {
-    computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
+    val zoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
+    TimeZone.getTimeZone(zoneId)
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -83,10 +77,10 @@ object DateTimeUtils {
   }
 
   def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
-    // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
+    // SPARK-6785: use Math.floorDiv so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
     val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
-    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+    Math.floorDiv(millisLocal, MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
@@ -185,11 +179,11 @@ object DateTimeUtils {
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
-    Math.floor(us.toDouble / MILLIS_PER_SECOND).toLong
+    Math.floorDiv(us, MICROS_PER_MILLIS)
   }
 
   /*
-   * Converts millseconds since epoch to SQLTimestamp.
+   * Converts milliseconds since epoch to SQLTimestamp.
    */
   def fromMillis(millis: Long): SQLTimestamp = {
     MILLISECONDS.toMicros(millis)
