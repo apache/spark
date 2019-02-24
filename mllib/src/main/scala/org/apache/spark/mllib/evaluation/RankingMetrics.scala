@@ -157,6 +157,46 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
     }.mean()
   }
 
+  /**
+    * Compute the average recall of all the queries, truncated at ranking position k.
+    *
+    * If for a query, the ranking algorithm returns n results, the recall value will be
+    * computed as #(relevant items retrieved) / #(ground truth set). This formula
+    * also applies when the size of the ground truth set is less than k.
+    *
+    * If a query has an empty ground truth set, zero will be used as recall together with
+    * a log warning.
+    *
+    * See the following paper for detail:
+    *
+    * IR evaluation methods for retrieving highly relevant documents. K. Jarvelin and J. Kekalainen
+    *
+    * @param k the position to compute the truncated recall, must be positive
+    * @return the average recall at the first k ranking positions
+    */
+  @Since("2.5.0")
+  def recallAt(k: Int): Double = {
+    require(k > 0, "ranking position k should be positive")
+    predictionAndLabels.map { case (pred, lab) =>
+      val labSet = lab.toSet
+
+      if (labSet.nonEmpty) {
+        val n = math.min(pred.length, k)
+        var i = 0
+        var cnt = 0
+        while (i < n) {
+          if (labSet.contains(pred(i))) {
+            cnt += 1
+          }
+          i += 1
+        }
+        cnt.toDouble / lab.length
+      } else {
+        logWarning("Empty ground truth set, check input data")
+        0.0
+      }
+    }.mean()
+  }
 }
 
 object RankingMetrics {
