@@ -156,10 +156,10 @@ class BlockManagerMasterEndpoint(
 
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
-      bms.foreach(bm => {
-        blockManagerInfo.get(bm).foreach(_.removeBlock(blockId))
+      bms.foreach { bm => {
+        blockManagerInfo.get(bm).foreach { _.removeBlock(blockId) }
         executorIds.add(bm.executorId)
-      })
+      }}
       blockLocations.remove(blockId)
     }
 

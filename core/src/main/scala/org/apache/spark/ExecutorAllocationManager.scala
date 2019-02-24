@@ -603,28 +603,27 @@ private[spark] class ExecutorAllocationManager(
     onExecutorIdle(Seq(executorId))
   }
 
-  private def onExecutorIdle(executorIds: Seq[String], onUnpersist: Boolean = false): Unit =
+  private def onExecutorIdle(idleExecutorIds: Seq[String], onUnpersist: Boolean = false): Unit =
     synchronized {
-      executorIds.foreach(executorId => {
-        if (executorIds.contains(executorId)) {
-          if (!executorsPendingToRemove.contains(executorId)) {
-            if (!removeTimes.contains(executorId)) {
-              val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
-              updateRemovalTime(executorId, hasCachedBlocks)
+      idleExecutorIds.foreach(idleExecutorId => {
+        if (executorIds.contains(idleExecutorId)) {
+          if (!executorsPendingToRemove.contains(idleExecutorId)) {
+            val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(idleExecutorId)
+            if (!removeTimes.contains(idleExecutorId)) {
+              updateRemovalTime(idleExecutorId, hasCachedBlocks)
             } else {
               // Check if this was called when an RDD was unpersisted.
               if (onUnpersist) {
-                // If the executor other RDDs cached on them, do not update its removal time.
+                // If the executor has other RDDs cached on them, do not update its removal time.
                 // If not, we can update the removal time to executorIdleTimeout.
-                val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
                 if (!hasCachedBlocks) {
-                  updateRemovalTime(executorId, false)
+                  updateRemovalTime(idleExecutorId, false)
                 }
               }
             }
           }
         } else {
-          logWarning(s"Attempted to mark unknown executor $executorId idle")
+          logWarning(s"Attempted to mark unknown executor $idleExecutorId idle")
         }
       })
 
