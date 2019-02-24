@@ -946,7 +946,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
-    TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
+    TableIdentifier(visitIdentifier(ctx.table), Option(ctx.db).map(_.getText))
   }
 
   /**
@@ -1421,6 +1421,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.FOLLOWING =>
         value
     }
+  }
+
+  override def visitIdentifier(ctx: IdentifierContext): String = withOrigin(ctx) {
+    val keyword = ctx.getText
+    if (ctx.ansiReserved() != null) {
+      throw new ParseException(
+        s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
+    }
+    keyword
   }
 
   /**
