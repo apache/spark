@@ -92,10 +92,7 @@ _functions = {
     'asc': 'Returns a sort expression based on the ascending order of the given column name.',
     'desc': 'Returns a sort expression based on the descending order of the given column name.',
 
-    'upper': 'Converts a string expression to upper case.',
-    'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
-    'abs': 'Computes the absolute value.',
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
@@ -138,7 +135,6 @@ _functions_1_4 = {
                      as if computed by `java.lang.Math.tanh()`""",
     'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
     'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
-    'bitwiseNOT': 'Computes bitwise not.',
 }
 
 _functions_2_4 = {
@@ -576,6 +572,15 @@ def randn(seed=None):
     else:
         jc = sc._jvm.functions.randn()
     return Column(jc)
+
+
+@since(1.3)
+def abs(col):
+    """
+    Computes the absolute value.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.abs(_to_java_column(col)))
 
 
 @since(1.5)
@@ -1439,8 +1444,6 @@ _string_functions = {
     'unbase64': 'Decodes a BASE64 encoded string column and returns it as a binary column.',
     'initcap': 'Returns a new string column by converting the first letter of each word to ' +
                'uppercase. Words are delimited by whitespace.',
-    'lower': 'Converts a string column to lower case.',
-    'upper': 'Converts a string column to upper case.',
     'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
@@ -1450,6 +1453,24 @@ _string_functions = {
 for _name, _doc in _string_functions.items():
     globals()[_name] = since(1.5)(_create_function(_name, _doc))
 del _name, _doc
+
+
+@since(1.3)
+def lower(col):
+    """
+    Converts a string column to lower case.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.lower(_to_java_column(col)))
+
+
+@since(1.3)
+def upper(col):
+    """
+    Converts a string column to upper case.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.upper(_to_java_column(col)))
 
 
 @since(1.5)
@@ -1753,6 +1774,15 @@ def bin(col):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.bin(_to_java_column(col))
     return Column(jc)
+
+
+@since(1.4)
+def bitwiseNOT(col):
+    """
+    Computes bitwise not.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.bitwiseNOT(_to_java_column(col)))
 
 
 @ignore_unicode_prefix
