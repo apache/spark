@@ -516,7 +516,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
   }
 
-  def secs(millis: Long): Long = TimeUnit.MILLISECONDS.toSeconds(millis)
+  private def secs(millis: Long): Long = TimeUnit.MILLISECONDS.toSeconds(millis)
 
   test("unix_timestamp") {
     val date1 = Date.valueOf("2015-07-24")
