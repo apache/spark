@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -159,7 +160,7 @@ case class SortExec(
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $addToSorterFuncName();
        |   $sortedIterator = $sorterVariable.sort();
-       |   $sortTime.add($sorterVariable.getSortTimeNanos() / 1000000);
+       |   $sortTime.add($sorterVariable.getSortTimeNanos() / $NANOS_PER_MILLIS);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
