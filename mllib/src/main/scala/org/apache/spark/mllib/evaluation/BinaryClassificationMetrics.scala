@@ -21,12 +21,12 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Evaluator for binary classification.
  *
- * @param scoreAndLabelsWithOptWeight an RDD of (score, label) or (score, label, weight) tuples.
+ * @param scoreAndLabels an RDD of (score, label) or (score, label, weight) tuples.
  * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
  *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
  *                This is useful because the curve contains a point for each distinct score
@@ -42,10 +42,10 @@ import org.apache.spark.sql.DataFrame
  */
 @Since("1.0.0")
 class BinaryClassificationMetrics @Since("3.0.0") (
-    @Since("1.3.0") val scoreAndLabelsWithOptWeight: RDD[_ <: Product],
+    @Since("1.3.0") val scoreAndLabels: RDD[_ <: Product],
     @Since("1.3.0") val numBins: Int = 1000)
   extends Logging {
-  val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabelsWithOptWeight.map {
+  val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabels.map {
     case (prediction: Double, label: Double, weight: Double) =>
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
       (prediction, (label, weight))
@@ -64,20 +64,18 @@ class BinaryClassificationMetrics @Since("3.0.0") (
   def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 
   /**
-   * Retrieves the score and labels (for binary compatibility).
-   * @return The score and labels.
-   */
-  @Since("1.3.0")
-  def scoreAndLabels: RDD[(Double, Double)] = {
-    scoreLabelsWeight.map { case (prediction, (label, _)) => (prediction, label) }
-  }
-
-  /**
    * An auxiliary constructor taking a DataFrame.
    * @param scoreAndLabels a DataFrame with two double columns: score and label
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
-    this(scoreAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(scoreAndLabels.rdd.map {
+      case Row(prediction: Double, label: Double, weight: Double) =>
+        (prediction, label, weight)
+      case Row(prediction: Double, label: Double) =>
+        (prediction, label, 1.0)
+      case other =>
+        throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+    })
 
   /**
    * Unpersist intermediate RDDs used in the computation.

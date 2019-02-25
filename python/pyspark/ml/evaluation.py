@@ -138,6 +138,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     >>> evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw", weightCol="weight")
     >>> evaluator.evaluate(dataset)
     0.70...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
+    0.82...
 
     .. versionadded:: 1.4.0
     """

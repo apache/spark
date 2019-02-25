@@ -92,15 +92,15 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights, 0)
     val thresholds = Seq(0.8, 0.6, 0.4, 0.1)
     val numTruePositives =
-      Seq(1.0 * w1, 1.0 * w1 + 2.0 * w2, 1.0 * w1 + 2.0 * w2, 3.0 * w2 + 1.0 * w1)
+      Seq(1 * w1, 1 * w1 + 2 * w2, 1 * w1 + 2 * w2, 3 * w2 + 1 * w1)
     val numFalsePositives = Seq(0.0, 1.0 * w3, 1.0 * w1 + 1.0 * w3, 1.0 * w3 + 2.0 * w1)
     val numPositives = 3 * w2 + 1 * w1
     val numNegatives = 2 * w1 + w3
     val precisions = numTruePositives.zip(numFalsePositives).map { case (t, f) =>
       t.toDouble / (t + f)
     }
-    val recalls = numTruePositives.map(t => t / numPositives)
-    val fpr = numFalsePositives.map(f => f / numNegatives)
+    val recalls = numTruePositives.map(_ / numPositives)
+    val fpr = numFalsePositives.map(_ / numNegatives)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recalls) ++ Seq((1.0, 1.0))
     val pr = recalls.zip(precisions)
     val prCurve = Seq((0.0, 1.0)) ++ pr

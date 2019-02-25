@@ -45,23 +45,23 @@ class BinaryClassificationEvaluatorSuite
       .setMetricName("areaUnderPR")
 
     val vectorDF = Seq(
-      (0d, Vectors.dense(12, 2.5)),
-      (1d, Vectors.dense(1, 3)),
-      (0d, Vectors.dense(10, 2))
+      (0.0, Vectors.dense(12, 2.5)),
+      (1.0, Vectors.dense(1, 3)),
+      (0.0, Vectors.dense(10, 2))
     ).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(vectorDF) === 1.0)
 
     val doubleDF = Seq(
-      (0d, 0d),
-      (1d, 1d),
-      (0d, 0d)
+      (0.0, 0.0),
+      (1.0, 1.0),
+      (0.0, 0.0)
     ).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(doubleDF) === 1.0)
 
     val stringDF = Seq(
-      (0d, "0d"),
-      (1d, "1d"),
-      (0d, "0d")
+      (0.0, "0.0"),
+      (1.0, "1.0"),
+      (0.0, "0.0")
     ).toDF("label", "rawPrediction")
     val thrown = intercept[IllegalArgumentException] {
       evaluator.evaluate(stringDF)
@@ -77,9 +77,9 @@ class BinaryClassificationEvaluatorSuite
     val evaluator = new BinaryClassificationEvaluator()
       .setMetricName("areaUnderROC").setWeightCol(weightCol)
     val vectorDF = Seq(
-      (0d, Vectors.dense(2.5, 12), 1.0),
-      (1d, Vectors.dense(1, 3), 1.0),
-      (0d, Vectors.dense(10, 2), 1.0)
+      (0.0, Vectors.dense(2.5, 12), 1.0),
+      (1.0, Vectors.dense(1, 3), 1.0),
+      (0.0, Vectors.dense(10, 2), 1.0)
     ).toDF("label", "rawPrediction", weightCol)
     val result = evaluator.evaluate(vectorDF)
     // without weight column
@@ -89,9 +89,9 @@ class BinaryClassificationEvaluatorSuite
     assert(result === result2)
     // use different weights, validate metrics change
     val vectorDF2 = Seq(
-      (0d, Vectors.dense(2.5, 12), 2.5),
-      (1d, Vectors.dense(1, 3), 0.1),
-      (0d, Vectors.dense(10, 2), 2.0)
+      (0.0, Vectors.dense(2.5, 12), 2.5),
+      (1.0, Vectors.dense(1, 3), 0.1),
+      (0.0, Vectors.dense(10, 2), 2.0)
     ).toDF("label", "rawPrediction", weightCol)
     val result3 = evaluator.evaluate(vectorDF2)
     // Since wrong result weighted more heavily, expect the score to be lower
