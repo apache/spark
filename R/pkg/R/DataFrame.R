@@ -1453,8 +1453,8 @@ dapplyInternal <- function(x, func, schema) {
         stop("Arrow optimization with dapply do not support BinaryType yet.")
       }
     } else if (is.null(schema)) {
-      stop(paste0("Arrow optimization does not support 'dapplyCollect' yet. Please use ",
-                  "'collect' and 'dapply' APIs instead."))
+      stop(paste0("Arrow optimization does not support 'dapplyCollect' yet. Please disable ",
+                  "Arrow optimization or use 'collect' and 'dapply' APIs instead."))
     } else {
       stop("'schema' should be DDL-formatted string or structType.")
     }
