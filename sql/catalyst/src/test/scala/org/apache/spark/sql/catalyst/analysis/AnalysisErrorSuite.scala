@@ -604,4 +604,26 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
   }
+
+  test("ANY/SOME predicate doesn't support multi-column comparison") {
+    val a1 = AttributeReference("a1", IntegerType)()
+    val a2 = AttributeReference("a2", IntegerType)()
+    val b1 = AttributeReference("b1", IntegerType)()
+    val b2 = AttributeReference("b2", IntegerType)()
+    val a = LocalRelation(a1, a2)
+    val b = LocalRelation(b1, b2)
+    // a1 > ANY (SELECT b1 FROM b)
+    val plan1 = Filter(
+      AnySubquery(Seq(a1), ListQuery(Project(Seq(b1), b)), GreaterThan), a)
+    assertAnalysisSuccess(plan1)
+    // (a1, a2) = ANY (SELECT b1, b2 FROM b)
+    val plan2 = Filter(
+      AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), EqualTo), a)
+    assertAnalysisSuccess(plan2)
+    // (a1, a2) > ANY (SELECT b1, b2 FROM b)
+    val error_plan = Filter(
+      AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), GreaterThan), a)
+    assertAnalysisError(error_plan,
+      "ANY/SOME predicate doesn't support multi-column comparison" :: Nil)
+  }
 }

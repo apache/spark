@@ -150,6 +150,20 @@ trait CheckAnalysis extends PredicateHelper {
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
             s
+
+          case a @ AnySubquery(values, _, genCmp) =>
+            // ANY/SOME predicate doesn't support multi-column comparison.
+            if (values.size > 1) {
+              val cmp = genCmp(null, null)
+              cmp match {
+                case EqualTo(_, _) | EqualNullSafe(_, _) => // Ok
+                  a
+                case other =>
+                  failAnalysis("ANY/SOME predicate doesn't support multi-column comparison.")
+              }
+            } else {
+              a
+            }
         }
 
         operator match {

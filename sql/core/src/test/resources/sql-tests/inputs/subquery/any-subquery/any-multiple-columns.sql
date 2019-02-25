@@ -1,5 +1,4 @@
--- A test suite for multiple columns in ANY predicate in parent side, subquery, and both predicate subquery
--- It includes correlated cases.
+-- A test suite for ANY/SOME predicate with multiple columns
 
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
@@ -47,77 +46,37 @@ create temporary view t3 as select * from values
   ("val3b", 8S, null, 19L, float(17), 25D, 26E2, timestamp '2015-05-04 01:02:00.000', date '2015-05-04')
   as t3(t3a, t3b, t3c, t3d, t3e, t3f, t3g, t3h, t3i);
 
--- correlated subquery
+-- ANY predicate with `multi-column = subquery`
 -- TC 01.01
 SELECT t1a,
-       t1b,
-       t1h
+       t1b
 FROM   t1
-WHERE  NOT ( t1a, t1h ) = ANY (SELECT   t2a,
-                                        t2h
-                               FROM     t2
-                               WHERE    t2a = t1a
-                               ORDER BY t2a)
-AND    t1a = 'val1a';
+WHERE  (t1a, t1b) = ANY (SELECT t2a,
+                                t2b
+                         FROM   t2 );
 
+-- EqualNullSafe
 -- TC 01.02
 SELECT t1a,
-       t1b,
-       t1d
+       t1b
 FROM   t1
-WHERE  ( t1b, t1d ) > ANY (SELECT t2b,
-                                  t2d
-                           FROM   t2
-                           WHERE  t2i = ANY (SELECT t3i
-                                             FROM   t3
-                                             WHERE  t2b > t3b));
+WHERE  (t1a, t1b, t1c) <=> ANY (SELECT t2a,
+                                       t2b,
+                                       t2c
+                                FROM   t2  );
 
--- TC 01.03
-SELECT t1a,
-       t1b,
-       t1d
-FROM   t1
-WHERE  NOT ( t1b, t1d ) = ANY (SELECT t2b,
-                                      t2d
-                               FROM   t2
-                               WHERE  t2h != ANY (SELECT t3h
-                                                  FROM   t3
-                                                  WHERE  t2b > t3b))
-AND t1a = 'val1a';
-
--- TC 01.04
-SELECT t2a
-FROM   (SELECT t2a
-        FROM   t2
-        WHERE  ( t2a, t2b ) = ANY (SELECT t1a,
-                                          t1b
-                                   FROM   t1)
-        UNION ALL
-        SELECT t2a
-        FROM   t2
-        WHERE  ( t2a, t2b ) = ANY (SELECT t1a,
-                                          t1b
-                                   FROM   t1)
-        UNION DISTINCT
-        SELECT t2a
-        FROM   t2
-        WHERE  ( t2a, t2b ) = ANY (SELECT t3a,
-                                          t3b
-                                   FROM   t3)) AS t4;
-
--- TC 01.05
-WITH cte1 AS
-(
-       SELECT t1a,
-              t1b
-       FROM   t1
-       WHERE  (t1b, t1d) >= ANY (SELECT t2b,
-                                        t2d
-                                 FROM   t2
-                                 WHERE  t1c = t2c))
+-- negative cases
+-- TC 02.01
 SELECT *
-FROM            (
-                           SELECT     *
-                           FROM       cte1
-                           JOIN       cte1 cte2
-                           ON         cte1.t1b = cte2.t1b) s;
+FROM   t1
+WHERE  (t1a, t1b) <= ANY (SELECT t2a,
+                                 t2b
+                          FROM   t2  );
+
+-- TC 02.02
+SELECT *
+FROM   t1
+WHERE  (t1a, t1b) != ANY (SELECT t2a,
+                                 t2b
+                          FROM   t2  );
+
