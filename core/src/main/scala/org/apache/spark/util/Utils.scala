@@ -2623,8 +2623,8 @@ private[spark] object Utils extends Logging {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
     commands.map {
       case PATTERN_FOR_COMMAND_LINE_ARG(key, value) =>
-        val (newKey, newValue) = redact(redactionPattern, Seq((key, value))).head
-        s"-D$newKey=$newValue"
+        val (_, newValue) = redact(redactionPattern, Seq((key, value))).head
+        s"-D$key=$newValue"
 
       case cmd => cmd
     }
