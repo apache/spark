@@ -284,8 +284,8 @@ object ScalaReflection extends ScalaReflection {
         val classNameForKey = getClassNameFromType(keyType)
         val classNameForValue = getClassNameFromType(valueType)
 
-        val newTypePath = s"- map key class: $classNameForKey, value class: $classNameForValue" +:
-          walkedTypePath
+        val newTypePath = (s"""- map key class: "${classNameForKey}"""" +
+          s""", value class: "${classNameForValue}"""") +: walkedTypePath
 
         UnresolvedCatalystToExternalMap(
           path,
@@ -320,7 +320,8 @@ object ScalaReflection extends ScalaReflection {
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
           val Schema(dataType, nullable) = schemaFor(fieldType)
           val clsName = getClassNameFromType(fieldType)
-          val newTypePath = s"- field (class: $clsName, name: $fieldName)" +: walkedTypePath
+          val newTypePath = (s"""- field (class: "$clsName", """ +
+              s"""name: "$fieldName")""") +: walkedTypePath
 
           // For tuples, we based grab the inner fields by ordinal instead of name.
           deserializerForWithNullSafety(

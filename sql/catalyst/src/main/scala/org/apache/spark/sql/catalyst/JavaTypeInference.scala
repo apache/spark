@@ -288,8 +288,8 @@ object JavaTypeInference {
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
-        val newTypePath = (s"- map key class: ${keyType.getType.getTypeName}" +
-          s", value class: ${valueType.getType.getTypeName}") +: walkedTypePath
+        val newTypePath = (s"""- map key class: "${keyType.getType.getTypeName}"""" +
+          s""", value class: "${valueType.getType.getTypeName}"""") +: walkedTypePath
 
         val keyData =
           Invoke(
@@ -325,8 +325,8 @@ object JavaTypeInference {
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(fieldType)
-          val newTypePath = (s"- field (class: ${fieldType.getType.getTypeName}" +
-            s", name: $fieldName)") +: walkedTypePath
+          val newTypePath = (s"""- field (class: "${fieldType.getType.getTypeName}"""" +
+            s""", name: "$fieldName")""") +: walkedTypePath
           val setter = deserializerForWithNullSafety(
             path,
             dataType,
