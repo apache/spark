@@ -241,23 +241,25 @@ class SparkSqlParserSuite extends AnalysisTest {
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     assertEqual("describe table t",
-      DescribeTableCommand(
+      DescribeTableOrQueryCommand(
         None,
         Some(UnresolvedRelation(TableIdentifier("t", None))), Map.empty, isExtended = false))
     assertEqual("describe table extended t",
-      DescribeTableCommand(
+      DescribeTableOrQueryCommand(
         Some(TableIdentifier("t")), None, Map.empty, isExtended = true))
     assertEqual("describe table formatted t",
-      DescribeTableCommand(
+      DescribeTableOrQueryCommand(
         Some(TableIdentifier("t")), None, Map.empty, isExtended = true))
   }
 
   test("describe query") {
     val query = "SELECT * FROM t"
     assertEqual("DESCRIBE QUERY " + query,
-      DescribeTableCommand(None, Some(parser.parsePlan(query)), Map.empty, isExtended = false))
+      DescribeTableOrQueryCommand(None,
+        Some(parser.parsePlan(query)), Map.empty, isExtended = false))
     assertEqual("DESCRIBE " + query,
-      DescribeTableCommand(None, Some(parser.parsePlan(query)), Map.empty, isExtended = false))
+      DescribeTableOrQueryCommand(None,
+        Some(parser.parsePlan(query)), Map.empty, isExtended = false))
   }
 
   test("describe table column") {

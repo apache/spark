@@ -498,11 +498,10 @@ case class TruncateTableCommand(
  * Commands can of the following forms.
  * {{{
  *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
- *   DESCRIBE QUERY <query>
- *   DESCRIBE <query>
+ *   DESCRIBE [QUERY] <query>
  * }}}
  */
-case class DescribeTableCommand(
+case class DescribeTableOrQueryCommand(
     tableIdent: Option[TableIdentifier],
     query: Option[LogicalPlan],
     partitionSpec: TablePartitionSpec,

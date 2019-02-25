@@ -333,12 +333,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Determine if a plan should be explained at all.
    */
   protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
-    case _: DescribeTableCommand => false
+    case _: DescribeTableOrQueryCommand => false
     case _ => true
   }
 
   /**
-   * Create a [[DescribeColumnCommand]] or [[DescribeTableCommand]] logical commands.
+   * Create a [[DescribeColumnCommand]] or [[DescribeTableOrQueryCommand]] logical commands.
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
@@ -362,7 +362,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       } else {
         Map.empty[String, String]
       }
-      DescribeTableCommand(
+      DescribeTableOrQueryCommand(
         Option(visitTableIdentifier(ctx.tableIdentifier)),
         None,
         partitionSpec,
@@ -371,10 +371,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[DescribeTableCommand]] logical commands.
+   * Create a [[DescribeTableOrQueryCommand]] logical commands.
    */
   override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
-    DescribeTableCommand(None, Option(visitQuery(ctx.query())), Map.empty[String, String], false)
+    DescribeTableOrQueryCommand(None,
+      Option(visitQuery(ctx.query())),
+      Map.empty[String, String], false)
   }
 
   /**
