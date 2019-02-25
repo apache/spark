@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
 
 /**
- * This rule wraps the query plan with an [[AdaptiveSparkPlan]], which executes the query plan
+ * This rule wraps the query plan with an [[AdaptiveSparkPlanExec]], which executes the query plan
  * adaptively with runtime data statistics. Note that this rule must be run after
  * [[org.apache.spark.sql.execution.exchange.EnsureRequirements]], so that the exchange nodes are
  * already inserted.
@@ -33,7 +33,7 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
   override def apply(plan: SparkPlan): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
     case _ if session.sessionState.conf.adaptiveExecutionEnabled =>
-      AdaptiveSparkPlan(plan, session.cloneSession())
+      AdaptiveSparkPlanExec(plan, session.cloneSession())
     case _ => plan
   }
 }

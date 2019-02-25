@@ -28,11 +28,11 @@ import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SparkPlanInfo, S
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 
 /**
- * A root node to execute the query plan adaptively. It creates query stages, and incrementally
- * updates the query plan when a query stage is materialized and provides accurate runtime
+ * A root node to execute the query plan adaptively. It creates query fragments, and incrementally
+ * updates the query plan when a query fragment is materialized and provides accurate runtime
  * data statistics.
  */
-case class AdaptiveSparkPlan(initialPlan: SparkPlan, session: SparkSession)
+case class AdaptiveSparkPlanExec(initialPlan: SparkPlan, session: SparkSession)
   extends LeafExecNode{
 
   override def output: Seq[Attribute] = initialPlan.output
@@ -40,24 +40,26 @@ case class AdaptiveSparkPlan(initialPlan: SparkPlan, session: SparkSession)
   @volatile private var currentPlan: SparkPlan = initialPlan
   @volatile private var error: Throwable = null
 
-  // We will release the lock when we finish planning query stages, or we fail to do the planning.
-  // Getting `resultStage` will be blocked until the lock is release.
+  // We will release the lock when we finish planning query fragments, or we fail to do the
+  // planning. Getting `finalPlan` will be blocked until the lock is release.
   // This is better than wait()/notify(), as we can easily check if the computation has completed,
   // by calling `readyLock.getCount()`.
   private val readyLock = new CountDownLatch(1)
 
-  private def createCallback(executionId: Option[Long]): QueryStageCreatorCallback = {
-    new QueryStageCreatorCallback {
+  private def createCallback(executionId: Option[Long]): QueryFragmentCreatorCallback = {
+    new QueryFragmentCreatorCallback {
       override def onPlanUpdate(updatedPlan: SparkPlan): Unit = {
         updateCurrentPlan(updatedPlan, executionId)
-        if (updatedPlan.isInstanceOf[ResultQueryStage]) readyLock.countDown()
+        if (updatedPlan.isInstanceOf[ResultQueryFragmentExec]) readyLock.countDown()
       }
 
-      override def onStageMaterializingFailed(stage: QueryStage, e: Throwable): Unit = {
+      override def onFragmentMaterializingFailed(
+          fragment: QueryFragmentExec,
+          e: Throwable): Unit = {
         error = new SparkException(
           s"""
-             |Fail to materialize stage ${stage.id}:
-             |${stage.plan.treeString}
+             |Fail to materialize fragment ${fragment.id}:
+             |${fragment.plan.treeString}
            """.stripMargin, e)
         readyLock.countDown()
       }
@@ -79,18 +81,18 @@ case class AdaptiveSparkPlan(initialPlan: SparkPlan, session: SparkSession)
     }
   }
 
-  def finalPlan: ResultQueryStage = {
+  def finalPlan: ResultQueryFragmentExec = {
     if (readyLock.getCount > 0) {
       val sc = session.sparkContext
       val executionId = Option(sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
-      val creator = new QueryStageCreator(initialPlan, session, createCallback(executionId))
+      val creator = new QueryFragmentCreator(initialPlan, session, createCallback(executionId))
       creator.start()
       readyLock.await()
       creator.stop()
     }
 
     if (error != null) throw error
-    currentPlan.asInstanceOf[ResultQueryStage]
+    currentPlan.asInstanceOf[ResultQueryFragmentExec]
   }
 
   override def executeCollect(): Array[InternalRow] = finalPlan.executeCollect()

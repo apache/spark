@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{QueryStage, ShuffleQueryStage}
+import org.apache.spark.sql.execution.adaptive.{QueryFragmentExec, ShuffleQueryFragmentExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -55,16 +55,16 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     val shuffleMetrics: Seq[MapOutputStatistics] = plan.collect {
-      case stage: ShuffleQueryStage =>
-        val metricsFuture = stage.mapOutputStatisticsFuture
-        assert(metricsFuture.isCompleted, "ShuffleQueryStage should already be ready")
+      case fragment: ShuffleQueryFragmentExec =>
+        val metricsFuture = fragment.mapOutputStatisticsFuture
+        assert(metricsFuture.isCompleted, "ShuffleQueryFragment should already be ready")
         ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
     }
 
-    val allStageLeaves = plan.collectLeaves().forall(_.isInstanceOf[QueryStage])
+    val allFragmentLeaves = plan.collectLeaves().forall(_.isInstanceOf[QueryFragmentExec])
 
-    if (allStageLeaves) {
-      // ShuffleQueryStage gives null mapOutputStatistics when the input RDD has 0 partitions,
+    if (allFragmentLeaves) {
+      // ShuffleQueryFragment gives null mapOutputStatistics when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleMetrics.filter(_ != null)
       if (validMetrics.nonEmpty) {
@@ -72,16 +72,16 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
         // This transformation adds new nodes, so we must use `transformUp` here.
         plan.transformUp {
           // even for shuffle exchange whose input RDD has 0 partition, we should still update its
-          // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same number
-          // of output partitions.
-          case stage: ShuffleQueryStage =>
-            CoalescedShuffleReaderExec(stage, partitionStartIndices)
+          // `partitionStartIndices`, so that all the leaf shuffles in a fragment have the same
+          // number of output partitions.
+          case fragment: ShuffleQueryFragmentExec =>
+            CoalescedShuffleReaderExec(fragment, partitionStartIndices)
         }
       } else {
         plan
       }
     } else {
-      // If not all leaf nodes are query stages, it's not safe to reduce the number of
+      // If not all leaf nodes are query fragments, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
       plan
@@ -90,7 +90,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   /**
    * Estimates partition start indices for post-shuffle partitions based on
-   * mapOutputStatistics provided by all pre-shuffle stages.
+   * mapOutputStatistics provided by all pre-shuffle fragments.
    */
   // visible for testing.
   private[sql] def estimatePartitionStartIndices(
@@ -114,7 +114,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       s"advisoryTargetPostShuffleInputSize: $advisoryTargetPostShuffleInputSize, " +
         s"targetPostShuffleInputSize $targetPostShuffleInputSize.")
 
-    // Make sure we do get the same number of pre-shuffle partitions for those stages.
+    // Make sure we do get the same number of pre-shuffle partitions for those fragments.
     val distinctNumPreShufflePartitions =
       mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
     // The reason that we are expecting a single value of the number of pre-shuffle partitions
@@ -137,7 +137,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     var i = 0
     while (i < numPreShufflePartitions) {
-      // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle stages.
+      // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle fragments.
       // Then, we add the total size to postShuffleInputSize.
       var nextShuffleInputSize = 0L
       var j = 0
@@ -162,7 +162,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 }
 
 case class CoalescedShuffleReaderExec(
-    child: ShuffleQueryStage,
+    child: ShuffleQueryFragmentExec,
     partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
