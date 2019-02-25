@@ -930,7 +930,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays(
-            java.util.concurrent.TimeUnit.MICROSECONDS.toMillis($c), $tz);"""
+            $c / $MICROS_PER_MILLIS, $tz);"""
     case _ =>
       (c, evPrim, evNull) => code"$evNull = true;"
   }
@@ -1037,8 +1037,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
-          java.util.concurrent.TimeUnit.MILLISECONDS.toMicros(
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz));"""
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis(
+            $c, $tz) * $MICROS_PER_MILLIS;"""
     case DecimalType() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
