@@ -1020,11 +1020,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val sparkConf = new SparkConf
 
     // Set some secret keys
-    val secretKeys = Seq(
+    val secretKeysWithSameValue = Seq(
       "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
       "spark.my.password",
       "spark.my.sECreT")
-    val cmdArgsForSecret = secretKeys.map(s => s"-D$s=sensitive_value")
+    val cmdArgsForSecretWithSameValue = secretKeysWithSameValue.map(s => s"-D$s=sensitive_value")
+
+    val secretKeys = secretKeysWithSameValue ++ Seq("spark.your.password")
+    val cmdArgsForSecret = cmdArgsForSecretWithSameValue ++ Seq(
+      // Have '=' twice
+      "-Dspark.your.password=sensitive=sensitive2"
+    )
 
     val ignoredArgs = Seq(
       // starts with -D but no assignment

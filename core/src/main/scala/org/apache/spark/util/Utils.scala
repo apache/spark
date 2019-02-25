@@ -98,7 +98,7 @@ private[spark] object Utils extends Logging {
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
 
-  private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+)=(.+)".r
+  private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
