@@ -147,9 +147,10 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
       } else if (!nonBuiltInCollectors.contains(mxBean.getName)) {
         nonBuiltInCollectors = mxBean.getName +: nonBuiltInCollectors
         // log it when first seen
-        logWarning(s"Add the non-built-in garbage collector(s) $nonBuiltInCollectors " +
-          s"to ${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key} " +
-          s"or ${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key} to enable.")
+        logWarning(s"To enable non-built-in garbage collector(s) " +
+          s"$nonBuiltInCollectors, users should configure it(them) to " +
+          s"${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key} or " +
+          s"${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key}")
       } else {
         // do nothing
       }
