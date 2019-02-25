@@ -334,9 +334,21 @@ object SizeEstimator extends Logging {
         if (fieldClass.isPrimitive) {
           sizeCount(primitiveSize(fieldClass)) += 1
         } else {
-          field.setAccessible(true) // Enable future get()'s on this field
+          // Note: in Java 9+ this would be better with trySetAccessible and canAccess
+          try {
+            field.setAccessible(true) // Enable future get()'s on this field
+            pointerFields = field :: pointerFields
+          } catch {
+            // If the field isn't accessible, we can still record the pointer size
+            // but can't know more about the field, so ignore it
+            case _: SecurityException =>
+              // do nothing
+            // Java 9+ can throw InaccessibleObjectException but the class is Java 9+-only
+            case re: RuntimeException
+                if re.getClass.getSimpleName == "InaccessibleObjectException" =>
+              // do nothing
+          }
           sizeCount(pointerSize) += 1
-          pointerFields = field :: pointerFields
         }
       }
     }

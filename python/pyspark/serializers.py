@@ -311,10 +311,9 @@ class ArrowStreamPandasSerializer(Serializer):
 
     def arrow_to_pandas(self, arrow_column):
         from pyspark.sql.types import from_arrow_type, \
-            _check_series_convert_date, _check_series_localize_timestamps
+            _arrow_column_to_pandas, _check_series_localize_timestamps
 
-        s = arrow_column.to_pandas()
-        s = _check_series_convert_date(s, from_arrow_type(arrow_column.type))
+        s = _arrow_column_to_pandas(arrow_column, from_arrow_type(arrow_column.type))
         s = _check_series_localize_timestamps(s, self._timezone)
         return s
 

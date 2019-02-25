@@ -200,7 +200,8 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
-    assert(mostImportantFeature !== mostIF)
+    assert(mostIF === 1)
+    assert(importances(mostImportantFeature) !== importanceFeatures(mostIF))
   }
 
   test("model evaluateEachIteration") {
