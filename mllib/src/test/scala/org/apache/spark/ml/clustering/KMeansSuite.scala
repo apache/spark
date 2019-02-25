@@ -20,7 +20,8 @@ package org.apache.spark.ml.clustering
 import scala.language.existentials
 import scala.util.Random
 
-import org.dmg.pmml.{ClusteringModel, PMML}
+import org.dmg.pmml.PMML
+import org.dmg.pmml.clustering.ClusteringModel
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
