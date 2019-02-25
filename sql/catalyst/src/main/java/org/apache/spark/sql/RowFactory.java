@@ -19,6 +19,8 @@ package org.apache.spark.sql;
 
 import org.apache.spark.annotation.Stable;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * A factory class used to construct {@link Row} objects.
@@ -36,5 +38,18 @@ public class RowFactory {
    */
   public static Row create(Object ... values) {
     return new GenericRow(values);
+  }
+
+  /**
+   * Create a {@link Row} from the given arguments. Provided schema is incorporated into
+   * created {@link Row} object, and allows getAs(fieldName) to access the value of column.
+   *
+   * Note that every Rows will contain the duplicated schema, hence in high volume it is still
+   * recommended to use `create` with accessing column by position.
+   *
+   * @since 3.0.0
+   */
+  public static Row createWithSchema(StructType schema, Object ... values) {
+    return new GenericRowWithSchema(values, schema);
   }
 }
