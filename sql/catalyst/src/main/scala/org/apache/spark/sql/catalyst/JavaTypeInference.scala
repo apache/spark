@@ -241,20 +241,19 @@ object JavaTypeInference {
         val newTypePath = s"""- array element class: "${elementType.getCanonicalName}"""" +:
           walkedTypePath
         val (dataType, elementNullable) = inferDataType(elementType)
-        val mapFunction: Expression => Expression = element => {
-          // upcast the array element to the data type the encoder expected.
-          deserializerForWithNullSafetyAndUpcast(
-            element,
-            dataType,
-            nullable = elementNullable,
-            newTypePath,
-            (casted, typePath) => deserializerFor(typeToken.getComponentType, casted, typePath))
-        }
-
-        val arrayCls = MapObjects(mapFunction, path, dataType)
 
         if (elementNullable) {
-          Invoke(arrayCls, "array", ObjectType(c), returnNullable = false)
+          val mapFunction: Expression => Expression = element => {
+            // upcast the array element to the data type the encoder expected.
+            deserializerForWithNullSafetyAndUpcast(
+              element,
+              dataType,
+              nullable = elementNullable,
+              newTypePath,
+              (casted, typePath) => deserializerFor(typeToken.getComponentType, casted, typePath))
+          }
+          val arrayData = MapObjects(mapFunction, path, dataType)
+          Invoke(arrayData, "array", ObjectType(c), returnNullable = false)
         } else {
           val primitiveMethod = elementType match {
             case c if c == java.lang.Integer.TYPE => "toIntArray"
@@ -289,9 +288,8 @@ object JavaTypeInference {
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
-        val newTypePath = s"""- map key class: "${keyType.getType.getTypeName}",
-                              | value class: "${valueType.getType.getTypeName}"""" +:
-          walkedTypePath
+        val newTypePath = (s"- map key class: ${keyType.getType.getTypeName}" +
+          s", value class: ${valueType.getType.getTypeName}") +: walkedTypePath
 
         val keyData =
           Invoke(
@@ -327,9 +325,8 @@ object JavaTypeInference {
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(fieldType)
-          val newTypePath =
-            s"""- field (class: "${fieldType.getType.getTypeName}",
-               |name: "$fieldName")""".stripMargin +: walkedTypePath
+          val newTypePath = (s"- field (class: ${fieldType.getType.getTypeName}" +
+            s", name: $fieldName)") +: walkedTypePath
           val setter = deserializerForWithNullSafety(
             path,
             dataType,
