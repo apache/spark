@@ -181,12 +181,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("200ms")
 
-  private[spark] val SCHEDULER_SERVICES = ConfigBuilder("spark.yarn.services")
-    .doc("A comma-separated list of class names of services to add to the scheduler.")
-    .stringConf
-    .toSequence
-    .createWithDefault(Nil)
-
   private[spark] val AM_FINAL_MSG_LIMIT = ConfigBuilder("spark.yarn.am.finalMessageLimit")
     .doc("The limit size of final diagnostic message for our ApplicationMaster to unregister from" +
       " the ResourceManager.")
