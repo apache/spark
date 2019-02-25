@@ -28,7 +28,7 @@ class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
   private val scenarios = ScenariosFor(failingBlacklist, temporalBlacklist, wontFixBlacklistFile, failureReportingBlacklistFile)
 
   forAll(scenarios.whiteList) { scenario =>
-    test(s"[${graphFactory.name}, ${WhiteList.name}] $scenario", WhiteList, TckCapsTag, Tag(graphFactory.name)) {
+    test(s"[${WhiteList.name}] $scenario", WhiteList, TckCapsTag, Tag(graphFactory.name)) {
       scenario(TCKGraph(graphFactory, cypherEngine.graphs.empty)).execute()
     }
   }
@@ -105,4 +105,3 @@ class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
       .foreach(scenario => scenario(TCKGraph(graphFactory, cypherEngine.graphs.empty)).execute())
   }
 }
-

@@ -31,10 +31,6 @@ object ExprConversions {
 
   implicit class RichExpression(expr: Expr) {
 
-    def verify(implicit header: RecordHeader): Unit = {
-      if (header.expressionsFor(expr).isEmpty) throw IllegalStateException(s"Expression $expr not in header:\n${header.pretty}")
-    }
-
     /**
       * This is possible without violating Cypher semantics because
       *   - Spark SQL returns null when comparing across types (from initial investigation)
@@ -45,13 +41,13 @@ object ExprConversions {
       comparator(lhs.asSparkSQLExpr)(rhs.asSparkSQLExpr)
     }
 
-    def lt(c: Column): Column => Column = c < _
+    def lt(column: Column): Column => Column = column < _
 
-    def lteq(c: Column): Column => Column = c <= _
+    def lteq(column: Column): Column => Column = column <= _
 
-    def gt(c: Column): Column => Column = c > _
+    def gt(column: Column): Column => Column = column > _
 
-    def gteq(c: Column): Column => Column = c >= _
+    def gteq(column: Column): Column => Column = column >= _
 
     /**
       * Attempts to create a Spark SQL expression from the CAPS expression.
@@ -65,7 +61,7 @@ object ExprConversions {
 
       expr match {
 
-        // context based lookups
+        // Context based lookups
         case p@Param(name) if p.cypherType.isInstanceOf[CTList] =>
           parameters(name) match {
             case CypherList(l) => functions.array(l.unwrap.map(functions.lit): _*)
@@ -93,21 +89,17 @@ object ExprConversions {
               NULL_LIT
 
             case _ =>
-              verify
-
-              df.col(header.column(expr))
+              columnFor(expr)
           }
 
-        // direct column lookup
+        case IsNull(e) =>
+          e.asSparkSQLExpr.isNull
+
+        case IsNotNull(e) =>
+          e.asSparkSQLExpr.isNotNull
+
         case _: Var | _: Param | _: HasLabel | _: HasType | _: StartNode | _: EndNode =>
-          verify
-
-          val colName = header.column(expr)
-          if (df.columns.contains(colName)) {
-            df.col(colName)
-          } else {
-            NULL_LIT
-          }
+          columnFor(expr)
 
         case AliasExpr(innerExpr, _) =>
           innerExpr.asSparkSQLExpr
@@ -159,8 +151,6 @@ object ExprConversions {
         // predicates
         case Equals(e1, e2) => e1.asSparkSQLExpr === e2.asSparkSQLExpr
         case Not(e) => !e.asSparkSQLExpr
-        case IsNull(e) => e.asSparkSQLExpr.isNull
-        case IsNotNull(e) => e.asSparkSQLExpr.isNotNull
         case Size(e) =>
           val col = e.asSparkSQLExpr
           e.cypherType match {
@@ -174,11 +164,9 @@ object ExprConversions {
             case other => throw NotImplementedException(s"size() on values of type $other")
           }
 
-        case Ands(exprs) =>
-          exprs.map(_.asSparkSQLExpr).foldLeft(TRUE_LIT)(_ && _)
+        case Ands(exprs) => exprs.map(_.asSparkSQLExpr).foldLeft(TRUE_LIT)(_ && _)
 
-        case Ors(exprs) =>
-          exprs.map(_.asSparkSQLExpr).foldLeft(FALSE_LIT)(_ || _)
+        case Ors(exprs) => exprs.map(_.asSparkSQLExpr).foldLeft(FALSE_LIT)(_ || _)
 
         case In(lhs, rhs) =>
           if (rhs.cypherType == CTNull || lhs.cypherType == CTNull) {
@@ -194,12 +182,9 @@ object ExprConversions {
         case GreaterThanOrEqual(lhs, rhs) => compare(gteq, lhs, rhs)
         case GreaterThan(lhs, rhs) => compare(gt, lhs, rhs)
 
-        case StartsWith(lhs, rhs) =>
-          lhs.asSparkSQLExpr.startsWith(rhs.asSparkSQLExpr)
-        case EndsWith(lhs, rhs) =>
-          lhs.asSparkSQLExpr.endsWith(rhs.asSparkSQLExpr)
-        case Contains(lhs, rhs) =>
-          lhs.asSparkSQLExpr.contains(rhs.asSparkSQLExpr)
+        case StartsWith(lhs, rhs) => lhs.asSparkSQLExpr.startsWith(rhs.asSparkSQLExpr)
+        case EndsWith(lhs, rhs) => lhs.asSparkSQLExpr.endsWith(rhs.asSparkSQLExpr)
+        case Contains(lhs, rhs) => lhs.asSparkSQLExpr.contains(rhs.asSparkSQLExpr)
 
         case RegexMatch(prop, Param(name)) =>
           val regex: String = parameters(name).unwrap.toString
@@ -235,36 +220,13 @@ object ExprConversions {
         case Subtract(lhs, rhs) if lhs.cypherType.material.subTypeOf(CTDate).isTrue && rhs.cypherType.material.subTypeOf(CTDuration).isTrue =>
           TemporalUdfs.dateSubtract(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
 
-        case Subtract(lhs, rhs) =>
-          lhs.asSparkSQLExpr - rhs.asSparkSQLExpr
+        case Subtract(lhs, rhs) => lhs.asSparkSQLExpr - rhs.asSparkSQLExpr
 
         case Multiply(lhs, rhs) => lhs.asSparkSQLExpr * rhs.asSparkSQLExpr
         case div@Divide(lhs, rhs) => (lhs.asSparkSQLExpr / rhs.asSparkSQLExpr).cast(div.cypherType.getSparkType)
 
-        // Id functions
-
-        case Id(e) => e.asSparkSQLExpr
-
-        case PrefixId(idExpr, prefix) =>
-//          idExpr.asSparkSQLExpr.addPrefix(functions.lit(prefix))
-          ???
-
-        case ToId(e) =>
-          e.cypherType.material match {
-            // TODO: Remove this call; we shouldn't have nodes or rels as concrete types here
-            case _: CTNode | _: CTRelationship =>
-              e.asSparkSQLExpr
-            case CTInteger =>
-//              e.asSparkSQLExpr.encodeLongAsCAPSId
-              ???
-            case CTIdentity =>
-              e.asSparkSQLExpr
-            case other =>
-              throw IllegalArgumentException("a type that may be converted to an ID", other)
-          }
-
         // Functions
-        case _: MonotonicallyIncreasingId => functions.monotonically_increasing_id()
+        case Id(e) => e.asSparkSQLExpr
         case Exists(e) => e.asSparkSQLExpr.isNotNull
         case Labels(e) =>
           e.cypherType match {
@@ -461,6 +423,18 @@ object ExprConversions {
         case _ =>
           throw NotImplementedException(s"No support for converting Cypher expression $expr to a Spark SQL expression")
       }
+    }
+  }
+
+  private def columnFor(expr: Expr)(implicit header: RecordHeader, df: DataFrame): Column = {
+    val columnName = header.getColumn(expr).getOrElse(throw IllegalArgumentException(
+      expected = s"Expression in ${header.expressions.mkString("[", ", ", "]")}",
+      actual = expr)
+    )
+    if (df.columns.contains(columnName)) {
+      df.col(columnName)
+    } else {
+      NULL_LIT
     }
   }
 
