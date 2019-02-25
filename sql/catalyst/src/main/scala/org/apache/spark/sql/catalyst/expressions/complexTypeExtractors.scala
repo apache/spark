@@ -216,31 +216,6 @@ case class GetArrayStructFields(
 }
 
 /**
- * Common trait for [[GetArrayItem]] and [[ElementAt]].
- */
-trait GetArrayItemUtil extends BinaryExpression {
-
-  private val child = left
-  private val ordinal = right
-
-  /** `Null` is returned for invalid ordinals. */
-  protected def computeNullabilityFromArray: Boolean = if (ordinal.foldable && !ordinal.nullable) {
-    val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
-    child match {
-      case CreateArray(ar) if intOrdinal < ar.length =>
-        ar(intOrdinal).nullable
-      case GetArrayStructFields(CreateArray(elements), field, _, _, _)
-          if intOrdinal < elements.length =>
-        elements(intOrdinal).nullable || field.nullable
-      case _ =>
-        true
-    }
-  } else {
-    true
-  }
-}
-
-/**
  * Returns the field at `ordinal` in the Array `child`.
  *
  * We need to do type checking here as `ordinal` expression maybe unresolved.
@@ -286,6 +261,31 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
         }
       """
     })
+  }
+}
+
+/**
+ * Common trait for [[GetArrayItem]] and [[ElementAt]].
+ */
+trait GetArrayItemUtil extends BinaryExpression {
+
+  private val child = left
+  private val ordinal = right
+
+  /** `Null` is returned for invalid ordinals. */
+  protected def computeNullabilityFromArray: Boolean = if (ordinal.foldable && !ordinal.nullable) {
+    val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
+    child match {
+      case CreateArray(ar) if intOrdinal < ar.length =>
+        ar(intOrdinal).nullable
+      case GetArrayStructFields(CreateArray(elements), field, _, _, _)
+          if intOrdinal < elements.length =>
+        elements(intOrdinal).nullable || field.nullable
+      case _ =>
+        true
+    }
+  } else {
+    true
   }
 }
 
