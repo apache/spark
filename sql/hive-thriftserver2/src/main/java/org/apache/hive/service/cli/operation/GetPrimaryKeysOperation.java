@@ -32,14 +32,14 @@ import java.util.List;
  *
  */
 public class GetPrimaryKeysOperation extends MetadataOperation {
-/**
-TABLE_CAT String => table catalog (may be null)
-TABLE_SCHEM String => table schema (may be null)
-TABLE_NAME String => table name
-COLUMN_NAME String => column name
-KEY_SEQ short => sequence number within primary key( a value of 1 represents the first column of the primary key, a value of 2 would represent the second column within the primary key).
-PK_NAME String => primary key name (may be null)
- */
+  /**
+  TABLE_CAT String => table catalog (may be null)
+  TABLE_SCHEM String => table schema (may be null)
+  TABLE_NAME String => table name
+  COLUMN_NAME String => column name
+  KEY_SEQ short => sequence number within primary key( a value of 1 represents the first column of the primary key, a value of 2 would represent the second column within the primary key).
+  PK_NAME String => primary key name (may be null)
+  */
   private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addPrimitiveColumn("TABLE_CAT", Type.STRING_TYPE,
       "Table catalog (may be null)")
@@ -80,14 +80,14 @@ PK_NAME String => primary key name (may be null)
         return;
       }
       for (SQLPrimaryKey pk : pks) {
-	    rowSet.addRow(new Object[] {catalogName, pk.getTable_db(), 
-	      pk.getTable_name(), pk.getColumn_name(), pk.getKey_seq(), pk.getPk_name()});
-	  }
-	  setState(OperationState.FINISHED);
-	} catch (Exception e) {
-	  setState(OperationState.ERROR);
-	  throw new HiveSQLException(e);
-	}
+        rowSet.addRow(new Object[] {catalogName, pk.getTable_db(),
+          pk.getTable_name(), pk.getColumn_name(), pk.getKey_seq(), pk.getPk_name()});
+      }
+      setState(OperationState.FINISHED);
+    } catch (Exception e) {
+      setState(OperationState.ERROR);
+      throw new HiveSQLException(e);
+    }
   }
 
 

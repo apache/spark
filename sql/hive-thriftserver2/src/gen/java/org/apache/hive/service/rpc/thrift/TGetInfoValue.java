@@ -139,7 +139,7 @@ public class TGetInfoValue extends org.apache.thrift.TUnion<TGetInfoValue, TGetI
     super();
   }
 
-  public TGetInfoValue(_Fields setField, Object value) {
+  public TGetInfoValue(TGetInfoValue._Fields setField, Object value) {
     super(setField, value);
   }
 

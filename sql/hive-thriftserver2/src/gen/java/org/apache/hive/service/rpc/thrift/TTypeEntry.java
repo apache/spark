@@ -139,7 +139,7 @@ public class TTypeEntry extends org.apache.thrift.TUnion<TTypeEntry, TTypeEntry.
     super();
   }
 
-  public TTypeEntry(_Fields setField, Object value) {
+  public TTypeEntry(TTypeEntry._Fields setField, Object value) {
     super(setField, value);
   }
 

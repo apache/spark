@@ -148,9 +148,9 @@ public class OperationManager extends AbstractService {
   public GetPrimaryKeysOperation newGetPrimaryKeysOperation(HiveSession parentSession,
       String catalogName, String schemaName, String tableName) {
     GetPrimaryKeysOperation operation = new GetPrimaryKeysOperation(parentSession,
-	    catalogName, schemaName, tableName);
-	addOperation(operation);
-	return operation;
+      catalogName, schemaName, tableName);
+    addOperation(operation);
+    return operation;
   }
 
   public GetCrossReferenceOperation newGetCrossReferenceOperation(

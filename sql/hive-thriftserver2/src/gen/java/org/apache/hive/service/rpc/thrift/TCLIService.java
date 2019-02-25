@@ -16,7 +16,7 @@ import org.apache.thrift.protocol.TProtocolException;
 import org.apache.thrift.EncodingUtils;
 import org.apache.thrift.TException;
 import org.apache.thrift.async.AsyncMethodCallback;
-import org.apache.thrift.server.AbstractNonblockingServer.*;
+import org.apache.thrift.server.AbstractNonblockingServer;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
@@ -1825,7 +1825,7 @@ public class TCLIService {
         return new OpenSession_args();
       }
 
-      public AsyncMethodCallback<TOpenSessionResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TOpenSessionResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TOpenSessionResp>() { 
           public void onComplete(TOpenSessionResp o) {
@@ -1876,7 +1876,7 @@ public class TCLIService {
         return new CloseSession_args();
       }
 
-      public AsyncMethodCallback<TCloseSessionResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TCloseSessionResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TCloseSessionResp>() { 
           public void onComplete(TCloseSessionResp o) {
@@ -1927,7 +1927,7 @@ public class TCLIService {
         return new GetInfo_args();
       }
 
-      public AsyncMethodCallback<TGetInfoResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetInfoResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetInfoResp>() { 
           public void onComplete(TGetInfoResp o) {
@@ -1978,7 +1978,7 @@ public class TCLIService {
         return new ExecuteStatement_args();
       }
 
-      public AsyncMethodCallback<TExecuteStatementResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TExecuteStatementResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TExecuteStatementResp>() { 
           public void onComplete(TExecuteStatementResp o) {
@@ -2029,7 +2029,7 @@ public class TCLIService {
         return new GetTypeInfo_args();
       }
 
-      public AsyncMethodCallback<TGetTypeInfoResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetTypeInfoResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetTypeInfoResp>() { 
           public void onComplete(TGetTypeInfoResp o) {
@@ -2080,7 +2080,7 @@ public class TCLIService {
         return new GetCatalogs_args();
       }
 
-      public AsyncMethodCallback<TGetCatalogsResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetCatalogsResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetCatalogsResp>() { 
           public void onComplete(TGetCatalogsResp o) {
@@ -2131,7 +2131,7 @@ public class TCLIService {
         return new GetSchemas_args();
       }
 
-      public AsyncMethodCallback<TGetSchemasResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetSchemasResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetSchemasResp>() { 
           public void onComplete(TGetSchemasResp o) {
@@ -2182,7 +2182,7 @@ public class TCLIService {
         return new GetTables_args();
       }
 
-      public AsyncMethodCallback<TGetTablesResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetTablesResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetTablesResp>() { 
           public void onComplete(TGetTablesResp o) {
@@ -2233,7 +2233,7 @@ public class TCLIService {
         return new GetTableTypes_args();
       }
 
-      public AsyncMethodCallback<TGetTableTypesResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetTableTypesResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetTableTypesResp>() { 
           public void onComplete(TGetTableTypesResp o) {
@@ -2284,7 +2284,7 @@ public class TCLIService {
         return new GetColumns_args();
       }
 
-      public AsyncMethodCallback<TGetColumnsResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetColumnsResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetColumnsResp>() { 
           public void onComplete(TGetColumnsResp o) {
@@ -2335,7 +2335,7 @@ public class TCLIService {
         return new GetFunctions_args();
       }
 
-      public AsyncMethodCallback<TGetFunctionsResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetFunctionsResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetFunctionsResp>() { 
           public void onComplete(TGetFunctionsResp o) {
@@ -2386,7 +2386,7 @@ public class TCLIService {
         return new GetPrimaryKeys_args();
       }
 
-      public AsyncMethodCallback<TGetPrimaryKeysResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetPrimaryKeysResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetPrimaryKeysResp>() { 
           public void onComplete(TGetPrimaryKeysResp o) {
@@ -2437,7 +2437,7 @@ public class TCLIService {
         return new GetCrossReference_args();
       }
 
-      public AsyncMethodCallback<TGetCrossReferenceResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetCrossReferenceResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetCrossReferenceResp>() { 
           public void onComplete(TGetCrossReferenceResp o) {
@@ -2488,7 +2488,7 @@ public class TCLIService {
         return new GetOperationStatus_args();
       }
 
-      public AsyncMethodCallback<TGetOperationStatusResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetOperationStatusResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetOperationStatusResp>() { 
           public void onComplete(TGetOperationStatusResp o) {
@@ -2539,7 +2539,7 @@ public class TCLIService {
         return new CancelOperation_args();
       }
 
-      public AsyncMethodCallback<TCancelOperationResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TCancelOperationResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TCancelOperationResp>() { 
           public void onComplete(TCancelOperationResp o) {
@@ -2590,7 +2590,7 @@ public class TCLIService {
         return new CloseOperation_args();
       }
 
-      public AsyncMethodCallback<TCloseOperationResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TCloseOperationResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TCloseOperationResp>() { 
           public void onComplete(TCloseOperationResp o) {
@@ -2641,7 +2641,7 @@ public class TCLIService {
         return new GetResultSetMetadata_args();
       }
 
-      public AsyncMethodCallback<TGetResultSetMetadataResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetResultSetMetadataResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetResultSetMetadataResp>() { 
           public void onComplete(TGetResultSetMetadataResp o) {
@@ -2692,7 +2692,7 @@ public class TCLIService {
         return new FetchResults_args();
       }
 
-      public AsyncMethodCallback<TFetchResultsResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TFetchResultsResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TFetchResultsResp>() { 
           public void onComplete(TFetchResultsResp o) {
@@ -2743,7 +2743,7 @@ public class TCLIService {
         return new GetDelegationToken_args();
       }
 
-      public AsyncMethodCallback<TGetDelegationTokenResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TGetDelegationTokenResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TGetDelegationTokenResp>() { 
           public void onComplete(TGetDelegationTokenResp o) {
@@ -2794,7 +2794,7 @@ public class TCLIService {
         return new CancelDelegationToken_args();
       }
 
-      public AsyncMethodCallback<TCancelDelegationTokenResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TCancelDelegationTokenResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TCancelDelegationTokenResp>() { 
           public void onComplete(TCancelDelegationTokenResp o) {
@@ -2845,7 +2845,7 @@ public class TCLIService {
         return new RenewDelegationToken_args();
       }
 
-      public AsyncMethodCallback<TRenewDelegationTokenResp> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<TRenewDelegationTokenResp> getResultHandler(final AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<TRenewDelegationTokenResp>() { 
           public void onComplete(TRenewDelegationTokenResp o) {
