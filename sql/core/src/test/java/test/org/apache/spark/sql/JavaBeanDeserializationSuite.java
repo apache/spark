@@ -20,15 +20,12 @@ package test.org.apache.spark.sql;
 import java.io.Serializable;
 import java.util.*;
 
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 import org.junit.*;
 
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Encoder;
-import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.test.TestSparkSession;
 
 public class JavaBeanDeserializationSuite implements Serializable {
@@ -157,6 +154,36 @@ public class JavaBeanDeserializationSuite implements Serializable {
     Assert.assertEquals(records, records);
   }
 
+  @Test
+  public void testSpark22000FailToUpcast() {
+    List<Row> inputRows = new ArrayList<>();
+    for (long idx = 0 ; idx < 5 ; idx++) {
+      Row row = createRecordSpark22000FailToUpcastRow(idx);
+      inputRows.add(row);
+    }
+
+    // Here we try to convert the fields, from string type to int, which upcast doesn't help.
+    Encoder<RecordSpark22000FailToUpcast> encoder =
+            Encoders.bean(RecordSpark22000FailToUpcast.class);
+
+    StructType schema = new StructType().add("id", DataTypes.StringType);
+
+    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+
+    try {
+      dataFrame.as(encoder).collect();
+      Assert.fail("Expected AnalysisException, but passed.");
+    } catch (Throwable e) {
+      // Here we need to handle weird case: compiler complains AnalysisException never be thrown
+      // in try statement, but it can be thrown actually. Maybe Scala-Java interop issue?
+      if (e instanceof AnalysisException) {
+        Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
+      } else {
+        throw e;
+      }
+    }
+  }
+
   private static Row createRecordSpark22000Row(Long index) {
     Object[] values = new Object[] {
             index.shortValue(),
@@ -185,6 +212,11 @@ public class JavaBeanDeserializationSuite implements Serializable {
     // This would figure out that null value will not become "null".
     record.setNullIntField(null);
     return record;
+  }
+
+  private static Row createRecordSpark22000FailToUpcastRow(Long index) {
+    Object[] values = new Object[] { String.valueOf(index) };
+    return new GenericRow(values);
   }
 
   public static class ArrayRecord {
@@ -445,6 +477,21 @@ public class JavaBeanDeserializationSuite implements Serializable {
               .add("timestampField", timestampField)
               .add("nullIntField", nullIntField)
               .toString();
+    }
+  }
+
+  public static final class RecordSpark22000FailToUpcast {
+    private Integer id;
+
+    public RecordSpark22000FailToUpcast() {
+    }
+
+    public Integer getId() {
+      return id;
+    }
+
+    public void setId(Integer id) {
+      this.id = id;
     }
   }
 }
