@@ -286,15 +286,16 @@ object SparkTable {
       df.schema.fields(df.schema.fieldIndex(columnName))
     }
 
-    def safeRenameColumns(renamings: Map[String, String]): DataFrame = {
-      if (renamings.isEmpty || renamings.forall { case (oldColumn, newColumn) => oldColumn == newColumn }) {
+    def safeRenameColumns(renames: Map[String, String]): DataFrame = {
+      val actualRenames = renames.filter { case (oldCol, newCol) => oldCol != newCol }
+      if (actualRenames.isEmpty) {
         df
       } else {
-        renamings.foreach { case (oldName, newName) => require(!df.columns.contains(newName),
+        actualRenames.foreach { case (oldName, newName) => require(!df.columns.contains(newName),
           s"Cannot rename column `$oldName` to `$newName`. A column with name `$newName` exists already.")
         }
         val newColumns = df.columns.map {
-          case col if renamings.contains(col) => renamings(col)
+          case col if actualRenames.contains(col) => actualRenames(col)
           case col => col
         }
         df.toDF(newColumns: _*)

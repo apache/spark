@@ -10,15 +10,19 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.api.table.RelationalCypherRecords
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
-case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameTable], schema: Schema) extends CypherResult {
+case class SparkCypherResult(
+  relationalTable: RelationalCypherRecords[DataFrameTable],
+  schema: Schema
+) extends CypherResult {
 
   override val df: DataFrame = relationalTable.table.df
 
   private val header: RecordHeader = relationalTable.header
 
+  private lazy val hasMultipleEntities = header.entityVars.size > 1
+
   // TODO: Error handling
-  // TODO: Distinct if more than one entityVar
-  override def nodeDataFrame(varName: String): Seq[NodeDataFrame] = {
+  override def nodeDataFrames(varName: String): Seq[NodeDataFrame] = {
     val nodeVar: NodeVar = find(NodeVar(varName)(CTNode))
 
     val idColumn = header.column(nodeVar)
@@ -38,19 +42,20 @@ case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameT
       val properties = propertyToColumns.filter { case (propertyKey, _) => propertyKeys.contains(propertyKey) }
       val propertyColumns = properties.values.toSeq
 
-      val selectColumns = (idColumn +: propertyColumns).map(col => s"`$col`")
+      val selectColumns = (idColumn +: propertyColumns).map(escape)
       val labelCombinationDf = df
         .filter(trueLabels.map(df.col).map(_ === true).reduce(_ && _))
         .filter(falseLabels.map(df.col).map(_ === false).foldLeft(functions.lit(true))(_ && _))
         .select(selectColumns.head, selectColumns.tail: _*)
 
-      NodeDataFrame(labelCombinationDf, idColumn, labels, properties)
+      val distinctDf = if (hasMultipleEntities) labelCombinationDf.dropDuplicates(idColumn) else labelCombinationDf
+
+      NodeDataFrame(distinctDf, idColumn, labels, properties)
     }
   }
 
   // TODO: Error handling
-  // TODO: Distinct if more than one entityVar
-  override def relationshipDataFrame(varName: String): Seq[RelationshipDataFrame] = {
+  override def relationshipDataFrames(varName: String): Seq[RelationshipDataFrame] = {
     val relVar: RelationshipVar = find(RelationshipVar(varName)(CTRelationship))
 
     val idColumn = header.column(relVar)
@@ -67,14 +72,18 @@ case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameT
       val properties = propertyToColumns.filter { case (propertyKey, _) => propertyKeys.contains(propertyKey) }
       val propertyColumns = properties.values.toSeq
 
-      val selectColumns = (idColumn +: sourceIdColumn +: targetIdColumn +: propertyColumns).map(col => s"`$col`")
+      val selectColumns = (idColumn +: sourceIdColumn +: targetIdColumn +: propertyColumns).map(escape)
       val relTypeDf = df
         .filter(df.col(trueRelType) === true)
         .select(selectColumns.head, selectColumns.tail: _*)
 
-      RelationshipDataFrame(relTypeDf, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
+      val distinctDf = if (hasMultipleEntities) relTypeDf.dropDuplicates(idColumn) else relTypeDf
+
+      RelationshipDataFrame(distinctDf, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
     }
   }
+
+  private def escape(columnName: String): String = s"`$columnName`"
 
   // TODO use header.entityVars ?
   private def find[T <: ReturnItem](lookup: Var): T = relationalTable.header.idExpressions(lookup)

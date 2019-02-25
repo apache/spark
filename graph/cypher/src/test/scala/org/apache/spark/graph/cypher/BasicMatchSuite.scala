@@ -26,8 +26,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     graph.cypher("MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2").df.show()
   }
 
-  // TODO: requires fixing escaping in CAPS
-  ignore("create property graph from query results") {
+  test("create property graph from query results") {
     val personData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), "Alice", 42), Tuple3(id(1), "Bob", 23), Tuple3(id(2), "Eve", 19))).toDF("id", "name", "age")
     val universityData: DataFrame = spark.createDataFrame(Seq(id(2) -> "UC Berkeley", id(3)-> "Stanford")).toDF("id", "title")
     val knowsData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), id(0), id(1)), Tuple3(id(1), id(0), id(2)))).toDF("id", "source", "target")
@@ -46,9 +45,9 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
         |RETURN p, o, k
         |""".stripMargin)
 
-    val berkeleyStudents: Seq[NodeDataFrame] = result.nodeDataFrame("p")
-    val berkeleyStudentFriends: Seq[NodeDataFrame] = result.nodeDataFrame("o")
-    val knows: Seq[RelationshipDataFrame] = result.relationshipDataFrame("k")
+    val berkeleyStudents: Seq[NodeDataFrame] = result.nodeDataFrames("p")
+    val berkeleyStudentFriends: Seq[NodeDataFrame] = result.nodeDataFrames("o")
+    val knows: Seq[RelationshipDataFrame] = result.relationshipDataFrames("k")
 
     val berkeleyGraph: PropertyGraph = cypherEngine.createGraph(berkeleyStudents ++ berkeleyStudentFriends, knows)
     berkeleyGraph.cypher("MATCH (n:Student)-[:KNOWS]->(o:Student) RETURN n.name AS person, o.name AS friend").df.show()

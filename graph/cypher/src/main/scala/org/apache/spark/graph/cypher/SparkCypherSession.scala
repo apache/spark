@@ -35,8 +35,8 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
     relationships: Seq[RelationshipDataFrame]
   ): PropertyGraph = {
     require(nodes.nonEmpty, "Creating a graph requires at least one NodeDataFrame")
-    val nodeTables = nodes.map { nodeDataFrame => SparkNodeTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
-    val relTables = relationships.map { relDataFrame => SparkRelationshipTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
+    val nodeTables = nodes.map { nodeDataFrame => SparkNodeTable.create(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
+    val relTables = relationships.map { relDataFrame => SparkRelationshipTable.create(relDataFrame.toRelationshipMapping, relDataFrame.df) }
 
     RelationalGraphAdapter(this, graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*))
   }
@@ -53,5 +53,3 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
     SparkCypherResult(relationalGraph.cypher(query).records, relationalGraph.schema)
   }
 }
-
-

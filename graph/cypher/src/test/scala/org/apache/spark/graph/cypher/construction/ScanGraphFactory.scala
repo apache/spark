@@ -85,7 +85,7 @@ object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
 
       val encodedRecords = encodeIdColumns(records, nodeMapping)
 
-      SparkNodeTable(nodeMapping, encodedRecords)
+      SparkNodeTable.create(nodeMapping, encodedRecords)
     }
 
     val relScans = schema.relationshipTypes.map { relType =>
@@ -116,7 +116,7 @@ object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
 
       val encodedRecords = encodeIdColumns(records, relationshipMapping)
 
-      SparkRelationshipTable(relationshipMapping, encodedRecords)
+      SparkRelationshipTable.create(relationshipMapping, encodedRecords)
     }
 
     new ScanGraph(nodeScans.toSeq ++ relScans, schema)
