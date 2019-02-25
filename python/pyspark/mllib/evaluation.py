@@ -30,7 +30,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     """
     Evaluator for binary classification.
 
-    :param scoreAndLabels: an RDD of (score, label) pairs
+    :param scoreAndLabels: an RDD of score, label and optional weight.
 
     >>> scoreAndLabels = sc.parallelize([
     ...     (0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)], 2)
@@ -40,6 +40,14 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     >>> metrics.areaUnderPR
     0.83...
     >>> metrics.unpersist()
+    >>> scoreAndLabelsWithOptWeight = sc.parallelize([
+    ...     (0.1, 0.0, 1.0), (0.1, 1.0, 0.4), (0.4, 0.0, 0.2), (0.6, 0.0, 0.6), (0.6, 1.0, 0.9),
+    ...     (0.6, 1.0, 0.5), (0.8, 1.0, 0.7)], 2)
+    >>> metrics = BinaryClassificationMetrics(scoreAndLabelsWithOptWeight)
+    >>> metrics.areaUnderROC
+    0.79...
+    >>> metrics.areaUnderPR
+    0.88...
 
     .. versionadded:: 1.4.0
     """
@@ -47,9 +55,13 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     def __init__(self, scoreAndLabels):
         sc = scoreAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
-        df = sql_ctx.createDataFrame(scoreAndLabels, schema=StructType([
+        numCol = len(scoreAndLabels.first())
+        schema = StructType([
             StructField("score", DoubleType(), nullable=False),
-            StructField("label", DoubleType(), nullable=False)]))
+            StructField("label", DoubleType(), nullable=False)])
+        if numCol == 3:
+            schema.add("weight", DoubleType(), False)
+        df = sql_ctx.createDataFrame(scoreAndLabels, schema=schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
         java_model = java_class(df._jdf)
         super(BinaryClassificationMetrics, self).__init__(java_model)
@@ -162,7 +174,7 @@ class MulticlassMetrics(JavaModelWrapper):
     """
     Evaluator for multiclass classification.
 
-    :param predAndLabelsWithOptWeight: an RDD of prediction, label and optional weight.
+    :param predictionAndLabels: an RDD of prediction, label and optional weight.
 
     >>> predictionAndLabels = sc.parallelize([(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])
@@ -223,16 +235,16 @@ class MulticlassMetrics(JavaModelWrapper):
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, predAndLabelsWithOptWeight):
-        sc = predAndLabelsWithOptWeight.ctx
+    def __init__(self, predictionAndLabels):
+        sc = predictionAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
-        numCol = len(predAndLabelsWithOptWeight.first())
+        numCol = len(predictionAndLabels.first())
         schema = StructType([
             StructField("prediction", DoubleType(), nullable=False),
             StructField("label", DoubleType(), nullable=False)])
-        if (numCol == 3):
+        if numCol == 3:
             schema.add("weight", DoubleType(), False)
-        df = sql_ctx.createDataFrame(predAndLabelsWithOptWeight, schema)
+        df = sql_ctx.createDataFrame(predictionAndLabels, schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MulticlassMetrics
         java_model = java_class(df._jdf)
         super(MulticlassMetrics, self).__init__(java_model)
