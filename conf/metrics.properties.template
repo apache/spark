@@ -64,6 +64,10 @@
 #    "/metrics/applications/json" endpoints can be sent separately to get
 #    metrics snapshots of the master instance and applications. This
 #    MetricsServlet does not have to be configured.
+#    6. The metrics system can also be configured using Spark configuration
+#    parameters. The relevant parameter names are formed by adding the
+#    prefix "spark.metrics.conf." to the configuration entries detailed in
+#    this file (see examples below).
 
 ## List of available common sources and their properties.
 
@@ -188,4 +192,3 @@
 #driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
 #executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
-

@@ -692,10 +692,11 @@ The syntax of the metrics configuration file and the parameters available for ea
 in an example configuration file,
 `$SPARK_HOME/conf/metrics.properties.template`.
 
-When using configuration parameters instead of the metrics configuration file, the relevant
-parameter names have the following form:
+When using Spark configuration parameters instead of the metrics configuration file, the relevant
+parameter names are composed by the prefix `spark.metrics.conf.` followed by the configuration
+details, i.e. the parameters take the following form:
 `spark.metrics.conf.[instance|*].sink.[sink_name].[parameter_name]`.
-This example shows a list of configuration parameters for a Graphite sink:
+This example shows a list of Spark configuration parameters for a Graphite sink:
 ```
 "spark.metrics.conf.*.sink.graphite.class"="org.apache.spark.metrics.sink.GraphiteSink"
 "spark.metrics.conf.*.sink.graphite.host"="graphiteEndPoint_hostName>"
@@ -803,8 +804,8 @@ This is the component with the largest amount of instrumented metrics
   - LongAccumulatorSource
 
 - namespace=spark.streaming
-  - **note** applies to Spark Streaming only. Conditional to a configuration parameter:
-  `spark.sql.streaming.metricsEnabled= true` (default is false) 
+  - **note** applies to Spark Structured Streaming only. Conditional to a configuration
+  parameter: `spark.sql.streaming.metricsEnabled=true` (default is false) 
   - eventTime-watermark
   - inputRate-total
   - latency
@@ -926,7 +927,7 @@ Note: applies when running in Spark standalone as worker
 - coresFree
 - memFree_MB
 
-## Component instance =  shuffleService
+## Component instance = shuffleService
 Note: applies to the shuffle service
 
 - blockTransferRateBytes (meter)
