@@ -22,6 +22,8 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val relationshipFrame: RelationshipDataFrame = RelationshipDataFrame(df = relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
 
     val graph: PropertyGraph = cypherEngine.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
+    graph.nodes.show()
+    graph.relationships.show()
 
     graph.cypher("MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2").df.show()
   }
@@ -37,6 +39,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val studyAtDataFrame: RelationshipDataFrame = RelationshipDataFrame(df = studyAtData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "STUDY_AT")
 
     val graph: PropertyGraph = cypherEngine.createGraph(Seq(personDataFrame, universityDataFrame), Seq(knowsDataFrame, studyAtDataFrame))
+
     val result: CypherResult = graph.cypher(
       """
         |MATCH (p:Student)-[:STUDY_AT]->(u:University),

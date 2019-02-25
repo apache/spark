@@ -19,7 +19,7 @@ case class SparkCypherResult(
 
   private val header: RecordHeader = relationalTable.header
 
-  private lazy val hasMultipleEntities = header.entityVars.size > 1
+  private lazy val hasMultipleEntities: Boolean = header.entityVars.size > 1
 
   // TODO: Error handling
   override def nodeDataFrames(varName: String): Seq[NodeDataFrame] = {
