@@ -72,7 +72,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
-    assert(TaskContextSuite.completed === true)
+    assert(TaskContextSuite.completed)
   }
 
   test("calls TaskFailureListeners after failure") {

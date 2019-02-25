@@ -619,7 +619,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         .filter { case (k, v) => k.startsWith("spark.")}
         .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
       val sparkConf = new SparkConf
-      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
+      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false))
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     }
   }
@@ -835,11 +835,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.isDynamicAllocationEnabled(
       conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set(DYN_ALLOCATION_ENABLED, true)) === true)
+      conf.set(DYN_ALLOCATION_ENABLED, true)))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === true)
+      conf.set("spark.executor.instances", "1")))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "0")) === true)
+      conf.set("spark.executor.instances", "0")))
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }

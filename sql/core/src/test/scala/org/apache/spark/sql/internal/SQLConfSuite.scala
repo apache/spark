@@ -118,12 +118,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
     try {
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
       sql(s"reset")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")

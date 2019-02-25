@@ -294,16 +294,16 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cast from string") {
     assert(cast("abcdef", StringType).nullable === false)
     assert(cast("abcdef", BinaryType).nullable === false)
-    assert(cast("abcdef", BooleanType).nullable === true)
-    assert(cast("abcdef", TimestampType).nullable === true)
-    assert(cast("abcdef", LongType).nullable === true)
-    assert(cast("abcdef", IntegerType).nullable === true)
-    assert(cast("abcdef", ShortType).nullable === true)
-    assert(cast("abcdef", ByteType).nullable === true)
-    assert(cast("abcdef", DecimalType.USER_DEFAULT).nullable === true)
-    assert(cast("abcdef", DecimalType(4, 2)).nullable === true)
-    assert(cast("abcdef", DoubleType).nullable === true)
-    assert(cast("abcdef", FloatType).nullable === true)
+    assert(cast("abcdef", BooleanType).nullable)
+    assert(cast("abcdef", TimestampType).nullable)
+    assert(cast("abcdef", LongType).nullable)
+    assert(cast("abcdef", IntegerType).nullable)
+    assert(cast("abcdef", ShortType).nullable)
+    assert(cast("abcdef", ByteType).nullable)
+    assert(cast("abcdef", DecimalType.USER_DEFAULT).nullable)
+    assert(cast("abcdef", DecimalType(4, 2)).nullable)
+    assert(cast("abcdef", DoubleType).nullable)
+    assert(cast("abcdef", FloatType).nullable)
   }
 
   test("data type casting") {
@@ -403,33 +403,33 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("casting to fixed-precision decimals") {
     assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
-    assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable === true)
-    assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable === true)
+    assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable)
+    assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable)
     assert(cast(Decimal(10.03), DecimalType.SYSTEM_DEFAULT).nullable === false)
 
-    assert(cast(123, DecimalType(2, 1)).nullable === true)
-    assert(cast(10.03f, DecimalType(2, 1)).nullable === true)
-    assert(cast(10.03, DecimalType(2, 1)).nullable === true)
-    assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable === true)
+    assert(cast(123, DecimalType(2, 1)).nullable)
+    assert(cast(10.03f, DecimalType(2, 1)).nullable)
+    assert(cast(10.03, DecimalType(2, 1)).nullable)
+    assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable)
 
     assert(cast(123, DecimalType.IntDecimal).nullable === false)
-    assert(cast(10.03f, DecimalType.FloatDecimal).nullable === true)
-    assert(cast(10.03, DecimalType.DoubleDecimal).nullable === true)
+    assert(cast(10.03f, DecimalType.FloatDecimal).nullable)
+    assert(cast(10.03, DecimalType.DoubleDecimal).nullable)
     assert(cast(Decimal(10.03), DecimalType(4, 2)).nullable === false)
     assert(cast(Decimal(10.03), DecimalType(5, 3)).nullable === false)
 
-    assert(cast(Decimal(10.03), DecimalType(3, 1)).nullable === true)
+    assert(cast(Decimal(10.03), DecimalType(3, 1)).nullable)
     assert(cast(Decimal(10.03), DecimalType(4, 1)).nullable === false)
-    assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable === true)
+    assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable)
     assert(cast(Decimal(9.95), DecimalType(3, 1)).nullable === false)
 
-    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable === true)
+    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
     assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
-    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable === true)
+    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
     assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
 
     assert(cast(true, DecimalType.SYSTEM_DEFAULT).nullable === false)
-    assert(cast(true, DecimalType(1, 1)).nullable === true)
+    assert(cast(true, DecimalType(1, 1)).nullable)
 
 
     checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
@@ -556,7 +556,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(array, ArrayType(IntegerType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(123, null, null, null))
     }
     {
@@ -565,7 +565,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false, null))
     }
     {
@@ -575,7 +575,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(123, null, null))
     }
     {
@@ -584,7 +584,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false))
     }
     {
@@ -610,7 +610,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null, "d" -> null))
     }
     {
@@ -619,7 +619,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
     }
     {
@@ -633,7 +633,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null))
     }
     {
@@ -642,7 +642,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
     {
@@ -696,7 +696,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = true),
         StructField("d", IntegerType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(123, null, null, null))
     }
     {
@@ -713,7 +713,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true),
         StructField("d", BooleanType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false, null))
     }
     {
@@ -730,7 +730,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", IntegerType, nullable = true),
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(123, null, null))
     }
     {
@@ -745,7 +745,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false))
     }
     {

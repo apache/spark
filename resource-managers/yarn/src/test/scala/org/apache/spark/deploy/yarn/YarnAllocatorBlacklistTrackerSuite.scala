@@ -135,6 +135,6 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     yarnBlacklistTracker.handleResourceAllocationFailure(Some("host4"))
 
     verify(amClientMock).updateBlacklist(Arrays.asList("host4"), Collections.emptyList())
-    assert(yarnBlacklistTracker.isAllNodeBlacklisted === true)
+    assert(yarnBlacklistTracker.isAllNodeBlacklisted)
   }
 }
