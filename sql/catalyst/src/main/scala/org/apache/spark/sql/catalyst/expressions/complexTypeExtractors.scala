@@ -221,7 +221,8 @@ case class GetArrayStructFields(
  * We need to do type checking here as `ordinal` expression maybe unresolved.
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
-  extends GetArrayItemUtil with ExpectsInputTypes with ExtractValue with NullIntolerant {
+  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue
+    with NullIntolerant {
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -231,7 +232,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def left: Expression = child
   override def right: Expression = ordinal
-  override def nullable: Boolean = computeNullabilityFromArray
+  override def nullable: Boolean = computeNullabilityFromArray(left, right)
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
@@ -267,25 +268,24 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 /**
  * Common trait for [[GetArrayItem]] and [[ElementAt]].
  */
-trait GetArrayItemUtil extends BinaryExpression {
-
-  private val child = left
-  private val ordinal = right
+trait GetArrayItemUtil {
 
   /** `Null` is returned for invalid ordinals. */
-  protected def computeNullabilityFromArray: Boolean = if (ordinal.foldable && !ordinal.nullable) {
-    val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
-    child match {
-      case CreateArray(ar) if intOrdinal < ar.length =>
-        ar(intOrdinal).nullable
-      case GetArrayStructFields(CreateArray(elements), field, _, _, _)
+  protected def computeNullabilityFromArray(child: Expression, ordinal: Expression): Boolean = {
+    if (ordinal.foldable && !ordinal.nullable) {
+      val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
+      child match {
+        case CreateArray(ar) if intOrdinal < ar.length =>
+          ar(intOrdinal).nullable
+        case GetArrayStructFields(CreateArray(elements), field, _, _, _)
           if intOrdinal < elements.length =>
-        elements(intOrdinal).nullable || field.nullable
-      case _ =>
-        true
+          elements(intOrdinal).nullable || field.nullable
+        case _ =>
+          true
+      }
+    } else {
+      true
     }
-  } else {
-    true
   }
 }
 
