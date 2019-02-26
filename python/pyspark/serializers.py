@@ -316,7 +316,11 @@ def _create_batch(series, timezone, safecheck, assign_cols_by_name):
                     struct_arrs.append(create_array(s[s.columns[i]], field.type))
                     struct_names.append(field.name)
 
-            arrs.append(pa.StructArray.from_arrays(struct_arrs, names=struct_names))
+            # TODO: from_arrays args switched for v0.9.0, remove when bump minimum pyarrow version
+            if LooseVersion(pa.__version__) < LooseVersion("0.9.0"):
+                arrs.append(pa.StructArray.from_arrays(struct_names, struct_arrs))
+            else:
+                arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
         else:
             arrs.append(create_array(s, t))
 
