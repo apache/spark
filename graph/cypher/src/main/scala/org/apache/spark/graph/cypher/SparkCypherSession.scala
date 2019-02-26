@@ -4,7 +4,7 @@ import org.apache.spark.graph.api._
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.MappingAdapter._
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory, RelationalCypherSession}
 import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
@@ -35,8 +35,8 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
     relationships: Seq[RelationshipDataFrame]
   ): PropertyGraph = {
     require(nodes.nonEmpty, "Creating a graph requires at least one NodeDataFrame")
-    val nodeTables = nodes.map { nodeDataFrame => SparkNodeTable.create(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
-    val relTables = relationships.map { relDataFrame => SparkRelationshipTable.create(relDataFrame.toRelationshipMapping, relDataFrame.df) }
+    val nodeTables = nodes.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
+    val relTables = relationships.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
 
     RelationalGraphAdapter(this, graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*))
   }

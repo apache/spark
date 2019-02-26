@@ -5,10 +5,11 @@ import java.time.{LocalDate, LocalDateTime}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.conversions.TemporalConversions._
 import org.apache.spark.graph.cypher.conversions.TypeConversions._
-import org.apache.spark.graph.cypher.{SparkCypherSession, SparkNodeTable, SparkRelationshipTable}
+import org.apache.spark.graph.cypher.{SparkCypherSession, SparkEntityTable}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.api.graph.Pattern
+import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMappingBuilder, RelationshipMappingBuilder}
 import org.opencypher.okapi.api.schema.PropertyKeys.PropertyKeys
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.impl.temporal.Duration
@@ -21,8 +22,7 @@ import scala.collection.JavaConverters._
 object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
 
   def encodeIdColumns(df: DataFrame, mapping: EntityMapping): DataFrame = {
-
-    val idCols = mapping.idKeys.map { columnName =>
+    val idCols = mapping.allSourceIdKeys.map { columnName =>
       val dataType = df.schema.fields(df.schema.fieldIndex(columnName)).dataType
       dataType match {
         case LongType => df.col(columnName).cast(StringType).cast(BinaryType)
@@ -35,7 +35,7 @@ object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
         )
       }
     }
-    val remainingCols = mapping.allSourceKeys.filterNot(mapping.idKeys.contains).map(df.col)
+    val remainingCols = mapping.allSourceKeys.filterNot(mapping.allSourceIdKeys.contains).map(df.col)
     val colsToSelect = idCols ++ remainingCols
     df.select(colsToSelect: _*)
   }
@@ -50,8 +50,9 @@ object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
   val tableEntityStartNodeKey = "___source"
   val tableEntityEndNodeKey = "___target"
 
-  override def apply(propertyGraph: InMemoryTestGraph)
+  override def apply(propertyGraph: InMemoryTestGraph, additionalPattern: Seq[Pattern] = Seq.empty)
     (implicit sparkCypher: SparkCypherSession): ScanGraph[DataFrameTable] = {
+    require(additionalPattern.isEmpty, "Additional pattern input not yet supported.")
     val schema = computeSchema(propertyGraph)
 
     val nodeScans = schema.labelCombinations.combos.map { labels =>
@@ -78,14 +79,15 @@ object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
 
       val records = sparkCypher.sparkSession.createDataFrame(rows.asJava, structType).toDF(header: _*)
 
-      val nodeMapping = NodeMapping
+      val nodeMapping = NodeMappingBuilder
         .on(tableEntityIdKey)
         .withImpliedLabels(labels.toSeq: _*)
         .withPropertyKeys(propKeys.keys.toSeq: _*)
+        .build
 
       val encodedRecords = encodeIdColumns(records, nodeMapping)
 
-      SparkNodeTable.create(nodeMapping, encodedRecords)
+      SparkEntityTable(nodeMapping, encodedRecords)
     }
 
     val relScans = schema.relationshipTypes.map { relType =>
@@ -107,16 +109,17 @@ object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
 
       val records = sparkCypher.sparkSession.createDataFrame(rows.asJava, structType).toDF(header: _*)
 
-      val relationshipMapping = RelationshipMapping
+      val relationshipMapping = RelationshipMappingBuilder
         .on(tableEntityIdKey)
         .from(tableEntityStartNodeKey)
         .to(tableEntityEndNodeKey)
         .relType(relType)
         .withPropertyKeys(propKeys.keys.toSeq: _*)
+        .build
 
       val encodedRecords = encodeIdColumns(records, relationshipMapping)
 
-      SparkRelationshipTable.create(relationshipMapping, encodedRecords)
+      SparkEntityTable(relationshipMapping, encodedRecords)
     }
 
     new ScanGraph(nodeScans.toSeq ++ relScans, schema)
