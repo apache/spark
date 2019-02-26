@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType
  *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  * }}}
  */
-  object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
+object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
   private val conf = new SparkConf()
     .setAppName(this.getClass.getSimpleName)
@@ -125,7 +125,7 @@ import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType
 
     Seq(false, true).foreach { pushDownEnabled =>
       val name = s"Native ORC Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
-    benchmark.addCase(name) { _ =>
+      benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
           spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").collect()
         }
