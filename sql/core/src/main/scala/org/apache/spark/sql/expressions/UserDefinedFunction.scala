@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.DataType
  * @since 1.3.0
  */
 @Stable
-sealed abstract class UserDefinedFunction {
+sealed trait UserDefinedFunction {
 
   /**
    * Returns true when the UDF can return a nullable value.
