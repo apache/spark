@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 class ObjectSerializerPruningSuite extends PlanTest {
 
@@ -38,6 +39,30 @@ class ObjectSerializerPruningSuite extends PlanTest {
   }
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+
+  test("collect struct types") {
+    val dataTypes = Seq(
+      IntegerType,
+      ArrayType(IntegerType),
+      StructType.fromDDL("a int, b int"),
+      ArrayType(StructType.fromDDL("a int, b int, c string")),
+      StructType.fromDDL("a struct<a:int, b:int>, b int")
+    )
+
+    val expectedTypes = Seq(
+      Seq.empty[StructType],
+      Seq.empty[StructType],
+      Seq(StructType.fromDDL("a int, b int")),
+      Seq(StructType.fromDDL("a int, b int, c string")),
+      Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
+        StructType.fromDDL("a int, b int"))
+    )
+
+    dataTypes.zipWithIndex.foreach { case (dt, idx) =>
+      val structs = ObjectSerializerPruning.collectStructType(dt, ArrayBuffer.empty[StructType])
+      assert(structs === expectedTypes(idx))
+    }
+  }
 
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
     val testRelation = LocalRelation('_1.int, '_2.int)

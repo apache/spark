@@ -15,41 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical
-
-import scala.collection.mutable.ArrayBuffer
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.SchemaPruning
 import org.apache.spark.sql.types._
 
-class SerializeFromObjectSuite extends SparkFunSuite {
-  import SerializeFromObject._
-
-  test("collect struct types") {
-    val dataTypes = Seq(
-      IntegerType,
-      ArrayType(IntegerType),
-      StructType.fromDDL("a int, b int"),
-      ArrayType(StructType.fromDDL("a int, b int, c string")),
-      StructType.fromDDL("a struct<a:int, b:int>, b int")
-    )
-
-    val expectedTypes = Seq(
-      Seq.empty[StructType],
-      Seq.empty[StructType],
-      Seq(StructType.fromDDL("a int, b int")),
-      Seq(StructType.fromDDL("a int, b int, c string")),
-      Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
-        StructType.fromDDL("a int, b int"))
-    )
-
-    dataTypes.zipWithIndex.foreach { case (dt, idx) =>
-      val structs = collectStructType(dt, ArrayBuffer.empty[StructType])
-      assert(structs === expectedTypes(idx))
-    }
-  }
-
+class SchemaPruningSuite extends SparkFunSuite {
   test("prune schema by the requested fields") {
     def testPrunedSchema(
         schema: StructType,
