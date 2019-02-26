@@ -256,17 +256,26 @@ object JavaTypeInference {
           Invoke(arrayData, "array", ObjectType(c), returnNullable = false)
         } else {
           val primitiveMethod = elementType match {
-            case c if c == java.lang.Integer.TYPE => "toIntArray"
-            case c if c == java.lang.Long.TYPE => "toLongArray"
-            case c if c == java.lang.Double.TYPE => "toDoubleArray"
-            case c if c == java.lang.Float.TYPE => "toFloatArray"
-            case c if c == java.lang.Short.TYPE => "toShortArray"
-            case c if c == java.lang.Byte.TYPE => "toByteArray"
-            case c if c == java.lang.Boolean.TYPE => "toBooleanArray"
-            case other => throw new IllegalStateException("expect primitive array element type " +
-              "but got " + other)
+            case c if c == java.lang.Integer.TYPE => Some("toIntArray")
+            case c if c == java.lang.Long.TYPE => Some("toLongArray")
+            case c if c == java.lang.Double.TYPE => Some("toDoubleArray")
+            case c if c == java.lang.Float.TYPE => Some("toFloatArray")
+            case c if c == java.lang.Short.TYPE => Some("toShortArray")
+            case c if c == java.lang.Byte.TYPE => Some("toByteArray")
+            case c if c == java.lang.Boolean.TYPE => Some("toBooleanArray")
+            case _ => None
           }
-          Invoke(path, primitiveMethod, ObjectType(c), returnNullable = false)
+          primitiveMethod.map { method =>
+            Invoke(path, method, ObjectType(c))
+          }.getOrElse {
+            Invoke(
+              MapObjects(
+                p => deserializerFor(typeToken.getComponentType, p, newTypePath),
+                path,
+                inferDataType(elementType)._1),
+              "array",
+              ObjectType(c))
+          }
         }
 
       case c if listType.isAssignableFrom(typeToken) =>

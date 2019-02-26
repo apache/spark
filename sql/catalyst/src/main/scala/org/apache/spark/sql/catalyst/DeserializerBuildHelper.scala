@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke,
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
-private[spark] object DeserializerBuildHelper {
+object DeserializerBuildHelper {
   /** Returns the current path with a sub-field extracted. */
   def addToPath(
       path: Expression,
@@ -42,17 +42,6 @@ private[spark] object DeserializerBuildHelper {
       walkedTypePath: Seq[String]): Expression = {
     val newPath = GetStructField(path, ordinal)
     upCastToExpectedType(newPath, dataType, walkedTypePath)
-  }
-
-  def expressionWithNullSafety(
-      expr: Expression,
-      nullable: Boolean,
-      walkedTypePath: Seq[String]): Expression = {
-    if (nullable) {
-      expr
-    } else {
-      AssertNotNull(expr, walkedTypePath)
-    }
   }
 
   def deserializerForWithNullSafety(
@@ -74,6 +63,17 @@ private[spark] object DeserializerBuildHelper {
     val casted = upCastToExpectedType(expr, dataType, walkedTypePath)
     deserializerForWithNullSafety(casted, dataType, nullable, walkedTypePath,
       funcForCreatingNewExpr)
+  }
+
+  private def expressionWithNullSafety(
+      expr: Expression,
+      nullable: Boolean,
+      walkedTypePath: Seq[String]): Expression = {
+    if (nullable) {
+      expr
+    } else {
+      AssertNotNull(expr, walkedTypePath)
+    }
   }
 
   def createDeserializerForTypesSupportValueOf(
