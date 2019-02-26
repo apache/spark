@@ -374,9 +374,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[DescribeTableOrQueryCommand]] logical commands.
    */
   override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
-    DescribeTableOrQueryCommand(None,
+    DescribeTableOrQueryCommand(
+      None,
       Option(visitQuery(ctx.query())),
-      Map.empty[String, String], false)
+      Map.empty[String, String],
+      false)
   }
 
   /**

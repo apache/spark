@@ -498,7 +498,7 @@ case class TruncateTableCommand(
  * Commands can of the following forms.
  * {{{
  *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
- *   DESCRIBE [QUERY] <query>
+ *   DESCRIBE [QUERY] query_statement
  * }}}
  */
 case class DescribeTableOrQueryCommand(
@@ -522,10 +522,14 @@ case class DescribeTableOrQueryCommand(
     val result = new ArrayBuffer[Row]
     if (query.isDefined) {
       query.get match {
+        case p if p.collectFirst { case _: InsertIntoTable | _: InsertIntoDir => true}.isDefined =>
+          throw new AnalysisException("Describe command is not supported for insert statements.")
+          /*
         case _: InsertIntoTable | _: InsertIntoDir =>
           throw new AnalysisException("Describe command is not supported for insert statements.")
         case u @ Union(children) if children.forall(_.isInstanceOf[InsertIntoTable]) =>
           throw new AnalysisException("Describe command is not supported for insert statements.")
+          */
         case u: UnresolvedRelation =>
           describeTable(sparkSession, u.tableIdentifier, partitionSpec, isExtended, result)
         case _ =>
