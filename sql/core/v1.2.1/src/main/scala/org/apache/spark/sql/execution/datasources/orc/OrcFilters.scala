@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.util.Objects
+
 import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
@@ -308,10 +310,25 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 }
 
-private case class FilterWithConjunctPushdown(
+private sealed case class FilterWithConjunctPushdown(
   expression: Filter,
   canPartialPushDownConjuncts: Boolean
-)
+) {
+  override def hashCode(): Int = {
+    Objects.hash(
+      System.identityHashCode(expression).asInstanceOf[Object],
+      canPartialPushDownConjuncts.asInstanceOf[Object])
+  }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case FilterWithConjunctPushdown(expr, canPushDown) =>
+        Objects.equals(System.identityHashCode(expression), System.identityHashCode(expr)) &&
+        Objects.equals(canPartialPushDownConjuncts, canPushDown)
+      case _ => false
+    }
+  }
+}
 
 /**
  * Helper class for efficiently checking whether a `Filter` and its children can be converted to
@@ -319,9 +336,7 @@ private case class FilterWithConjunctPushdown(
  *
  * @param dataTypeMap
  */
-private class OrcConvertibilityChecker(
-  dataTypeMap: Map[String, DataType]
-) {
+private class OrcConvertibilityChecker(dataTypeMap: Map[String, DataType]) {
 
   private val convertibilityCache = new mutable.HashMap[FilterWithConjunctPushdown, Boolean]
 
