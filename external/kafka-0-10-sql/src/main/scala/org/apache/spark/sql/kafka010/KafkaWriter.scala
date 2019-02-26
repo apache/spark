@@ -28,12 +28,11 @@ import org.apache.spark.sql.types.{BinaryType, StringType}
 import org.apache.spark.util.Utils
 
 /**
- * The [[KafkaWriter]] class is used to write data from a batch query
- * or structured streaming query, given by a [[QueryExecution]], to Kafka.
- * The data is assumed to have a value column, and an optional topic and key
- * columns. If the topic column is missing, then the topic must come from
- * the 'topic' configuration option or 'path' configuration option. If the key
- * column is missing, then a null valued key field will be added to the
+ * The [[KafkaWriter]] class is used to write data from a batch query or structured
+ * streaming query, given by a [[QueryExecution]], to Kafka. The data is assumed to
+ * have a value column, and an optional topic and key columns. If the topic column is
+ * missing, then the topic must come from the 'topic' or 'path' configuration option.
+ * If the key column is missing, then a null valued key field will be added to the
  * [[org.apache.kafka.clients.producer.ProducerRecord]].
  */
 private[kafka010] object KafkaWriter extends Logging {
@@ -52,7 +51,7 @@ private[kafka010] object KafkaWriter extends Logging {
         throw new AnalysisException(s"topic option required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
           s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option, " +
-          s"${DataSourceOptions.PATH_KEY} option or setting a topic.")
+          s"${DataSourceOptions.PATH_KEY} option for setting a topic.")
       } else {
         Literal.create(topic.get, StringType)
       }

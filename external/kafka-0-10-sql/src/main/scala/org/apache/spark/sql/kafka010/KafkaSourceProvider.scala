@@ -199,8 +199,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val pathOption = parameters.get(DataSourceOptions.PATH_KEY).map(_.trim)
 
     (topicOption, pathOption) match {
-      case (Some(t), Some(p)) if t != p => throw new IllegalArgumentException("'topic' and 'path'"
-        + " options should match if both defined: '" + t + "' should match '" + p + "'")
+      case (Some(t), Some(p)) if t != p =>
+        throw new IllegalArgumentException("'topic' and 'path' options must match"
+          + " if both defined: '" + t + "' must match '" + p + "'")
       case (Some(_), _) => topicOption
       case (None, Some(_)) => pathOption
       case _ => None
@@ -389,7 +390,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           import scala.collection.JavaConverters._
 
           assert(inputSchema != null)
-          val params = options.asMap.asScala.toMap
+          val params = options.asMap().asScala.toMap
           val topic = resolveTopic(params)
           val producerParams = kafkaParamsForProducer(params)
           new KafkaStreamingWrite(topic, producerParams, inputSchema)

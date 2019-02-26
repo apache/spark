@@ -204,15 +204,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     }
   }
 
-  /**
-   * The purpose of this test is to ensure that the topic option overrides the
-   * topic path and topic field. We begin by writing some data that includes a
-   * topic field and value (e.g., 'foo') along with a topic option and topic
-   * path (e.g. 'bar'). Then when we read from the topic specified in the option
-   * we should see the data i.e., the data was written to the topic option, and
-   * not to the topic in the data e.g., foo
-   */
-  test("streaming - aggregation with topic field, path and topic option") {
+  test("streaming - write aggregation with topic field, path and topic option") {
     val input = MemoryStream[String]
     val topic = newTopic()
     testUtils.createTopic(topic)
@@ -239,7 +231,8 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
       withTopic = Some(topic),
       withPath = Some(topic),
       withOutputMode = Some(OutputMode.Update()))(
-      withSelectExpr = "CAST(value as STRING) key", "CAST(count as STRING) value")
+        withSelectExpr = "CAST(value as STRING) key",
+        "CAST(count as STRING) value")
 
     checkStreamAggregation(input, writer, topic)
   }
@@ -254,12 +247,13 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
       withTopic = None,
       withPath = Some(topic),
       withOutputMode = Some(OutputMode.Update()))(
-      withSelectExpr = "CAST(value as STRING) key", "CAST(count as STRING) value")
+        withSelectExpr = "CAST(value as STRING) key",
+        "CAST(count as STRING) value")
 
     checkStreamAggregation(input, writer, topic)
   }
 
-  test("streaming - aggregation with topic field and topic option") {
+  test("streaming - write aggregation with topic field and topic option") {
     val input = MemoryStream[String]
     val topic = newTopic()
     testUtils.createTopic(topic)
@@ -269,14 +263,14 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
       withTopic = Some(topic),
       withPath = None,
       withOutputMode = Some(OutputMode.Update()))(
-      withSelectExpr = "'foo' as topic",
-      "CAST(value as STRING) key",
-      "CAST(count as STRING) value")
+        withSelectExpr = "'foo' as topic",
+        "CAST(value as STRING) key",
+        "CAST(count as STRING) value")
 
     checkStreamAggregation(input, writer, topic)
   }
 
-  test("streaming - aggregation with topic field and path option") {
+  test("streaming - write aggregation with topic field and path option") {
     val input = MemoryStream[String]
     val topic = newTopic()
     testUtils.createTopic(topic)
@@ -286,9 +280,9 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
       withTopic = None,
       withPath = Some(topic),
       withOutputMode = Some(OutputMode.Update()))(
-      withSelectExpr = "'foo' as topic",
-      "CAST(value as STRING) key",
-      "CAST(count as STRING) value")
+        withSelectExpr = "'foo' as topic",
+        "CAST(value as STRING) key",
+        "CAST(count as STRING) value")
 
     checkStreamAggregation(input, writer, topic)
   }
@@ -522,9 +516,10 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     }
   }
 
-  private def checkStreamAggregation(input: MemoryStream[String],
-                                     stream: StreamingQuery,
-                                     topic: String): Unit = {
+  private def checkStreamAggregation(
+      input: MemoryStream[String],
+      stream: StreamingQuery,
+      topic: String): Unit = {
     val dataset = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
       .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
