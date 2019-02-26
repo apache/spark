@@ -125,7 +125,8 @@ object HiveResult {
     case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
   }
 
-  /** Escape a String in JSON format. */
+  // Escape a String in JSON format.
+  // This code was taken from org.apache.hadoop.hive.serde2.SerDeUtils
   private def escapeString(str: String): String = {
     val length = str.length
     val escape = new StringBuilder(length + 16)
@@ -150,7 +151,7 @@ object HiveResult {
         escape.append('\\')
         escape.append('t')
       case c =>
-        // Control characeters! According to JSON RFC u0020
+        // Control characters! According to JSON RFC u0020
         if (c < ' ') {
           val hex = Integer.toHexString(c)
           escape.append('\\')
