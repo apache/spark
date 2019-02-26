@@ -25,11 +25,15 @@ import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, Literal, Or}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
-import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
+import org.apache.spark.sql.types._
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
@@ -400,24 +404,43 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
     runBenchmark(s"Pushdown benchmark with unbalanced Column") {
       val numRows = 1
-      val width = 1000
+      val width = 2000
 
       withTempPath { dir =>
         val columns = (1 to width).map(i => s"id c$i")
         val df = spark.range(1).selectExpr(columns: _*)
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
-        (1 to width by 200).foreach { numFilter =>
-            val whereColumn = (1 to numFilter)
-              .map(i => col(s"c$i") === lit(0))
-              .foldLeft(lit(false))(_ || _)
+        (1000 to 15000 by 2000).foreach { numFilter =>
+//            val whereColumn = (1 to numFilter)
+//              .map(i => col(s"c$i") === lit(0))
+//              .foldLeft(lit(false))(_ || _)
+            val whereExpression = (1 to numFilter)
+              .map {
+                i => EqualTo(
+                  Literal(0),
+                  AttributeReference(
+                    s"c1",
+                    IntegerType,
+                    nullable = true)()
+                  ).asInstanceOf[Expression]
+              }
+              .foldLeft[Expression](Literal.FalseLiteral)((x, y) => Or(x, y))
+          val benchmark = new Benchmark(s"Select 1 row with $numFilter filters",
+            numRows, minNumIters = 5, output = output)
+          val name = s"Native ORC Vectorized (Pushdown)"
+          benchmark.addCase(name) { _ =>
+            OrcFilters.createFilter(df.schema,
+              DataSourceStrategy.translateFilter(whereExpression).toSeq)
+          }
+          benchmark.run()
 //            val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" or ")
             // Note: InferFiltersFromConstraints will add more filters to this given filters
 //            filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
-            filterPushDownBenchmarkWithColumn(
-              numRows,
-              s"Select 1 row with $numFilter filters",
-              whereColumn)
+//            filterPushDownBenchmarkWithColumn(
+//              numRows,
+//              s"Select 1 row with $numFilter filters",
+//              whereColumn)
           }
         }
       }
