@@ -750,7 +750,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// NOTE: You must follow a rule below when you add a new ANTLR taken in this file:
+// NOTE: You must follow a rule below when you add a new ANTLR token in this file:
 //  - All the ANTLR tokens = UNION(`ansiReserved`, `ansiNonReserved`) = UNION(`defaultReserved`, `nonReserved`)
 //
 // Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
@@ -1014,7 +1014,8 @@ SORTED: 'SORTED';
 PURGE: 'PURGE';
 INPUTFORMAT: 'INPUTFORMAT';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
-DATABASE: 'DATABASE' | 'SCHEMA';
+SCHEMA: 'SCHEMA';
+DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
