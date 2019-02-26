@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReadSupport
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.types._
 
 /**
@@ -40,8 +40,7 @@ import org.apache.spark.sql.types._
  *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
-class RateStreamProvider extends DataSourceV2
-  with TableProvider with ContinuousReadSupportProvider with DataSourceRegister {
+class RateStreamProvider extends TableProvider with DataSourceRegister {
   import RateStreamProvider._
 
   override def getTable(options: DataSourceOptions): Table = {
@@ -68,12 +67,6 @@ class RateStreamProvider extends DataSourceV2
     new RateStreamTable(rowsPerSecond, rampUpTimeSeconds, numPartitions)
   }
 
-  override def createContinuousReadSupport(
-     checkpointLocation: String,
-     options: DataSourceOptions): ContinuousReadSupport = {
-    new RateStreamContinuousReadSupport(options)
-  }
-
   override def shortName(): String = "rate"
 }
 
@@ -81,7 +74,7 @@ class RateStreamTable(
     rowsPerSecond: Long,
     rampUpTimeSeconds: Long,
     numPartitions: Int)
-  extends Table with SupportsMicroBatchRead {
+  extends Table with SupportsMicroBatchRead with SupportsContinuousRead {
 
   override def name(): String = {
     s"RateStream(rowsPerSecond=$rowsPerSecond, rampUpTimeSeconds=$rampUpTimeSeconds, " +
@@ -97,6 +90,10 @@ class RateStreamTable(
       override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
         new RateStreamMicroBatchStream(
           rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
+      }
+
+      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+        new RateStreamContinuousStream(rowsPerSecond, numPartitions, options)
       }
     }
   }

@@ -38,7 +38,8 @@ import org.apache.spark.util.collection.MedianHeap
  * each task, retries tasks if they fail (up to a limited number of times), and
  * handles locality-aware scheduling for this TaskSet via delay scheduling. The main interfaces
  * to it are resourceOffer, which asks the TaskSet whether it wants to run a task on one node,
- * and statusUpdate, which tells it that one of its tasks changed state (e.g. finished).
+ * and handleSuccessfulTask/handleFailedTask, which tells it that one of its tasks changed state
+ *  (e.g. finished/failed).
  *
  * THREADING: This class is designed to only be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
@@ -494,12 +495,12 @@ private[spark] class TaskSetManager(
             abort(s"$msg Exception during serialization: $e")
             throw new TaskNotSerializableException(e)
         }
-        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
           !emittedTaskSizeWarning) {
           emittedTaskSizeWarning = true
           logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-            s"(${serializedTask.limit() / 1024} KB). The maximum recommended task size is " +
-            s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+            s"(${serializedTask.limit() / 1024} KiB). The maximum recommended task size is " +
+            s"${TaskSetManager.TASK_SIZE_TO_WARN_KIB} KiB.")
         }
         addRunningTask(taskId)
 
@@ -1101,5 +1102,5 @@ private[spark] class TaskSetManager(
 private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
   // this.
-  val TASK_SIZE_TO_WARN_KB = 100
+  val TASK_SIZE_TO_WARN_KIB = 100
 }

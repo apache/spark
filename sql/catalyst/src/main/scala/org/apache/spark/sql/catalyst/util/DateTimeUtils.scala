@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime}
+import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
-import java.util.{Calendar, Locale, TimeZone}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.function.{Function => JFunction}
+import java.util.{Locale, TimeZone}
+import java.util.concurrent.TimeUnit
+
+import scala.util.control.NonFatal
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -60,19 +61,14 @@ object DateTimeUtils {
   final val toYearZero = to2001 + 7304850
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
-  final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   val TIMEZONE_OPTION = "timeZone"
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
-  private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
-  private val computeTimeZone = new JFunction[String, TimeZone] {
-    override def apply(timeZoneId: String): TimeZone = TimeZone.getTimeZone(timeZoneId)
-  }
-
   def getTimeZone(timeZoneId: String): TimeZone = {
-    computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
+    val zoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
+    TimeZone.getTimeZone(zoneId)
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -81,10 +77,10 @@ object DateTimeUtils {
   }
 
   def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
-    // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
+    // SPARK-6785: use Math.floorDiv so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
     val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
-    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+    Math.floorDiv(millisLocal, MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
@@ -183,14 +179,14 @@ object DateTimeUtils {
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
-    Math.floor(us.toDouble / MILLIS_PER_SECOND).toLong
+    Math.floorDiv(us, MICROS_PER_MILLIS)
   }
 
   /*
-   * Converts millseconds since epoch to SQLTimestamp.
+   * Converts milliseconds since epoch to SQLTimestamp.
    */
   def fromMillis(millis: Long): SQLTimestamp = {
-    millis * 1000L
+    millis * MICROS_PER_MILLIS
   }
 
   /**
@@ -219,10 +215,6 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
-  def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
-    stringToTimestamp(s, defaultTimeZone())
-  }
-
   def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
     if (s == null) {
       return None
@@ -330,34 +322,27 @@ object DateTimeUtils {
       segments(6) /= 10
       digitsMilli -= 1
     }
-
-    if (!justTime && isInvalidDate(segments(0), segments(1), segments(2))) {
-      return None
+    try {
+      val zoneId = if (tz.isEmpty) {
+        timeZone.toZoneId
+      } else {
+        val sign = if (tz.get.toChar == '-') -1 else 1
+        ZoneId.ofOffset("GMT", ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8)))
+      }
+      val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      val localDate = if (justTime) {
+        LocalDate.now(zoneId)
+      } else {
+        LocalDate.of(segments(0), segments(1), segments(2))
+      }
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+      val instant = Instant.from(zonedDateTime)
+      Some(instantToMicros(instant))
+    } catch {
+      case NonFatal(_) => None
     }
-
-    if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
-        segments(5) < 0 || segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 ||
-        segments(7) < 0 || segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
-      return None
-    }
-
-    val zoneId = if (tz.isEmpty) {
-      timeZone.toZoneId
-    } else {
-      getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d").toZoneId
-    }
-    val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
-    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-    val localDate = if (justTime) {
-      LocalDate.now(zoneId)
-    } else {
-      LocalDate.of(segments(0), segments(1), segments(2))
-    }
-    val localDateTime = LocalDateTime.of(localDate, localTime)
-    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-    val instant = Instant.from(zonedDateTime)
-
-    Some(instantToMicros(instant))
   }
 
   def instantToMicros(instant: Instant): Long = {
@@ -418,32 +403,13 @@ object DateTimeUtils {
       return None
     }
     segments(i) = currentSegmentValue
-    if (isInvalidDate(segments(0), segments(1), segments(2))) {
-      return None
+    try {
+      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
+      Some(instantToDays(instant))
+    } catch {
+      case NonFatal(_) => None
     }
-
-    val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-    val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
-    Some(instantToDays(instant))
-  }
-
-  /**
-   * Return true if the date is invalid.
-   */
-  private def isInvalidDate(year: Int, month: Int, day: Int): Boolean = {
-    if (year < 0 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
-      return true
-    }
-    if (month == 2) {
-      if (isLeap(year) && day > 29) {
-        return true
-      } else if (!isLeap(year) && day > 28) {
-        return true
-      }
-    } else if (!MonthOf31Days.contains(month) && day > 30) {
-      return true
-    }
-    false
   }
 
   /**
@@ -453,19 +419,8 @@ object DateTimeUtils {
     microsec + toYearZero * MICROS_PER_DAY
   }
 
-  private def localTimestamp(microsec: SQLTimestamp): SQLTimestamp = {
-    localTimestamp(microsec, defaultTimeZone())
-  }
-
   private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): SQLTimestamp = {
     absoluteMicroSecond(microsec) + timeZone.getOffset(microsec / 1000) * 1000L
-  }
-
-  /**
-   * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
-   */
-  def getHours(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND / 3600) % 24).toInt
   }
 
   /**
@@ -479,24 +434,8 @@ object DateTimeUtils {
    * Returns the minute value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getMinutes(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND / 60) % 60).toInt
-  }
-
-  /**
-   * Returns the minute value of a given timestamp value. The timestamp is expressed in
-   * microseconds.
-   */
   def getMinutes(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
     ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND / 60) % 60).toInt
-  }
-
-  /**
-   * Returns the second value of a given timestamp value. The timestamp is expressed in
-   * microseconds.
-   */
-  def getSeconds(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND) % 60).toInt
   }
 
   /**
@@ -610,14 +549,6 @@ object DateTimeUtils {
       dayOfMonth
     }
     firstDayOfMonth(nonNegativeMonth) + currentDayInMonth - 1
-  }
-
-  /**
-   * Add timestamp and full interval.
-   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
-   */
-  def timestampAddInterval(start: SQLTimestamp, months: Int, microseconds: Long): SQLTimestamp = {
-    timestampAddInterval(start, months, microseconds, defaultTimeZone())
   }
 
   /**
@@ -783,27 +714,14 @@ object DateTimeUtils {
         daysToMillis(prevMonday, timeZone)
       case TRUNC_TO_QUARTER =>
         val dDays = millisToDays(millis, timeZone)
-        millis = daysToMillis(truncDate(dDays, TRUNC_TO_MONTH), timeZone)
-        val cal = Calendar.getInstance()
-        cal.setTimeInMillis(millis)
-        val quarter = getQuarter(dDays)
-        val month = quarter match {
-          case 1 => Calendar.JANUARY
-          case 2 => Calendar.APRIL
-          case 3 => Calendar.JULY
-          case 4 => Calendar.OCTOBER
-        }
-        cal.set(Calendar.MONTH, month)
-        cal.getTimeInMillis()
+        val daysOfQuarter = LocalDate.ofEpochDay(dDays)
+          .`with`(IsoFields.DAY_OF_QUARTER, 1L).toEpochDay.toInt
+        daysToMillis(daysOfQuarter, timeZone)
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
     }
     truncated * MICROS_PER_MILLIS
-  }
-
-  def truncTimestamp(d: SQLTimestamp, level: Int): SQLTimestamp = {
-    truncTimestamp(d, level, defaultTimeZone())
   }
 
   /**
@@ -841,26 +759,15 @@ object DateTimeUtils {
     if (offset != guess) {
       guess = tz.getOffset(millisLocal - offset)
       if (guess != offset) {
-        // fallback to do the reverse lookup using java.sql.Timestamp
+        // fallback to do the reverse lookup using java.time.LocalDateTime
         // this should only happen near the start or end of DST
-        val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
-        val year = getYear(days)
-        val month = getMonth(days)
-        val day = getDayOfMonth(days)
+        val localDate = LocalDate.ofEpochDay(TimeUnit.MILLISECONDS.toDays(millisLocal))
+        val localTime = LocalTime.ofNanoOfDay(TimeUnit.MILLISECONDS.toNanos(
+          Math.floorMod(millisLocal, MILLIS_PER_DAY)))
+        val localDateTime = LocalDateTime.of(localDate, localTime)
+        val millisEpoch = localDateTime.atZone(tz.toZoneId).toInstant.toEpochMilli
 
-        var millisOfDay = (millisLocal % MILLIS_PER_DAY).toInt
-        if (millisOfDay < 0) {
-          millisOfDay += MILLIS_PER_DAY.toInt
-        }
-        val seconds = (millisOfDay / 1000L).toInt
-        val hh = seconds / 3600
-        val mm = seconds / 60 % 60
-        val ss = seconds % 60
-        val ms = millisOfDay % 1000
-        val calendar = Calendar.getInstance(tz)
-        calendar.set(year, month - 1, day, hh, mm, ss)
-        calendar.set(Calendar.MILLISECOND, ms)
-        guess = (millisLocal - calendar.getTimeInMillis()).toInt
+        guess = (millisLocal - millisEpoch).toInt
       }
     }
     guess

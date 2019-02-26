@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, RateCo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.writer.streaming.SupportsOutputMode
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
 
@@ -99,7 +100,7 @@ class MicroBatchExecution(
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(dsOptions).build()
           val stream = scan.toMicroBatchStream(metadataPath)
-          StreamingDataSourceV2Relation(output, scan.description(), stream)
+          StreamingDataSourceV2Relation(output, scan, stream)
         })
       case s @ StreamingRelationV2(ds, dsName, _, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
@@ -501,8 +502,11 @@ class MicroBatchExecution(
     // Rewire the plan to use the new attributes that were returned by the source.
     val newAttributePlan = newBatchesPlan transformAllExpressions {
       case ct: CurrentTimestamp =>
+        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
+        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
+        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
-          ct.dataType)
+          ct.dataType, Some("Dummy TimeZoneId"))
       case cd: CurrentDate =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           cd.dataType, cd.timeZoneId)
@@ -510,13 +514,16 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: StreamingWriteSupportProvider =>
-        val writer = s.createStreamingWriteSupport(
-          s"$runId",
-          newAttributePlan.schema,
-          outputMode,
-          new DataSourceOptions(extraOptions.asJava))
-        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, writer), newAttributePlan)
+      case s: SupportsStreamingWrite =>
+        // TODO: we should translate OutputMode to concrete write actions like truncate, but
+        // the truncate action is being developed in SPARK-26666.
+        val writeBuilder = s.newWriteBuilder(new DataSourceOptions(extraOptions.asJava))
+          .withQueryId(runId.toString)
+          .withInputDataSchema(newAttributePlan.schema)
+        val streamingWrite = writeBuilder.asInstanceOf[SupportsOutputMode]
+          .outputMode(outputMode)
+          .buildForStreaming()
+        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, streamingWrite), newAttributePlan)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
@@ -546,7 +553,7 @@ class MicroBatchExecution(
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
-          case _: StreamingWriteSupportProvider =>
+          case _: SupportsStreamingWrite =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }

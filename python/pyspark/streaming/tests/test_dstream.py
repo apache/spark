@@ -22,12 +22,16 @@ import time
 import unittest
 from functools import reduce
 from itertools import chain
+import platform
 
 from pyspark import SparkConf, SparkContext, RDD
 from pyspark.streaming import StreamingContext
 from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
+    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
 class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_map(self):
@@ -389,6 +393,9 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self.fail("a failed func should throw an error")
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
+    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
 class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 15
@@ -466,6 +473,9 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
+    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
 class CheckpointTests(unittest.TestCase):
 
     setupCalled = False

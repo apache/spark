@@ -314,6 +314,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ANSI_SQL_PARSER =
+    buildConf("spark.sql.parser.ansi.enabled")
+      .doc("When true, tries to conform to ANSI SQL syntax.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -582,12 +588,14 @@ object SQLConf {
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
+    .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
-      "distinct semantics.")
+      "distinct semantics. By default the optimization is disabled, since it may return " +
+      "incorrect results when the files are empty.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
     .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
@@ -905,6 +913,12 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
+      .doc("When true, enable temporary checkpoint locations force delete.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
     .internal()
     .doc("The minimum number of batches that must be retained and made recoverable.")
@@ -1104,6 +1118,14 @@ object SQLConf {
       .internal()
       .stringConf
 
+  val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
+      .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
+        "to SPARK-26824.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
@@ -1284,8 +1306,9 @@ object SQLConf {
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas, and " +
-        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame. " +
+        "for use with pyspark.sql.DataFrame.toPandas, " +
+        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame, " +
+        "and createDataFrame when its input is an R DataFrame. " +
         "The following data types are unsupported: " +
         "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
       .booleanConf
@@ -1436,6 +1459,14 @@ object SQLConf {
       " sources will fall back to the V1 sources.")
     .stringConf
     .createWithDefault("")
+
+  val USE_V1_SOURCE_WRITER_LIST = buildConf("spark.sql.sources.write.useV1SourceList")
+    .internal()
+    .doc("A comma-separated list of data source short names or fully qualified data source" +
+      " register class names for which data source V2 write paths are disabled. Writes from these" +
+      " sources will fall back to the V1 sources.")
+    .stringConf
+    .createWithDefault("orc")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1824,6 +1855,8 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def ansiParserEnabled: Boolean = getConf(ANSI_SQL_PARSER)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
@@ -2031,6 +2064,8 @@ class SQLConf extends Serializable with Logging {
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
   def userV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
+
+  def userV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 

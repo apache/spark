@@ -63,7 +63,8 @@ private[spark] object CoarseGrainedClusterMessages {
       executorRef: RpcEndpointRef,
       hostname: String,
       cores: Int,
-      logUrls: Map[String, String])
+      logUrls: Map[String, String],
+      attributes: Map[String, String])
     extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,

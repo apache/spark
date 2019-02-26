@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.sources.ConsoleWriteSupport
+import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer.WriteBuilder
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWrite, SupportsOutputMode}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -30,17 +31,12 @@ case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
   override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider extends DataSourceV2
-  with StreamingWriteSupportProvider
+class ConsoleSinkProvider extends TableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def createStreamingWriteSupport(
-      queryId: String,
-      schema: StructType,
-      mode: OutputMode,
-      options: DataSourceOptions): StreamingWriteSupport = {
-    new ConsoleWriteSupport(schema, options)
+  override def getTable(options: DataSourceOptions): Table = {
+    ConsoleTable
   }
 
   def createRelation(
@@ -59,4 +55,29 @@ class ConsoleSinkProvider extends DataSourceV2
   }
 
   def shortName(): String = "console"
+}
+
+object ConsoleTable extends Table with SupportsStreamingWrite {
+
+  override def name(): String = "console"
+
+  override def schema(): StructType = StructType(Nil)
+
+  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
+    new WriteBuilder with SupportsOutputMode {
+      private var inputSchema: StructType = _
+
+      override def withInputDataSchema(schema: StructType): WriteBuilder = {
+        this.inputSchema = schema
+        this
+      }
+
+      override def outputMode(mode: OutputMode): WriteBuilder = this
+
+      override def buildForStreaming(): StreamingWrite = {
+        assert(inputSchema != null)
+        new ConsoleWrite(inputSchema, options)
+      }
+    }
+  }
 }

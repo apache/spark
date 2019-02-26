@@ -26,8 +26,8 @@ import org.mockito.Mockito.mock
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
-import org.apache.spark.deploy.security.KafkaTokenUtil
-import org.apache.spark.deploy.security.KafkaTokenUtil.KafkaDelegationTokenIdentifier
+import org.apache.spark.kafka010.KafkaTokenUtil
+import org.apache.spark.kafka010.KafkaTokenUtil.KafkaDelegationTokenIdentifier
 
 /**
  * This is a trait which provides functionalities for Kafka delegation token related test suites.

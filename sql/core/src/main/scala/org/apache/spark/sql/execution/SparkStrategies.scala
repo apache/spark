@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -331,8 +332,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
+        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+        // `groupingExpressions` is not extracted during logical phase.
+        val normalizedGroupingExpressions = namedGroupingExpressions.map { e =>
+          NormalizeFloatingNumbers.normalize(e) match {
+            case n: NamedExpression => n
+            case other => Alias(other, e.name)(exprId = e.exprId)
+          }
+        }
+
         aggregate.AggUtils.planStreamingAggregation(
-          namedGroupingExpressions,
+          normalizedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
           stateVersion,
@@ -414,16 +424,25 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               "Spark user mailing list.")
         }
 
+        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+        // `groupingExpressions` is not extracted during logical phase.
+        val normalizedGroupingExpressions = groupingExpressions.map { e =>
+          NormalizeFloatingNumbers.normalize(e) match {
+            case n: NamedExpression => n
+            case other => Alias(other, e.name)(exprId = e.exprId)
+          }
+        }
+
         val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
             aggregate.AggUtils.planAggregateWithoutDistinct(
-              groupingExpressions,
+              normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
             aggregate.AggUtils.planAggregateWithOneDistinct(
-              groupingExpressions,
+              normalizedGroupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
               resultExpressions,
@@ -577,6 +596,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.FlatMapGroupsInR(f, p, b, is, os, key, value, grouping, data, objAttr, child) =>
         execution.FlatMapGroupsInRExec(f, p, b, is, os, key, value, grouping,
           data, objAttr, planLater(child)) :: Nil
+      case logical.FlatMapGroupsInRWithArrow(f, p, b, is, ot, key, grouping, child) =>
+        execution.FlatMapGroupsInRWithArrowExec(
+          f, p, b, is, ot, key, grouping, planLater(child)) :: Nil
       case logical.FlatMapGroupsInPandas(grouping, func, output, child) =>
         execution.python.FlatMapGroupsInPandasExec(grouping, func, output, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
