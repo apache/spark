@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.ServerSocketChannel
 import java.sql.Timestamp
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 
@@ -29,7 +30,6 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
@@ -168,7 +168,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       // Timestamp for rate stream is round to second which leads to milliseconds lost, that will
       // make batch1stamp smaller than current timestamp if both of them are in the same second.
       // Comparing by second to make sure the correct behavior.
-      assert(batch1Stamp.getTime >= curr / 1000 * 1000)
+      assert(batch1Stamp.getTime >= SECONDS.toMillis(MILLISECONDS.toSeconds(curr)))
       assert(!batch2Stamp.before(batch1Stamp))
     }
   }
