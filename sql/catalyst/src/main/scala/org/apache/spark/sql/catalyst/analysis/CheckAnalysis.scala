@@ -156,7 +156,7 @@ trait CheckAnalysis extends PredicateHelper {
             if (values.size > 1) {
               val cmp = genCmp(null, null)
               cmp match {
-                case EqualTo(_, _) | EqualNullSafe(_, _) => // Ok
+                case EqualTo(_, _) => // Ok
                   a
                 case other =>
                   failAnalysis("ANY/SOME predicate doesn't support multi-column comparison.")
