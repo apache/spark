@@ -33,6 +33,8 @@ import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
+import org.apache.hadoop.hive.ql.exec.mr.HadoopJobExecHelper
+import org.apache.hadoop.hive.ql.exec.tez.TezJobExecHelper
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -46,7 +48,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.util.ShutdownHookManager
+import scala.collection.mutable.ListBuffer
+import scala.util.control.Breaks._
 
+import sun.misc.{Signal, SignalHandler}
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
  * has dropped its support.
@@ -294,6 +299,55 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     state.isHiveServerQuery
   }
 
+  /**
+   * Split the line by semicolon by ignoring the ones in the single/double quotes.
+   *
+   */
+  def splitSemiColon(line: String): List[String] = {
+    var inQuotes = false
+    var escape = false
+
+    val ret = new ListBuffer[String]
+
+    var quoteChar = '"'
+    var beginIndex = 0
+    var index = 0
+    while (index < line.length) {
+      val c = line.charAt(index)
+      c match {
+        case ';' =>
+          if (!inQuotes) {
+            ret += line.substring(beginIndex, index)
+            beginIndex = index + 1
+          }
+        case '"' =>
+        case '\'' =>
+          if (!escape) {
+            if (!inQuotes) {
+              quoteChar = c
+              inQuotes = !inQuotes
+            }
+            else {
+              if (c == quoteChar) {
+                inQuotes = !inQuotes
+              }
+            }
+          }
+        case _ =>
+      }
+      if (escape) {
+        escape = false
+      }
+      else if (c == '\\') {
+        escape = true
+      }
+      index += 1;
+    }
+    if (beginIndex < line.length) {
+      ret += line.substring(beginIndex)
+    }
+    ret.toList
+  }
 }
 
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
@@ -433,6 +487,70 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         // scalastyle:on println
       }
       ret
+    }
+  }
+
+  override def processLine(line: String, allowInterrupting: Boolean): Int = {
+    var oldSignal: SignalHandler = null
+    var interruptSignal: Signal = null
+    if (allowInterrupting) {
+      // Remember all threads that were running at the time we started line processing.
+      // Hook up the custom Ctrl+C handler while processing this line
+      interruptSignal = new Signal("INT")
+      oldSignal = Signal.handle(interruptSignal, new SignalHandler() {
+        private var interruptRequested = false
+        override def handle(signal: Signal): Unit = {
+          val initialRequest = !interruptRequested
+          interruptRequested = true
+          // Kill the VM on second ctrl+c
+          if (!initialRequest) {
+            console.printInfo("Exiting the JVM")
+            System.exit(127)
+          }
+          // Interrupt the CLI thread to stop the current statement and return
+          // to prompt
+          console.printInfo("Interrupting... Be patient, this might take some time.")
+          console.printInfo("Press Ctrl+C again to kill JVM")
+          // First, kill any running MR jobs
+          HadoopJobExecHelper.killRunningJobs()
+          TezJobExecHelper.killRunningJobs()
+          HiveInterruptUtils.interrupt()
+        }
+      })
+    }
+    try {
+      var lastRet = 0
+      var ret = 0
+      // we can not use "split" function directly as ";" may be quoted
+      val commands = SparkSQLCLIDriver.splitSemiColon(line)
+      var command = ""
+      for (oneCmd: String <- commands) {
+        breakable {
+          if (StringUtils.endsWith(oneCmd, "\\")) {
+            command += StringUtils.chop(oneCmd) + ";"
+            break()
+          }
+          else {
+            command += oneCmd
+          }
+          if (StringUtils.isBlank(command)) {
+            break()
+          }
+          ret = processCmd(command)
+          command = ""
+          lastRet = ret
+          val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
+          if (ret != 0 && !ignoreErrors) {
+            return ret
+          }
+        }
+      }
+      lastRet
+    } finally {
+      // Once we are done processing the line, restore the old handler
+      if (oldSignal != null && interruptSignal != null) {
+        Signal.handle(interruptSignal, oldSignal)
+      }
     }
   }
 }
