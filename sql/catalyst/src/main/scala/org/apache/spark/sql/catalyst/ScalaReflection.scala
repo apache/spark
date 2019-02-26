@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.lang.reflect.Constructor
-
-import scala.util.Properties
-
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
@@ -250,6 +246,14 @@ object ScalaReflection extends ScalaReflection {
           DateTimeUtils.getClass,
           ObjectType(classOf[java.sql.Date]),
           "toJavaDate",
+          path :: Nil,
+          returnNullable = false)
+
+      case t if t <:< localTypeOf[java.time.Instant] =>
+        StaticInvoke(
+          DateTimeUtils.getClass,
+          ObjectType(classOf[java.time.Instant]),
+          "microsToInstant",
           path :: Nil,
           returnNullable = false)
 
@@ -537,6 +541,14 @@ object ScalaReflection extends ScalaReflection {
           inputObject :: Nil,
           returnNullable = false)
 
+      case t if t <:< localTypeOf[java.time.Instant] =>
+        StaticInvoke(
+          DateTimeUtils.getClass,
+          TimestampType,
+          "instantToMicros",
+          inputObject :: Nil,
+          returnNullable = false)
+
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         StaticInvoke(
           DateTimeUtils.getClass,
@@ -754,6 +766,7 @@ object ScalaReflection extends ScalaReflection {
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
+      case t if t <:< localTypeOf[java.time.Instant] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Date] => Schema(DateType, nullable = true)
       case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)

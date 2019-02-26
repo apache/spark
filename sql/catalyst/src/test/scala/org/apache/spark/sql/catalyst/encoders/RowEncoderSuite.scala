@@ -21,7 +21,8 @@ import scala.util.Random
 
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
@@ -279,6 +280,18 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val schema = new StructType().add("pythonUDT", pythonUDT, true)
     val encoder = RowEncoder(schema)
     assert(encoder.serializer(0).dataType == pythonUDT.sqlType)
+  }
+
+  test("encoding/decoding TimestampType to/from java.time.Instant") {
+    withSQLConf(SQLConf.TIMESTAMP_EXTERNAL_TYPE.key -> "Instant") {
+      val schema = new StructType().add("t", TimestampType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
+      val row = encoder.toRow(Row(instant))
+      assert(row.getLong(0) === DateTimeUtils.instantToMicros(instant))
+      val readback = encoder.fromRow(row)
+      assert(readback.get(0) === instant)
+    }
   }
 
   for {
