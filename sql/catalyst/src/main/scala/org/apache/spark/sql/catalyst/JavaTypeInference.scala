@@ -252,22 +252,19 @@ object JavaTypeInference {
         }
 
         val arrayData = UnresolvedMapObjects(mapFunction, path)
-        if (elementNullable) {
-          Invoke(arrayData, "array", ObjectType(c))
-        } else {
-          val primitiveMethod = elementType match {
-            case c if c == java.lang.Integer.TYPE => "toIntArray"
-            case c if c == java.lang.Long.TYPE => "toLongArray"
-            case c if c == java.lang.Double.TYPE => "toDoubleArray"
-            case c if c == java.lang.Float.TYPE => "toFloatArray"
-            case c if c == java.lang.Short.TYPE => "toShortArray"
-            case c if c == java.lang.Byte.TYPE => "toByteArray"
-            case c if c == java.lang.Boolean.TYPE => "toBooleanArray"
-            case other => throw new IllegalStateException("expect primitive array element type " +
-              "but got " + other)
-          }
-          Invoke(arrayData, primitiveMethod, ObjectType(c))
+
+        val methodName = elementType match {
+          case c if c == java.lang.Integer.TYPE => "toIntArray"
+          case c if c == java.lang.Long.TYPE => "toLongArray"
+          case c if c == java.lang.Double.TYPE => "toDoubleArray"
+          case c if c == java.lang.Float.TYPE => "toFloatArray"
+          case c if c == java.lang.Short.TYPE => "toShortArray"
+          case c if c == java.lang.Byte.TYPE => "toByteArray"
+          case c if c == java.lang.Boolean.TYPE => "toBooleanArray"
+          // non-primitive
+          case _ => "array"
         }
+        Invoke(arrayData, methodName, ObjectType(c))
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)

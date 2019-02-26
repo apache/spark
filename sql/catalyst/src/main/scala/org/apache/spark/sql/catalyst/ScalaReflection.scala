@@ -234,22 +234,18 @@ object ScalaReflection extends ScalaReflection {
         val arrayData = UnresolvedMapObjects(mapFunction, path)
         val arrayCls = arrayClassFor(elementType)
 
-        if (elementNullable) {
-          Invoke(arrayData, "array", arrayCls, returnNullable = false)
-        } else {
-          val primitiveMethod = elementType match {
-            case t if t <:< definitions.IntTpe => "toIntArray"
-            case t if t <:< definitions.LongTpe => "toLongArray"
-            case t if t <:< definitions.DoubleTpe => "toDoubleArray"
-            case t if t <:< definitions.FloatTpe => "toFloatArray"
-            case t if t <:< definitions.ShortTpe => "toShortArray"
-            case t if t <:< definitions.ByteTpe => "toByteArray"
-            case t if t <:< definitions.BooleanTpe => "toBooleanArray"
-            case other => throw new IllegalStateException("expect primitive array element type " +
-              "but got " + other)
-          }
-          Invoke(arrayData, primitiveMethod, arrayCls, returnNullable = false)
+        val methodName = elementType match {
+          case t if t <:< definitions.IntTpe => "toIntArray"
+          case t if t <:< definitions.LongTpe => "toLongArray"
+          case t if t <:< definitions.DoubleTpe => "toDoubleArray"
+          case t if t <:< definitions.FloatTpe => "toFloatArray"
+          case t if t <:< definitions.ShortTpe => "toShortArray"
+          case t if t <:< definitions.ByteTpe => "toByteArray"
+          case t if t <:< definitions.BooleanTpe => "toBooleanArray"
+          // non-primitive
+          case _ => "array"
         }
+        Invoke(arrayData, methodName, arrayCls, returnNullable = false)
 
       // We serialize a `Set` to Catalyst array. When we deserialize a Catalyst array
       // to a `Set`, if there are duplicated elements, the elements will be de-duplicated.
