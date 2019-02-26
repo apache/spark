@@ -23,13 +23,16 @@ import tempfile
 import time
 import unittest
 
+if sys.version >= '3':
+    unicode = str
+
 from datetime import date, datetime
 from decimal import Decimal
 from distutils.version import LooseVersion
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
-from pyspark.sql.functions import array, col, expr, lit, sum, udf, pandas_udf
+from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf
 from pyspark.sql.types import Row
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
@@ -264,6 +267,23 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         array_f = pandas_udf(lambda x: x, ArrayType(IntegerType()))
         result = df.select(array_f(col('array')))
         self.assertEquals(df.collect(), result.collect())
+
+    def test_vectorized_udf_struct_type(self):
+        import pandas as pd
+
+        df = self.spark.range(10)
+        return_type = StructType([
+            StructField('id', IntegerType()),
+            StructField('str', StringType())])
+
+        @pandas_udf(returnType=return_type)
+        def f(id):
+            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+
+        actual = df.select(f(col('id')).alias('struct')).collect()
+        expected = df.select(struct(col('id'), col('id').cast('string').alias('str')) \
+                             .alias('struct')).collect()
+        self.assertEqual(expected, actual)
 
     def test_vectorized_udf_complex(self):
         df = self.spark.range(10).select(
