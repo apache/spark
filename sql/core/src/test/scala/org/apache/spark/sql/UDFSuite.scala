@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.functions.{lit, udf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
@@ -491,6 +492,16 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       spark.udf.register("f", (x: Long, y: Any) => x)
       val df = spark.sql("SELECT f(i, j) FROM t")
       checkAnswer(df, Seq(Row(1L), Row(2L)))
+    }
+  }
+
+  test("Using java.time.Instant in UDF") {
+    withSQLConf(SQLConf.TIMESTAMP_EXTERNAL_TYPE.key -> "Instant") {
+      val expected = java.time.Instant.parse("2019-02-27T00:00:00Z")
+      val plusSec = udf((i: java.time.Instant) => i.plusSeconds(1))
+      val df = spark.sql("SELECT TIMESTAMP '2019-02-26 23:59:59Z' as t")
+        .select(plusSec('t))
+      assert(df.collect().toSeq === Seq(Row(expected)))
     }
   }
 }
