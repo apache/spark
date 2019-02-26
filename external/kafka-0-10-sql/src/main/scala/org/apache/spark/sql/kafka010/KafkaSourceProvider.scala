@@ -201,9 +201,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     (topicOption, pathOption) match {
       case (Some(t), Some(p)) if t != p => throw new IllegalArgumentException("'topic' and 'path'"
         + " options should match if both defined: '" + t + "' should match '" + p + "'")
-      case (Some(t), _) => Some(t)
-      case (None, Some(p)) => Option(p)
-      case _ => Option.empty
+      case (Some(_), _) => topicOption
+      case (None, Some(_)) => pathOption
+      case _ => None
     }
   }
 

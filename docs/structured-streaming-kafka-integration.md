@@ -427,10 +427,6 @@ The Dataframe being written to Kafka should have the following columns in schema
   <td>topic (*optional)</td>
   <td>string</td>
 </tr>
-<tr>
-  <td>path (*optional)</td>
-  <td>string</td>
-</tr>
 </table>
 \* The topic column is required if the "topic" or "path" configuration option is not specified.<br>
 
@@ -440,7 +436,7 @@ how ```null``` valued key values are handled). If a topic column exists then its
 is used as the topic when writing the given row to Kafka, unless the "topic" or "path"
 configuration option is set i.e., the "topic" configuration option overrides both the
 "path" configuration option and the topic column; the "path" configuration option
-overrides the topic column: 1) topic option -> 2) path option -> 3) topic column.
+overrides the topic column.
 
 The following options must be set for the Kafka sink
 for both batch and streaming queries.
@@ -464,7 +460,7 @@ The following configurations are optional:
   <td>none</td>
   <td>streaming and batch</td>
   <td>Sets the topic that all rows will be written to in Kafka. This option overrides
-  ```path``` option and any topic column that may exist in the data.</td>
+  "path" option and any topic column that may exist in the data.</td>
 </tr>
 <tr>
   <td>path</td>
@@ -472,8 +468,8 @@ The following configurations are optional:
   <td>none</td>
   <td>streaming and batch</td>
   <td>Sets the topic that all rows will be written to in Kafka. This option overrides any
-  topic column that may exist in the data and is overridden by ```topic``` option.
-  However, if both ```topic``` and ```path``` options are specified they should match.</td>
+  topic column that may exist in the data and is overridden by "topic" option.
+  However, if both "topic" and "path" options are specified they must match.</td>
 </tr>
 </table>
 
@@ -484,8 +480,8 @@ The following configurations are optional:
 {% highlight scala %}
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
-val ds = df
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+val q = df
+  .select($"key" cast "string", $"value" cast "string")
   .writeStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -493,20 +489,32 @@ val ds = df
   .start()
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the data
-val ds = df
-  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+val q = df
+  .select($"topic", $"key" cast "string", $"value" cast "string")
   .writeStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .start()
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the path option
-val ds = df
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+val q = df
+  .select($"key" cast "string", $"value" cast "string")
   .writeStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .start("topic2")
+
+// Write key-value data from a DataFrame to Kafka, when DataFrame has topic column and both topic
+// and path option are specified. In such situation topic will be taken from topic option. You do
+// not need to specify topic in all three places, but be aware, that if both topic and path options
+// are specified, they must match.
+val q = df
+  .select($"topic", $"key" cast "string", $"value" cast "string")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic3")
+  .start("topic3")
 
 {% endhighlight %}
 </div>
@@ -514,7 +522,7 @@ val ds = df
 {% highlight java %}
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
-StreamingQuery ds = df
+StreamingQuery q = df
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream()
   .format("kafka")
@@ -523,7 +531,7 @@ StreamingQuery ds = df
   .start();
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the data
-StreamingQuery ds = df
+StreamingQuery q = df
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream()
   .format("kafka")
@@ -531,12 +539,24 @@ StreamingQuery ds = df
   .start();
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the path option
-StreamingQuery ds = df
+StreamingQuery q = df
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .start("topic2");
+
+// Write key-value data from a DataFrame to Kafka, when DataFrame has topic column and both topic
+// and path option are specified. In such situation topic will be taken from topic option. You do
+// not need to specify topic in all three places, but be aware, that if both topic and path options
+// are specified, they must match.
+StreamingQuery q = df
+  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic3")
+  .start("topic3");
 
 {% endhighlight %}
 </div>
@@ -544,7 +564,7 @@ StreamingQuery ds = df
 {% highlight python %}
 
 # Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
-ds = df \
+q = df \
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .writeStream \
   .format("kafka") \
@@ -553,7 +573,7 @@ ds = df \
   .start()
 
 # Write key-value data from a DataFrame to Kafka using the topic specified in the data
-ds = df \
+q = df \
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
   .writeStream \
   .format("kafka") \
@@ -561,12 +581,24 @@ ds = df \
   .start()
 
 # Write key-value data from a DataFrame to Kafka using the topic specified in the path option
-ds = df \
+q = df \
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .writeStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .start("topic2")
+
+# Write key-value data from a DataFrame to Kafka, when DataFrame has topic column and both topic
+# and path option are specified. In such situation topic will be taken from topic option. You do
+# not need to specify topic in all three places, but be aware, that if both topic and path options
+# are specified, they must match.
+q = df \
+  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "topic3") \
+  .start("topic3")
 
 {% endhighlight %}
 </div>
@@ -579,7 +611,7 @@ ds = df \
 {% highlight scala %}
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the topic option
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.select($"key" cast "string", $"value" cast "string")
   .write
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -587,19 +619,29 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .save()
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the data
-df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+df.select($"topic", $"key" cast "string", $"value" cast "string")
   .write
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .save()
 
 // Write key-value data from a DataFrame to Kafka using the topic specified in the path option
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.select($"key" cast "string", $"value" cast "string")
   .write
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("topic", "topic1")
-  .save()
+  .save("topic2")
+
+// Write key-value data from a DataFrame to Kafka, when DataFrame has topic column and both topic
+// and path option are specified. In such situation topic will be taken from topic option. You do
+// not need to specify topic in all three places, but be aware, that if both topic and path options
+// are specified, they must match.
+df.select($"topic", $"key" cast "string", $"value" cast "string")
+  .write
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic3")
+  .save("topic3")
 
 {% endhighlight %}
 </div>
@@ -620,6 +662,24 @@ df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .save();
+
+// Write key-value data from a DataFrame to Kafka using the topic specified in the path option
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .save("topic2");
+
+// Write key-value data from a DataFrame to Kafka, when DataFrame has topic column and both topic
+// and path option are specified. In such situation topic will be taken from topic option. You do
+// not need to specify topic in all three places, but be aware, that if both topic and path options
+// are specified, they must match.
+df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic3")
+  .save("topic3");
 
 {% endhighlight %}
 </div>
@@ -647,6 +707,17 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .save("topic2")
+
+# Write key-value data from a DataFrame to Kafka, when DataFrame has topic column and both topic
+# and path option are specified. In such situation topic will be taken from topic option. You do
+# not need to specify topic in all three places, but be aware, that if both topic and path options
+# are specified, they must match.
+df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .write \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "topic3") \
+  .save("topic3")
 
 {% endhighlight %}
 </div>
