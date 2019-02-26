@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.net.URI
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.{LocalFileSystem, Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.FsPermission
 
@@ -29,11 +27,11 @@ import org.apache.spark.sql.{Encoder, LocalSparkSession, SparkSession, SQLContex
 
 class StreamingCheckpointSuite extends SparkFunSuite with LocalSparkSession {
 
-  test("SPARK-26825: set temp checkpoint dir to local even default filesystem is not local") {
+  test("temp checkpoint dir should stay local even if default filesystem is not local") {
     val conf = new SparkConf()
-      .set("spark.hadoop.fs.defaultFS", "mockfs:///")
       .set("spark.hadoop.fs.file.impl", classOf[LocalFileSystem].getName)
       .set("spark.hadoop.fs.mockfs.impl", classOf[MkdirRecordingFileSystem].getName)
+      .set("spark.hadoop.fs.defaultFS", "mockfs:///")
 
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
 
@@ -41,43 +39,40 @@ class StreamingCheckpointSuite extends SparkFunSuite with LocalSparkSession {
     implicit val sqlContext: SQLContext = spark.sqlContext
 
     MkdirRecordingFileSystem.reset()
-
-    val inputData = MemoryStream[Int]
-    val df = inputData.toDF()
-
-    val query = df.writeStream.format("console").start()
+    val query = MemoryStream[Int].toDF().writeStream.format("console").start()
     try {
-      assert(MkdirRecordingFileSystem.requests.isEmpty,
-        "Expected mkdir happens in mocked filesystem")
+      val checkpointDir = new Path(
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
+      val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
+      assert(fs.getScheme === "file")
+      assert(fs.exists(checkpointDir))
+      assert(MkdirRecordingFileSystem.requests === 0,
+        "Unexpected mkdir happens in mocked filesystem")
     } finally {
       query.stop()
     }
   }
 }
 
+/**
+ * FileSystem to record requests for mkdir.
+ * All tests relying on this should call reset() first.
+ */
 class MkdirRecordingFileSystem extends RawLocalFileSystem {
   override def getScheme: String = "mockfs"
 
   override def getUri: URI = URI.create(s"$getScheme:///")
 
-  override def mkdirs(f: Path): Boolean = {
-    mkdirs(f, null)
-  }
+  override def mkdirs(f: Path): Boolean = mkdirs(f, null)
 
   override def mkdirs(f: Path, permission: FsPermission): Boolean = {
-    MkdirRecordingFileSystem.add(f)
-    super.mkdirs(f, permission)
+    MkdirRecordingFileSystem.requests += 1
+    true
   }
 }
 
-/**
- * Hacked approach to retrive requests for mkdir.
- * All tests relying on this should call reset() first.
- */
 object MkdirRecordingFileSystem {
-  val requests = new mutable.ArrayBuffer[Path]()
+  var requests = 0
 
-  def reset(): Unit = requests.clear()
-
-  def add(p: Path): mutable.ArrayBuffer[Path] = requests += p
+  def reset(): Unit = requests = 0
 }
