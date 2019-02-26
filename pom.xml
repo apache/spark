@@ -82,32 +82,38 @@
   </mailingLists>
 
   <modules>
-    <module>common/sketch</module>
+    <module>assembly</module>
     <module>common/kvstore</module>
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
-    <module>common/unsafe</module>
+    <module>common/network-yarn</module>
+    <module>common/sketch</module>
     <module>common/tags</module>
+    <module>common/unsafe</module>
     <module>core</module>
+    <module>dists/hadoop-palantir-bom</module>
+    <module>dists/hadoop-palantir</module>
+    <module>examples</module>
+    <module>external/avro</module>
+    <module>external/kafka-0-10-assembly</module>
+    <module>external/kafka-0-10-sql</module>
+    <module>external/kafka-0-10-token-provider</module>
+    <module>external/kafka-0-10</module>
+    <module>external/kinesis-asl-assembly</module>
+    <module>external/kinesis-asl</module>
     <module>graphx</module>
-    <module>mllib</module>
+    <module>hadoop-cloud</module>
+    <module>launcher</module>
     <module>mllib-local</module>
-    <module>tools</module>
-    <module>streaming</module>
+    <module>mllib</module>
+    <module>repl</module>
+    <module>resource-managers/kubernetes/core</module>
+    <module>resource-managers/yarn</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>assembly</module>
-    <module>examples</module>
-    <module>repl</module>
-    <module>launcher</module>
-    <module>external/kafka-0-10-token-provider</module>
-    <module>external/kafka-0-10</module>
-    <module>external/kafka-0-10-assembly</module>
-    <module>external/kafka-0-10-sql</module>
-    <module>external/avro</module>
-    <module>dists/hadoop-palantir-bom</module>
-    <module>dists/hadoop-palantir</module>
+    <module>streaming</module>
+    <module>tools</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -121,7 +127,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.25</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.7.4</hadoop.version>
+    <hadoop.version>2.9.1-palantir.11</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.4.7</zookeeper.version>
@@ -134,7 +140,7 @@
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.1.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
-    <parquet.version>1.12.0-palantir.1</parquet.version>
+    <parquet.version>1.12.0-palantir.4</parquet.version>
     <okhttp3.version>3.11.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.15.0</okio.version>
@@ -850,11 +856,6 @@
         <version>${jersey.version}</version>
       </dependency>
       <dependency>
-        <groupId>javax.activation</groupId>
-        <artifactId>activation</artifactId>
-        <version>${javax-activation.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.glassfish.jersey.media</groupId>
         <artifactId>jersey-media-multipart</artifactId>
         <version>${jersey.version}</version>
@@ -1148,6 +1149,18 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-azure-datalake</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-azure</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
@@ -1225,7 +1238,7 @@
       <dependency>
         <groupId>javax.activation</groupId>
         <artifactId>activation</artifactId>
-        <version>1.1.1</version>
+        <version>${javax-activation.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
@@ -2990,44 +3003,6 @@
 
     <profile>
       <id>hadoop-palantir</id>
-      <properties>
-        <hadoop.version>2.9.1-palantir.11</hadoop.version>
-        <curator.version>2.7.1</curator.version>
-      </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-azure-datalake</artifactId>
-            <version>${hadoop.version}</version>
-            <scope>${hadoop.deps.scope}</scope>
-          </dependency>
-          <!--
-          Hadoop-Azure isn't in Hadoop 2.6, so this has to be made
-          a 2.7+ moodule.
-          -->
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-azure</artifactId>
-            <version>${hadoop.version}</version>
-            <scope>${hadoop.deps.scope}</scope>
-            <exclusions>
-              <exclusion>
-                <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-common</artifactId>
-              </exclusion>
-              <exclusion>
-                <groupId>org.codehaus.jackson</groupId>
-                <artifactId>jackson-mapper-asl</artifactId>
-              </exclusion>
-              <exclusion>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-core</artifactId>
-              </exclusion>
-            </exclusions>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
     </profile>
 
     <profile>
