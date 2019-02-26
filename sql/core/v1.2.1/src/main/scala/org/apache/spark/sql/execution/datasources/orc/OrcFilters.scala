@@ -311,16 +311,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 private class OrcConvertibilityChecker(
   dataTypeMap: Map[String, DataType]
 ) {
-  // TODO(ivan): correctness might be more obvious if this is (Filter, Boolean) -> Boolean instead
-  // of just Filter -> Boolean.
-  private val convertibilityCache = new mutable.HashMap[Filter, Boolean]
+
+  private val convertibilityCache = new mutable.HashMap[(Filter, Boolean), Boolean]
+    .withDefault(Function.tupled(isConvertibleImpl _))
 
   def isConvertible(expression: Filter, canPartialPushDownConjuncts: Boolean): Boolean = {
-    if (!convertibilityCache.contains(expression)) {
-      convertibilityCache.put(expression,
-        isConvertibleImpl(expression, canPartialPushDownConjuncts))
-    }
-    convertibilityCache(expression)
+    convertibilityCache((expression, canPartialPushDownConjuncts))
   }
 
   private def isConvertibleImpl(
