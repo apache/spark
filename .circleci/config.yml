@@ -149,7 +149,7 @@ jobs:
           keys:
             - build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
             - build-binaries-
-      - run: ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Psparkr install
+      - run: ./build/mvn -DskipTests -Psparkr install
       # Get sbt to run trivially, ensures its launcher is downloaded under build/
       - run: ./build/sbt -h || true
       - save_cache:
