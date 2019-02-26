@@ -8,7 +8,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
 
   test("match single node pattern using spark-graph-api") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(id(0) -> "Alice", id(1) -> "Bob")).toDF("id", "name")
-    val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"), properties = Map("name" -> "name"))
+    val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"))
 
     val graph: PropertyGraph = cypherEngine.createGraph(Seq(nodeDataFrame))
 
@@ -18,7 +18,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
   test("match simple pattern using spark-graph-api") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(id(0) -> "Alice", id(1) -> "Bob")).toDF("id", "name")
     val relationshipData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), id(0), id(1)))).toDF("id", "source", "target")
-    val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"), properties = Map("name" -> "name"))
+    val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"))
     val relationshipFrame: RelationshipFrame = RelationshipFrame(df = relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
 
     val graph: PropertyGraph = cypherEngine.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
@@ -33,8 +33,8 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val universityData: DataFrame = spark.createDataFrame(Seq(id(2) -> "UC Berkeley", id(3)-> "Stanford")).toDF("id", "title")
     val knowsData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), id(0), id(1)), Tuple3(id(1), id(0), id(2)))).toDF("id", "source", "target")
     val studyAtData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(2), id(0), id(2)), Tuple3(id(3), id(1), id(3)), Tuple3(id(4), id(2), id(2)))).toDF("id", "source", "target")
-    val personDataFrame: NodeFrame = NodeFrame(df = personData, idColumn = "id", labels = Set("Student"), properties = Map("name" -> "name", "age" -> "age"))
-    val universityDataFrame: NodeFrame = NodeFrame(df = universityData, idColumn = "id", labels = Set("University"), properties = Map("title" -> "title"))
+    val personDataFrame: NodeFrame = NodeFrame(df = personData, idColumn = "id", labels = Set("Student"))
+    val universityDataFrame: NodeFrame = NodeFrame(df = universityData, idColumn = "id", labels = Set("University"))
     val knowsDataFrame: RelationshipFrame = RelationshipFrame(df = knowsData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
     val studyAtDataFrame: RelationshipFrame = RelationshipFrame(df = studyAtData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "STUDY_AT")
 
