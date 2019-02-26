@@ -133,6 +133,8 @@ class UserDefinedFunction(object):
                                 "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
+                if isinstance(self._returnType_placeholder, StructType):
+                    raise TypeError
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
                 raise NotImplementedError(
