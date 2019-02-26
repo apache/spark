@@ -828,9 +828,12 @@ private[spark] class SparkSubmit extends Logging {
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
       mainClass.newInstance().asInstanceOf[SparkApplication]
     } else {
-      // SPARK-4170
-      if (classOf[scala.App].isAssignableFrom(mainClass)) {
-        logWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
+      // SPARK-4170, SPARK-26977
+      Try {
+        if (classOf[scala.App].isAssignableFrom(Utils.classForName(s"$childMainClass$$"))) {
+          logWarning("Subclasses of scala.App may not work correctly. " +
+            "Use a main() method instead.")
+        }
       }
       new JavaMainApplication(mainClass)
     }
