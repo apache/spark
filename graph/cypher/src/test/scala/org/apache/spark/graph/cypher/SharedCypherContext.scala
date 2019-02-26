@@ -1,8 +1,9 @@
 package org.apache.spark.graph.cypher
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.scalatest.Suite
 
-trait SharedCypherContext extends SharedSQLContext {
+trait SharedCypherContext extends SharedSparkSession { self: Suite =>
 
   private var _cypherEngine: SparkCypherSession = _
 
