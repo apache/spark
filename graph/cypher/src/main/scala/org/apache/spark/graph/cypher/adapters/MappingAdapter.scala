@@ -1,11 +1,11 @@
 package org.apache.spark.graph.cypher.adapters
 
-import org.apache.spark.graph.api.{NodeDataFrame, RelationshipDataFrame}
+import org.apache.spark.graph.api.{NodeFrame, RelationshipFrame}
 import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMappingBuilder, RelationshipMappingBuilder}
 
 object MappingAdapter {
 
-  implicit class RichNodeDataFrame(val nodeDf: NodeDataFrame) extends AnyVal {
+  implicit class RichNodeDataFrame(val nodeDf: NodeFrame) extends AnyVal {
     def toNodeMapping: EntityMapping = NodeMappingBuilder
       .on(nodeDf.idColumn)
       .withImpliedLabels(nodeDf.labels.toSeq: _*)
@@ -13,7 +13,7 @@ object MappingAdapter {
       .build
   }
 
-  implicit class RichRelationshipDataFrame(val relDf: RelationshipDataFrame) extends AnyVal {
+  implicit class RichRelationshipDataFrame(val relDf: RelationshipFrame) extends AnyVal {
     def toRelationshipMapping: EntityMapping = RelationshipMappingBuilder
         .on(relDf.idColumn)
         .withSourceStartNodeKey(relDf.sourceIdColumn)

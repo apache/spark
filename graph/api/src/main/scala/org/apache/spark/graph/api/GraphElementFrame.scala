@@ -2,7 +2,7 @@ package org.apache.spark.graph.api
 
 import org.apache.spark.sql.DataFrame
 
-trait GraphElementDataFrame {
+trait GraphElementFrame {
 
   def df: DataFrame
 
@@ -11,18 +11,18 @@ trait GraphElementDataFrame {
   def properties: Map[String, String]
 }
 
-case class NodeDataFrame(
+case class NodeFrame(
   df: DataFrame,
   idColumn: String,
   labels: Set[String] = Set.empty,
   properties: Map[String, String] = Map.empty
-) extends GraphElementDataFrame
+) extends GraphElementFrame
 
-case class RelationshipDataFrame(
+case class RelationshipFrame(
   df: DataFrame,
   idColumn: String,
   sourceIdColumn: String,
   targetIdColumn: String,
   relationshipType: String,
   properties: Map[String, String] = Map.empty
-) extends GraphElementDataFrame
+) extends GraphElementFrame

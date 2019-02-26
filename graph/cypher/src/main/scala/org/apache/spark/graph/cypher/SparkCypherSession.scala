@@ -31,8 +31,8 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
   override def entityTables: RelationalEntityTableFactory[DataFrameTable] = ???
 
   override def createGraph(
-    nodes: Seq[NodeDataFrame],
-    relationships: Seq[RelationshipDataFrame]
+    nodes: Seq[NodeFrame],
+    relationships: Seq[RelationshipFrame]
   ): PropertyGraph = {
     require(nodes.nonEmpty, "Creating a graph requires at least one NodeDataFrame")
     val nodeTables = nodes.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }

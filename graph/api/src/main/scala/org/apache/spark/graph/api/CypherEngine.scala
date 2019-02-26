@@ -4,7 +4,7 @@ trait CypherEngine {
   def cypher(graph: PropertyGraph, query: String): CypherResult
 
   def createGraph(
-    nodes: Seq[NodeDataFrame],
-    relationships: Seq[RelationshipDataFrame] = Seq.empty
+    nodes: Seq[NodeFrame],
+    relationships: Seq[RelationshipFrame] = Seq.empty
   ): PropertyGraph
 }

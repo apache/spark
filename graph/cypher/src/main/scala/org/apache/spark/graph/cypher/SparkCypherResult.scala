@@ -1,6 +1,6 @@
 package org.apache.spark.graph.cypher
 
-import org.apache.spark.graph.api.{CypherResult, NodeDataFrame, RelationshipDataFrame}
+import org.apache.spark.graph.api.{CypherResult, NodeFrame, RelationshipFrame}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.sql.{DataFrame, functions}
 import org.opencypher.okapi.api.schema.Schema
@@ -22,7 +22,7 @@ case class SparkCypherResult(
   private lazy val hasMultipleEntities: Boolean = header.entityVars.size > 1
 
   // TODO: Error handling
-  override def nodeDataFrames(varName: String): Seq[NodeDataFrame] = {
+  override def nodeDataFrames(varName: String): Seq[NodeFrame] = {
     val nodeVar: NodeVar = find(NodeVar(varName)(CTNode))
 
     val idColumn = header.column(nodeVar)
@@ -50,12 +50,12 @@ case class SparkCypherResult(
 
       val distinctDf = if (hasMultipleEntities) labelCombinationDf.dropDuplicates(idColumn) else labelCombinationDf
 
-      NodeDataFrame(distinctDf, idColumn, labels, properties)
+      NodeFrame(distinctDf, idColumn, labels, properties)
     }
   }
 
   // TODO: Error handling
-  override def relationshipDataFrames(varName: String): Seq[RelationshipDataFrame] = {
+  override def relationshipDataFrames(varName: String): Seq[RelationshipFrame] = {
     val relVar: RelationshipVar = find(RelationshipVar(varName)(CTRelationship))
 
     val idColumn = header.column(relVar)
@@ -79,7 +79,7 @@ case class SparkCypherResult(
 
       val distinctDf = if (hasMultipleEntities) relTypeDf.dropDuplicates(idColumn) else relTypeDf
 
-      RelationshipDataFrame(distinctDf, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
+      RelationshipFrame(distinctDf, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
     }
   }
 
