@@ -22,7 +22,7 @@ case class SparkCypherResult(
   private lazy val hasMultipleEntities: Boolean = header.entityVars.size > 1
 
   // TODO: Error handling
-  override def nodeDataFrames(varName: String): Seq[NodeFrame] = {
+  override def nodeFrames(varName: String): Seq[NodeFrame] = {
     val nodeVar: NodeVar = find(NodeVar(varName)(CTNode))
 
     val idColumn = header.column(nodeVar)
@@ -55,7 +55,7 @@ case class SparkCypherResult(
   }
 
   // TODO: Error handling
-  override def relationshipDataFrames(varName: String): Seq[RelationshipFrame] = {
+  override def relationshipFrames(varName: String): Seq[RelationshipFrame] = {
     val relVar: RelationshipVar = find(RelationshipVar(varName)(CTRelationship))
 
     val idColumn = header.column(relVar)

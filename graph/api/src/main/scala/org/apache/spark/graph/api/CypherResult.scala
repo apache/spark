@@ -5,7 +5,7 @@ import org.apache.spark.sql.DataFrame
 trait CypherResult {
   def df: DataFrame
 
-  def nodeDataFrames(varName: String): Seq[NodeFrame]
+  def nodeFrames(varName: String): Seq[NodeFrame]
 
-  def relationshipDataFrames(varName: String): Seq[RelationshipFrame]
+  def relationshipFrames(varName: String): Seq[RelationshipFrame]
 }

@@ -48,9 +48,9 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
         |RETURN p, o, k
         |""".stripMargin)
 
-    val berkeleyStudents: Seq[NodeFrame] = result.nodeDataFrames("p")
-    val berkeleyStudentFriends: Seq[NodeFrame] = result.nodeDataFrames("o")
-    val knows: Seq[RelationshipFrame] = result.relationshipDataFrames("k")
+    val berkeleyStudents: Seq[NodeFrame] = result.nodeFrames("p")
+    val berkeleyStudentFriends: Seq[NodeFrame] = result.nodeFrames("o")
+    val knows: Seq[RelationshipFrame] = result.relationshipFrames("k")
 
     val berkeleyGraph: PropertyGraph = cypherEngine.createGraph(berkeleyStudents ++ berkeleyStudentFriends, knows)
     berkeleyGraph.cypher("MATCH (n:Student)-[:KNOWS]->(o:Student) RETURN n.name AS person, o.name AS friend").df.show()
