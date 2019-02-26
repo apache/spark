@@ -28,7 +28,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     graph.cypher("MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2").df.show()
   }
 
-  ignore("create property graph from query results") {
+  test("create property graph from query results") {
     val personData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), "Alice", 42), Tuple3(id(1), "Bob", 23), Tuple3(id(2), "Eve", 19))).toDF("id", "name", "age")
     val universityData: DataFrame = spark.createDataFrame(Seq(id(2) -> "UC Berkeley", id(3)-> "Stanford")).toDF("id", "title")
     val knowsData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), id(0), id(1)), Tuple3(id(1), id(0), id(2)))).toDF("id", "source", "target")
