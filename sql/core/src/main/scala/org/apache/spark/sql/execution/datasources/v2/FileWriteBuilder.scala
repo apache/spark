@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.io.IOException
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -83,7 +84,9 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
         null
 
       case SaveMode.Overwrite =>
-        committer.deleteWithJob(fs, path, true)
+        if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
+          throw new IOException(s"Unable to clear directory $path prior to writing to it")
+        }
         committer.setupJob(job)
         new FileBatchWrite(job, description, committer)
 
