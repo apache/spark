@@ -691,6 +691,16 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
           rows_first.numRows()
         }
+
+        statement.execute(s"SET ${SQLConf.THRIFTSERVER_INCREMENTAL_DESERIALIZE.key}=true")
+        statement.setFetchSize(2)
+        val rs = statement.executeQuery("SELECT * FROM test_25224 WHERE key IS NOT NULL LIMIT 3")
+        Seq(238, 311, 255).foreach { key =>
+          rs.next()
+          assert(rs.getInt(1) === key)
+        }
+        assert(!rs.next())
+        rs.close()
       }
     }
   }
