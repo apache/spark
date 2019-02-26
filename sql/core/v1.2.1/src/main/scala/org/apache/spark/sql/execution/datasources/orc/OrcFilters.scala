@@ -308,24 +308,39 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 }
 
+private case class FilterWithConjunctPushdown(
+  expression: Filter,
+  canPartialPushDownConjuncts: Boolean
+)
+
+/**
+ * Helper class for efficiently checking whether a `Filter` and its children can be converted to
+ * ORC `SearchArgument`s.
+ *
+ * @param dataTypeMap
+ */
 private class OrcConvertibilityChecker(
   dataTypeMap: Map[String, DataType]
 ) {
 
-  private val convertibilityCache = new mutable.HashMap[(Filter, Boolean), Boolean]
-    .withDefault(Function.tupled(isConvertibleImpl _))
+  private val convertibilityCache = new mutable.HashMap[FilterWithConjunctPushdown, Boolean]
 
   def isConvertible(expression: Filter, canPartialPushDownConjuncts: Boolean): Boolean = {
-    convertibilityCache((expression, canPartialPushDownConjuncts))
+    val node = FilterWithConjunctPushdown(expression, canPartialPushDownConjuncts)
+    convertibilityCache.getOrElseUpdate(node, isConvertibleImpl(node))
   }
 
-  private def isConvertibleImpl(
-      expression: Filter,
-      canPartialPushDownConjuncts: Boolean): Boolean = {
+  /**
+   * This method duplicates the logic from `OrcFilters.createBuilder` that is related to checking
+   * if a given part of the filter is actually convertible to an ORC `SearchArgument`.
+   * @param node
+   * @return
+   */
+  private def isConvertibleImpl(node: FilterWithConjunctPushdown): Boolean = {
     import org.apache.spark.sql.sources._
     import OrcFilters._
 
-    expression match {
+    node.expression match {
       case And(left, right) =>
         // At here, it is not safe to just convert one side and remove the other side
         // if we do not understand what the parent filters are.
@@ -338,29 +353,25 @@ private class OrcConvertibilityChecker(
         // Pushing one side of AND down is only safe to do at the top level or in the child
         // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
         // can be safely removed.
-        val leftIsConvertible = isConvertible(left, canPartialPushDownConjuncts)
-        val rightIsConvertible = isConvertible(right, canPartialPushDownConjuncts)
+        val leftIsConvertible = isConvertible(left, node.canPartialPushDownConjuncts)
+        val rightIsConvertible = isConvertible(right, node.canPartialPushDownConjuncts)
         // NOTE: If we can use partial predicates here, we only need one of the children to
         // be convertible to be able to convert the parent. Otherwise, we need both to be
         // convertible.
-        if (canPartialPushDownConjuncts) {
+        if (node.canPartialPushDownConjuncts) {
           leftIsConvertible || rightIsConvertible
         } else {
           leftIsConvertible && rightIsConvertible
         }
 
       case Or(left, right) =>
-        val leftIsConvertible = isConvertible(left, canPartialPushDownConjuncts)
-        val rightIsConvertible = isConvertible(right, canPartialPushDownConjuncts)
+        val leftIsConvertible = isConvertible(left, node.canPartialPushDownConjuncts)
+        val rightIsConvertible = isConvertible(right, node.canPartialPushDownConjuncts)
         leftIsConvertible && rightIsConvertible
 
       case Not(child) =>
         val childIsConvertible = isConvertible(child, canPartialPushDownConjuncts = false)
         childIsConvertible
-
-      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
-      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
-      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
