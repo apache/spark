@@ -111,15 +111,16 @@ object PartitioningUtils {
       caseSensitive: Boolean,
       validatePartitionColumns: Boolean,
       timeZone: TimeZone): PartitionSpec = {
-    val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
+    val (userSpecifiedDataTypes, userSpecifiedNames) = if (userSpecifiedSchema.isDefined) {
       val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
+      val nameToName = userSpecifiedSchema.get.fields.map(f => f.name -> f.name).toMap
       if (!caseSensitive) {
-        CaseInsensitiveMap(nameToDataType)
+        (CaseInsensitiveMap(nameToDataType), CaseInsensitiveMap(nameToName))
       } else {
-        nameToDataType
+        (nameToDataType, nameToName)
       }
     } else {
-      Map.empty[String, DataType]
+      (Map.empty[String, DataType], Map.empty[String, String])
     }
 
     val dateFormatter = DateFormatter()
@@ -170,7 +171,9 @@ object PartitioningUtils {
         columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
           // We always assume partition columns are nullable since we've no idea whether null values
           // will be appended in the future.
-          StructField(name, userSpecifiedDataTypes.getOrElse(name, dataType), nullable = true)
+          val resultName = userSpecifiedNames.getOrElse(name, name)
+          val resultDataType = userSpecifiedDataTypes.getOrElse(name, dataType)
+          StructField(resultName, resultDataType, nullable = true)
         }
       }
 
