@@ -273,17 +273,58 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         df = self.spark.range(10)
         return_type = StructType([
-            StructField('id', IntegerType()),
+            StructField('id', LongType()),
             StructField('str', StringType())])
+
+        def func(id):
+            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+
+        f = pandas_udf(func, returnType=return_type)
+
+        expected = df.select(struct(col('id'), col('id').cast('string').alias('str'))
+                             .alias('struct')).collect()
+
+        actual = df.select(f(col('id')).alias('struct')).collect()
+        self.assertEqual(expected, actual)
+
+        g = pandas_udf(func, 'id: long, str: string')
+        actual = df.select(g(col('id')).alias('struct')).collect()
+        self.assertEqual(expected, actual)
+
+    def test_vectorized_udf_struct_complex(self):
+        import pandas as pd
+
+        df = self.spark.range(10)
+        return_type = StructType([
+            StructField('ts', TimestampType()),
+            StructField('arr', ArrayType(LongType()))])
 
         @pandas_udf(returnType=return_type)
         def f(id):
-            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+            return pd.DataFrame({'ts': id.apply(lambda i: pd.Timestamp(i)),
+                                 'arr': id.apply(lambda i: [i, i + 1])})
 
-        actual = df.select(f(col('id')).alias('struct')).collect()
-        expected = df.select(struct(col('id'), col('id').cast('string').alias('str')) \
-                             .alias('struct')).collect()
-        self.assertEqual(expected, actual)
+        actual = df.withColumn('f', f(col('id'))).collect()
+        for i, row in enumerate(actual):
+            id, f = row
+            self.assertEqual(i, id)
+            self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
+            self.assertListEqual([i, i + 1], f[1])
+
+    def test_vectorized_udf_nested_struct(self):
+        nested_type = StructType([
+            StructField('id', IntegerType()),
+            StructField('nested', StructType([
+                StructField('foo', StringType()),
+                StructField('bar', FloatType())
+            ]))
+        ])
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    'Invalid returnType with scalar Pandas UDFs'):
+                pandas_udf(lambda x: x, returnType=nested_type)
 
     def test_vectorized_udf_complex(self):
         df = self.spark.range(10).select(

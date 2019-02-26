@@ -299,7 +299,7 @@ def _create_batch(series, timezone, safecheck, assign_cols_by_name):
 
     arrs = []
     for s, t in series:
-        if pa.types.is_struct(t):
+        if t is not None and pa.types.is_struct(t):
             if not isinstance(s, pd.DataFrame):
                 raise ValueError("A field of type StructType expects a pandas.DataFrame, " +
                                  "but got: %s" % str(type(s)))
