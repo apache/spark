@@ -828,9 +828,17 @@ private[spark] class SparkSubmit extends Logging {
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
       mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
     } else {
-      // SPARK-4170
-      if (classOf[scala.App].isAssignableFrom(mainClass)) {
-        logWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
+      // Scala object subclassing scala.App has its whole class body executed in the
+      // main method it inherits. Fields of the object will not have been initialized
+      // before the main method has been executed, which will cause problems like SPARK-4170
+      // Note two Java classes are generated, the childMainClass and childMainClass$.
+      // Users will pass in childMainClass which will delegate all invocations to childMainClass$
+      // but it's childMainClass$ that subclasses scala.App and we should check for.
+      Try {
+        if (classOf[scala.App].isAssignableFrom(Utils.classForName(s"$childMainClass$$"))) {
+          logWarning("Subclasses of scala.App may not work correctly. " +
+            "Use a main() method instead.")
+        }
       }
       new JavaMainApplication(mainClass)
     }
