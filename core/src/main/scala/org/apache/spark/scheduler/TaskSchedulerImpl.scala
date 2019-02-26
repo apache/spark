@@ -858,12 +858,12 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def markPartitionCompletedInAllTaskSets(
       stageId: Int,
       partitionId: Int,
-      taskInfo: Option[TaskInfo]) = {
+      taskInfo: TaskInfo) = {
     val finishedPartitions =
       stageIdToFinishedPartitions.getOrElseUpdate(stageId, new BitSet)
     finishedPartitions += partitionId
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
-      tsm.markPartitionCompleted(partitionId, taskInfo)
+      tsm.markPartitionCompleted(partitionId, Some(taskInfo))
     }
   }
 
