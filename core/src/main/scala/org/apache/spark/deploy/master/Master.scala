@@ -370,7 +370,7 @@ private[deploy] class Master(
 
           val validExecutors = executors.filter(exec => idToApp.get(exec.appId).isDefined)
           for (exec <- validExecutors) {
-            val app = idToApp.get(exec.appId).get
+            val app = idToApp(exec.appId)
             val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
             worker.addExecutor(execInfo)
             execInfo.copyState(exec)

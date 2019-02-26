@@ -330,7 +330,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       val options = df.queryExecution.optimizedPlan.collectFirst {
         case d: DataSourceV2Relation => d.options
       }.get
-      assert(options.get(optionName).get == "false")
+      assert(options(optionName) === "false")
     }
   }
 
