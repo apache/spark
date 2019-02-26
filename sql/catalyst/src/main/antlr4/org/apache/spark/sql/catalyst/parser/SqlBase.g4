@@ -78,11 +78,11 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
-    | CREATE DATABASE (IF NOT EXISTS)? identifier
+    | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
-    | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
-    | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
+    | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitionColumnNames=identifierList) |
@@ -163,7 +163,7 @@ statement
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
@@ -272,6 +272,11 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
+    ;
+
+database
+    : DATABASE
+    | SCHEMA
     ;
 
 describeFuncName
