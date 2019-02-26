@@ -111,16 +111,22 @@ object PartitioningUtils {
       caseSensitive: Boolean,
       validatePartitionColumns: Boolean,
       timeZone: TimeZone): PartitionSpec = {
-    val (userSpecifiedDataTypes, userSpecifiedNames) = if (userSpecifiedSchema.isDefined) {
+    val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
       val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
-      val nameToName = userSpecifiedSchema.get.fields.map(f => f.name -> f.name).toMap
       if (!caseSensitive) {
-        (CaseInsensitiveMap(nameToDataType), CaseInsensitiveMap(nameToName))
+        CaseInsensitiveMap(nameToDataType)
       } else {
-        (nameToDataType, nameToName)
+        nameToDataType
       }
     } else {
-      (Map.empty[String, DataType], Map.empty[String, String])
+      Map.empty[String, DataType]
+    }
+
+    // SPARK-26990: use user specified field names if case insensitive.
+    val userSpecifiedNames = if (userSpecifiedSchema.isDefined && !caseSensitive) {
+      CaseInsensitiveMap(userSpecifiedSchema.get.fields.map(f => f.name -> f.name).toMap)
+    } else {
+      Map.empty[String, String]
     }
 
     val dateFormatter = DateFormatter()
