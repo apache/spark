@@ -882,18 +882,7 @@ object TypeCoercion {
 
       case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
         val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
-          // Currently Scala UDF will only expect `AnyDataType` at top level, so this trick works.
-          // In the future we should create types like `AbstractArrayType`, so that Scala UDF can
-          // accept inputs of array type of arbitrary element type.
-          if (expected == AnyDataType) {
-            in
-          } else {
-            implicitCast(
-              in,
-              udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
-            ).getOrElse(in)
-          }
-
+          implicitCast(in, udfInputToCastType(in.dataType, expected)).getOrElse(in)
         }
         udf.withNewChildren(children)
     }

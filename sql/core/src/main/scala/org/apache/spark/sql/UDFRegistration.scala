@@ -123,16 +123,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
         |  val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
         |  val inputSchemas: Seq[Option[ScalaReflection.Schema]] = $inputSchemas
-        |  val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-        |  val finalUdf = if (nullable) udf else udf.asNonNullable()
         |  def builder(e: Seq[Expression]) = if (e.length == $x) {
-        |    finalUdf.createScalaUDF(e)
+        |    ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        |    if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        |    Some(name), nullable, udfDeterministic = true)
         |  } else {
         |    throw new AnalysisException("Invalid number of arguments for function " + name +
         |      ". Expected: $x; Found: " + e.length)
         |  }
         |  functionRegistry.createOrReplaceTempFunction(name, builder)
-        |  finalUdf
+        |  val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+        |  if (nullable) udf else udf.asNonNullable()
         |}""".stripMargin)
     }
 
@@ -169,16 +170,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag](name: String, func: Function0[RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 0) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 0; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -189,16 +191,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag](name: String, func: Function1[A1, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 1) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 1; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -209,16 +212,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](name: String, func: Function2[A1, A2, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 2) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 2; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -229,16 +233,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](name: String, func: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 3) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 3; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -249,16 +254,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](name: String, func: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 4) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 4; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -269,16 +275,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](name: String, func: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 5) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 5; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -289,16 +296,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](name: String, func: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 6) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 6; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -309,16 +317,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](name: String, func: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 7) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 7; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -329,16 +338,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](name: String, func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 8) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 8; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -349,16 +359,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](name: String, func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 9) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 9; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -369,16 +380,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](name: String, func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 10) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 10; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -389,16 +401,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag](name: String, func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 11) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 11; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -409,16 +422,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag](name: String, func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 12) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 12; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -429,16 +443,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag](name: String, func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 13) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 13; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -449,16 +464,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag](name: String, func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 14) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 14; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -469,16 +485,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag](name: String, func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 15) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 15; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -489,16 +506,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag](name: String, func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Try(ScalaReflection.schemaFor[A16]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 16) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 16; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -509,16 +527,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag](name: String, func: Function17[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Try(ScalaReflection.schemaFor[A16]).toOption :: Try(ScalaReflection.schemaFor[A17]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 17) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 17; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -529,16 +548,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag](name: String, func: Function18[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Try(ScalaReflection.schemaFor[A16]).toOption :: Try(ScalaReflection.schemaFor[A17]).toOption :: Try(ScalaReflection.schemaFor[A18]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 18) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 18; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -549,16 +569,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag](name: String, func: Function19[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Try(ScalaReflection.schemaFor[A16]).toOption :: Try(ScalaReflection.schemaFor[A17]).toOption :: Try(ScalaReflection.schemaFor[A18]).toOption :: Try(ScalaReflection.schemaFor[A19]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 19) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 19; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -569,16 +590,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag](name: String, func: Function20[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Try(ScalaReflection.schemaFor[A16]).toOption :: Try(ScalaReflection.schemaFor[A17]).toOption :: Try(ScalaReflection.schemaFor[A18]).toOption :: Try(ScalaReflection.schemaFor[A19]).toOption :: Try(ScalaReflection.schemaFor[A20]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 20) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 20; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -589,16 +611,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag](name: String, func: Function21[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Try(ScalaReflection.schemaFor[A16]).toOption :: Try(ScalaReflection.schemaFor[A17]).toOption :: Try(ScalaReflection.schemaFor[A18]).toOption :: Try(ScalaReflection.schemaFor[A19]).toOption :: Try(ScalaReflection.schemaFor[A20]).toOption :: Try(ScalaReflection.schemaFor[A21]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 21) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 21; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -609,16 +632,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag, A22: TypeTag](name: String, func: Function22[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas: Seq[Option[ScalaReflection.Schema]] = Try(ScalaReflection.schemaFor[A1]).toOption :: Try(ScalaReflection.schemaFor[A2]).toOption :: Try(ScalaReflection.schemaFor[A3]).toOption :: Try(ScalaReflection.schemaFor[A4]).toOption :: Try(ScalaReflection.schemaFor[A5]).toOption :: Try(ScalaReflection.schemaFor[A6]).toOption :: Try(ScalaReflection.schemaFor[A7]).toOption :: Try(ScalaReflection.schemaFor[A8]).toOption :: Try(ScalaReflection.schemaFor[A9]).toOption :: Try(ScalaReflection.schemaFor[A10]).toOption :: Try(ScalaReflection.schemaFor[A11]).toOption :: Try(ScalaReflection.schemaFor[A12]).toOption :: Try(ScalaReflection.schemaFor[A13]).toOption :: Try(ScalaReflection.schemaFor[A14]).toOption :: Try(ScalaReflection.schemaFor[A15]).toOption :: Try(ScalaReflection.schemaFor[A16]).toOption :: Try(ScalaReflection.schemaFor[A17]).toOption :: Try(ScalaReflection.schemaFor[A18]).toOption :: Try(ScalaReflection.schemaFor[A19]).toOption :: Try(ScalaReflection.schemaFor[A20]).toOption :: Try(ScalaReflection.schemaFor[A21]).toOption :: Try(ScalaReflection.schemaFor[A22]).toOption :: Nil
-    val udf = SparkUserDefinedFunction(func, dataType, inputSchemas).withName(name)
-    val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 22) {
-      finalUdf.createScalaUDF(e)
+      ScalaUDF(func, dataType, e, inputSchemas.map(_.map(_.nullable).getOrElse(true)),
+        if (inputSchemas.contains(None)) Nil else inputSchemas.map(_.get.dataType),
+        Some(name), nullable, udfDeterministic = true)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 22; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    finalUdf
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
