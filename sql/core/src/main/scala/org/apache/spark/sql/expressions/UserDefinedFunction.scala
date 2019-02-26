@@ -38,14 +38,25 @@ import org.apache.spark.sql.types.DataType
  * @since 1.3.0
  */
 @Stable
-sealed trait UserDefinedFunction {
+case class UserDefinedFunction protected[sql] (
+    f: AnyRef,
+    dataType: DataType,
+    inputTypes: Option[Seq[DataType]]) {
+
+  private var _nameOption: Option[String] = None
+  private var _nullable: Boolean = true
+  private var _deterministic: Boolean = true
+
+  // This is a `var` instead of in the constructor for backward compatibility of this case class.
+  // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
+  private[sql] var nullableTypes: Option[Seq[Boolean]] = None
 
   /**
    * Returns true when the UDF can return a nullable value.
    *
    * @since 2.3.0
    */
-  def nullable: Boolean
+  def nullable: Boolean = _nullable
 
   /**
    * Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the same
@@ -53,7 +64,7 @@ sealed trait UserDefinedFunction {
    *
    * @since 2.3.0
    */
-  def deterministic: Boolean
+  def deterministic: Boolean = _deterministic
 
   /**
    * Returns an expression that invokes the UDF, using the given arguments.
@@ -61,83 +72,80 @@ sealed trait UserDefinedFunction {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def apply(exprs: Column*): Column
-
-  /**
-   * Updates UserDefinedFunction with a given name.
-   *
-   * @since 2.3.0
-   */
-  def withName(name: String): UserDefinedFunction
-
-  /**
-   * Updates UserDefinedFunction to non-nullable.
-   *
-   * @since 2.3.0
-   */
-  def asNonNullable(): UserDefinedFunction
-
-  /**
-   * Updates UserDefinedFunction to nondeterministic.
-   *
-   * @since 2.3.0
-   */
-  def asNondeterministic(): UserDefinedFunction
-}
-
-private[sql] case class SparkUserDefinedFunction(
-    f: AnyRef,
-    dataType: DataType,
-    inputTypes: Option[Seq[DataType]],
-    nullableTypes: Option[Seq[Boolean]],
-    name: Option[String] = None,
-    nullable: Boolean = true,
-    deterministic: Boolean = true) extends UserDefinedFunction {
-
-  @scala.annotation.varargs
-  override def apply(exprs: Column*): Column = {
+  def apply(exprs: Column*): Column = {
     // TODO: make sure this class is only instantiated through `SparkUserDefinedFunction.create()`
     // and `nullableTypes` is always set.
+    if (nullableTypes.isEmpty) {
+      nullableTypes = Some(ScalaReflection.getParameterTypeNullability(f))
+    }
     if (inputTypes.isDefined) {
       assert(inputTypes.get.length == nullableTypes.get.length)
-    }
-
-    val inputsNullSafe = nullableTypes.getOrElse {
-      ScalaReflection.getParameterTypeNullability(f)
     }
 
     Column(ScalaUDF(
       f,
       dataType,
       exprs.map(_.expr),
-      inputsNullSafe,
+      nullableTypes.get,
       inputTypes.getOrElse(Nil),
-      udfName = name,
-      nullable = nullable,
-      udfDeterministic = deterministic))
+      udfName = _nameOption,
+      nullable = _nullable,
+      udfDeterministic = _deterministic))
   }
 
-  override def withName(name: String): UserDefinedFunction = {
-    copy(name = Option(name))
+  private def copyAll(): UserDefinedFunction = {
+    val udf = copy()
+    udf._nameOption = _nameOption
+    udf._nullable = _nullable
+    udf._deterministic = _deterministic
+    udf.nullableTypes = nullableTypes
+    udf
   }
 
-  override def asNonNullable(): UserDefinedFunction = {
+  /**
+   * Updates UserDefinedFunction with a given name.
+   *
+   * @since 2.3.0
+   */
+  def withName(name: String): UserDefinedFunction = {
+    val udf = copyAll()
+    udf._nameOption = Option(name)
+    udf
+  }
+
+  /**
+   * Updates UserDefinedFunction to non-nullable.
+   *
+   * @since 2.3.0
+   */
+  def asNonNullable(): UserDefinedFunction = {
     if (!nullable) {
       this
     } else {
-      copy(nullable = false)
+      val udf = copyAll()
+      udf._nullable = false
+      udf
     }
   }
 
-  override def asNondeterministic(): UserDefinedFunction = {
-    if (!deterministic) {
+  /**
+   * Updates UserDefinedFunction to nondeterministic.
+   *
+   * @since 2.3.0
+   */
+  def asNondeterministic(): UserDefinedFunction = {
+    if (!_deterministic) {
       this
     } else {
-      copy(deterministic = false)
+      val udf = copyAll()
+      udf._deterministic = false
+      udf
     }
   }
 }
 
+// We have to use a name different than `UserDefinedFunction` here, to avoid breaking the binary
+// compatibility of the auto-generate UserDefinedFunction object.
 private[sql] object SparkUserDefinedFunction {
 
   def create(
@@ -149,7 +157,8 @@ private[sql] object SparkUserDefinedFunction {
     } else {
       Some(inputSchemas.map(_.get.dataType))
     }
-    val nullableTypes = Some(inputSchemas.map(_.map(_.nullable).getOrElse(true)))
-    SparkUserDefinedFunction(f, dataType, inputTypes, nullableTypes)
+    val udf = new UserDefinedFunction(f, dataType, inputTypes)
+    udf.nullableTypes = Some(inputSchemas.map(_.map(_.nullable).getOrElse(true)))
+    udf
   }
 }
