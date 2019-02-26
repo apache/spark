@@ -64,6 +64,7 @@ if sys.version < '3':
     from itertools import izip as zip, imap as map
 else:
     import pickle
+    basestring = unicode = str
     xrange = range
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
@@ -244,7 +245,7 @@ class ArrowStreamSerializer(Serializer):
         return "ArrowStreamSerializer"
 
 
-def _create_batch(series, timezone, safecheck):
+def _create_batch(series, timezone, safecheck, assign_cols_by_name):
     """
     Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
 
@@ -254,6 +255,7 @@ def _create_batch(series, timezone, safecheck):
     """
     import decimal
     from distutils.version import LooseVersion
+    import pandas as pd
     import pyarrow as pa
     from pyspark.sql.types import _check_series_convert_timestamps_internal
     # Make input conform to [(series1, type1), (series2, type2), ...]
@@ -295,7 +297,29 @@ def _create_batch(series, timezone, safecheck):
             raise RuntimeError(error_msg % (s.dtype, t), e)
         return array
 
-    arrs = [create_array(s, t) for s, t in series]
+    arrs = []
+    for s, t in series:
+        if pa.types.is_struct(t):
+            if not isinstance(s, pd.DataFrame):
+                raise ValueError("A field of type StructType expects a pandas.DataFrame, " +
+                                 "but got: %s" % str(type(s)))
+
+            # Assign result columns by schema name if user labeled with strings, else use position
+            struct_arrs = []
+            struct_names = []
+            if assign_cols_by_name and any(isinstance(name, basestring) for name in s.columns):
+                for field in t:
+                    struct_arrs.append(create_array(s[field.name], field.type))
+                    struct_names.append(field.name)
+            else:
+                for i, field in enumerate(t):
+                    struct_arrs.append(create_array(s[s.columns[i]], field.type))
+                    struct_names.append(field.name)
+
+            arrs.append(pa.StructArray.from_arrays(struct_arrs, names=struct_names))
+        else:
+            arrs.append(create_array(s, t))
+
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
 
 
@@ -304,10 +328,11 @@ class ArrowStreamPandasSerializer(Serializer):
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
-    def __init__(self, timezone, safecheck):
+    def __init__(self, timezone, safecheck, assign_cols_by_name):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
+        self._assign_cols_by_name = assign_cols_by_name
 
     def arrow_to_pandas(self, arrow_column):
         from pyspark.sql.types import from_arrow_type, \
@@ -326,7 +351,8 @@ class ArrowStreamPandasSerializer(Serializer):
         writer = None
         try:
             for series in iterator:
-                batch = _create_batch(series, self._timezone, self._safecheck)
+                batch = _create_batch(series, self._timezone, self._safecheck,
+                                      self._assign_cols_by_name)
                 if writer is None:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)

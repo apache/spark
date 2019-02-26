@@ -254,7 +254,12 @@ def read_udfs(pickleSer, infile, eval_type):
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
         safecheck = runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion",
                                     "false").lower() == 'true'
-        ser = ArrowStreamPandasSerializer(timezone, safecheck)
+        # NOTE: this is duplicated from wrap_grouped_map_pandas_udf
+        assign_cols_by_name = runner_conf.get(
+            "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")\
+            .lower() == "true"
+
+        ser = ArrowStreamPandasSerializer(timezone, safecheck, assign_cols_by_name)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 
