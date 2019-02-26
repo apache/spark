@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.util.{Calendar, Locale, TimeZone}
-
-import scala.util.Random
+import java.util.{Calendar, TimeZone}
+import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -321,13 +320,13 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        c.getTimeInMillis * 1000)
+        MILLISECONDS.toMicros(c.getTimeInMillis))
       c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        c.getTimeInMillis * 1000)
+        MILLISECONDS.toMicros(c.getTimeInMillis))
     }
 
     val gmtId = Option("GMT")
@@ -522,17 +521,17 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, FloatType), 15.003f)
     checkEvaluation(cast(ts, DoubleType), 15.003)
     checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(
-      cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
-      millis.toFloat / 1000)
+      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
+      millis.toFloat / MILLIS_PER_SECOND)
     checkEvaluation(
-      cast(cast(millis.toDouble / 1000, TimestampType), DoubleType),
-      millis.toDouble / 1000)
+      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
+      millis.toDouble / MILLIS_PER_SECOND)
     checkEvaluation(
       cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
       Decimal(1))

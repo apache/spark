@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import java.util.concurrent.TimeUnit._
+
+import scala.collection.mutable.HashMap
 
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -180,7 +181,8 @@ case class FileSourceScanExec(
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
     driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
-    val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
+    val timeTakenMs = NANOSECONDS.toMillis(
+      (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
     driverMetrics("metadataTime") = timeTakenMs
     ret
   }

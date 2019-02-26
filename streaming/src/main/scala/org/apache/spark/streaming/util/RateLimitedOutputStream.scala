@@ -79,7 +79,7 @@ class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
     } else {
       // Calculate how much time we should sleep to bring ourselves to the desired rate.
       val targetTimeInMillis = bytesWrittenSinceSync * 1000 / desiredBytesPerSec
-      val elapsedTimeInMillis = elapsedNanosecs / 1000000
+      val elapsedTimeInMillis = NANOSECONDS.toMillis(elapsedNanosecs)
       val sleepTimeInMillis = targetTimeInMillis - elapsedTimeInMillis
       if (sleepTimeInMillis > 0) {
         logTrace("Natural rate is " + rate + " per second but desired rate is " +
