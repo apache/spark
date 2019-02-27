@@ -20,11 +20,12 @@ package test.org.apache.spark.sql;
 import java.io.Serializable;
 import java.util.*;
 
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructType;
 import org.junit.*;
 
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Encoder;
-import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.test.TestSparkSession;
 
 public class JavaBeanDeserializationSuite implements Serializable {
@@ -113,6 +114,109 @@ public class JavaBeanDeserializationSuite implements Serializable {
     List<MapRecord> records = dataset.collectAsList();
 
     Assert.assertEquals(records, MAP_RECORDS);
+  }
+
+  @Test
+  public void testSpark22000() {
+    List<Row> inputRows = new ArrayList<>();
+    List<RecordSpark22000> expectedRecords = new ArrayList<>();
+
+    for (long idx = 0 ; idx < 5 ; idx++) {
+      Row row = createRecordSpark22000Row(idx);
+      inputRows.add(row);
+      expectedRecords.add(createRecordSpark22000(row));
+    }
+
+    // Here we try to convert the fields, from any types to string.
+    // Before applying SPARK-22000, Spark called toString() against variable which type might
+    // be primitive.
+    // SPARK-22000 it calls String.valueOf() which finally calls toString() but handles boxing
+    // if the type is primitive.
+    Encoder<RecordSpark22000> encoder = Encoders.bean(RecordSpark22000.class);
+
+    StructType schema = new StructType()
+      .add("shortField", DataTypes.ShortType)
+      .add("intField", DataTypes.IntegerType)
+      .add("longField", DataTypes.LongType)
+      .add("floatField", DataTypes.FloatType)
+      .add("doubleField", DataTypes.DoubleType)
+      .add("stringField", DataTypes.StringType)
+      .add("booleanField", DataTypes.BooleanType)
+      .add("timestampField", DataTypes.TimestampType)
+      // explicitly setting nullable = true to make clear the intention
+      .add("nullIntField", DataTypes.IntegerType, true);
+
+    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+    Dataset<RecordSpark22000> dataset = dataFrame.as(encoder);
+
+    List<RecordSpark22000> records = dataset.collectAsList();
+
+    Assert.assertEquals(records, records);
+  }
+
+  @Test
+  public void testSpark22000FailToUpcast() {
+    List<Row> inputRows = new ArrayList<>();
+    for (long idx = 0 ; idx < 5 ; idx++) {
+      Row row = createRecordSpark22000FailToUpcastRow(idx);
+      inputRows.add(row);
+    }
+
+    // Here we try to convert the fields, from string type to int, which upcast doesn't help.
+    Encoder<RecordSpark22000FailToUpcast> encoder =
+            Encoders.bean(RecordSpark22000FailToUpcast.class);
+
+    StructType schema = new StructType().add("id", DataTypes.StringType);
+
+    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+
+    try {
+      dataFrame.as(encoder).collect();
+      Assert.fail("Expected AnalysisException, but passed.");
+    } catch (Throwable e) {
+      // Here we need to handle weird case: compiler complains AnalysisException never be thrown
+      // in try statement, but it can be thrown actually. Maybe Scala-Java interop issue?
+      if (e instanceof AnalysisException) {
+        Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  private static Row createRecordSpark22000Row(Long index) {
+    Object[] values = new Object[] {
+            index.shortValue(),
+            index.intValue(),
+            index,
+            index.floatValue(),
+            index.doubleValue(),
+            String.valueOf(index),
+            index % 2 == 0,
+            new java.sql.Timestamp(System.currentTimeMillis()),
+            null
+    };
+    return new GenericRow(values);
+  }
+
+  private static RecordSpark22000 createRecordSpark22000(Row recordRow) {
+    RecordSpark22000 record = new RecordSpark22000();
+    record.setShortField(String.valueOf(recordRow.getShort(0)));
+    record.setIntField(String.valueOf(recordRow.getInt(1)));
+    record.setLongField(String.valueOf(recordRow.getLong(2)));
+    record.setFloatField(String.valueOf(recordRow.getFloat(3)));
+    record.setDoubleField(String.valueOf(recordRow.getDouble(4)));
+    record.setStringField(recordRow.getString(5));
+    record.setBooleanField(String.valueOf(recordRow.getBoolean(6)));
+    record.setTimestampField(String.valueOf(recordRow.getTimestamp(7).getTime() * 1000));
+    // This would figure out that null value will not become "null".
+    record.setNullIntField(null);
+    return record;
+  }
+
+  private static Row createRecordSpark22000FailToUpcastRow(Long index) {
+    Object[] values = new Object[] { String.valueOf(index) };
+    return new GenericRow(values);
   }
 
   public static class ArrayRecord {
@@ -250,6 +354,144 @@ public class JavaBeanDeserializationSuite implements Serializable {
     @Override
     public String toString() {
       return String.format("[%d,%d]", startTime, endTime);
+    }
+  }
+
+  public static final class RecordSpark22000 {
+    private String shortField;
+    private String intField;
+    private String longField;
+    private String floatField;
+    private String doubleField;
+    private String stringField;
+    private String booleanField;
+    private String timestampField;
+    private String nullIntField;
+
+    public RecordSpark22000() { }
+
+    public String getShortField() {
+      return shortField;
+    }
+
+    public void setShortField(String shortField) {
+      this.shortField = shortField;
+    }
+
+    public String getIntField() {
+      return intField;
+    }
+
+    public void setIntField(String intField) {
+      this.intField = intField;
+    }
+
+    public String getLongField() {
+      return longField;
+    }
+
+    public void setLongField(String longField) {
+      this.longField = longField;
+    }
+
+    public String getFloatField() {
+      return floatField;
+    }
+
+    public void setFloatField(String floatField) {
+      this.floatField = floatField;
+    }
+
+    public String getDoubleField() {
+      return doubleField;
+    }
+
+    public void setDoubleField(String doubleField) {
+      this.doubleField = doubleField;
+    }
+
+    public String getStringField() {
+      return stringField;
+    }
+
+    public void setStringField(String stringField) {
+      this.stringField = stringField;
+    }
+
+    public String getBooleanField() {
+      return booleanField;
+    }
+
+    public void setBooleanField(String booleanField) {
+      this.booleanField = booleanField;
+    }
+
+    public String getTimestampField() {
+      return timestampField;
+    }
+
+    public void setTimestampField(String timestampField) {
+      this.timestampField = timestampField;
+    }
+
+    public String getNullIntField() {
+      return nullIntField;
+    }
+
+    public void setNullIntField(String nullIntField) {
+      this.nullIntField = nullIntField;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      RecordSpark22000 that = (RecordSpark22000) o;
+      return Objects.equals(shortField, that.shortField) &&
+              Objects.equals(intField, that.intField) &&
+              Objects.equals(longField, that.longField) &&
+              Objects.equals(floatField, that.floatField) &&
+              Objects.equals(doubleField, that.doubleField) &&
+              Objects.equals(stringField, that.stringField) &&
+              Objects.equals(booleanField, that.booleanField) &&
+              Objects.equals(timestampField, that.timestampField) &&
+              Objects.equals(nullIntField, that.nullIntField);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(shortField, intField, longField, floatField, doubleField, stringField,
+              booleanField, timestampField, nullIntField);
+    }
+
+    @Override
+    public String toString() {
+      return com.google.common.base.Objects.toStringHelper(this)
+              .add("shortField", shortField)
+              .add("intField", intField)
+              .add("longField", longField)
+              .add("floatField", floatField)
+              .add("doubleField", doubleField)
+              .add("stringField", stringField)
+              .add("booleanField", booleanField)
+              .add("timestampField", timestampField)
+              .add("nullIntField", nullIntField)
+              .toString();
+    }
+  }
+
+  public static final class RecordSpark22000FailToUpcast {
+    private Integer id;
+
+    public RecordSpark22000FailToUpcast() {
+    }
+
+    public Integer getId() {
+      return id;
+    }
+
+    public void setId(Integer id) {
+      this.id = id;
     }
   }
 }
