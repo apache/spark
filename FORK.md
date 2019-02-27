@@ -30,8 +30,9 @@
 * [SPARK-25862](https://issues.apache.org/jira/browse/SPARK-25862) - Removal of `unboundedPreceding`, `unboundedFollowing`, `currentRow`
 * [SPARK-26127](https://issues.apache.org/jira/browse/SPARK-26127) - Removal of deprecated setters from tree regression and classification models
 * [SPARK-25867](https://issues.apache.org/jira/browse/SPARK-25867) - Removal of KMeans computeCost
-
-* e59507243d Robert Kruszewski 14 seconds ago  (HEAD -> rk/merge-again) Revert "[SPARK-26216][SQL] Do not use case class as public API (UserDefinedFunction)"
-* 8735a08f1b Robert Kruszewski 68 seconds ago  Revert "[SPARK-26216][SQL][FOLLOWUP] use abstract class instead of trait for UserDefinedFunction"
-* 1423024322 Robert Kruszewski 2 minutes ago  Revert "[SPARK-26323][SQL] Scala UDF should still check input types even if some inputs are of type Any"
-* b0d256d21a Robert Kruszewski 2 minutes ago  Revert "[SPARK-26580][SQL] remove Scala 2.11 hack for Scala UDF"
+* [SPARK-26216](https://issues.apache.org/jira/browse/SPARK-26216) - Change to UserDefinedFunction type
+  * [SPARK-26323](https://issues.apache.org/jira/browse/SPARK-26323) - Scala UDF null checking
+  * [SPARK-26580](https://issues.apache.org/jira/browse/SPARK-26580) - Bring back scala 2.11 behaviour of primitive types null behaviour
+* [SPARK-26133](https://issues.apache.org/jira/browse/SPARK-26133) - Old OneHotEncoder
+* [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215) - StringIndexer multi column support
+* [SPARK-26616](https://issues.apache.org/jira/browse/SPARK-26616) - No document frequency in IDFModel
