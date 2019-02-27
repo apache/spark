@@ -723,6 +723,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def stop(): Unit = {
+    stopStreamingQueries()
     sparkContext.stop()
   }
 
@@ -740,6 +741,20 @@ class SparkSession private(
    */
   protected[sql] def parseDataType(dataTypeString: String): DataType = {
     DataType.fromJson(dataTypeString)
+  }
+
+  /**
+   * Stops all active streaming queries
+   */
+  private def stopStreamingQueries(): Unit = {
+    streams.active.foreach { query =>
+      try {
+        query.stop()
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Exception while stopping query ${query.id}", e)
+      }
+    }
   }
 
   /**
