@@ -1980,6 +1980,7 @@ class DataFrame(object):
         assert isinstance(col, Column), "col should be Column"
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
+    @ignore_unicode_prefix
     def withColumns(self, colNames, cols):
         """
         Returns a new :class:`DataFrame` by adding or replacing the
@@ -1992,7 +1993,7 @@ class DataFrame(object):
         :param col: a sequence of :class:`Column` expression for the new columns.
 
         >>> df.withColumns(['age2', 'age3'], [df.age + 2, df.age + 3]).collect()
-        [Row(age=2, name='Alice', age2=4, age3=5), Row(age=5, name='Bob', age2=7, age3=8)]
+        [Row(age=2, name=u'Alice', age2=4, age3=5), Row(age=5, name=u'Bob', age2=7, age3=8)]
 
         """
         jcolumns = []
