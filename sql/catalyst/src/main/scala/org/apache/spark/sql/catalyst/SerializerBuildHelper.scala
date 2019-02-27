@@ -187,4 +187,12 @@ object SerializerBuildHelper {
     val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
     expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
   }
+
+  def createSerializerForUserDefinedType(
+      inputObject: Expression,
+      udt: UserDefinedType[_],
+      udtClass: Class[_]): Expression = {
+    val obj = NewInstance(udtClass, Nil, dataType = ObjectType(udtClass))
+    Invoke(obj, "serialize", udt, inputObject :: Nil)
+  }
 }
