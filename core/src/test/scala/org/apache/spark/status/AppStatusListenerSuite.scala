@@ -294,7 +294,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(executorStageSummaryWrappersForNode.nonEmpty)
     executorStageSummaryWrappersForNode.foreach { exec =>
       // both executor is expected to be blacklisted
-      assert(exec.info.isBlacklistedForStage === true)
+      assert(exec.info.isBlacklistedForStage)
     }
 
     // Fail one of the tasks, re-start it.
