@@ -1773,9 +1773,8 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     >>> model2 = OneVsRestModel.load(model_path)
     >>> model2.transform(test0).head().prediction
     0.0
-    >>> fieldNames = set(field.name for field in model.transform(test2).schema.fields)
-    >>> fieldNames
-    {'features', 'rawPrediction', 'prediction'}
+    >>> model.transform(test2).columns
+    ['features', 'rawPrediction', 'prediction']
 
     .. versionadded:: 2.0.0
     """
