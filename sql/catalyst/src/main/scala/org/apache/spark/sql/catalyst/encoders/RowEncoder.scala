@@ -155,7 +155,7 @@ object RowEncoder {
           element => {
             val value = serializerFor(ValidateExternalType(element, et), et)
             if (!containsNull) {
-              AssertNotNull(value, Seq.empty)
+              AssertNotNull(value)
             } else {
               value
             }

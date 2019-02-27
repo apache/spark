@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection, WalkedTypePath}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
@@ -195,7 +195,7 @@ case class ExpressionEncoder[T](
         case r: BoundReference =>
           // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
           // doesn't allow top-level row to be null, only its columns can be null.
-          AssertNotNull(r, Seq("top level Product or row object"))
+          AssertNotNull(r, new WalkedTypePath(Seq("top level Product or row object")))
       }
       nullSafeSerializer match {
         case If(_: IsNull, _, s: CreateNamedStruct) => s

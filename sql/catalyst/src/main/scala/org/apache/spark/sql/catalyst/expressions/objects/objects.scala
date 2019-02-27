@@ -28,7 +28,7 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, WalkedTypePath}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -1627,7 +1627,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
  */
-case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
+case class AssertNotNull(child: Expression, walkedTypePath: WalkedTypePath = new WalkedTypePath())
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
@@ -1637,7 +1637,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   override def flatArguments: Iterator[Any] = Iterator(child)
 
   private val errMsg = "Null value appeared in non-nullable field:" +
-    walkedTypePath.mkString("\n", "\n", "\n") +
+    s"\n$walkedTypePath\n" +
     "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
     "please try to use scala.Option[_] or other nullable types " +
     "(e.g. java.lang.Integer instead of int/scala.Int)."

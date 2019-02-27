@@ -2348,7 +2348,7 @@ class Analyzer(
       } else {
         // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
         Some(Alias(
-          UpCast(queryExpr, tableAttr.dataType, Seq()), tableAttr.name
+          UpCast(queryExpr, tableAttr.dataType), tableAttr.name
         )(
           explicitMetadata = Option(tableAttr.metadata)
         ))
@@ -2528,14 +2528,14 @@ class Analyzer(
    * Replace the [[UpCast]] expression by [[Cast]], and throw exceptions if the cast may truncate.
    */
   object ResolveUpCast extends Rule[LogicalPlan] {
-    private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
+    private def fail(from: Expression, to: DataType, walkedTypePath: WalkedTypePath) = {
       val fromStr = from match {
         case l: LambdaVariable => "array element"
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
         s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
-        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
+        "The type path of the target object is:\n\n" + walkedTypePath + "\n" +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
     }
