@@ -294,6 +294,18 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
+  test("encoding/decoding DateType to/from java.time.LocalDate") {
+    withSQLConf(SQLConf.DATE_EXTERNAL_TYPE.key -> "LocalDate") {
+      val schema = new StructType().add("d", DateType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val localDate = java.time.LocalDate.parse("2019-02-27")
+      val row = encoder.toRow(Row(localDate))
+      assert(row.getLong(0) === DateTimeUtils.localDateToDays(localDate))
+      val readback = encoder.fromRow(row)
+      assert(readback.get(0) === localDate)
+    }
+  }
+
   for {
     elementType <- Seq(IntegerType, StringType)
     containsNull <- Seq(true, false)
