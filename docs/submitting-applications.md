@@ -177,7 +177,7 @@ The master URL passed to Spark can be in one of the following formats:
 # Loading Configuration from a File
 
 The `spark-submit` script can load default [Spark configuration values](configuration.html) from a
-properties file and pass them on to your application. By default it will read options
+properties file and pass them on to your application. By default, it will read options
 from `conf/spark-defaults.conf` in the Spark directory. For more detail, see the section on
 [loading default configurations](configuration.html#loading-default-configurations).
 

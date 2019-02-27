@@ -238,6 +238,7 @@ class LauncherServer implements Closeable {
         };
         ServerConnection clientConnection = new ServerConnection(client, timeout);
         Thread clientThread = factory.newThread(clientConnection);
+        clientConnection.setConnectionThread(clientThread);
         synchronized (clients) {
           clients.add(clientConnection);
         }
@@ -290,17 +291,15 @@ class LauncherServer implements Closeable {
 
     private TimerTask timeout;
     private volatile Thread connectionThread;
-    volatile AbstractAppHandle handle;
+    private volatile AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
       this.timeout = timeout;
     }
 
-    @Override
-    public void run() {
-      this.connectionThread = Thread.currentThread();
-      super.run();
+    void setConnectionThread(Thread t) {
+      this.connectionThread = t;
     }
 
     @Override
@@ -319,9 +318,9 @@ class LauncherServer implements Closeable {
             throw new IllegalArgumentException("Received Hello for unknown client.");
           }
         } else {
+          String msgClassName = msg != null ? msg.getClass().getName() : "no message";
           if (handle == null) {
-            throw new IllegalArgumentException("Expected hello, got: " +
-              msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Expected hello, got: " + msgClassName);
           }
           if (msg instanceof SetAppId) {
             SetAppId set = (SetAppId) msg;
@@ -329,8 +328,7 @@ class LauncherServer implements Closeable {
           } else if (msg instanceof SetState) {
             handle.setState(((SetState)msg).state);
           } else {
-            throw new IllegalArgumentException("Invalid message: " +
-              msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Invalid message: " + msgClassName);
           }
         }
       } catch (Exception e) {
@@ -361,18 +359,29 @@ class LauncherServer implements Closeable {
     }
 
     /**
-     * Close the connection and wait for any buffered data to be processed before returning.
+     * Wait for the remote side to close the connection so that any pending data is processed.
      * This ensures any changes reported by the child application take effect.
+     *
+     * This method allows a short period for the above to happen (same amount of time as the
+     * connection timeout, which is configurable). This should be fine for well-behaved
+     * applications, where they close the connection arond the same time the app handle detects the
+     * app has finished.
+     *
+     * In case the connection is not closed within the grace period, this method forcefully closes
+     * it and any subsequent data that may arrive will be ignored.
      */
-    public void closeAndWait() throws IOException {
-      close();
-
+    public void waitForClose() throws IOException {
       Thread connThread = this.connectionThread;
       if (Thread.currentThread() != connThread) {
         try {
-          connThread.join();
+          connThread.join(getConnectionTimeout());
         } catch (InterruptedException ie) {
           // Ignore.
+        }
+
+        if (connThread.isAlive()) {
+          LOG.log(Level.WARNING, "Timed out waiting for child connection to close.");
+          close();
         }
       }
     }

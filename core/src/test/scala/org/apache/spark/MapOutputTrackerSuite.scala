@@ -19,11 +19,13 @@ package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MAX_SIZE}
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
@@ -147,7 +149,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L)))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
       Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
@@ -169,9 +171,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 
   test("remote fetch below max RPC message size") {
     val newConf = new SparkConf
-    newConf.set("spark.rpc.message.maxSize", "1")
-    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
-    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "1048576")
+    newConf.set(RPC_MESSAGE_MAX_SIZE, 1)
+    newConf.set(RPC_ASK_TIMEOUT, "1") // Fail fast
+    newConf.set(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, 1048576L)
 
     val masterTracker = newTrackerMaster(newConf)
     val rpcEnv = createRpcEnv("spark")
@@ -198,9 +200,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 
   test("min broadcast size exceeds max RPC message size") {
     val newConf = new SparkConf
-    newConf.set("spark.rpc.message.maxSize", "1")
-    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
-    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", Int.MaxValue.toString)
+    newConf.set(RPC_MESSAGE_MAX_SIZE, 1)
+    newConf.set(RPC_ASK_TIMEOUT, "1") // Fail fast
+    newConf.set(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, Int.MaxValue.toLong)
 
     intercept[IllegalArgumentException] { newTrackerMaster(newConf) }
   }
@@ -242,9 +244,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 
   test("remote fetch using broadcast") {
     val newConf = new SparkConf
-    newConf.set("spark.rpc.message.maxSize", "1")
-    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
-    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "10240") // 10 KB << 1MB framesize
+    newConf.set(RPC_MESSAGE_MAX_SIZE, 1)
+    newConf.set(RPC_ASK_TIMEOUT, "1") // Fail fast
+    newConf.set(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, 10240L) // 10 KiB << 1MiB framesize
 
     // needs TorrentBroadcast so need a SparkContext
     withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
@@ -296,6 +298,35 @@ class MapOutputTrackerSuite extends SparkFunSuite {
         wholeSplit = rest
       }
     }
+  }
+
+  test("zero-sized blocks should be excluded when getMapSizesByExecutorId") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    tracker.registerShuffle(10, 2)
+
+    val size0 = MapStatus.decompressSize(MapStatus.compressSize(0L))
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(size0, size1000, size0, size10000)))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(size10000, size0, size1000, size0)))
+    assert(tracker.containsShuffle(10))
+    assert(tracker.getMapSizesByExecutorId(10, 0, 4).toSeq ===
+        Seq(
+          (BlockManagerId("a", "hostA", 1000),
+              Seq((ShuffleBlockId(10, 0, 1), size1000), (ShuffleBlockId(10, 0, 3), size10000))),
+          (BlockManagerId("b", "hostB", 1000),
+              Seq((ShuffleBlockId(10, 1, 0), size10000), (ShuffleBlockId(10, 1, 2), size1000)))
+        )
+    )
+
+    tracker.unregisterShuffle(10)
+    tracker.stop()
+    rpcEnv.shutdown()
   }
 
 }

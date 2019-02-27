@@ -77,6 +77,27 @@ class UDFXPathUtilSuite extends SparkFunSuite {
     assert(ret == "foo")
   }
 
+  test("embedFailure") {
+    import org.apache.commons.io.FileUtils
+    import java.io.File
+    val secretValue = String.valueOf(Math.random)
+    val tempFile = File.createTempFile("verifyembed", ".tmp")
+    tempFile.deleteOnExit()
+    val fname = tempFile.getAbsolutePath
+
+    FileUtils.writeStringToFile(tempFile, secretValue)
+
+    val xml =
+      s"""<?xml version="1.0" encoding="utf-8"?>
+        |<!DOCTYPE test [
+        |    <!ENTITY embed SYSTEM "$fname">
+        |]>
+        |<foo>&embed;</foo>
+      """.stripMargin
+    val evaled = new UDFXPathUtil().evalString(xml, "/foo")
+    assert(evaled.isEmpty)
+  }
+
   test("number eval") {
     var ret =
       util.evalNumber("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>-77</c></a>", "a/c[2]")

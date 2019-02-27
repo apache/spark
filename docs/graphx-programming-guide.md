@@ -283,7 +283,7 @@ class Graph[VD, ED] {
   // Functions for caching graphs ==================================================================
   def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
   def cache(): Graph[VD, ED]
-  def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
+  def unpersistVertices(blocking: Boolean = false): Graph[VD, ED]
   // Change the partitioning heuristic  ============================================================
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
   // Transform vertex and edge attributes ==========================================================
@@ -491,7 +491,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts)(
 The more general [`outerJoinVertices`][Graph.outerJoinVertices] behaves similarly to `joinVertices`
 except that the user defined `map` function is applied to all vertices and can change the vertex
 property type.  Because not all vertices may have a matching value in the input RDD the `map`
-function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
+function takes an `Option` type.  For example, we can set up a graph for PageRank by initializing
 vertex properties with their `outDegree`.
 
 
@@ -522,7 +522,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts,
 
 A key step in many graph analytics tasks is aggregating information about the neighborhood of each
 vertex.
-For example, we might want to know the number of followers each user has or the average age of the
+For example, we might want to know the number of followers each user has or the average age of
 the followers of each user.  Many iterative graph algorithms (e.g., PageRank, Shortest Path, and
 connected components) repeatedly aggregate properties of neighboring vertices (e.g., current
 PageRank Value, shortest path to the source, and smallest reachable vertex id).
@@ -700,7 +700,7 @@ a new value for the vertex property, and then send messages to neighboring verti
 super step.  Unlike Pregel, messages are computed in parallel as a
 function of the edge triplet and the message computation has access to both the source and
 destination vertex attributes.  Vertices that do not receive a message are skipped within a super
-step.  The Pregel operators terminates iteration and returns the final graph when there are no
+step.  The Pregel operator terminates iteration and returns the final graph when there are no
 messages remaining.
 
 > Note, unlike more standard Pregel implementations, vertices in GraphX can only send messages to
@@ -726,7 +726,7 @@ class GraphOps[VD, ED] {
     var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
 
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop until no messages remain or maxIterations is achieved
     var i = 0
@@ -969,7 +969,7 @@ A vertex is part of a triangle when it has two adjacent vertices with an edge be
 # Examples
 
 Suppose I want to build a graph from some text files, restrict the graph
-to important relationships and users, run page-rank on the sub-graph, and
+to important relationships and users, run page-rank on the subgraph, and
 then finally return attributes associated with the top users.  I can do
 all of this in just a few lines with GraphX:
 

@@ -33,7 +33,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-class KafkaSinkSuite extends StreamTest with SharedSQLContext {
+class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
   import testImplicits._
 
   protected var testUtils: KafkaTestUtils = _
@@ -48,9 +48,12 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
+    try {
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+    } finally {
       super.afterAll()
     }
   }
@@ -138,7 +141,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
       .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
       .map(_._2)
 
     try {
@@ -229,6 +232,27 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
+  test("streaming - sink progress is produced") {
+    /* ensure sink progress is correctly produced. */
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF(),
+      withTopic = Some(topic),
+      withOutputMode = Some(OutputMode.Update()))()
+
+    try {
+      input.addData("1", "2", "3")
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      assert(writer.lastProgress.sink.numOutputRows == 3L)
+    } finally {
+      writer.stop()
+    }
+  }
 
   test("streaming - write data with bad schema") {
     val input = MemoryStream[String]
@@ -303,7 +327,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       writer.stop()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "value attribute type must be a string or binarytype"))
+      "value attribute type must be a string or binary"))
 
     try {
       ex = intercept[StreamingQueryException] {
@@ -318,7 +342,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       writer.stop()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "key attribute type must be a string or binarytype"))
+      "key attribute type must be a string or binary"))
   }
 
   test("streaming - write to non-existing topic") {
@@ -424,6 +448,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .format("kafka")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.max.block.ms", "5000")
         .queryName("kafkaStream")
       withTopic.foreach(stream.option("topic", _))
       withOutputMode.foreach(stream.outputMode(_))

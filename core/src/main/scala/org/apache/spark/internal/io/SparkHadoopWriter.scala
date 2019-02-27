@@ -76,13 +76,17 @@ object SparkHadoopWriter extends Logging {
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
+        // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
+        // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
+        val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
+
         executeTask(
           context = context,
           config = config,
           jobTrackerId = jobTrackerId,
           commitJobId = commitJobId,
           sparkPartitionId = context.partitionId,
-          sparkAttemptNumber = context.attemptNumber,
+          sparkAttemptNumber = attemptId,
           committer = committer,
           iterator = iter)
       })
@@ -252,7 +256,7 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
   private def getOutputFormat(): OutputFormat[K, V] = {
     require(outputFormat != null, "Must call initOutputFormat first.")
 
-    outputFormat.newInstance()
+    outputFormat.getConstructor().newInstance()
   }
 
   // --------------------------------------------------------------------------
@@ -375,7 +379,7 @@ class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfigura
   private def getOutputFormat(): NewOutputFormat[K, V] = {
     require(outputFormat != null, "Must call initOutputFormat first.")
 
-    outputFormat.newInstance()
+    outputFormat.getConstructor().newInstance()
   }
 
   // --------------------------------------------------------------------------

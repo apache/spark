@@ -80,7 +80,7 @@ public class LevelDBSuite {
 
     try {
       db.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existant object.");
+      fail("Expected exception for non-existent object.");
     } catch (NoSuchElementException nsee) {
       // Expected.
     }
@@ -217,7 +217,7 @@ public class LevelDBSuite {
   public void testNegativeIndexValues() throws Exception {
     List<Integer> expected = Arrays.asList(-100, -50, 0, 50, 100);
 
-    expected.stream().forEach(i -> {
+    expected.forEach(i -> {
       try {
         db.write(createCustomType1(i));
       } catch (Exception e) {

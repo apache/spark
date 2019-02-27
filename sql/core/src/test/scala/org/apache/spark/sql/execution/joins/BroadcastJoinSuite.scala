@@ -54,8 +54,12 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   override def afterAll(): Unit = {
-    spark.stop()
-    spark = null
+    try {
+      spark.stop()
+      spark = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**
@@ -199,7 +203,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("broadcast hint in SQL") {
-    import org.apache.spark.sql.catalyst.plans.logical.{ResolvedHint, Join}
+    import org.apache.spark.sql.catalyst.plans.logical.Join
 
     spark.range(10).createOrReplaceTempView("t")
     spark.range(10).createOrReplaceTempView("u")
@@ -212,19 +216,19 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
         .optimizedPlan
 
-      assert(plan1.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
-      assert(!plan1.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
-      assert(!plan2.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
-      assert(plan2.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
-      assert(!plan3.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
-      assert(!plan3.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+      assert(plan1.asInstanceOf[Join].hint.leftHint.get.broadcast)
+      assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
+      assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
+      assert(plan2.asInstanceOf[Join].hint.rightHint.get.broadcast)
+      assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
+      assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
     }
   }
 
   test("join key rewritten") {
     val l = Literal(1L)
     val i = Literal(2)
-    val s = Literal.create(3, ShortType)
+    val s = Literal.create(3.toShort, ShortType)
     val ss = Literal("hello")
 
     assert(HashJoin.rewriteKeyExpr(l :: Nil) === l :: Nil)

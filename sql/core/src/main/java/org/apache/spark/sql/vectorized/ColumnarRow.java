@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.*;
@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * Row abstraction in {@link ColumnVector}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public final class ColumnarRow extends InternalRow {
   // The data for this row.
   // E.g. the value of 3rd int field is `data.getChild(3).getInt(rowId)`.
@@ -119,43 +119,36 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getDecimal(rowId, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getUTF8String(rowId);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getBinary(rowId);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getInterval(rowId);
   }
 
   @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getStruct(rowId);
   }
 
   @Override
   public ColumnarArray getArray(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getArray(rowId);
   }
 
   @Override
   public ColumnarMap getMap(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getMap(rowId);
   }
 

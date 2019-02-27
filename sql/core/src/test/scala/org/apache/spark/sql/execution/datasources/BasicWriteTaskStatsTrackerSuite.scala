@@ -49,7 +49,11 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
    * In teardown delete the temp dir.
    */
   protected override def afterAll(): Unit = {
-    Utils.deleteRecursively(tempDir)
+    try {
+      Utils.deleteRecursively(tempDir)
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**

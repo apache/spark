@@ -35,6 +35,7 @@ import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
@@ -490,7 +491,7 @@ class LogisticRegression @Since("1.2.0") (
 
   protected[spark] def train(
       dataset: Dataset[_],
-      handlePersistence: Boolean): LogisticRegressionModel = {
+      handlePersistence: Boolean): LogisticRegressionModel = instrumented { instr =>
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -500,9 +501,11 @@ class LogisticRegression @Since("1.2.0") (
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val instr = Instrumentation.create(this, instances)
-    instr.logParams(regParam, elasticNetParam, standardization, threshold,
-      maxIter, tol, fitIntercept)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
+      probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
+      fitIntercept)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -517,6 +520,9 @@ class LogisticRegression @Since("1.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
+    instr.logNumExamples(summarizer.count)
+    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -560,15 +566,15 @@ class LogisticRegression @Since("1.2.0") (
       if (numInvalid != 0) {
         val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 
       val isConstantLabel = histogram.count(_ != 0.0) == 1
 
       if ($(fitIntercept) && isConstantLabel && !usingBoundConstrainedOptimization) {
-        logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
-          s"will be zeros. Training is not needed.")
+        instr.logWarning(s"All labels are the same value and fitIntercept=true, so the " +
+          s"coefficients will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
         val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
           new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
@@ -581,7 +587,7 @@ class LogisticRegression @Since("1.2.0") (
         (coefMatrix, interceptVec, Array.empty[Double])
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
-          logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
+          instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
             s"dangerous ground, so the algorithm may not converge.")
         }
 
@@ -590,7 +596,7 @@ class LogisticRegression @Since("1.2.0") (
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
-          logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
+          instr.logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
             "constant nonzero column, Spark MLlib outputs zero coefficients for constant " +
             "nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.")
         }
@@ -708,7 +714,7 @@ class LogisticRegression @Since("1.2.0") (
               (_initialModel.interceptVector.size == numCoefficientSets) &&
               (_initialModel.getFitIntercept == $(fitIntercept))
             if (!modelIsValid) {
-              logWarning(s"Initial coefficients will be ignored! Its dimensions " +
+              instr.logWarning(s"Initial coefficients will be ignored! Its dimensions " +
                 s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
                 s"expected size ($numCoefficientSets, $numFeatures)")
             }
@@ -809,11 +815,11 @@ class LogisticRegression @Since("1.2.0") (
           state = states.next()
           arrayBuilder += state.adjustedValue
         }
-        bcFeaturesStd.destroy(blocking = false)
+        bcFeaturesStd.destroy()
 
         if (state == null) {
           val msg = s"${optimizer.getClass.getName} failed."
-          logError(msg)
+          instr.logError(msg)
           throw new SparkException(msg)
         }
 
@@ -902,8 +908,6 @@ class LogisticRegression @Since("1.2.0") (
         objectiveHistory)
     }
     model.setSummary(Some(logRegSummary))
-    instr.logSuccess(model)
-    model
   }
 
   @Since("1.4.0")
@@ -930,8 +934,8 @@ class LogisticRegressionModel private[spark] (
     @Since("2.1.0") val interceptVector: Vector,
     @Since("1.3.0") override val numClasses: Int,
     private val isMultinomial: Boolean)
-  extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
-  with LogisticRegressionParams with MLWritable {
+  extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel] with MLWritable
+  with LogisticRegressionParams with HasTrainingSummary[LogisticRegressionTrainingSummary] {
 
   require(coefficientMatrix.numRows == interceptVector.size, s"Dimension mismatch! Expected " +
     s"coefficientMatrix.numRows == interceptVector.size, but ${coefficientMatrix.numRows} != " +
@@ -1014,20 +1018,16 @@ class LogisticRegressionModel private[spark] (
   @Since("1.6.0")
   override val numFeatures: Int = coefficientMatrix.numCols
 
-  private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
-
   /**
    * Gets summary of model on training set. An exception is thrown
-   * if `trainingSummary == None`.
+   * if `hasSummary` is false.
    */
   @Since("1.5.0")
-  def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException("No training summary available for this LogisticRegressionModel")
-  }
+  override def summary: LogisticRegressionTrainingSummary = super.summary
 
   /**
    * Gets summary of model on training set. An exception is thrown
-   * if `trainingSummary == None` or it is a multiclass model.
+   * if `hasSummary` is false or it is a multiclass model.
    */
   @Since("2.3.0")
   def binarySummary: BinaryLogisticRegressionTrainingSummary = summary match {
@@ -1058,16 +1058,6 @@ class LogisticRegressionModel private[spark] (
     (model, model.getProbabilityCol, model.getPredictionCol)
   }
 
-  private[classification]
-  def setSummary(summary: Option[LogisticRegressionTrainingSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
-  /** Indicates whether a training summary exists for this model instance. */
-  @Since("1.5.0")
-  def hasSummary: Boolean = trainingSummary.isDefined
-
   /**
    * Evaluates the model on a test dataset.
    *
@@ -1090,7 +1080,7 @@ class LogisticRegressionModel private[spark] (
    * Predict label for the given feature vector.
    * The behavior of this can be adjusted using `thresholds`.
    */
-  override protected def predict(features: Vector): Double = if (isMultinomial) {
+  override def predict(features: Vector): Double = if (isMultinomial) {
     super.predict(features)
   } else {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
@@ -1199,6 +1189,11 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+
+  override def toString: String = {
+    s"LogisticRegressionModel: " +
+    s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures"
+  }
 }
 
 
@@ -1267,7 +1262,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
           numClasses, isMultinomial)
       }
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -1476,7 +1471,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
 
   /**
    * Convenient method for casting to binary logistic regression summary.
-   * This method will throws an Exception if the summary is not a binary summary.
+   * This method will throw an Exception if the summary is not a binary summary.
    */
   @Since("2.3.0")
   def asBinary: BinaryLogisticRegressionSummary = this match {

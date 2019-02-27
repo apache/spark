@@ -56,7 +56,7 @@ class CheckCartesianProductsSuite extends PlanTest {
         val thrownException = the [AnalysisException] thrownBy {
           performCartesianProductCheck(joinType)
         }
-        assert(thrownException.message.contains("Detected cartesian product"))
+        assert(thrownException.message.contains("Detected implicit cartesian product"))
       }
     }
   }

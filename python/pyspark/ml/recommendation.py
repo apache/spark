@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
@@ -55,7 +57,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
 
     For implicit preference data, the algorithm used is based on
     `"Collaborative Filtering for Implicit Feedback Datasets",
-    <http://dx.doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
+    <https://doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
     approach used here.
 
     Essentially instead of finding the low-rank approximations to the
@@ -480,4 +482,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

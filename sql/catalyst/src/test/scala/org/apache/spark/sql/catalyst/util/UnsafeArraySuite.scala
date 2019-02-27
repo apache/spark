@@ -36,9 +36,10 @@ class UnsafeArraySuite extends SparkFunSuite {
   val dateArray = Array(
     DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1")).get,
     DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
+  private def defaultTz = DateTimeUtils.defaultTimeZone()
   val timestampArray = Array(
-    DateTimeUtils.stringToTimestamp(UTF8String.fromString("1970-1-1 00:00:00")).get,
-    DateTimeUtils.stringToTimestamp(UTF8String.fromString("2016-7-26 00:00:00")).get)
+    DateTimeUtils.stringToTimestamp(UTF8String.fromString("1970-1-1 00:00:00"), defaultTz).get,
+    DateTimeUtils.stringToTimestamp(UTF8String.fromString("2016-7-26 00:00:00"), defaultTz).get)
   val decimalArray4_1 = Array(
     BigDecimal("123.4").setScale(1, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("567.8").setScale(1, BigDecimal.RoundingMode.FLOOR))
@@ -114,7 +115,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     assert(unsafeDate.isInstanceOf[UnsafeArrayData])
     assert(unsafeDate.numElements == dateArray.length)
     dateArray.zipWithIndex.map { case (e, i) =>
-      assert(unsafeDate.get(i, DateType) == e)
+      assert(unsafeDate.get(i, DateType).asInstanceOf[Int] == e)
     }
 
     val unsafeTimestamp = ExpressionEncoder[Array[Long]].resolveAndBind().
@@ -122,7 +123,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     assert(unsafeTimestamp.isInstanceOf[UnsafeArrayData])
     assert(unsafeTimestamp.numElements == timestampArray.length)
     timestampArray.zipWithIndex.map { case (e, i) =>
-      assert(unsafeTimestamp.get(i, TimestampType) == e)
+      assert(unsafeTimestamp.get(i, TimestampType).asInstanceOf[Long] == e)
     }
 
     Seq(decimalArray4_1, decimalArray20_20).map { decimalArray =>

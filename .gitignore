@@ -76,6 +76,7 @@ streaming-tests.log
 target/
 unit-tests.log
 work/
+docs/.jekyll-metadata
 
 # For Hive
 TempStatsStore/
@@ -93,3 +94,6 @@ spark-warehouse/
 *.Rproj.*
 
 .Rproj.user
+
+# For SBT
+.jvmopts

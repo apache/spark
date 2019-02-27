@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.sources.v2.reader.partitioning;
 
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.DataReader;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.reader.PartitionReader;
 
 /**
  * A concrete implementation of {@link Distribution}. Represents a distribution where records that
  * share the same values for the {@link #clusteredColumns} will be produced by the same
- * {@link DataReader}.
+ * {@link PartitionReader}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public class ClusteredDistribution implements Distribution {
 
   /**

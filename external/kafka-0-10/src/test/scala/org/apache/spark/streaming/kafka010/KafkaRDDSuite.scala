@@ -18,16 +18,22 @@
 package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
+import java.io.File
 
 import scala.collection.JavaConverters._
 import scala.util.Random
 
+import kafka.log.{CleanerConfig, Log, LogCleaner, LogConfig, ProducerStateManager}
+import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
+import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.streaming.kafka010.mocks.MockTime
 
 class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -35,23 +41,34 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val sparkConf = new SparkConf().setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
+    // Set a timeout of 10 seconds that's going to be used to fetch topics/partitions from kafka.
+    // Othewise the poll timeout defaults to 2 minutes and causes test cases to run longer.
+    .set("spark.streaming.kafka.consumer.poll.ms", "10000")
+
   private var sc: SparkContext = _
 
   override def beforeAll {
+    super.beforeAll()
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
   override def afterAll {
-    if (sc != null) {
-      sc.stop
-      sc = null
-    }
-
-    if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardown()
-      kafkaTestUtils = null
+    try {
+      try {
+        if (sc != null) {
+          sc.stop
+          sc = null
+        }
+      } finally {
+        if (kafkaTestUtils != null) {
+          kafkaTestUtils.teardown()
+          kafkaTestUtils = null
+        }
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -63,6 +80,47 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   ).asJava
 
   private val preferredHosts = LocationStrategies.PreferConsistent
+
+  private def compactLogs(topic: String, partition: Int, messages: Array[(String, String)]) {
+    val mockTime = new MockTime()
+    val logs = new Pool[TopicPartition, Log]()
+    val logDir = kafkaTestUtils.brokerLogDir
+    val dir = new File(logDir, topic + "-" + partition)
+    dir.mkdirs()
+    val logProps = new ju.Properties()
+    logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
+    logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
+    val logDirFailureChannel = new LogDirFailureChannel(1)
+    val topicPartition = new TopicPartition(topic, partition)
+    val log = new Log(
+      dir,
+      LogConfig(logProps),
+      0L,
+      0L,
+      mockTime.scheduler,
+      new BrokerTopicStats(),
+      mockTime,
+      Int.MaxValue,
+      Int.MaxValue,
+      topicPartition,
+      new ProducerStateManager(topicPartition, dir),
+      logDirFailureChannel
+    )
+    messages.foreach { case (k, v) =>
+      val record = new SimpleRecord(k.getBytes, v.getBytes)
+      log.appendAsLeader(MemoryRecords.withRecords(CompressionType.NONE, record), 0);
+    }
+    log.roll()
+    logs.put(topicPartition, log)
+
+    val cleaner = new LogCleaner(CleanerConfig(), Array(dir), logs, logDirFailureChannel)
+    cleaner.startup()
+    cleaner.awaitCleaned(new TopicPartition(topic, partition), log.activeSegment.baseOffset, 1000)
+
+    cleaner.shutdown()
+    mockTime.scheduler.shutdown()
+  }
+
 
   test("basic usage") {
     val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"
@@ -87,6 +145,71 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.take(1).size === 1)
     assert(rdd.take(1).head === messages.head)
     assert(rdd.take(messages.size + 10).size === messages.size)
+
+    val emptyRdd = KafkaUtils.createRDD[String, String](
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
+
+    assert(emptyRdd.isEmpty)
+
+    // invalid offset ranges throw exceptions
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    intercept[SparkException] {
+      val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
+        .map(_.value)
+        .collect()
+    }
+  }
+
+  test("compacted topic") {
+    val compactConf = sparkConf.clone()
+    compactConf.set("spark.streaming.kafka.allowNonConsecutiveOffsets", "true")
+    sc.stop()
+    sc = new SparkContext(compactConf)
+    val topic = s"topiccompacted-${Random.nextInt}-${System.currentTimeMillis}"
+
+    val messages = Array(
+      ("a", "1"),
+      ("a", "2"),
+      ("b", "1"),
+      ("c", "1"),
+      ("c", "2"),
+      ("b", "2"),
+      ("b", "3")
+    )
+    val compactedMessages = Array(
+      ("a", "2"),
+      ("b", "3"),
+      ("c", "2")
+    )
+
+    compactLogs(topic, 0, messages)
+
+    val props = new ju.Properties()
+    props.put("cleanup.policy", "compact")
+    props.put("flush.messages", "1")
+    props.put("segment.ms", "1")
+    props.put("segment.bytes", "256")
+    kafkaTestUtils.createTopic(topic, 1, props)
+
+
+    val kafkaParams = getKafkaParams()
+
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+
+    val rdd = KafkaUtils.createRDD[String, String](
+      sc, kafkaParams, offsetRanges, preferredHosts
+    ).map(m => m.key -> m.value)
+
+    val received = rdd.collect.toSet
+    assert(received === compactedMessages.toSet)
+
+    // size-related method optimizations return sane results
+    assert(rdd.count === compactedMessages.size)
+    assert(rdd.countApprox(0).getFinalValue.mean === compactedMessages.size)
+    assert(!rdd.isEmpty)
+    assert(rdd.take(1).size === 1)
+    assert(rdd.take(1).head === compactedMessages.head)
+    assert(rdd.take(messages.size + 10).size === compactedMessages.size)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)

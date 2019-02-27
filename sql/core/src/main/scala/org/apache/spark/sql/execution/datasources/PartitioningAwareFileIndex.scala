@@ -34,13 +34,13 @@ import org.apache.spark.sql.types.{StringType, StructType}
  * It provides the necessary methods to parse partition data based on a set of files.
  *
  * @param parameters as set of options to control partition discovery
- * @param userPartitionSchema an optional partition schema that will be use to provide types for
- *                            the discovered partitions
+ * @param userSpecifiedSchema an optional user specified schema that will be use to provide
+ *                            types for the discovered partitions
  */
 abstract class PartitioningAwareFileIndex(
     sparkSession: SparkSession,
     parameters: Map[String, String],
-    userPartitionSchema: Option[StructType],
+    userSpecifiedSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache) extends FileIndex with Logging {
   import PartitioningAwareFileIndex.BASE_PATH_PARAM
 
@@ -127,35 +127,14 @@ abstract class PartitioningAwareFileIndex(
     val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
       .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    userPartitionSchema match {
-      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
-        val spec = PartitioningUtils.parsePartitions(
-          leafDirs,
-          typeInference = false,
-          basePaths = basePaths,
-          timeZoneId = timeZoneId)
-
-        // Without auto inference, all of value in the `row` should be null or in StringType,
-        // we need to cast into the data type that user specified.
-        def castPartitionValuesToUserSchema(row: InternalRow) = {
-          InternalRow((0 until row.numFields).map { i =>
-            Cast(
-              Literal.create(row.getUTF8String(i), StringType),
-              userProvidedSchema.fields(i).dataType,
-              Option(timeZoneId)).eval()
-          }: _*)
-        }
-
-        PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
-          part.copy(values = castPartitionValuesToUserSchema(part.values))
-        })
-      case _ =>
-        PartitioningUtils.parsePartitions(
-          leafDirs,
-          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
-          basePaths = basePaths,
-          timeZoneId = timeZoneId)
-    }
+    PartitioningUtils.parsePartitions(
+      leafDirs,
+      typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
+      basePaths = basePaths,
+      userSpecifiedSchema = userSpecifiedSchema,
+      caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis,
+      validatePartitionColumns = sparkSession.sqlContext.conf.validatePartitionColumns,
+      timeZoneId = timeZoneId)
   }
 
   private def prunePartitions(

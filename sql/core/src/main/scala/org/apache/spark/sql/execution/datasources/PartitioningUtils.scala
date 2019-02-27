@@ -21,6 +21,7 @@ import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.util.{Locale, TimeZone}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
@@ -30,8 +31,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -58,14 +59,14 @@ object PartitionSpec {
 
 object PartitioningUtils {
 
+  val timestampPartitionPattern = "yyyy-MM-dd HH:mm:ss[.S]"
+
   private[datasources] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal])
   {
     require(columnNames.size == literals.size)
   }
 
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.unescapePathName
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.{escapePathName, unescapePathName, DEFAULT_PARTITION_NAME}
 
   /**
    * Given a group of qualified paths, tries to parse them and returns a partition specification.
@@ -94,18 +95,46 @@ object PartitioningUtils {
       paths: Seq[Path],
       typeInference: Boolean,
       basePaths: Set[Path],
+      userSpecifiedSchema: Option[StructType],
+      caseSensitive: Boolean,
+      validatePartitionColumns: Boolean,
       timeZoneId: String): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, DateTimeUtils.getTimeZone(timeZoneId))
+    parsePartitions(paths, typeInference, basePaths, userSpecifiedSchema, caseSensitive,
+      validatePartitionColumns, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(
       paths: Seq[Path],
       typeInference: Boolean,
       basePaths: Set[Path],
+      userSpecifiedSchema: Option[StructType],
+      caseSensitive: Boolean,
+      validatePartitionColumns: Boolean,
       timeZone: TimeZone): PartitionSpec = {
+    val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
+      val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
+      if (!caseSensitive) {
+        CaseInsensitiveMap(nameToDataType)
+      } else {
+        nameToDataType
+      }
+    } else {
+      Map.empty[String, DataType]
+    }
+
+    // SPARK-26990: use user specified field names if case insensitive.
+    val userSpecifiedNames = if (userSpecifiedSchema.isDefined && !caseSensitive) {
+      CaseInsensitiveMap(userSpecifiedSchema.get.fields.map(f => f.name -> f.name).toMap)
+    } else {
+      Map.empty[String, String]
+    }
+
+    val dateFormatter = DateFormatter()
+    val timestampFormatter = TimestampFormatter(timestampPartitionPattern, timeZone)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
-      parsePartition(path, typeInference, basePaths, timeZone)
+      parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
+        validatePartitionColumns, timeZone, dateFormatter, timestampFormatter)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -139,7 +168,8 @@ object PartitioningUtils {
           "root directory of the table. If there are multiple root directories, " +
           "please load them separately and then union them.")
 
-      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, timeZone)
+      val resolvedPartitionValues =
+        resolvePartitions(pathsWithPartitionValues, caseSensitive, timeZone)
 
       // Creates the StructType which represents the partition columns.
       val fields = {
@@ -147,7 +177,9 @@ object PartitioningUtils {
         columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
           // We always assume partition columns are nullable since we've no idea whether null values
           // will be appended in the future.
-          StructField(name, dataType, nullable = true)
+          val resultName = userSpecifiedNames.getOrElse(name, name)
+          val resultDataType = userSpecifiedDataTypes.getOrElse(name, dataType)
+          StructField(resultName, resultDataType, nullable = true)
         }
       }
 
@@ -185,7 +217,11 @@ object PartitioningUtils {
       path: Path,
       typeInference: Boolean,
       basePaths: Set[Path],
-      timeZone: TimeZone): (Option[PartitionValues], Option[Path]) = {
+      userSpecifiedDataTypes: Map[String, DataType],
+      validatePartitionColumns: Boolean,
+      timeZone: TimeZone,
+      dateFormatter: DateFormatter,
+      timestampFormatter: TimestampFormatter): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
@@ -206,7 +242,8 @@ object PartitioningUtils {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
         // Once we get the string, we try to parse it and find the partition column and value.
         val maybeColumn =
-          parsePartitionColumn(currentPath.getName, typeInference, timeZone)
+          parsePartitionColumn(currentPath.getName, typeInference, userSpecifiedDataTypes,
+            validatePartitionColumns, timeZone, dateFormatter, timestampFormatter)
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -239,7 +276,11 @@ object PartitioningUtils {
   private def parsePartitionColumn(
       columnSpec: String,
       typeInference: Boolean,
-      timeZone: TimeZone): Option[(String, Literal)] = {
+      userSpecifiedDataTypes: Map[String, DataType],
+      validatePartitionColumns: Boolean,
+      timeZone: TimeZone,
+      dateFormatter: DateFormatter,
+      timestampFormatter: TimestampFormatter): Option[(String, Literal)] = {
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
       None
@@ -250,7 +291,31 @@ object PartitioningUtils {
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
       assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
 
-      val literal = inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)
+      val literal = if (userSpecifiedDataTypes.contains(columnName)) {
+        // SPARK-26188: if user provides corresponding column schema, get the column value without
+        //              inference, and then cast it as user specified data type.
+        val dataType = userSpecifiedDataTypes(columnName)
+        val columnValueLiteral = inferPartitionColumnValue(
+          rawColumnValue,
+          false,
+          timeZone,
+          dateFormatter,
+          timestampFormatter)
+        val columnValue = columnValueLiteral.eval()
+        val castedValue = Cast(columnValueLiteral, dataType, Option(timeZone.getID)).eval()
+        if (validatePartitionColumns && columnValue != null && castedValue == null) {
+          throw new RuntimeException(s"Failed to cast value `$columnValue` to `$dataType` " +
+            s"for partition column `$columnName`")
+        }
+        Literal.create(castedValue, dataType)
+      } else {
+        inferPartitionColumnValue(
+          rawColumnValue,
+          typeInference,
+          timeZone,
+          dateFormatter,
+          timestampFormatter)
+      }
       Some(columnName -> literal)
     }
   }
@@ -284,6 +349,10 @@ object PartitioningUtils {
     }.mkString("/")
   }
 
+  def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
+    getPathFragment(spec, StructType.fromAttributes(partitionColumns))
+  }
+
   /**
    * Normalize the column names in partition specification, w.r.t. the real partition column names
    * and case sensitivity. e.g., if the partition spec has a column named `monTh`, and there is a
@@ -314,15 +383,18 @@ object PartitioningUtils {
    */
   def resolvePartitions(
       pathsWithPartitionValues: Seq[(Path, PartitionValues)],
+      caseSensitive: Boolean,
       timeZone: TimeZone): Seq[PartitionValues] = {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
-      // TODO: Selective case sensitivity.
-      val distinctPartColNames =
-        pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase())).distinct
+      val partColNames = if (caseSensitive) {
+        pathsWithPartitionValues.map(_._2.columnNames)
+      } else {
+        pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase()))
+      }
       assert(
-        distinctPartColNames.size == 1,
+        partColNames.distinct.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))
 
       // Resolves possible type conflicts for each column
@@ -395,7 +467,9 @@ object PartitioningUtils {
   private[datasources] def inferPartitionColumnValue(
       raw: String,
       typeInference: Boolean,
-      timeZone: TimeZone): Literal = {
+      timeZone: TimeZone,
+      dateFormatter: DateFormatter,
+      timestampFormatter: TimestampFormatter): Literal = {
     val decimalTry = Try {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new JBigDecimal(raw)
@@ -407,6 +481,34 @@ object PartitioningUtils {
       Literal(bigDecimal)
     }
 
+    val dateTry = Try {
+      // try and parse the date, if no exception occurs this is a candidate to be resolved as
+      // DateType
+      dateFormatter.parse(raw)
+      // SPARK-23436: Casting the string to date may still return null if a bad Date is provided.
+      // This can happen since DateFormat.parse  may not use the entire text of the given string:
+      // so if there are extra-characters after the date, it returns correctly.
+      // We need to check that we can cast the raw string since we later can use Cast to get
+      // the partition values with the right DataType (see
+      // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
+      val dateValue = Cast(Literal(raw), DateType).eval()
+      // Disallow DateType if the cast returned null
+      require(dateValue != null)
+      Literal.create(dateValue, DateType)
+    }
+
+    val timestampTry = Try {
+      val unescapedRaw = unescapePathName(raw)
+      // try and parse the date, if no exception occurs this is a candidate to be resolved as
+      // TimestampType
+      timestampFormatter.parse(unescapedRaw)
+      // SPARK-23436: see comment for date
+      val timestampValue = Cast(Literal(unescapedRaw), TimestampType, Some(timeZone.getID)).eval()
+      // Disallow TimestampType if the cast returned null
+      require(timestampValue != null)
+      Literal.create(timestampValue, TimestampType)
+    }
+
     if (typeInference) {
       // First tries integral types
       Try(Literal.create(Integer.parseInt(raw), IntegerType))
@@ -415,16 +517,8 @@ object PartitioningUtils {
         // Then falls back to fractional types
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
         // Then falls back to date/timestamp types
-        .orElse(Try(
-          Literal.create(
-            DateTimeUtils.getThreadLocalTimestampFormat(timeZone)
-              .parse(unescapePathName(raw)).getTime * 1000L,
-            TimestampType)))
-        .orElse(Try(
-          Literal.create(
-            DateTimeUtils.millisToDays(
-              DateTimeUtils.getThreadLocalDateFormat.parse(raw).getTime),
-            DateType)))
+        .orElse(timestampTry)
+        .orElse(dateTry)
         // Then falls back to string
         .getOrElse {
           if (raw == DEFAULT_PARTITION_NAME) {
@@ -466,9 +560,39 @@ object PartitioningUtils {
     val equality = columnNameEquality(caseSensitive)
     StructType(partitionColumns.map { col =>
       schema.find(f => equality(f.name, col)).getOrElse {
-        throw new AnalysisException(s"Partition column $col not found in schema $schema")
+        val schemaCatalog = schema.catalogString
+        throw new AnalysisException(s"Partition column `$col` not found in schema $schemaCatalog")
       }
     }).asNullable
+  }
+
+  def mergeDataAndPartitionSchema(
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      caseSensitive: Boolean): (StructType, Map[String, StructField]) = {
+    val overlappedPartCols = mutable.Map.empty[String, StructField]
+    partitionSchema.foreach { partitionField =>
+      val partitionFieldName = getColName(partitionField, caseSensitive)
+      if (dataSchema.exists(getColName(_, caseSensitive) == partitionFieldName)) {
+        overlappedPartCols += partitionFieldName -> partitionField
+      }
+    }
+
+    // When data and partition schemas have overlapping columns, the output
+    // schema respects the order of the data schema for the overlapping columns, and it
+    // respects the data types of the partition schema.
+    val fullSchema =
+    StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f, caseSensitive), f)) ++
+      partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f, caseSensitive))))
+    (fullSchema, overlappedPartCols.toMap)
+  }
+
+  def getColName(f: StructField, caseSensitive: Boolean): String = {
+    if (caseSensitive) {
+      f.name
+    } else {
+      f.name.toLowerCase(Locale.ROOT)
+    }
   }
 
   private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {

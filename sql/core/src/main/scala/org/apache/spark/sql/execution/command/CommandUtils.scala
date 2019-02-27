@@ -21,12 +21,13 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -38,7 +39,7 @@ object CommandUtils extends Logging {
       val catalog = sparkSession.sessionState.catalog
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
         val newTable = catalog.getTableMetadata(table.identifier)
-        val newSize = CommandUtils.calculateTotalSize(sparkSession.sessionState, newTable)
+        val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
       } else {
@@ -47,15 +48,29 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(sessionState: SessionState, catalogTable: CatalogTable): BigInt = {
+  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
+    val sessionState = spark.sessionState
     if (catalogTable.partitionColumnNames.isEmpty) {
       calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      partitions.map { p =>
-        calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
-      }.sum
+      if (spark.sessionState.conf.parallelFileListingInStatsComputation) {
+        val paths = partitions.map(x => new Path(x.storage.locationUri.get))
+        val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+        val pathFilter = new PathFilter with Serializable {
+          override def accept(path: Path): Boolean = {
+            DataSourceUtils.isDataPath(path) && !path.getName.startsWith(stagingDir)
+          }
+        }
+        val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
+          paths, sessionState.newHadoopConf(), pathFilter, spark)
+        fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
+      } else {
+        partitions.map { p =>
+          calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
+        }.sum
+      }
     }
   }
 
@@ -78,7 +93,8 @@ object CommandUtils extends Logging {
       val size = if (fileStatus.isDirectory) {
         fs.listStatus(path)
           .map { status =>
-            if (!status.getPath.getName.startsWith(stagingDir)) {
+            if (!status.getPath.getName.startsWith(stagingDir) &&
+              DataSourceUtils.isDataPath(path)) {
               getPathSize(fs, status.getPath)
             } else {
               0L

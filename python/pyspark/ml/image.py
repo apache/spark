@@ -24,10 +24,17 @@
    :members:
 """
 
+import sys
+import warnings
+
 import numpy as np
+from distutils.version import LooseVersion
+
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
+
+__all__ = ["ImageSchema"]
 
 
 class _ImageSchema(object):
@@ -40,6 +47,7 @@ class _ImageSchema(object):
     def __init__(self):
         self._imageSchema = None
         self._ocvTypes = None
+        self._columnSchema = None
         self._imageFields = None
         self._undefinedImageType = None
 
@@ -49,7 +57,7 @@ class _ImageSchema(object):
         Returns the image schema.
 
         :return: a :class:`StructType` with a single column of images
-               named "image" (nullable).
+               named "image" (nullable) and having the same type returned by :meth:`columnSchema`.
 
         .. versionadded:: 2.3.0
         """
@@ -74,6 +82,23 @@ class _ImageSchema(object):
             ctx = SparkContext._active_spark_context
             self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
         return self._ocvTypes
+
+    @property
+    def columnSchema(self):
+        """
+        Returns the schema for the image column.
+
+        :return: a :class:`StructType` for image column,
+            ``struct<origin:string, height:int, width:int, nChannels:int, mode:int, data:binary>``.
+
+        .. versionadded:: 2.4.0
+        """
+
+        if self._columnSchema is None:
+            ctx = SparkContext._active_spark_context
+            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.columnSchema()
+            self._columnSchema = _parse_datatype_json_string(jschema.json())
+        return self._columnSchema
 
     @property
     def imageFields(self):
@@ -166,7 +191,11 @@ class _ImageSchema(object):
         # Running `bytearray(numpy.array([1]))` fails in specific Python versions
         # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
         # Here, it avoids it by converting it to bytes.
-        data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        if LooseVersion(np.__version__) >= LooseVersion('1.9'):
+            data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        else:
+            # Numpy prior to 1.9 don't have `tobytes` method.
+            data = bytearray(array.astype(dtype=np.uint8).ravel())
 
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
@@ -185,6 +214,9 @@ class _ImageSchema(object):
         .. note:: If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
             potentially non-deterministic.
 
+        .. note:: Deprecated in 2.4.0. Use `spark.read.format("image").load(path)` instead and
+            this `readImages` will be removed in 3.0.0.
+
         :param str path: Path to the image directory.
         :param bool recursive: Recursive search flag.
         :param int numPartitions: Number of DataFrame partitions.
@@ -194,13 +226,14 @@ class _ImageSchema(object):
         :return: a :class:`DataFrame` with a single column of "images",
                see ImageSchema for details.
 
-        >>> df = ImageSchema.readImages('data/mllib/images/kittens', recursive=True)
+        >>> df = ImageSchema.readImages('data/mllib/images/origin/kittens', recursive=True)
         >>> df.count()
         5
 
         .. versionadded:: 2.3.0
         """
-
+        warnings.warn("`ImageSchema.readImage` is deprecated. " +
+                      "Use `spark.read.format(\"image\").load(path)` instead.", DeprecationWarning)
         spark = SparkSession.builder.getOrCreate()
         image_schema = spark._jvm.org.apache.spark.ml.image.ImageSchema
         jsession = spark._jsparkSession
@@ -233,7 +266,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

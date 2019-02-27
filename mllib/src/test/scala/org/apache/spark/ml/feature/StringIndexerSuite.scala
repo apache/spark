@@ -17,26 +17,57 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 
-class StringIndexerSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
-    val model = new StringIndexerModel("indexer", Array("a", "b"))
+    val model = new StringIndexerModel("indexer", Array(Array("a", "b")))
     val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
+  }
+
+  test("params: input/output columns") {
+    val stringIndexerSingleCol = new StringIndexer()
+      .setInputCol("in").setOutputCol("out")
+    val inOutCols1 = stringIndexerSingleCol.getInOutCols()
+    assert(inOutCols1._1 === Array("in"))
+    assert(inOutCols1._2 === Array("out"))
+
+    val stringIndexerMultiCol = new StringIndexer()
+      .setInputCols(Array("in1", "in2")).setOutputCols(Array("out1", "out2"))
+    val inOutCols2 = stringIndexerMultiCol.getInOutCols()
+    assert(inOutCols2._1 === Array("in1", "in2"))
+    assert(inOutCols2._2 === Array("out1", "out2"))
+
+
+    val df = Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")).toDF("id", "label")
+
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCol("in").setOutputCols(Array("out1", "out2")).fit(df)
+    }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2")).setOutputCol("out1").fit(df)
+    }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2"))
+        .setOutputCols(Array("out1", "out2", "out3"))
+        .fit(df)
+    }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2"))
+        .setOutputCols(Array("out1", "out1"))
+        .fit(df)
+    }
   }
 
   test("StringIndexer") {
@@ -46,19 +77,23 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val indexerModel = indexer.fit(df)
-
     MLTestingUtils.checkCopyAndUids(indexer, indexerModel)
-
-    val transformed = indexerModel.transform(df)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("a", "c", "b"))
-    val output = transformed.select("id", "labelIndex").rdd.map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
     // a -> 0, b -> 2, c -> 1
-    val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
-    assert(output === expected)
+    val expected = Seq(
+      (0, 0.0),
+      (1, 2.0),
+      (2, 1.0),
+      (3, 0.0),
+      (4, 0.0),
+      (5, 1.0)
+    ).toDF("id", "labelIndex")
+
+    testTransformerByGlobalCheckFunc[(Int, String)](df, indexerModel, "id", "labelIndex") { rows =>
+      val attr = Attribute.fromStructField(rows.head.schema("labelIndex"))
+        .asInstanceOf[NominalAttribute]
+      assert(attr.values.get === Array("a", "c", "b"))
+      assert(rows.seq === expected.collect().toSeq)
+    }
   }
 
   test("StringIndexerUnseen") {
@@ -70,36 +105,38 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
+
     // Verify we throw by default with unseen values
-    intercept[SparkException] {
-      indexer.transform(df2).collect()
+    testTransformerByInterceptingException[(Int, String)](
+      df2,
+      indexer,
+      "Unseen label:",
+      "labelIndex")
+
+    // Verify that we skip the c record
+    // a -> 1, b -> 0
+    indexer.setHandleInvalid("skip")
+
+    val expectedSkip = Seq((0, 1.0), (1, 0.0)).toDF()
+    testTransformerByGlobalCheckFunc[(Int, String)](df2, indexer, "id", "labelIndex") { rows =>
+      val attrSkip = Attribute.fromStructField(rows.head.schema("labelIndex"))
+        .asInstanceOf[NominalAttribute]
+      assert(attrSkip.values.get === Array("b", "a"))
+      assert(rows.seq === expectedSkip.collect().toSeq)
     }
 
-    indexer.setHandleInvalid("skip")
-    // Verify that we skip the c record
-    val transformedSkip = indexer.transform(df2)
-    val attrSkip = Attribute.fromStructField(transformedSkip.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attrSkip.values.get === Array("b", "a"))
-    val outputSkip = transformedSkip.select("id", "labelIndex").rdd.map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
-    // a -> 1, b -> 0
-    val expectedSkip = Set((0, 1.0), (1, 0.0))
-    assert(outputSkip === expectedSkip)
-
     indexer.setHandleInvalid("keep")
-    // Verify that we keep the unseen records
-    val transformedKeep = indexer.transform(df2)
-    val attrKeep = Attribute.fromStructField(transformedKeep.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attrKeep.values.get === Array("b", "a", "__unknown"))
-    val outputKeep = transformedKeep.select("id", "labelIndex").rdd.map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
+
     // a -> 1, b -> 0, c -> 2, d -> 3
-    val expectedKeep = Set((0, 1.0), (1, 0.0), (2, 2.0), (3, 2.0))
-    assert(outputKeep === expectedKeep)
+    val expectedKeep = Seq((0, 1.0), (1, 0.0), (2, 2.0), (3, 2.0)).toDF()
+
+    // Verify that we keep the unseen records
+    testTransformerByGlobalCheckFunc[(Int, String)](df2, indexer, "id", "labelIndex") { rows =>
+      val attrKeep = Attribute.fromStructField(rows.head.schema("labelIndex"))
+        .asInstanceOf[NominalAttribute]
+      assert(attrKeep.values.get === Array("b", "a", "__unknown"))
+      assert(rows === expectedKeep.collect().toSeq)
+    }
   }
 
   test("StringIndexer with a numeric input column") {
@@ -109,16 +146,14 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
-    val transformed = indexer.transform(df)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("100", "300", "200"))
-    val output = transformed.select("id", "labelIndex").rdd.map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
     // 100 -> 0, 200 -> 2, 300 -> 1
-    val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
-    assert(output === expected)
+    val expected = Seq((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)).toDF()
+    testTransformerByGlobalCheckFunc[(Int, String)](df, indexer, "id", "labelIndex") { rows =>
+      val attr = Attribute.fromStructField(rows.head.schema("labelIndex"))
+        .asInstanceOf[NominalAttribute]
+      assert(attr.values.get === Array("100", "300", "200"))
+      assert(rows === expected.collect().toSeq)
+    }
   }
 
   test("StringIndexer with NULLs") {
@@ -133,45 +168,46 @@ class StringIndexerSuite
 
     withClue("StringIndexer should throw error when setHandleInvalid=error " +
       "when given NULL values") {
-      intercept[SparkException] {
-        indexer.setHandleInvalid("error")
-        indexer.fit(df).transform(df2).collect()
-      }
+      indexer.setHandleInvalid("error")
+      testTransformerByInterceptingException[(Int, String)](
+        df2,
+        indexer.fit(df),
+        "StringIndexer encountered NULL value.",
+        "labelIndex")
     }
 
     indexer.setHandleInvalid("skip")
-    val transformedSkip = indexer.fit(df).transform(df2)
-    val attrSkip = Attribute
-      .fromStructField(transformedSkip.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attrSkip.values.get === Array("b", "a"))
-    val outputSkip = transformedSkip.select("id", "labelIndex").rdd.map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
+    val modelSkip = indexer.fit(df)
     // a -> 1, b -> 0
-    val expectedSkip = Set((0, 1.0), (1, 0.0))
-    assert(outputSkip === expectedSkip)
+    val expectedSkip = Seq((0, 1.0), (1, 0.0)).toDF()
+    testTransformerByGlobalCheckFunc[(Int, String)](df2, modelSkip, "id", "labelIndex") { rows =>
+      val attrSkip =
+        Attribute.fromStructField(rows.head.schema("labelIndex")).asInstanceOf[NominalAttribute]
+      assert(attrSkip.values.get === Array("b", "a"))
+      assert(rows === expectedSkip.collect().toSeq)
+    }
 
     indexer.setHandleInvalid("keep")
-    val transformedKeep = indexer.fit(df).transform(df2)
-    val attrKeep = Attribute
-      .fromStructField(transformedKeep.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attrKeep.values.get === Array("b", "a", "__unknown"))
-    val outputKeep = transformedKeep.select("id", "labelIndex").rdd.map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
     // a -> 1, b -> 0, null -> 2
-    val expectedKeep = Set((0, 1.0), (1, 0.0), (3, 2.0))
-    assert(outputKeep === expectedKeep)
+    val expectedKeep = Seq((0, 1.0), (1, 0.0), (3, 2.0)).toDF()
+    val modelKeep = indexer.fit(df)
+    testTransformerByGlobalCheckFunc[(Int, String)](df2, modelKeep, "id", "labelIndex") { rows =>
+      val attrKeep = Attribute
+        .fromStructField(rows.head.schema("labelIndex"))
+        .asInstanceOf[NominalAttribute]
+      assert(attrKeep.values.get === Array("b", "a", "__unknown"))
+      assert(rows === expectedKeep.collect().toSeq)
+    }
   }
 
   test("StringIndexerModel should keep silent if the input column does not exist.") {
-    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+    val indexerModel = new StringIndexerModel("indexer", Array(Array("a", "b", "c")))
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val df = spark.range(0L, 10L).toDF()
-    assert(indexerModel.transform(df).collect().toSet === df.collect().toSet)
+    testTransformerByGlobalCheckFunc[Long](df, indexerModel, "id") { rows =>
+      assert(rows.toSet === df.collect().toSet)
+    }
   }
 
   test("StringIndexerModel can't overwrite output column") {
@@ -188,9 +224,12 @@ class StringIndexerSuite
       .setOutputCol("indexedInput")
       .fit(df)
 
-    intercept[IllegalArgumentException] {
-      indexer.setOutputCol("output").transform(df)
-    }
+    testTransformerByInterceptingException[(Int, String)](
+      df,
+      indexer.setOutputCol("output"),
+      "Output column output already exists.",
+      "labelIndex")
+
   }
 
   test("StringIndexer read/write") {
@@ -202,7 +241,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel read/write") {
-    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
+    val instance = new StringIndexerModel("myStringIndexerModel", Array(Array("a", "b", "c")))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setHandleInvalid("skip")
@@ -223,7 +262,8 @@ class StringIndexerSuite
       .setInputCol("index")
       .setOutputCol("actual")
       .setLabels(labels)
-    idxToStr0.transform(df0).select("actual", "expected").collect().foreach {
+
+    testTransformer[(Int, String)](df0, idxToStr0, "actual", "expected") {
       case Row(actual, expected) =>
         assert(actual === expected)
     }
@@ -234,7 +274,8 @@ class StringIndexerSuite
     val idxToStr1 = new IndexToString()
       .setInputCol("indexWithAttr")
       .setOutputCol("actual")
-    idxToStr1.transform(df1).select("actual", "expected").collect().foreach {
+
+    testTransformer[(Int, String)](df1, idxToStr1, "actual", "expected") {
       case Row(actual, expected) =>
         assert(actual === expected)
     }
@@ -252,9 +293,10 @@ class StringIndexerSuite
       .setInputCol("labelIndex")
       .setOutputCol("sameLabel")
       .setLabels(indexer.labels)
-    idx2str.transform(transformed).select("label", "sameLabel").collect().foreach {
-      case Row(a: String, b: String) =>
-        assert(a === b)
+
+    testTransformer[(Int, String, Double)](transformed, idx2str, "sameLabel", "label") {
+      case Row(sameLabel, label) =>
+        assert(sameLabel === label)
     }
   }
 
@@ -286,10 +328,11 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
-    val transformed = indexer.transform(df)
-    val attrs =
-      NominalAttribute.decodeStructField(transformed.schema("labelIndex"), preserveName = true)
-    assert(attrs.name.nonEmpty && attrs.name.get === "labelIndex")
+    testTransformerByGlobalCheckFunc[(Int, String)](df, indexer, "labelIndex") { rows =>
+      val attrs =
+        NominalAttribute.decodeStructField(rows.head.schema("labelIndex"), preserveName = true)
+      assert(attrs.name.nonEmpty && attrs.name.get === "labelIndex")
+    }
   }
 
   test("StringIndexer order types") {
@@ -299,13 +342,33 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
 
-    val expected = Seq(Set((0, 0.0), (1, 0.0), (2, 2.0), (3, 1.0), (4, 1.0), (5, 0.0)),
-      Set((0, 2.0), (1, 2.0), (2, 0.0), (3, 1.0), (4, 1.0), (5, 2.0)),
-      Set((0, 1.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 1.0)),
-      Set((0, 1.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 1.0)))
+    val expected = Seq(Seq((0, 0.0), (1, 0.0), (2, 2.0), (3, 1.0), (4, 1.0), (5, 0.0)),
+      Seq((0, 2.0), (1, 2.0), (2, 0.0), (3, 1.0), (4, 1.0), (5, 2.0)),
+      Seq((0, 1.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 1.0)),
+      Seq((0, 1.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 1.0)))
 
     var idx = 0
     for (orderType <- StringIndexer.supportedStringOrderType) {
+      val model = indexer.setStringOrderType(orderType).fit(df)
+      testTransformerByGlobalCheckFunc[(Int, String)](df, model, "id", "labelIndex") { rows =>
+        assert(rows === expected(idx).toDF().collect().toSeq)
+      }
+      idx += 1
+    }
+  }
+
+  test("StringIndexer order types: secondary sort by alphabets when frequency equal") {
+    val data = Seq((0, "a"), (1, "a"), (2, "b"), (3, "b"), (4, "c"), (5, "d"))
+    val df = data.toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+
+    val expected = Seq(Set((0, 0.0), (1, 0.0), (2, 1.0), (3, 1.0), (4, 2.0), (5, 3.0)),
+      Set((0, 2.0), (1, 2.0), (2, 3.0), (3, 3.0), (4, 0.0), (5, 1.0)))
+
+    var idx = 0
+    for (orderType <- Seq("frequencyDesc", "frequencyAsc")) {
       val transformed = indexer.setStringOrderType(orderType).fit(df).transform(df)
       val output = transformed.select("id", "labelIndex").rdd.map { r =>
         (r.getInt(0), r.getDouble(1))
@@ -317,9 +380,9 @@ class StringIndexerSuite
 
   test("SPARK-22446: StringIndexerModel's indexer UDF should not apply on filtered data") {
     val df = List(
-         ("A", "London", "StrA"),
-         ("B", "Bristol", null),
-         ("C", "New York", "StrC")).toDF("ID", "CITY", "CONTENT")
+      ("A", "London", "StrA"),
+      ("B", "Bristol", null),
+      ("C", "New York", "StrC")).toDF("ID", "CITY", "CONTENT")
 
     val dfNoBristol = df.filter($"CONTENT".isNotNull)
 
@@ -328,7 +391,81 @@ class StringIndexerSuite
       .setOutputCol("CITYIndexed")
       .fit(dfNoBristol)
 
-    val dfWithIndex = model.transform(dfNoBristol)
-    assert(dfWithIndex.filter($"CITYIndexed" === 1.0).count == 1)
+    testTransformerByGlobalCheckFunc[(String, String, String)](
+      dfNoBristol,
+      model,
+      "CITYIndexed") { rows =>
+      assert(rows.toList.count(_.getDouble(0) == 1.0) === 1)
+    }
+  }
+
+  test("StringIndexer multiple input columns") {
+    val data = Seq(
+      Row("a", 0.0, "e", 1.0),
+      Row("b", 2.0, "f", 0.0),
+      Row("c", 1.0, "e", 1.0),
+      Row("a", 0.0, "f", 0.0),
+      Row("a", 0.0, "f", 0.0),
+      Row("c", 1.0, "f", 0.0))
+
+    val schema = StructType(Array(
+      StructField("label1", StringType),
+      StructField("expected1", DoubleType),
+      StructField("label2", StringType),
+      StructField("expected2", DoubleType)))
+
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val indexer = new StringIndexer()
+      .setInputCols(Array("label1", "label2"))
+      .setOutputCols(Array("labelIndex1", "labelIndex2"))
+    val indexerModel = indexer.fit(df)
+
+    MLTestingUtils.checkCopyAndUids(indexer, indexerModel)
+
+    val transformed = indexerModel.transform(df)
+
+    // Checks output attribute correctness.
+    val attr1 = Attribute.fromStructField(transformed.schema("labelIndex1"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr1.values.get === Array("a", "c", "b"))
+    val attr2 = Attribute.fromStructField(transformed.schema("labelIndex2"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr2.values.get === Array("f", "e"))
+
+    transformed.select("labelIndex1", "expected1").rdd.map { r =>
+      (r.getDouble(0), r.getDouble(1))
+    }.collect().foreach { case (index, expected) =>
+      assert(index == expected)
+    }
+
+    transformed.select("labelIndex2", "expected2").rdd.map { r =>
+      (r.getDouble(0), r.getDouble(1))
+    }.collect().foreach { case (index, expected) =>
+      assert(index == expected)
+    }
+  }
+
+  test("Correctly skipping NULL and NaN values") {
+    val df = Seq(("a", Double.NaN), (null, 1.0), ("b", 2.0), (null, 3.0)).toDF("str", "double")
+
+    val indexer = new StringIndexer()
+      .setInputCols(Array("str", "double"))
+      .setOutputCols(Array("strIndex", "doubleIndex"))
+
+    val model = indexer.fit(df)
+    assert(model.labelsArray(0) === Array("a", "b"))
+    assert(model.labelsArray(1) === Array("1.0", "2.0", "3.0"))
+  }
+
+  test("Load StringIndexderModel prior to Spark 3.0") {
+    val modelPath = testFile("test-data/strIndexerModel")
+
+    val loadedModel = StringIndexerModel.load(modelPath)
+    assert(loadedModel.labelsArray === Array(Array("b", "c", "a")))
+
+    val metadata = spark.read.json(s"$modelPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr == "2.4.1-SNAPSHOT")
   }
 }

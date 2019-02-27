@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import scala.language.existentials
+
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
@@ -163,7 +165,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // Just to be defensive in case anything ever changes in parquet, this test checks
               // the assumption on column stats, and also the end-to-end behavior.
 
-              val hadoopConf = sparkContext.hadoopConfiguration
+              val hadoopConf = spark.sessionState.newHadoopConf()
               val fs = FileSystem.get(hadoopConf)
               val parts = fs.listStatus(new Path(tableDir.getAbsolutePath), new PathFilter {
                 override def accept(path: Path): Boolean = !path.getName.startsWith("_")
@@ -175,8 +177,9 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 val oneFooter =
                   ParquetFileReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
-                assert(oneFooter.getFileMetaData.getSchema.getColumns.get(0).getType() ===
-                  PrimitiveTypeName.INT96)
+                val typeName = oneFooter
+                  .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName
+                assert(typeName === PrimitiveTypeName.INT96)
                 val oneBlockMeta = oneFooter.getBlocks().get(0)
                 val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
                 val columnStats = oneBlockColumnMeta.getStatistics
@@ -184,7 +187,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 // when the data is read back as mentioned above, b/c int96 is unsigned.  This
                 // assert makes sure this holds even if we change parquet versions (if eg. there
                 // were ever statistics even on unsigned columns).
-                assert(columnStats.isEmpty)
+                assert(!columnStats.hasNonNullValue)
               }
 
               // These queries should return the entire dataset with the conversion applied,

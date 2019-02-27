@@ -68,11 +68,14 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
  */
 private[spark] class JobDataWrapper(
     val info: JobData,
-    val skippedStages: Set[Int]) {
+    val skippedStages: Set[Int],
+    val sqlExecutionId: Option[Long]) {
 
   @JsonIgnore @KVIndex
   private def id: Int = info.jobId
 
+  @JsonIgnore @KVIndex("completionTime")
+  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 private[spark] class StageDataWrapper(
@@ -90,6 +93,8 @@ private[spark] class StageDataWrapper(
   @JsonIgnore @KVIndex("active")
   private def active: Boolean = info.status == StageStatus.ACTIVE
 
+  @JsonIgnore @KVIndex("completionTime")
+  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 /**
@@ -105,6 +110,7 @@ private[spark] object TaskIndexNames {
   final val DURATION = "dur"
   final val ERROR = "err"
   final val EXECUTOR = "exe"
+  final val HOST = "hst"
   final val EXEC_CPU_TIME = "ect"
   final val EXEC_RUN_TIME = "ert"
   final val GC_TIME = "gc"
@@ -134,6 +140,7 @@ private[spark] object TaskIndexNames {
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
+  final val COMPLETION_TIME = "ct"
 }
 
 /**
@@ -160,6 +167,7 @@ private[spark] class TaskDataWrapper(
     val duration: Long,
     @KVIndexParam(value = TaskIndexNames.EXECUTOR, parent = TaskIndexNames.STAGE)
     val executorId: String,
+    @KVIndexParam(value = TaskIndexNames.HOST, parent = TaskIndexNames.STAGE)
     val host: String,
     @KVIndexParam(value = TaskIndexNames.STATUS, parent = TaskIndexNames.STAGE)
     val status: String,
@@ -276,7 +284,10 @@ private[spark] class TaskDataWrapper(
       speculative,
       accumulatorUpdates,
       errorMessage,
-      metrics)
+      metrics,
+      executorLogs = null,
+      schedulerDelay = 0L,
+      gettingResultTime = 0L)
   }
 
   @JsonIgnore @KVIndex(TaskIndexNames.STAGE)
@@ -337,6 +348,8 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.ERROR, parent = TaskIndexNames.STAGE)
   private def error: String = if (errorMessage.isDefined) errorMessage.get else ""
 
+  @JsonIgnore @KVIndex(value = TaskIndexNames.COMPLETION_TIME, parent = TaskIndexNames.STAGE)
+  private def completionTime: Long = launchTime + duration
 }
 
 private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {

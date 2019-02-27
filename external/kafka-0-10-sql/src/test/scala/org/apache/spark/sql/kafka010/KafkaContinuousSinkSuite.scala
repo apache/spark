@@ -40,12 +40,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
   override val streamingTimeout = 30.seconds
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    testUtils = new KafkaTestUtils(
-      withBrokerProps = Map("auto.create.topics.enable" -> "false"))
-    testUtils.setup()
-  }
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
 
   override def afterAll(): Unit = {
     if (testUtils != null) {
@@ -79,7 +74,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
       .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
       .map(_._2)
 
     try {
@@ -119,7 +114,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
       .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
       .map(_._2)
 
     try {
@@ -167,7 +162,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
       .map(_._2)
 
     try {
@@ -314,7 +309,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       writer.stop()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "value attribute type must be a string or binarytype"))
+      "value attribute type must be a string or binary"))
 
     try {
       /* key field wrong type */
@@ -330,7 +325,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       writer.stop()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "key attribute type must be a string or binarytype"))
+      "key attribute type must be a string or binary"))
   }
 
   test("streaming - write to non-existing topic") {
@@ -414,7 +409,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     */
     val topic = newTopic()
     testUtils.createTopic(topic, 1)
-    val options = new java.util.HashMap[String, String]
+    val options = new java.util.HashMap[String, Object]
     options.put("bootstrap.servers", testUtils.brokerAddress)
     options.put("buffer.memory", "16384") // min buffer size
     options.put("block.on.buffer.full", "true")
@@ -422,7 +417,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     options.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
     val data = new Array[Byte](15000) // large value
-    val writeTask = new KafkaStreamDataWriter(Some(topic), options.asScala.toMap, inputSchema)
+    val writeTask = new KafkaStreamDataWriter(Some(topic), options, inputSchema)
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)

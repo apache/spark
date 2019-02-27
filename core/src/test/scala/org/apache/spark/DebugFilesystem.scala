@@ -103,8 +103,11 @@ class DebugFilesystem extends LocalFileSystem {
       override def markSupported(): Boolean = wrapped.markSupported()
 
       override def close(): Unit = {
-        wrapped.close()
-        removeOpenStream(wrapped)
+        try {
+          wrapped.close()
+        } finally {
+          removeOpenStream(wrapped)
+        }
       }
 
       override def read(): Int = wrapped.read()

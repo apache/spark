@@ -18,7 +18,8 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
-import java.util.concurrent.ConcurrentHashMap
+
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
@@ -132,10 +133,17 @@ private[spark] object BlockManagerId {
     getCachedBlockManagerId(obj)
   }
 
-  val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
+  /**
+   * The max cache size is hardcoded to 10000, since the size of a BlockManagerId
+   * object is about 48B, the total memory cost should be below 1MB which is feasible.
+   */
+  val blockManagerIdCache = CacheBuilder.newBuilder()
+    .maximumSize(10000)
+    .build(new CacheLoader[BlockManagerId, BlockManagerId]() {
+      override def load(id: BlockManagerId) = id
+    })
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
-    blockManagerIdCache.putIfAbsent(id, id)
     blockManagerIdCache.get(id)
   }
 }

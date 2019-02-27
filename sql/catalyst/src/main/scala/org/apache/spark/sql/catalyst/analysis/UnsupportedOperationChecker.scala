@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -228,7 +229,7 @@ object UnsupportedOperationChecker {
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
-        case Join(left, right, joinType, condition) =>
+        case Join(left, right, joinType, condition, _) =>
 
           joinType match {
 
@@ -305,17 +306,19 @@ object UnsupportedOperationChecker {
         case u: Union if u.children.map(_.isStreaming).distinct.size == 2 =>
           throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
-        case Except(left, right) if right.isStreaming =>
+        case Except(left, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
-        case Intersect(left, right) if left.isStreaming && right.isStreaming =>
+        case Intersect(left, right, _) if left.isStreaming && right.isStreaming =>
           throwError("Intersect between two streaming DataFrames/Datasets is not supported")
 
         case GroupingSets(_, _, child, _) if child.isStreaming =>
           throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
 
-        case GlobalLimit(_, _) | LocalLimit(_, _) if subPlan.children.forall(_.isStreaming) =>
-          throwError("Limits are not supported on streaming DataFrames/Datasets")
+        case GlobalLimit(_, _) | LocalLimit(_, _)
+            if subPlan.children.forall(_.isStreaming) && outputMode == InternalOutputModes.Update =>
+          throwError("Limits are not supported on streaming DataFrames/Datasets in Update " +
+            "output mode")
 
         case Sort(_, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
@@ -345,8 +348,20 @@ object UnsupportedOperationChecker {
     plan.foreachUp { implicit subPlan =>
       subPlan match {
         case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
-              _: DeserializeToObject | _: SerializeFromObject) =>
+              _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
+              _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
+        case Repartition(1, false, _) =>
+        case node: Aggregate =>
+          val aboveSinglePartitionCoalesce = node.find {
+            case Repartition(1, false, _) => true
+            case _ => false
+          }.isDefined
+
+          if (!aboveSinglePartitionCoalesce) {
+            throwError(s"In continuous processing mode, coalesce(1) must be called before " +
+              s"aggregate operation ${node.nodeName}.")
+          }
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }

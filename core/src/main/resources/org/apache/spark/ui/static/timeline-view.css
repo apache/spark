@@ -98,12 +98,12 @@ rect.getting-result-time-proportion {
   cursor: pointer;
 }
 
-.vis-timeline .vis-item.stage.succeeded {
+.vis-timeline .vis-item.stage.complete {
   background-color: #A0DFFF;
   border-color: #3EC0FF;
 }
 
-.vis-timeline .vis-item.stage.succeeded.vis-selected {
+.vis-timeline .vis-item.stage.complete.vis-selected {
   background-color: #A0DFFF;
   border-color: #3EC0FF;
   z-index: auto;
@@ -130,12 +130,12 @@ rect.getting-result-time-proportion {
   stroke: #FF4D6D;
 }
 
-.vis-timeline .vis-item.stage.running {
+.vis-timeline .vis-item.stage.active {
   background-color: #A2FCC0;
   border-color: #36F572;
 }
 
-.vis-timeline .vis-item.stage.running.vis-selected {
+.vis-timeline .vis-item.stage.active.vis-selected {
   background-color: #A2FCC0;
   border-color: #36F572;
   z-index: auto;

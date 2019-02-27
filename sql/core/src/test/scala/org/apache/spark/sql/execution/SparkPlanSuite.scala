@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -33,4 +34,28 @@ class SparkPlanSuite extends QueryTest with SharedSQLContext {
     intercept[IllegalStateException] { plan.executeTake(1) }
   }
 
+  test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {
+    withTempPath { path =>
+      spark.range(1).write.parquet(path.getAbsolutePath)
+      val df = spark.read.parquet(path.getAbsolutePath)
+      val fileSourceScanExec =
+        df.queryExecution.sparkPlan.collectFirst { case p: FileSourceScanExec => p }.get
+      val serializer = SparkEnv.get.serializer.newInstance()
+      val readback =
+        serializer.deserialize[FileSourceScanExec](serializer.serialize(fileSourceScanExec))
+      try {
+        readback.canonicalized
+      } catch {
+        case e: Throwable => fail("FileSourceScanExec was not canonicalizable", e)
+      }
+    }
+  }
+
+  test("SPARK-25357 SparkPlanInfo of FileScan contains nonEmpty metadata") {
+    withTempPath { path =>
+      spark.range(5).write.parquet(path.getAbsolutePath)
+      val f = spark.read.parquet(path.getAbsolutePath)
+      assert(SparkPlanInfo.fromSparkPlan(f.queryExecution.sparkPlan).metadata.nonEmpty)
+    }
+  }
 }

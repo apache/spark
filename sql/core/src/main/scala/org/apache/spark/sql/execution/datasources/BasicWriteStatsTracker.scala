@@ -31,7 +31,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 
 /**
- * Simple metrics collected during an instance of [[FileFormatWriter.ExecuteWriteTask]].
+ * Simple metrics collected during an instance of [[FileFormatDataWriter]].
  * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
  */
 case class BasicWriteTaskStats(
@@ -153,12 +153,29 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    metrics("numFiles").add(numFiles)
-    metrics("numOutputBytes").add(totalNumBytes)
-    metrics("numOutputRows").add(totalNumOutput)
-    metrics("numParts").add(numPartitions)
+    metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
+    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
+    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
+    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(numPartitions)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
+  }
+}
+
+object BasicWriteJobStatsTracker {
+  private val NUM_FILES_KEY = "numFiles"
+  private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
+  private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
+  private val NUM_PARTS_KEY = "numParts"
+
+  def metrics: Map[String, SQLMetric] = {
+    val sparkContext = SparkContext.getActive.get
+    Map(
+      NUM_FILES_KEY -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+      NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
+      NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
+    )
   }
 }

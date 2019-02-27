@@ -100,6 +100,25 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
       assert(output == Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
       assert(serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
     }
+
+    withSQLConf("hive.default.fileformat" -> "orc") {
+      val (desc, exists) = extractTableDesc(
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int) STORED AS textfile")
+      assert(exists)
+      assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
+      assert(desc.storage.outputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+      assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    }
+
+    withSQLConf("hive.default.fileformat" -> "orc") {
+      val (desc, exists) = extractTableDesc(
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int) STORED AS sequencefile")
+      assert(exists)
+      assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.SequenceFileInputFormat"))
+      assert(desc.storage.outputFormat == Some("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
+      assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    }
   }
 
   test("create hive serde table with new syntax - basic") {

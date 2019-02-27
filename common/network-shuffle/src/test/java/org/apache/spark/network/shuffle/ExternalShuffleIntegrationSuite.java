@@ -133,37 +133,37 @@ public class ExternalShuffleIntegrationSuite {
 
     final Semaphore requestsRemaining = new Semaphore(0);
 
-    ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false, 5000);
-    client.init(APP_ID);
-    client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
-      new BlockFetchingListener() {
-        @Override
-        public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
-          synchronized (this) {
-            if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
-              data.retain();
-              res.successBlocks.add(blockId);
-              res.buffers.add(data);
-              requestsRemaining.release();
+    try (ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false, 5000)) {
+      client.init(APP_ID);
+      client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
+        new BlockFetchingListener() {
+          @Override
+          public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
+            synchronized (this) {
+              if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
+                data.retain();
+                res.successBlocks.add(blockId);
+                res.buffers.add(data);
+                requestsRemaining.release();
+              }
             }
           }
-        }
 
-        @Override
-        public void onBlockFetchFailure(String blockId, Throwable exception) {
-          synchronized (this) {
-            if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
-              res.failedBlocks.add(blockId);
-              requestsRemaining.release();
+          @Override
+          public void onBlockFetchFailure(String blockId, Throwable exception) {
+            synchronized (this) {
+              if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
+                res.failedBlocks.add(blockId);
+                requestsRemaining.release();
+              }
             }
           }
-        }
-      }, null);
+        }, null);
 
-    if (!requestsRemaining.tryAcquire(blockIds.length, 5, TimeUnit.SECONDS)) {
-      fail("Timeout getting response from the server");
+      if (!requestsRemaining.tryAcquire(blockIds.length, 5, TimeUnit.SECONDS)) {
+        fail("Timeout getting response from the server");
+      }
     }
-    client.close();
     return res;
   }
 

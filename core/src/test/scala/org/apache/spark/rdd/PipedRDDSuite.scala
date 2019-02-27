@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.File
 
+import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.io.Codec
 
@@ -81,6 +82,29 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     intercept[SparkException] {
       piped.collect()
     }
+  }
+
+  test("stdin writer thread should be exited when task is finished") {
+    assume(TestUtils.testCommandAvailable("cat"))
+    val nums = sc.makeRDD(Array(1, 2, 3, 4), 1).map { x =>
+      val obj = new Object()
+      obj.synchronized {
+        obj.wait() // make the thread waits here.
+      }
+      x
+    }
+
+    val piped = nums.pipe(Seq("cat"))
+
+    val result = piped.mapPartitions(_ => Array.emptyIntArray.iterator)
+
+    assert(result.collect().length === 0)
+
+    // collect stderr writer threads
+    val stderrWriterThread = Thread.getAllStackTraces.keySet().asScala
+      .find { _.getName.startsWith(PipedRDD.STDIN_WRITER_THREAD_PREFIX) }
+
+    assert(stderrWriterThread.isEmpty)
   }
 
   test("advanced pipe") {

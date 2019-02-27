@@ -329,16 +329,52 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("   "))
   }
 
-  test("string split function") {
-    val df = Seq(("aa2bb3cc", "[1-9]+")).toDF("a", "b")
+  test("string split function with no limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
 
     checkAnswer(
       df.select(split($"a", "[1-9]+")),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
 
     checkAnswer(
       df.selectExpr("split(a, '[1-9]+')"),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
+  }
+
+  test("string split function with limit explicitly set to 0") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", 0)),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', 0)"),
+      Row(Seq("aa", "bb", "cc", "")))
+  }
+
+  test("string split function with positive limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", 2)),
+      Row(Seq("aa", "bb3cc4")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', 2)"),
+      Row(Seq("aa", "bb3cc4")))
+  }
+
+  test("string split function with negative limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", -2)),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', -2)"),
+      Row(Seq("aa", "bb", "cc", "")))
   }
 
   test("string / binary length function") {

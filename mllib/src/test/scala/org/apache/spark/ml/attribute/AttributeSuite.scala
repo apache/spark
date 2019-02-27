@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.attribute
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.types._
 
 class AttributeSuite extends SparkFunSuite {
@@ -220,5 +222,21 @@ class AttributeSuite extends SparkFunSuite {
     assert(Attribute.fromStructField(longFldWithMeta).isNumeric)
     val decimalFldWithMeta = new StructField("x", DecimalType(38, 18), false, metadata)
     assert(Attribute.fromStructField(decimalFldWithMeta).isNumeric)
+  }
+
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val numericAttr = new NumericAttribute(Some("numeric"), Some(1), Some(1.0), Some(2.0))
+    val nominalAttr = new NominalAttribute(Some("nominal"), Some(2), Some(false))
+    val binaryAttr = new BinaryAttribute(Some("binary"), Some(3), Some(Array("i", "j")))
+
+    Seq(numericAttr, nominalAttr, binaryAttr).foreach { i =>
+      val i2 = ser.deserialize[Attribute](ser.serialize(i))
+      assert(i === i2)
+    }
   }
 }

@@ -66,6 +66,22 @@ object StaticSQLConf {
       .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
       .createWithDefault(1000)
 
+  val CODEGEN_CACHE_MAX_ENTRIES = buildStaticConf("spark.sql.codegen.cache.maxEntries")
+      .internal()
+      .doc("When nonzero, enable caching of generated classes for operators and expressions. " +
+        "All jobs share the cache that can use up to the specified number for generated classes.")
+      .intConf
+      .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
+      .createWithDefault(100)
+
+  val CODEGEN_COMMENTS = buildStaticConf("spark.sql.codegen.comments")
+    .internal()
+    .doc("When true, put comment in the generated code. Since computing huge comments " +
+      "can be extremely expensive in certain cases, such as deeply-nested expressions which " +
+      "operate over inputs with wide schemas, default is false.")
+    .booleanConf
+    .createWithDefault(false)
+
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
   // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.
   val DEBUG_MODE = buildStaticConf("spark.sql.debug")
@@ -83,13 +99,27 @@ object StaticSQLConf {
       .createWithDefault(false)
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
-    .doc("Name of the class used to configure Spark Session extensions. The class should " +
-      "implement Function1[SparkSessionExtension, Unit], and must have a no-args constructor.")
+    .doc("A comma-separated list of classes that implement " +
+      "Function1[SparkSessionExtension, Unit] used to configure Spark Session extensions. The " +
+      "classes must have a no-args constructor. If multiple extensions are specified, they are " +
+      "applied in the specified order. For the case of rules and planner strategies, they are " +
+      "applied in the specified order. For the case of parsers, the last parser is used and each " +
+      "parser can delegate to its predecessor. For the case of function name conflicts, the last " +
+      "registered function name is used.")
     .stringConf
+    .toSequence
     .createOptional
 
   val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
     .doc("List of class names implementing QueryExecutionListener that will be automatically " +
+      "added to newly created sessions. The classes should have either a no-arg constructor, " +
+      "or a constructor that expects a SparkConf argument.")
+    .stringConf
+    .toSequence
+    .createOptional
+
+  val STREAMING_QUERY_LISTENERS = buildStaticConf("spark.sql.streaming.streamingQueryListeners")
+    .doc("List of class names implementing StreamingQueryListener that will be automatically " +
       "added to newly created sessions. The classes should have either a no-arg constructor, " +
       "or a constructor that expects a SparkConf argument.")
     .stringConf

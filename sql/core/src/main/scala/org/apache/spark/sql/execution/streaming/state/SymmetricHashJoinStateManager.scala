@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.Locale
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
@@ -263,16 +265,21 @@ class SymmetricHashJoinStateManager(
   def metrics: StateStoreMetrics = {
     val keyToNumValuesMetrics = keyToNumValues.metrics
     val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
-    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase}: $desc"
+    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase(Locale.ROOT)}: $desc"
 
     StateStoreMetrics(
       keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
       keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
       keyWithIndexToValueMetrics.customMetrics.map {
+        case (s @ StateStoreCustomSumMetric(_, desc), value) =>
+          s.copy(desc = newDesc(desc)) -> value
         case (s @ StateStoreCustomSizeMetric(_, desc), value) =>
           s.copy(desc = newDesc(desc)) -> value
         case (s @ StateStoreCustomTimingMetric(_, desc), value) =>
           s.copy(desc = newDesc(desc)) -> value
+        case (s, _) =>
+          throw new IllegalArgumentException(
+            s"Unknown state store custom metric is found at metrics: $s")
       }
     )
   }
@@ -290,7 +297,7 @@ class SymmetricHashJoinStateManager(
   private val keyWithIndexToValue = new KeyWithIndexToValueStore()
 
   // Clean up any state store resources if necessary at the end of the task
-  Option(TaskContext.get()).foreach { _.addTaskCompletionListener { _ => abortIfNeeded() } }
+  Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
   /** Helper trait for invoking common functionalities of a state store. */
   private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {

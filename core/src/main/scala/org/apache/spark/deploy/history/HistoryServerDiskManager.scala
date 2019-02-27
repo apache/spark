@@ -18,8 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
@@ -29,6 +27,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.History._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.util.kvstore.KVStore
@@ -51,8 +50,6 @@ private class HistoryServerDiskManager(
     path: File,
     listing: KVStore,
     clock: Clock) extends Logging {
-
-  import config._
 
   private val appStoreDir = new File(path, "apps")
   if (!appStoreDir.isDirectory() && !appStoreDir.mkdir()) {
@@ -107,9 +104,8 @@ private class HistoryServerDiskManager(
     val needed = approximateSize(eventLogSize, isCompressed)
     makeRoom(needed)
 
-    val perms = PosixFilePermissions.fromString("rwx------")
-    val tmp = Files.createTempDirectory(tmpStoreDir.toPath(), "appstore",
-      PosixFilePermissions.asFileAttribute(perms)).toFile()
+    val tmp = Utils.createTempDir(tmpStoreDir.getPath(), "appstore")
+    Utils.chmod700(tmp)
 
     updateUsage(needed)
     val current = currentUsage.get()

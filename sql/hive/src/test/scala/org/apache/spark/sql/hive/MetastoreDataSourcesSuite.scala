@@ -591,7 +591,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("Pre insert nullability check (ArrayType)") {
-    withTable("arrayInParquet") {
+    withTable("array") {
       {
         val df = (Tuple1(Seq(Int.box(1), null: Integer)) :: Nil).toDF("a")
         val expectedSchema =
@@ -604,9 +604,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Overwrite)
-          .saveAsTable("arrayInParquet")
+          .saveAsTable("array")
       }
 
       {
@@ -621,25 +620,24 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Append)
-          .insertInto("arrayInParquet")
+          .insertInto("array")
       }
 
       (Tuple1(Seq(4, 5)) :: Nil).toDF("a")
         .write
         .mode(SaveMode.Append)
-        .saveAsTable("arrayInParquet") // This one internally calls df2.insertInto.
+        .saveAsTable("array") // This one internally calls df2.insertInto.
 
       (Tuple1(Seq(Int.box(6), null: Integer)) :: Nil).toDF("a")
         .write
         .mode(SaveMode.Append)
-        .saveAsTable("arrayInParquet")
+        .saveAsTable("array")
 
-      sparkSession.catalog.refreshTable("arrayInParquet")
+      sparkSession.catalog.refreshTable("array")
 
       checkAnswer(
-        sql("SELECT a FROM arrayInParquet"),
+        sql("SELECT a FROM array"),
         Row(ArrayBuffer(1, null)) ::
           Row(ArrayBuffer(2, 3)) ::
           Row(ArrayBuffer(4, 5)) ::
@@ -648,7 +646,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("Pre insert nullability check (MapType)") {
-    withTable("mapInParquet") {
+    withTable("map") {
       {
         val df = (Tuple1(Map(1 -> (null: Integer))) :: Nil).toDF("a")
         val expectedSchema =
@@ -661,9 +659,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Overwrite)
-          .saveAsTable("mapInParquet")
+          .saveAsTable("map")
       }
 
       {
@@ -678,27 +675,24 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Append)
-          .insertInto("mapInParquet")
+          .insertInto("map")
       }
 
       (Tuple1(Map(4 -> 5)) :: Nil).toDF("a")
         .write
-        .format("parquet")
         .mode(SaveMode.Append)
-        .saveAsTable("mapInParquet") // This one internally calls df2.insertInto.
+        .saveAsTable("map") // This one internally calls df2.insertInto.
 
       (Tuple1(Map(6 -> null.asInstanceOf[Integer])) :: Nil).toDF("a")
         .write
-        .format("parquet")
         .mode(SaveMode.Append)
-        .saveAsTable("mapInParquet")
+        .saveAsTable("map")
 
-      sparkSession.catalog.refreshTable("mapInParquet")
+      sparkSession.catalog.refreshTable("map")
 
       checkAnswer(
-        sql("SELECT a FROM mapInParquet"),
+        sql("SELECT a FROM map"),
         Row(Map(1 -> null)) ::
           Row(Map(2 -> 3)) ::
           Row(Map(4 -> 5)) ::
@@ -852,52 +846,52 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
     }
 
-    withTable("insertParquet") {
-      createDF(0, 9).write.format("parquet").saveAsTable("insertParquet")
+    withTable("t") {
+      createDF(0, 9).write.saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
+        sql("SELECT p.c1, p.c2 FROM t p WHERE p.c1 > 5"),
         (6 to 9).map(i => Row(i, s"str$i")))
 
       intercept[AnalysisException] {
-        createDF(10, 19).write.format("parquet").saveAsTable("insertParquet")
+        createDF(10, 19).write.saveAsTable("t")
       }
 
-      createDF(10, 19).write.mode(SaveMode.Append).format("parquet").saveAsTable("insertParquet")
+      createDF(10, 19).write.mode(SaveMode.Append).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
+        sql("SELECT p.c1, p.c2 FROM t p WHERE p.c1 > 5"),
         (6 to 19).map(i => Row(i, s"str$i")))
 
-      createDF(20, 29).write.mode(SaveMode.Append).format("parquet").saveAsTable("insertParquet")
+      createDF(20, 29).write.mode(SaveMode.Append).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 25"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 5 AND p.c1 < 25"),
         (6 to 24).map(i => Row(i, s"str$i")))
 
       intercept[AnalysisException] {
-        createDF(30, 39).write.saveAsTable("insertParquet")
+        createDF(30, 39).write.saveAsTable("t")
       }
 
-      createDF(30, 39).write.mode(SaveMode.Append).saveAsTable("insertParquet")
+      createDF(30, 39).write.mode(SaveMode.Append).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 35"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 5 AND p.c1 < 35"),
         (6 to 34).map(i => Row(i, s"str$i")))
 
-      createDF(40, 49).write.mode(SaveMode.Append).insertInto("insertParquet")
+      createDF(40, 49).write.mode(SaveMode.Append).insertInto("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 45"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 5 AND p.c1 < 45"),
         (6 to 44).map(i => Row(i, s"str$i")))
 
-      createDF(50, 59).write.mode(SaveMode.Overwrite).saveAsTable("insertParquet")
+      createDF(50, 59).write.mode(SaveMode.Overwrite).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 51 AND p.c1 < 55"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 51 AND p.c1 < 55"),
         (52 to 54).map(i => Row(i, s"str$i")))
-      createDF(60, 69).write.mode(SaveMode.Ignore).saveAsTable("insertParquet")
+      createDF(60, 69).write.mode(SaveMode.Ignore).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p"),
+        sql("SELECT p.c1, c2 FROM t p"),
         (50 to 59).map(i => Row(i, s"str$i")))
 
-      createDF(70, 79).write.mode(SaveMode.Overwrite).insertInto("insertParquet")
+      createDF(70, 79).write.mode(SaveMode.Overwrite).insertInto("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p"),
+        sql("SELECT p.c1, c2 FROM t p"),
         (70 to 79).map(i => Row(i, s"str$i")))
     }
   }
@@ -914,7 +908,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }
       assert(e.getMessage.contains(
         "The format of the existing table default.appendOrcToParquet is `ParquetFileFormat`. " +
-          "It doesn't match the specified format `OrcFileFormat`"))
+          "It doesn't match the specified format"))
     }
 
     withTable("appendParquetToJson") {
