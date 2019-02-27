@@ -111,11 +111,11 @@ private[spark] class Benchmark(
     // The results are going to be processor specific so it is useful to include that.
     out.println(Benchmark.getJVMOSInfo())
     out.println(Benchmark.getProcessorName())
-    out.printf("%-40s %16s %12s %13s %10s %16s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
+    out.printf("%-40s %16s %12s %13s %10s %13s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
       "Per Row(ns)", "Relative", "Stdev (ms)")
-    out.println("-" * 96)
+    out.println("-" * 110)
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      out.printf("%-40s %16s %12s %13s %10s %16s\n",
+      out.printf("%-40s %16s %12s %13s %10s %13s\n",
         benchmark.name,
         "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
         "%10.1f" format result.bestRate,
