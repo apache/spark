@@ -1137,9 +1137,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(aa0, aa1)), Seq(Seq("a", "b"), Seq("c"), Seq("d"), Seq("e", "f")))
 
     assert(Concat(Seq(ai0, ai1)).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(Concat(Seq(ai0, ai2)).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(Concat(Seq(ai0, ai2)).dataType.asInstanceOf[ArrayType].containsNull)
     assert(Concat(Seq(as0, as1)).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(Concat(Seq(as0, as2)).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(Concat(Seq(as0, as2)).dataType.asInstanceOf[ArrayType].containsNull)
     assert(Concat(Seq(aa0, aa1)).dataType ===
       ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
     assert(Concat(Seq(aa0, aa2)).dataType ===
@@ -1450,9 +1450,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](5, 6), Seq[Int](2, 1)))
 
     assert(ArrayUnion(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayUnion(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull)
   }
 
   test("Shuffle") {
@@ -1631,10 +1631,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayExcept(aa1, aa0), Seq[Seq[Int]](Seq[Int](2, 1)))
 
     assert(ArrayExcept(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayExcept(a04, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
-    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a04, a02).dataType.asInstanceOf[ArrayType].containsNull)
+    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull)
   }
 
   test("Array Except - null handling") {
@@ -1757,9 +1757,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     assert(ArrayIntersect(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayIntersect(a00, a04).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayIntersect(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull)
   }
 
   test("Array Intersect - null handling") {

@@ -116,7 +116,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
   test("runInNewThread") {
     import ThreadUtils._
     assert(runInNewThread("thread-name") { Thread.currentThread().getName } === "thread-name")
-    assert(runInNewThread("thread-name") { Thread.currentThread().isDaemon } === true)
+    assert(runInNewThread("thread-name") { Thread.currentThread().isDaemon })
     assert(
       runInNewThread("thread-name", isDaemon = false) { Thread.currentThread().isDaemon } === false
     )
@@ -126,7 +126,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
     }
     assert(exception.asInstanceOf[IllegalArgumentException].getMessage === uniqueExceptionMessage)
     assert(exception.getStackTrace.mkString("\n").contains(
-      "... run in separate thread using org.apache.spark.util.ThreadUtils ...") === true,
+      "... run in separate thread using org.apache.spark.util.ThreadUtils ..."),
       "stack trace does not contain expected place holder"
     )
     assert(exception.getStackTrace.mkString("\n").contains("ThreadUtils.scala") === false,

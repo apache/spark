@@ -197,7 +197,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
     assert(executor.getMetadata.getOwnerReferences.get(0).getUid === driverPodUid)
-    assert(executor.getMetadata.getOwnerReferences.get(0).getController === true)
+    assert(executor.getMetadata.getOwnerReferences.get(0).getController)
   }
 
   // Check that the expected environment variables are present.
