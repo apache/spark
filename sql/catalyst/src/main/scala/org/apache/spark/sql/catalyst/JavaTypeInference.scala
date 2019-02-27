@@ -27,6 +27,7 @@ import scala.language.existentials
 import com.google.common.reflect.TypeToken
 
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
+import org.apache.spark.sql.catalyst.SerializerBuildHelper._
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -367,12 +368,10 @@ object JavaTypeInference {
     def toCatalystArray(input: Expression, elementType: TypeToken[_]): Expression = {
       val (dataType, nullable) = inferDataType(elementType)
       if (ScalaReflection.isNativeType(dataType)) {
-        NewInstance(
-          classOf[GenericArrayData],
-          input :: Nil,
-          dataType = ArrayType(dataType, nullable))
+        createSerializerForGenericArray(input, dataType, nullable = nullable)
       } else {
-        MapObjects(serializerFor(_, elementType), input, ObjectType(elementType.getRawType))
+        createSerializerForMapObjects(input, ObjectType(elementType.getRawType),
+          serializerFor(_, elementType))
       }
     }
 
@@ -380,60 +379,26 @@ object JavaTypeInference {
       inputObject
     } else {
       typeToken.getRawType match {
-        case c if c == classOf[String] =>
-          StaticInvoke(
-            classOf[UTF8String],
-            StringType,
-            "fromString",
-            inputObject :: Nil,
-            returnNullable = false)
+        case c if c == classOf[String] => createSerializerForString(inputObject)
 
-        case c if c == classOf[java.sql.Timestamp] =>
-          StaticInvoke(
-            DateTimeUtils.getClass,
-            TimestampType,
-            "fromJavaTimestamp",
-            inputObject :: Nil,
-            returnNullable = false)
+        case c if c == classOf[java.time.Instant] => createSerializerForJavaInstant(inputObject)
 
-        case c if c == classOf[java.time.LocalDate] =>
-          StaticInvoke(
-            DateTimeUtils.getClass,
-            DateType,
-            "localDateToDays",
-            inputObject :: Nil,
-            returnNullable = false)
+        case c if c == classOf[java.sql.Timestamp] => createSerializerForSqlTimestamp(inputObject)
 
-        case c if c == classOf[java.sql.Date] =>
-          StaticInvoke(
-            DateTimeUtils.getClass,
-            DateType,
-            "fromJavaDate",
-            inputObject :: Nil,
-            returnNullable = false)
+        case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)
+
+        case c if c == classOf[java.sql.Date] => createSerializerForSqlDate(inputObject)
 
         case c if c == classOf[java.math.BigDecimal] =>
-          StaticInvoke(
-            Decimal.getClass,
-            DecimalType.SYSTEM_DEFAULT,
-            "apply",
-            inputObject :: Nil,
-            returnNullable = false)
+          createSerializerForJavaBigDecimal(inputObject)
 
-        case c if c == classOf[java.lang.Boolean] =>
-          Invoke(inputObject, "booleanValue", BooleanType)
-        case c if c == classOf[java.lang.Byte] =>
-          Invoke(inputObject, "byteValue", ByteType)
-        case c if c == classOf[java.lang.Short] =>
-          Invoke(inputObject, "shortValue", ShortType)
-        case c if c == classOf[java.lang.Integer] =>
-          Invoke(inputObject, "intValue", IntegerType)
-        case c if c == classOf[java.lang.Long] =>
-          Invoke(inputObject, "longValue", LongType)
-        case c if c == classOf[java.lang.Float] =>
-          Invoke(inputObject, "floatValue", FloatType)
-        case c if c == classOf[java.lang.Double] =>
-          Invoke(inputObject, "doubleValue", DoubleType)
+        case c if c == classOf[java.lang.Boolean] => createSerializerForBoolean(inputObject)
+        case c if c == classOf[java.lang.Byte] => createSerializerForByte(inputObject)
+        case c if c == classOf[java.lang.Short] => createSerializerForShort(inputObject)
+        case c if c == classOf[java.lang.Integer] => createSerializerForInteger(inputObject)
+        case c if c == classOf[java.lang.Long] => createSerializerForLong(inputObject)
+        case c if c == classOf[java.lang.Float] => createSerializerForFloat(inputObject)
+        case c if c == classOf[java.lang.Double] => createSerializerForDouble(inputObject)
 
         case _ if typeToken.isArray =>
           toCatalystArray(inputObject, typeToken.getComponentType)
@@ -444,38 +409,36 @@ object JavaTypeInference {
         case _ if mapType.isAssignableFrom(typeToken) =>
           val (keyType, valueType) = mapKeyValueType(typeToken)
 
-          ExternalMapToCatalyst(
+          createSerializerForMap(
             inputObject,
-            ObjectType(keyType.getRawType),
-            serializerFor(_, keyType),
-            keyNullable = true,
-            ObjectType(valueType.getRawType),
-            serializerFor(_, valueType),
-            valueNullable = true
+            MapElementInformation(
+              ObjectType(keyType.getRawType),
+              nullable = true,
+              serializerFor(_, keyType)
+            ),
+            MapElementInformation(
+              ObjectType(valueType.getRawType),
+              nullable = true,
+              serializerFor(_, valueType)
+            ),
           )
 
         case other if other.isEnum =>
-          StaticInvoke(
-            classOf[UTF8String],
-            StringType,
-            "fromString",
-            Invoke(inputObject, "name", ObjectType(classOf[String]), returnNullable = false) :: Nil,
-            returnNullable = false)
+          createSerializerForString(
+            Invoke(inputObject, "name", ObjectType(classOf[String]), returnNullable = false))
 
         case other =>
           val properties = getJavaBeanReadableAndWritableProperties(other)
-          val nonNullOutput = CreateNamedStruct(properties.flatMap { p =>
+          val fields = properties.map { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
             val fieldValue = Invoke(
               inputObject,
               p.getReadMethod.getName,
               inferExternalType(fieldType.getRawType))
-            expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
-          })
-
-          val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
-          expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
+            (fieldName, fieldValue)
+          }
+          createSerializerForObject(inputObject, fields)
       }
     }
   }
