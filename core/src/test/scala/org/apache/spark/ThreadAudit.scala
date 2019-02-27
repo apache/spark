@@ -62,6 +62,15 @@ trait ThreadAudit extends Logging {
     "rpc-server.*",
 
     /**
+     * During [[org.apache.spark.network.TransportContext]] construction a separate event loop could
+     * be created for handling ChunkFetchRequest.
+     * The thread pool behind shut down asynchronously triggered by
+     * [[org.apache.spark.network.TransportContext#close]].
+     * Manually checked and all of them stopped properly.
+     */
+    "shuffle-chunk-fetch-handler.*",
+
+    /**
      * During [[SparkContext]] creation BlockManager creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
