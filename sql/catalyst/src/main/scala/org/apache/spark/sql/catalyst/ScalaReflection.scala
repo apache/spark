@@ -198,12 +198,7 @@ object ScalaReflection extends ScalaReflection {
         createDeserializerForSqlDate(path)
 
       case t if t <:< localTypeOf[java.time.Instant] =>
-        StaticInvoke(
-          DateTimeUtils.getClass,
-          ObjectType(classOf[java.time.Instant]),
-          "microsToInstant",
-          path :: Nil,
-          returnNullable = false)
+        createDeserializerForInstant(path)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)

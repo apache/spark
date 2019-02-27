@@ -101,6 +101,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForInstant(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.time.Instant]),
+      "microsToInstant",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   def createDeserializerForSqlTimestamp(path: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
