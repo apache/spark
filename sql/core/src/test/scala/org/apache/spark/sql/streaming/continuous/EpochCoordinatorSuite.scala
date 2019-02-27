@@ -56,8 +56,7 @@ class EpochCoordinatorSuite
     new SparkContext(
       "local[2]", "test-sql-context",
       new SparkConf().set("spark.sql.testkey", "true")
-        .set(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE.key,
-          epochBacklogQueueSize.toString)))
+        .set(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE, epochBacklogQueueSize)))
 
     epochCoordinator
       = EpochCoordinatorRef.create(writeSupport, stream, query, "test", 1, spark, SparkEnv.get)

@@ -233,15 +233,15 @@ private[continuous] class EpochCoordinator(
   private def checkProcessingQueueBoundaries() = {
     if (partitionOffsets.size > epochBacklogQueueSize) {
       query.stopInNewThread(new IllegalStateException("Size of the partition offset queue has " +
-        "exceeded it's maximum"))
+        "exceeded its maximum"))
     }
     if (partitionCommits.size > epochBacklogQueueSize) {
       query.stopInNewThread(new IllegalStateException("Size of the partition commit queue has " +
-        "exceeded it's maximum"))
+        "exceeded its maximum"))
     }
     if (epochsWaitingToBeCommitted.size > epochBacklogQueueSize) {
       query.stopInNewThread(new IllegalStateException("Size of the epoch queue has " +
-        "exceeded it's maximum"))
+        "exceeded its maximum"))
     }
   }
 
