@@ -102,18 +102,10 @@ test_that("spark.glm and predict", {
 })
 
 test_that("spark.glm summary", {
-  # prepare dataset
-  Sepal.Length <- c(2.0, 1.5, 1.8, 3.4, 5.1, 1.8, 1.0, 2.3)
-  Sepal.Width <- c(2.1, 2.3, 5.4, 4.7, 3.1, 2.1, 3.1, 5.5)
-  Petal.Length <- c(1.8, 2.1, 7.1, 2.5, 3.7, 6.3, 2.2, 7.2)
-  Species <- c("setosa", "versicolor", "versicolor", "versicolor", "virginica", "virginica",
-               "versicolor", "virginica")
-  dataset <- data.frame(Sepal.Length, Sepal.Width, Petal.Length, Species, stringsAsFactors = TRUE)
-
   # gaussian family
-  training <- suppressWarnings(createDataFrame(dataset))
+  training <- suppressWarnings(createDataFrame(iris))
   stats <- summary(spark.glm(training, Sepal_Width ~ Sepal_Length + Species))
-  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = dataset))
+  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
 
   # test summary coefficients return matrix type
   expect_true(class(stats$coefficients) == "matrix")
@@ -134,15 +126,15 @@ test_that("spark.glm summary", {
 
   out <- capture.output(print(stats))
   expect_match(out[2], "Deviance Residuals:")
-  expect_true(any(grepl("AIC: 35.84", out)))
+  expect_true(any(grepl("AIC: 59.22", out)))
 
   # binomial family
-  df <- suppressWarnings(createDataFrame(dataset))
+  df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   stats <- summary(spark.glm(training, Species ~ Sepal_Length + Sepal_Width,
                              family = binomial(link = "logit")))
 
-  rTraining <- dataset[dataset$Species %in% c("versicolor", "virginica"), ]
+  rTraining <- iris[iris$Species %in% c("versicolor", "virginica"), ]
   rStats <- summary(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
                         family = binomial(link = "logit")))
 
@@ -182,17 +174,17 @@ test_that("spark.glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   # Test spark.glm works with offset
-  training <- suppressWarnings(createDataFrame(dataset))
+  training <- suppressWarnings(createDataFrame(iris))
   stats <- summary(spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
                              family = poisson(), offsetCol = "Petal_Length"))
   rStats <- suppressWarnings(summary(glm(Sepal.Width ~ Sepal.Length + Species,
-                        data = dataset, family = poisson(), offset = dataset$Petal.Length)))
+                        data = iris, family = poisson(), offset = iris$Petal.Length)))
   expect_true(all(abs(rStats$coefficients - stats$coefficients) < 1e-3))
 
   # Test summary works on base GLM models
-  baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = dataset)
+  baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
   baseSummary <- summary(baseModel)
-  expect_true(abs(baseSummary$deviance - 11.84013) < 1e-4)
+  expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
 
   # Test spark.glm works with regularization parameter
   data <- as.data.frame(cbind(a1, a2, b))
@@ -308,19 +300,11 @@ test_that("glm and predict", {
 })
 
 test_that("glm summary", {
-  # prepare dataset
-  Sepal.Length <- c(2.0, 1.5, 1.8, 3.4, 5.1, 1.8, 1.0, 2.3)
-  Sepal.Width <- c(2.1, 2.3, 5.4, 4.7, 3.1, 2.1, 3.1, 5.5)
-  Petal.Length <- c(1.8, 2.1, 7.1, 2.5, 3.7, 6.3, 2.2, 7.2)
-  Species <- c("setosa", "versicolor", "versicolor", "versicolor", "virginica", "virginica",
-               "versicolor", "virginica")
-  dataset <- data.frame(Sepal.Length, Sepal.Width, Petal.Length, Species, stringsAsFactors = TRUE)
-
   # gaussian family
-  training <- suppressWarnings(createDataFrame(dataset))
+  training <- suppressWarnings(createDataFrame(iris))
   stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training))
 
-  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = dataset))
+  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
 
   coefs <- stats$coefficients
   rCoefs <- rStats$coefficients
@@ -336,12 +320,12 @@ test_that("glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   # binomial family
-  df <- suppressWarnings(createDataFrame(dataset))
+  df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
                        family = binomial(link = "logit")))
 
-  rTraining <- dataset[dataset$Species %in% c("versicolor", "virginica"), ]
+  rTraining <- iris[iris$Species %in% c("versicolor", "virginica"), ]
   rStats <- summary(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
                         family = binomial(link = "logit")))
 
