@@ -431,7 +431,7 @@ object JavaTypeInference {
               inputObject,
               p.getReadMethod.getName,
               inferExternalType(fieldType.getRawType))
-            (fieldName, fieldValue)
+            (fieldName, serializerFor(fieldValue, fieldType))
           }
           createSerializerForObject(inputObject, fields)
       }
