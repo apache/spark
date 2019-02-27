@@ -2535,7 +2535,7 @@ class Analyzer(
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
         s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
-        "The type path of the target object is:\n\n" + walkedTypePath + "\n" +
+        "The type path of the target object is:\n" + walkedTypePath + "\n" +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
     }
