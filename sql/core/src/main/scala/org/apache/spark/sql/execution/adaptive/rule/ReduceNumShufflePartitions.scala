@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.execution.adaptive.rule
 
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.MapOutputStatistics
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{QueryFragmentExec, ShuffleQueryFragmentExec}
+import org.apache.spark.sql.execution.adaptive.{QueryFragmentExec, ReusedQueryFragmentExec, ShuffleQueryFragmentExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -61,7 +61,9 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
         ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
     }
 
-    val allFragmentLeaves = plan.collectLeaves().forall(_.isInstanceOf[QueryFragmentExec])
+    val allFragmentLeaves = plan.collectLeaves().forall { node =>
+      node.isInstanceOf[QueryFragmentExec] || node.isInstanceOf[ReusedQueryFragmentExec]
+    }
 
     if (allFragmentLeaves) {
       // ShuffleQueryFragment gives null mapOutputStatistics when the input RDD has 0 partitions,
@@ -76,6 +78,8 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           // number of output partitions.
           case fragment: ShuffleQueryFragmentExec =>
             CoalescedShuffleReaderExec(fragment, partitionStartIndices)
+          case r@ReusedQueryFragmentExec(fragment: ShuffleQueryFragmentExec, output) =>
+            CoalescedShuffleReaderExec(r, partitionStartIndices)
         }
       } else {
         plan
@@ -152,7 +156,9 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
         partitionStartIndices += i
         // reset postShuffleInputSize.
         postShuffleInputSize = nextShuffleInputSize
-      } else postShuffleInputSize += nextShuffleInputSize
+      } else {
+        postShuffleInputSize += nextShuffleInputSize
+      }
 
       i += 1
     }
@@ -162,7 +168,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 }
 
 case class CoalescedShuffleReaderExec(
-    child: ShuffleQueryFragmentExec,
+    child: SparkPlan,
     partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
@@ -175,7 +181,13 @@ case class CoalescedShuffleReaderExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = child.plan.createShuffledRDD(Some(partitionStartIndices))
+      cachedShuffleRDD = child match {
+        case fragment: ShuffleQueryFragmentExec =>
+          fragment.plan.createShuffledRDD(Some(partitionStartIndices))
+        case ReusedQueryFragmentExec(fragment: ShuffleQueryFragmentExec, _) =>
+          fragment.plan.createShuffledRDD(Some(partitionStartIndices))
+        case _ => throw new SparkException("Invalid child for CoalescedShuffleReaderExec")
+      }
     }
     cachedShuffleRDD
   }

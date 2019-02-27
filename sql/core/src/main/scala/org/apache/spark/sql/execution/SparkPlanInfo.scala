@@ -54,7 +54,7 @@ private[execution] object SparkPlanInfo {
     val children = plan match {
       case ReusedExchangeExec(_, child) => child :: Nil
       case a: AdaptiveSparkPlanExec => a.finalPlan.plan :: Nil
-      case stage: QueryFragmentExec => stage.plan :: Nil
+      case fragment: QueryFragmentExec => fragment.plan :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>

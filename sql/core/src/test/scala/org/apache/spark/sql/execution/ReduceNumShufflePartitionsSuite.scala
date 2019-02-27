@@ -558,7 +558,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
 
       val leafFragments = level1Fragments.flatMap { fragment =>
         // All of the child fragments of result fragment have only one child fragment.
-        val children = fragment.plan.collect { case q: QueryFragmentExec => q }
+        val children = fragment.plan.collect {
+          case q: QueryFragmentExec => q
+          case r: ReusedQueryFragmentExec => r.child
+        }
         assert(children.length == 1)
         children
       }

@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.QueryFragmentExec
 
-// A sanity check rule to make sure we are running query stage optimizer rules on a sub-tree of
-// query plan with all input stages materialized.
+// A sanity check rule to make sure we are running query fragment optimizer rules on a sub-tree of
+// query plan with all input fragments materialized.
 object AssertChildFragmentsMaterialized extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transform {
     case q: QueryFragmentExec if !q.materialize().isCompleted =>

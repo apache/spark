@@ -139,7 +139,7 @@ case class BroadcastQueryFragmentExec(id: Int, plan: BroadcastExchangeExec)
  * A wrapper of QueryFragment to indicate that it's reused. Note that this is not a query fragment.
  */
 case class ReusedQueryFragmentExec(child: QueryFragmentExec, output: Seq[Attribute])
-  extends UnaryExecNode {
+  extends LeafExecNode {
 
   // Ignore this wrapper for canonicalizing.
   override def doCanonicalize(): SparkPlan = child.canonicalized
