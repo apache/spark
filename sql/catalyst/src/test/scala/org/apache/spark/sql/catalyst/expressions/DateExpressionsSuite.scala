@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -705,14 +706,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           1000L)
         checkEvaluation(
           UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2), timeZoneId),
           -1000L)
         checkEvaluation(UnixTimestamp(
           Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-          DateTimeUtils.daysToMillis(
-            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz)))
         val t1 = UnixTimestamp(
           CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
         val t2 = UnixTimestamp(
@@ -727,7 +728,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           null)
         checkEvaluation(
           UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
       }
@@ -759,14 +760,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           1000L)
         checkEvaluation(
           ToUnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           ToUnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2), timeZoneId),
           -1000L)
         checkEvaluation(ToUnixTimestamp(
           Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-          DateTimeUtils.daysToMillis(
-            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz)))
         val t1 = ToUnixTimestamp(
           CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
         val t2 = ToUnixTimestamp(
@@ -780,7 +781,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           null)
         checkEvaluation(ToUnixTimestamp(
           Literal(date1), Literal.create(null, StringType), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           ToUnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
       }

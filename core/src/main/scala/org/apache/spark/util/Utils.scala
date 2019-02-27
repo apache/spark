@@ -98,6 +98,8 @@ private[spark] object Utils extends Logging {
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
 
+  private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -2615,6 +2617,17 @@ private[spark] object Utils extends Logging {
       SECRET_REDACTION_PATTERN.defaultValueString
     ).r
     redact(redactionPattern, kvs.toArray)
+  }
+
+  def redactCommandLineArgs(conf: SparkConf, commands: Seq[String]): Seq[String] = {
+    val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
+    commands.map {
+      case PATTERN_FOR_COMMAND_LINE_ARG(key, value) =>
+        val (_, newValue) = redact(redactionPattern, Seq((key, value))).head
+        s"-D$key=$newValue"
+
+      case cmd => cmd
+    }
   }
 
   def stringToSeq(str: String): Seq[String] = {

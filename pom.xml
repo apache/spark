@@ -408,6 +408,14 @@
         </exclusions>
       </dependency>
       <!-- End of shaded deps -->
+
+      <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
+      <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>jaxb-runtime</artifactId>
+        <version>2.3.2</version>
+        <scope>runtime</scope>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -2005,13 +2013,6 @@
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
-                      <!--
-                        Akka depends on io.netty:netty, which puts classes under the org.jboss.netty
-                        package. This conflicts with the classes in org.jboss.netty:netty
-                        artifact, so we have to ban that artifact here. In Netty 4.x, the classes
-                        are under the io.netty package, so it's fine for us to depend on both
-                        io.netty:netty and io.netty:netty-all.
-                      -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>*:*_2.11</exclude>

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.sql.Date
+import java.util.concurrent.TimeUnit
 
 import org.apache.commons.lang3.StringUtils
 
@@ -178,7 +179,7 @@ private[sql] class GroupStateImpl[S] private(
       throw new IllegalArgumentException(s"Provided duration ($duration) is not positive")
     }
 
-    val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
+    val millisPerMonth = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY) * 31
     cal.milliseconds + cal.months * millisPerMonth
   }
 

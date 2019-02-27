@@ -45,7 +45,8 @@ class ArrowRRunner(
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
     schema: StructType,
-    timeZoneId: String)
+    timeZoneId: String,
+    mode: Int)
   extends RRunner[ColumnarBatch](
     func,
     "arrow",
@@ -55,13 +56,32 @@ class ArrowRRunner(
     numPartitions = -1,
     isDataFrame = true,
     schema.fieldNames,
-    RRunnerModes.DATAFRAME_GAPPLY) {
+    mode) {
+
+  // TODO: it needs to refactor to share the same code with RRunner, and have separate
+  // ArrowRRunners.
+  private val getNextBatch = {
+    if (mode == RRunnerModes.DATAFRAME_GAPPLY) {
+      // gapply
+      (inputIterator: Iterator[_], keys: collection.mutable.ArrayBuffer[Array[Byte]]) => {
+        val (key, nextBatch) = inputIterator
+          .asInstanceOf[Iterator[(Array[Byte], Iterator[InternalRow])]].next()
+        keys.append(key)
+        nextBatch
+      }
+    } else {
+      // dapply
+      (inputIterator: Iterator[_], keys: collection.mutable.ArrayBuffer[Array[Byte]]) => {
+        inputIterator
+          .asInstanceOf[Iterator[Iterator[InternalRow]]].next()
+      }
+    }
+  }
 
   protected override def writeData(
       dataOut: DataOutputStream,
       printOut: PrintStream,
-      iter: Iterator[_]): Unit = if (iter.hasNext) {
-    val inputIterator = iter.asInstanceOf[Iterator[(Array[Byte], Iterator[InternalRow])]]
+      inputIterator: Iterator[_]): Unit = if (inputIterator.hasNext) {
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       "stdout writer for R", 0, Long.MaxValue)
@@ -75,8 +95,7 @@ class ArrowRRunner(
       writer.start()
 
       while (inputIterator.hasNext) {
-        val (key, nextBatch) = inputIterator.next()
-        keys.append(key)
+        val nextBatch: Iterator[InternalRow] = getNextBatch(inputIterator, keys)
 
         while (nextBatch.hasNext) {
           arrowWriter.write(nextBatch.next())

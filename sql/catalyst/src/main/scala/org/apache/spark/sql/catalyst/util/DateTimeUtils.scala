@@ -22,7 +22,7 @@ import java.time._
 import java.time.Year.isLeap
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
@@ -44,14 +44,18 @@ object DateTimeUtils {
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
-  final val SECONDS_PER_DAY = 60 * 60 * 24L
-  final val MICROS_PER_MILLIS = 1000L
-  final val MICROS_PER_SECOND = MICROS_PER_MILLIS * MILLIS_PER_SECOND
-  final val MILLIS_PER_SECOND = 1000L
-  final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
-  final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
-  final val NANOS_PER_MICROS = 1000L
-  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
+
+  final val NANOS_PER_MICROS = MICROSECONDS.toNanos(1)
+  final val NANOS_PER_MILLIS = MILLISECONDS.toNanos(1)
+  final val NANOS_PER_SECOND = SECONDS.toNanos(1)
+  final val MICROS_PER_MILLIS = MILLISECONDS.toMicros(1)
+  final val MICROS_PER_SECOND = SECONDS.toMicros(1)
+  final val MICROS_PER_DAY = DAYS.toMicros(1)
+  final val MILLIS_PER_SECOND = SECONDS.toMillis(1)
+  final val MILLIS_PER_MINUTE = MINUTES.toMillis(1)
+  final val MILLIS_PER_HOUR = HOURS.toMillis(1)
+  final val MILLIS_PER_DAY = DAYS.toMillis(1)
+  final val SECONDS_PER_DAY = DAYS.toSeconds(1)
 
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
@@ -133,8 +137,8 @@ object DateTimeUtils {
       micros += MICROS_PER_SECOND
       seconds -= 1
     }
-    val t = new Timestamp(seconds * 1000)
-    t.setNanos(micros.toInt * 1000)
+    val t = new Timestamp(SECONDS.toMillis(seconds))
+    t.setNanos(MICROSECONDS.toNanos(micros).toInt)
     t
   }
 
@@ -143,7 +147,7 @@ object DateTimeUtils {
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
     if (t != null) {
-      t.getTime() * 1000L + (t.getNanos().toLong / 1000) % 1000L
+      MILLISECONDS.toMicros(t.getTime()) + NANOSECONDS.toMicros(t.getNanos()) % NANOS_PER_MICROS
     } else {
       0L
     }
@@ -156,7 +160,7 @@ object DateTimeUtils {
   def fromJulianDay(day: Int, nanoseconds: Long): SQLTimestamp = {
     // use Long to avoid rounding errors
     val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY
-    seconds * MICROS_PER_SECOND + nanoseconds / 1000L
+    SECONDS.toMicros(seconds) + NANOSECONDS.toMicros(nanoseconds)
   }
 
   /**
@@ -168,7 +172,7 @@ object DateTimeUtils {
     val julian_us = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
     val day = julian_us / MICROS_PER_DAY
     val micros = julian_us % MICROS_PER_DAY
-    (day.toInt, micros * 1000L)
+    (day.toInt, MICROSECONDS.toNanos(micros))
   }
 
   /*
@@ -186,7 +190,7 @@ object DateTimeUtils {
    * Converts milliseconds since epoch to SQLTimestamp.
    */
   def fromMillis(millis: Long): SQLTimestamp = {
-    millis * MICROS_PER_MILLIS
+    MILLISECONDS.toMicros(millis)
   }
 
   /**
@@ -329,7 +333,7 @@ object DateTimeUtils {
         val sign = if (tz.get.toChar == '-') -1 else 1
         ZoneId.ofOffset("GMT", ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8)))
       }
-      val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
+      val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
       val localDate = if (justTime) {
         LocalDate.now(zoneId)
@@ -346,8 +350,8 @@ object DateTimeUtils {
   }
 
   def instantToMicros(instant: Instant): Long = {
-    val sec = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
-    val result = Math.addExact(sec, instant.getNano / NANOS_PER_MICROS)
+    val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
+    val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
     result
   }
 
@@ -426,14 +430,15 @@ object DateTimeUtils {
   }
 
   private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): SQLTimestamp = {
-    absoluteMicroSecond(microsec) + timeZone.getOffset(microsec / 1000) * 1000L
+    val zoneOffsetUs = MILLISECONDS.toMicros(timeZone.getOffset(MICROSECONDS.toMillis(microsec)))
+    absoluteMicroSecond(microsec) + zoneOffsetUs
   }
 
   /**
    * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
    */
   def getHours(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND / 3600) % 24).toInt
+    (MICROSECONDS.toHours(localTimestamp(microsec, timeZone)) % 24).toInt
   }
 
   /**
@@ -441,7 +446,7 @@ object DateTimeUtils {
    * microseconds.
    */
   def getMinutes(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND / 60) % 60).toInt
+    (MICROSECONDS.toMinutes(localTimestamp(microsec, timeZone)) % 60).toInt
   }
 
   /**
@@ -449,7 +454,7 @@ object DateTimeUtils {
    * microseconds.
    */
   def getSeconds(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND) % 60).toInt
+    (MICROSECONDS.toSeconds(localTimestamp(microsec, timeZone)) % 60).toInt
   }
 
   /**
@@ -566,10 +571,10 @@ object DateTimeUtils {
       months: Int,
       microseconds: Long,
       timeZone: TimeZone): SQLTimestamp = {
-    val days = millisToDays(start / 1000L, timeZone)
+    val days = millisToDays(MICROSECONDS.toMillis(start), timeZone)
     val newDays = dateAddMonths(days, months)
     start +
-      daysToMillis(newDays, timeZone) * 1000L - daysToMillis(days, timeZone) * 1000L +
+      MILLISECONDS.toMicros(daysToMillis(newDays, timeZone) - daysToMillis(days, timeZone)) +
       microseconds
   }
 
@@ -588,8 +593,8 @@ object DateTimeUtils {
       time2: SQLTimestamp,
       roundOff: Boolean,
       timeZone: TimeZone): Double = {
-    val millis1 = time1 / 1000L
-    val millis2 = time2 / 1000L
+    val millis1 = MICROSECONDS.toMillis(time1)
+    val millis2 = MICROSECONDS.toMillis(time2)
     val date1 = millisToDays(millis1, timeZone)
     val date2 = millisToDays(millis2, timeZone)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
@@ -605,12 +610,11 @@ object DateTimeUtils {
     }
     // using milliseconds can cause precision loss with more than 8 digits
     // we follow Hive's implementation which uses seconds
-    val secondsInDay1 = (millis1 - daysToMillis(date1, timeZone)) / 1000L
-    val secondsInDay2 = (millis2 - daysToMillis(date2, timeZone)) / 1000L
+    val secondsInDay1 = MILLISECONDS.toSeconds(millis1 - daysToMillis(date1, timeZone))
+    val secondsInDay2 = MILLISECONDS.toSeconds(millis2 - daysToMillis(date2, timeZone))
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
-    // 2678400D is the number of seconds in 31 days
-    // every month is considered to be 31 days long in this function
-    val diff = monthDiff + secondsDiff / 2678400D
+    val secondsInMonth = DAYS.toSeconds(31)
+    val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
     if (roundOff) {
       // rounding to 8 digits
       math.round(diff * 1e8) / 1e8
@@ -694,7 +698,7 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
-    var millis = t / MICROS_PER_MILLIS
+    var millis = MICROSECONDS.toMillis(t)
     val truncated = level match {
       case TRUNC_TO_YEAR =>
         val dDays = millisToDays(millis, timeZone)
@@ -705,13 +709,13 @@ object DateTimeUtils {
       case TRUNC_TO_DAY =>
         val offset = timeZone.getOffset(millis)
         millis += offset
-        millis - millis % (MILLIS_PER_SECOND * SECONDS_PER_DAY) - offset
+        millis - millis % MILLIS_PER_DAY - offset
       case TRUNC_TO_HOUR =>
         val offset = timeZone.getOffset(millis)
         millis += offset
-        millis - millis % (60 * 60 * MILLIS_PER_SECOND) - offset
+        millis - millis % MILLIS_PER_HOUR - offset
       case TRUNC_TO_MINUTE =>
-        millis - millis % (60 * MILLIS_PER_SECOND)
+        millis - millis % MILLIS_PER_MINUTE
       case TRUNC_TO_SECOND =>
         millis - millis % MILLIS_PER_SECOND
       case TRUNC_TO_WEEK =>
@@ -767,8 +771,8 @@ object DateTimeUtils {
       if (guess != offset) {
         // fallback to do the reverse lookup using java.time.LocalDateTime
         // this should only happen near the start or end of DST
-        val localDate = LocalDate.ofEpochDay(TimeUnit.MILLISECONDS.toDays(millisLocal))
-        val localTime = LocalTime.ofNanoOfDay(TimeUnit.MILLISECONDS.toNanos(
+        val localDate = LocalDate.ofEpochDay(MILLISECONDS.toDays(millisLocal))
+        val localTime = LocalTime.ofNanoOfDay(MILLISECONDS.toNanos(
           Math.floorMod(millisLocal, MILLIS_PER_DAY)))
         val localDateTime = LocalDateTime.of(localDate, localTime)
         val millisEpoch = localDateTime.atZone(tz.toZoneId).toInstant.toEpochMilli
@@ -793,15 +797,19 @@ object DateTimeUtils {
       ts
     } else {
       // get the human time using local time zone, that actually is in fromZone.
-      val localTs = ts + localZone.getOffset(ts / 1000L) * 1000L  // in fromZone
-      localTs - getOffsetFromLocalMillis(localTs / 1000L, fromZone) * 1000L
+      val localZoneOffsetMs = localZone.getOffset(MICROSECONDS.toMillis(ts))
+      val localTsUs = ts + MILLISECONDS.toMicros(localZoneOffsetMs)  // in fromZone
+      val offsetFromLocalMs = getOffsetFromLocalMillis(MICROSECONDS.toMillis(localTsUs), fromZone)
+      localTsUs - MILLISECONDS.toMicros(offsetFromLocalMs)
     }
     if (toZone.getID == localZone.getID) {
       utcTs
     } else {
-      val localTs = utcTs + toZone.getOffset(utcTs / 1000L) * 1000L  // in toZone
+      val toZoneOffsetMs = toZone.getOffset(MICROSECONDS.toMillis(utcTs))
+      val localTsUs = utcTs + MILLISECONDS.toMicros(toZoneOffsetMs)  // in toZone
       // treat it as local timezone, convert to UTC (we could get the expected human time back)
-      localTs - getOffsetFromLocalMillis(localTs / 1000L, localZone) * 1000L
+      val offsetFromLocalMs = getOffsetFromLocalMillis(MICROSECONDS.toMillis(localTsUs), localZone)
+      localTsUs - MILLISECONDS.toMicros(offsetFromLocalMs)
     }
   }
 
