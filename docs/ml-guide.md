@@ -106,10 +106,6 @@ and the migration guide below will explain all changes between releases.
 
 ## From 2.4 to 3.0
 
-### Breaking changes
-
-* `OneHotEncoder` which is deprecated in 2.3, is removed in 3.0 and `OneHotEncoderEstimator` is now renamed to `OneHotEncoder`.
-
 ### Changes of behavior
 
 * [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215):
