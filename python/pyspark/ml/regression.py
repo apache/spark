@@ -798,14 +798,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> dt3 = DecisionTreeRegressor(maxDepth=2, weightCol="weight", varianceCol="variance")
     >>> model3 = dt3.fit(df3)
-    >>> model3.depth
-    1
-    >>> model3.numNodes
-    3
-    >>> model3.featureImportances
-    SparseVector(1, {0: 1.0})
-    >>> model3.numFeatures
-    1
+    >>> print(model3.toDebugString)
+    DecisionTreeRegressionModel (uid=...) of depth 1 with 3 nodes...
 
     .. versionadded:: 1.4.0
     """

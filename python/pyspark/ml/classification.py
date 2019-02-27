@@ -953,16 +953,6 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeig
     >>> td3 = si_model3.transform(df3)
     >>> dt3 = DecisionTreeClassifier(maxDepth=2, weightCol="weight", labelCol="indexed")
     >>> model3 = dt3.fit(td3)
-    >>> model3.numNodes
-    3
-    >>> model3.depth
-    1
-    >>> model3.featureImportances
-    SparseVector(1, {0: 1.0})
-    >>> model3.numFeatures
-    1
-    >>> model3.numClasses
-    2
     >>> print(model3.toDebugString)
     DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
 
