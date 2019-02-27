@@ -207,7 +207,7 @@ class EpochCoordinatorSuite
     for (i <- 1 to epochBacklogQueueSize + 1) {
       verifyNoCommitFor(i)
     }
-    verifyStoppedWithException("Size of the partition offset queue has exceeded it's maximum")
+    verifyStoppedWithException("Size of the partition offset queue has exceeded its maximum")
   }
 
   test("several epochs, max epoch backlog reached by partitionCommits") {
@@ -225,7 +225,7 @@ class EpochCoordinatorSuite
     for (i <- 1 to epochBacklogQueueSize + 1) {
       verifyNoCommitFor(i)
     }
-    verifyStoppedWithException("Size of the partition commit queue has exceeded it's maximum")
+    verifyStoppedWithException("Size of the partition commit queue has exceeded its maximum")
   }
 
   test("several epochs, max epoch backlog reached by epochsWaitingToBeCommitted") {
@@ -249,7 +249,7 @@ class EpochCoordinatorSuite
     for (i <- 1 to epochBacklogQueueSize + 2) {
       verifyNoCommitFor(i)
     }
-    verifyStoppedWithException("Size of the epoch queue has exceeded it's maximum")
+    verifyStoppedWithException("Size of the epoch queue has exceeded its maximum")
   }
 
   private def setWriterPartitions(numPartitions: Int): Unit = {

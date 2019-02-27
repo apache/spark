@@ -368,7 +368,7 @@ class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
       testStream(df, useV2Sink = true)(
         StartStream(Trigger.Continuous(1)),
         ExpectFailure[IllegalStateException] { e =>
-          e.getMessage.contains("queue has exceeded it's maximum")
+          e.getMessage.contains("queue has exceeded its maximum")
         }
       )
     }
