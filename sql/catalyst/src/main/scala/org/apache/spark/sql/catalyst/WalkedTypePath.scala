@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-class WalkedTypePath(val walkedPaths: Seq[String] = Nil) extends Serializable {
+case class WalkedTypePath(walkedPaths: Seq[String] = Nil) extends Serializable {
   def recordRoot(className: String): WalkedTypePath =
     newInstance(s"""- root class: "$className"""")
 
@@ -46,5 +46,5 @@ class WalkedTypePath(val walkedPaths: Seq[String] = Nil) extends Serializable {
   }
 
   private def newInstance(newRecord: String): WalkedTypePath =
-    new WalkedTypePath(newRecord +: walkedPaths)
+    WalkedTypePath(newRecord +: walkedPaths)
 }
