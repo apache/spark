@@ -5,6 +5,7 @@ import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.MappingAdapter._
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
 import org.apache.spark.sql.SparkSession
+import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory, RelationalCypherSession}
 import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
@@ -14,7 +15,13 @@ object SparkCypherSession {
   def create(implicit sparkSession: SparkSession): SparkCypherSession = new SparkCypherSession(sparkSession)
 }
 
-class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCypherSession[DataFrameTable] with CypherEngine {
+/**
+  * Default [[CypherSession]] implementation.
+  *
+  * This class is the main entry point for working with the spark-graph-cypher module.
+  * It wraps a [[SparkSession]] and allows to run Cypher queries over graphs represented as [[org.apache.spark.sql.DataFrame]]s.
+  */
+class SparkCypherSession(override val sparkSession: SparkSession) extends RelationalCypherSession[DataFrameTable] with CypherSession {
 
   override type Result = RelationalCypherResult[DataFrameTable]
   override type Records = SparkCypherRecords
@@ -30,10 +37,7 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
 
   override def entityTables: RelationalEntityTableFactory[DataFrameTable] = ???
 
-  override def createGraph(
-    nodes: Seq[NodeFrame],
-    relationships: Seq[RelationshipFrame]
-  ): PropertyGraph = {
+  override def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame]): PropertyGraph = {
     require(nodes.nonEmpty, "Creating a graph requires at least one NodeDataFrame")
     val nodeTables = nodes.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
     val relTables = relationships.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
@@ -41,7 +45,9 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
     RelationalGraphAdapter(this, graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*))
   }
 
-  override def cypher(graph: PropertyGraph, query: String): CypherResult = {
+  def cypher(graph: PropertyGraph, query: String): CypherResult = cypher(graph, query, Map.empty)
+
+  override def cypher(graph: PropertyGraph, query: String, parameters: Map[String, Any]): CypherResult = {
     val relationalGraph = graph match {
       case RelationalGraphAdapter(_, relGraph) => relGraph
       case other => throw IllegalArgumentException(
@@ -50,6 +56,6 @@ class SparkCypherSession(val sparkSession: SparkSession) extends RelationalCyphe
       )
     }
 
-    SparkCypherResult(relationalGraph.cypher(query).records, relationalGraph.schema)
+    SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records, relationalGraph.schema)
   }
 }
