@@ -46,7 +46,9 @@ import org.apache.spark.unsafe.types.UTF8String
  *   StringType -> String
  *   DecimalType -> java.math.BigDecimal or scala.math.BigDecimal or Decimal
  *
- *   DateType -> java.sql.Date
+ *   DateType -> java.sql.Date when spark.sql.catalyst.dateType is set to Date
+ *   DateType -> java.time.LocalDate when spark.sql.catalyst.dateType is set to LocalDate
+ *
  *   TimestampType -> java.sql.Timestamp when spark.sql.catalyst.timestampType is set to Timestamp
  *   TimestampType -> java.time.Instant when spark.sql.catalyst.timestampType is set to Instant
  *
@@ -104,6 +106,14 @@ object RowEncoder {
         DateTimeUtils.getClass,
         TimestampType,
         "fromJavaTimestamp",
+        inputObject :: Nil,
+        returnNullable = false)
+
+    case DateType if SQLConf.get.dateExternalType == "LocalDate" =>
+      StaticInvoke(
+        DateTimeUtils.getClass,
+        DateType,
+        "localDateToDays",
         inputObject :: Nil,
         returnNullable = false)
 
@@ -237,6 +247,8 @@ object RowEncoder {
     case TimestampType if SQLConf.get.timestampExternalType == "Instant" =>
       ObjectType(classOf[java.time.Instant])
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
+    case DateType if SQLConf.get.dateExternalType == "LocalDate" =>
+      ObjectType(classOf[java.time.LocalDate])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
@@ -292,6 +304,14 @@ object RowEncoder {
         DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Timestamp]),
         "toJavaTimestamp",
+        input :: Nil,
+        returnNullable = false)
+
+    case DateType if SQLConf.get.dateExternalType == "LocalDate" =>
+      StaticInvoke(
+        DateTimeUtils.getClass,
+        ObjectType(classOf[java.time.LocalDate]),
+        "daysToLocalDate",
         input :: Nil,
         returnNullable = false)
 

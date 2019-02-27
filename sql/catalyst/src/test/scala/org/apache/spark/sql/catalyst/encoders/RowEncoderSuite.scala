@@ -302,7 +302,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val row = encoder.toRow(Row(localDate))
       assert(row.getLong(0) === DateTimeUtils.localDateToDays(localDate))
       val readback = encoder.fromRow(row)
-      assert(readback.get(0) === localDate)
+      assert(readback.get(0).equals(localDate))
     }
   }
 

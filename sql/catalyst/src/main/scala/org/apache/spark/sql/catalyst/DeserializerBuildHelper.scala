@@ -101,6 +101,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForLocalDate(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.time.LocalDate]),
+      "daysToLocalDate",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   def createDeserializerForInstant(path: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
