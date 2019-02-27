@@ -372,6 +372,7 @@ org.eclipse.jetty:jetty-servlets
 org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
+com.sun.xml.fastinfoset:FastInfoset
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -485,6 +486,17 @@ org.glassfish.jersey.core:jersey-client
 org.glassfish.jersey.core:jersey-common
 org.glassfish.jersey.core:jersey-server
 org.glassfish.jersey.media:jersey-media-jaxb
+
+
+Eclipse Distribution License (EDL) 1.0
+--------------------------------------
+
+org.glassfish.jaxb:jaxb-runtime
+jakarta.xml.bind:jakarta.xml.bind-api
+org.glassfish.jaxb:txw2
+com.sun.istack:istack-commons-runtime
+org.jvnet.staxex:stax-ex
+jakarta.activation:jakarta.activation-api
 
 
 Mozilla Public License (MPL) 1.1
