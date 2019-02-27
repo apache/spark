@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -46,7 +47,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *   DecimalType -> java.math.BigDecimal or scala.math.BigDecimal or Decimal
  *
  *   DateType -> java.sql.Date
- *   TimestampType -> java.sql.Timestamp
+ *   TimestampType -> java.sql.Timestamp when spark.sql.catalyst.timestampType is set to Timestamp
+ *   TimestampType -> java.time.Instant when spark.sql.catalyst.timestampType is set to Instant
  *
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
@@ -88,6 +90,14 @@ object RowEncoder {
         Nil,
         dataType = ObjectType(udtClass), false)
       Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
+
+    case TimestampType if SQLConf.get.timestampExternalType == "Instant" =>
+      StaticInvoke(
+        DateTimeUtils.getClass,
+        TimestampType,
+        "instantToMicros",
+        inputObject :: Nil,
+        returnNullable = false)
 
     case TimestampType =>
       StaticInvoke(
@@ -224,6 +234,8 @@ object RowEncoder {
 
   def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
+    case TimestampType if SQLConf.get.timestampExternalType == "Instant" =>
+      ObjectType(classOf[java.time.Instant])
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -266,6 +278,14 @@ object RowEncoder {
         Nil,
         dataType = ObjectType(udtClass))
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
+
+    case TimestampType if SQLConf.get.timestampExternalType == "Instant" =>
+      StaticInvoke(
+        DateTimeUtils.getClass,
+        ObjectType(classOf[java.time.Instant]),
+        "microsToInstant",
+        input :: Nil,
+        returnNullable = false)
 
     case TimestampType =>
       StaticInvoke(
