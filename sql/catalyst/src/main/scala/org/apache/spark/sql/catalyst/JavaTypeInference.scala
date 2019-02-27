@@ -28,12 +28,12 @@ import com.google.common.reflect.TypeToken
 
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
 import org.apache.spark.sql.catalyst.SerializerBuildHelper._
+import org.apache.spark.sql.catalyst.WalkedTypePathRecorder._
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -196,7 +196,7 @@ object JavaTypeInference {
    */
   def deserializerFor(beanClass: Class[_]): Expression = {
     val typeToken = TypeToken.of(beanClass)
-    val walkedTypePath = s"""- root class: "${beanClass.getCanonicalName}"""" :: Nil
+    val walkedTypePath = recordRoot(beanClass.getCanonicalName)
     val (dataType, nullable) = inferDataType(typeToken)
 
     // Assumes we are deserializing the first column of a row.
@@ -245,8 +245,7 @@ object JavaTypeInference {
 
       case c if c.isArray =>
         val elementType = c.getComponentType
-        val newTypePath = s"""- array element class: "${elementType.getCanonicalName}"""" +:
-          walkedTypePath
+        val newTypePath = recordArray(walkedTypePath, elementType.getCanonicalName)
         val (dataType, elementNullable) = inferDataType(elementType)
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
@@ -275,8 +274,7 @@ object JavaTypeInference {
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
-        val newTypePath = s"""- array element class: "${et.getType.getTypeName}"""" +:
-          walkedTypePath
+        val newTypePath = recordArray(walkedTypePath, et.getType.getTypeName)
         val (dataType, elementNullable) = inferDataType(et)
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
@@ -292,8 +290,8 @@ object JavaTypeInference {
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
-        val newTypePath = (s"""- map key class: "${keyType.getType.getTypeName}"""" +
-          s""", value class: "${valueType.getType.getTypeName}"""") +: walkedTypePath
+        val newTypePath = recordMap(walkedTypePath, keyType.getType.getTypeName,
+          valueType.getType.getTypeName)
 
         val keyData =
           Invoke(
@@ -329,8 +327,7 @@ object JavaTypeInference {
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(fieldType)
-          val newTypePath = (s"""- field (class: "${fieldType.getType.getTypeName}"""" +
-            s""", name: "$fieldName")""") +: walkedTypePath
+          val newTypePath = recordField(walkedTypePath, fieldType.getType.getTypeName, fieldName)
           val setter = deserializerForWithNullSafety(
             path,
             dataType,
@@ -414,13 +411,11 @@ object JavaTypeInference {
             MapElementInformation(
               ObjectType(keyType.getRawType),
               nullable = true,
-              serializerFor(_, keyType)
-            ),
+              serializerFor(_, keyType)),
             MapElementInformation(
               ObjectType(valueType.getRawType),
               nullable = true,
-              serializerFor(_, valueType)
-            ),
+              serializerFor(_, valueType))
           )
 
         case other if other.isEnum =>
