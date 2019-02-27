@@ -64,8 +64,12 @@ private[kafka010] object CachedKafkaProducer extends Logging {
       .build[Seq[(String, Object)], Producer](cacheLoader)
 
   private def createKafkaProducer(producerConfiguration: ju.Map[String, Object]): Producer = {
-    val kafkaProducer: Producer = new Producer(producerConfiguration)
-    logDebug(s"Created a new instance of KafkaProducer for $producerConfiguration.")
+    val updatedKafkaProducerConfiguration =
+      KafkaConfigUpdater("executor", producerConfiguration.asScala.toMap)
+        .setAuthenticationConfigIfNeeded()
+        .build()
+    val kafkaProducer: Producer = new Producer(updatedKafkaProducerConfiguration)
+    logDebug(s"Created a new instance of KafkaProducer for $updatedKafkaProducerConfiguration.")
     kafkaProducer
   }
 
