@@ -730,7 +730,7 @@ class RDDTests(ReusedPySparkTestCase):
                                 seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
     def test_overwritten_global_func(self):
-        # Regression test for SPARK-20947
+        # Regression test for SPARK-27000
         global global_func
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Hi")
         global_func = lambda: "Yeah"
