@@ -39,11 +39,9 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext {
       math.log((m + 1.0) / (x + 1.0))
     })
     assert(model.idf ~== expected absTol 1e-12)
-    assert(model.numDocs === 3)
-    assert(model.docFreq === Array(0, 3, 1, 2))
 
     val assertHelper = (tfidf: Array[Vector]) => {
-      assert(tfidf.length === 3)
+      assert(tfidf.size === 3)
       val tfidf0 = tfidf(0).asInstanceOf[SparseVector]
       assert(tfidf0.indices === Array(1, 3))
       assert(Vectors.dense(tfidf0.values) ~==
@@ -72,21 +70,19 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val m = localTermFrequencies.size
     val termFrequencies = sc.parallelize(localTermFrequencies, 2)
-    val idf = new IDF(minDocFreq = 2)
+    val idf = new IDF(minDocFreq = 1)
     val model = idf.fit(termFrequencies)
     val expected = Vectors.dense(Array(0, 3, 1, 2).map { x =>
-      if (x >= 2) {
+      if (x > 0) {
         math.log((m + 1.0) / (x + 1.0))
       } else {
         0
       }
     })
     assert(model.idf ~== expected absTol 1e-12)
-    assert(model.numDocs === 3)
-    assert(model.docFreq === Array(0, 3, 0, 2))
 
     val assertHelper = (tfidf: Array[Vector]) => {
-      assert(tfidf.length === 3)
+      assert(tfidf.size === 3)
       val tfidf0 = tfidf(0).asInstanceOf[SparseVector]
       assert(tfidf0.indices === Array(1, 3))
       assert(Vectors.dense(tfidf0.values) ~==

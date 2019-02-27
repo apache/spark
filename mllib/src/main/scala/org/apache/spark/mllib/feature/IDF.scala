@@ -32,7 +32,6 @@ import org.apache.spark.rdd.RDD
  * This implementation supports filtering out terms which do not appear in a minimum number
  * of documents (controlled by the variable `minDocFreq`). For terms that are not in
  * at least `minDocFreq` documents, the IDF is found as 0, resulting in TF-IDFs of 0.
- * The document frequency is 0 as well for such terms
  *
  * @param minDocFreq minimum of documents in which a term
  *                   should appear for filtering
@@ -51,12 +50,12 @@ class IDF @Since("1.2.0") (@Since("1.2.0") val minDocFreq: Int) {
    */
   @Since("1.1.0")
   def fit(dataset: RDD[Vector]): IDFModel = {
-    val (idf: Vector, docFreq: Array[Long], numDocs: Long) = dataset.treeAggregate(
-      new IDF.DocumentFrequencyAggregator(minDocFreq = minDocFreq))(
+    val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
+          minDocFreq = minDocFreq))(
       seqOp = (df, v) => df.add(v),
       combOp = (df1, df2) => df1.merge(df2)
     ).idf()
-    new IDFModel(idf, docFreq, numDocs)
+    new IDFModel(idf)
   }
 
   /**
@@ -129,14 +128,13 @@ private object IDF {
 
     private def isEmpty: Boolean = m == 0L
 
-    /** Returns the current IDF vector, docFreq, number of documents */
-    def idf(): (Vector, Array[Long], Long) = {
+    /** Returns the current IDF vector. */
+    def idf(): Vector = {
       if (isEmpty) {
         throw new IllegalStateException("Haven't seen any document yet.")
       }
       val n = df.length
       val inv = new Array[Double](n)
-      val dfv = new Array[Long](n)
       var j = 0
       while (j < n) {
         /*
@@ -150,11 +148,10 @@ private object IDF {
          */
         if (df(j) >= minDocFreq) {
           inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
-          dfv(j) = df(j)
         }
         j += 1
       }
-      (Vectors.dense(inv), dfv, m)
+      Vectors.dense(inv)
     }
   }
 }
@@ -163,9 +160,7 @@ private object IDF {
  * Represents an IDF model that can transform term frequency vectors.
  */
 @Since("1.1.0")
-class IDFModel private[spark](@Since("1.1.0") val idf: Vector,
-                              @Since("3.0.0") val docFreq: Array[Long],
-                              @Since("3.0.0") val numDocs: Long) extends Serializable {
+class IDFModel private[spark] (@Since("1.1.0") val idf: Vector) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
