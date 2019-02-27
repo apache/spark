@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -339,6 +340,36 @@ class ContinuousMetaSuite extends ContinuousSuiteBase {
             case None => false
           }
         })
+      )
+    }
+  }
+}
+
+class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
+  import testImplicits._
+
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[1]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
+
+  // This test forces the backlog to overflow by not standing up enough executors for the query
+  // to make progress.
+  test("epoch backlog overflow") {
+    withSQLConf((CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE.key, "10")) {
+      val df = spark.readStream
+        .format("rate")
+        .option("numPartitions", "2")
+        .option("rowsPerSecond", "500")
+        .load()
+        .select('value)
+
+      testStream(df, useV2Sink = true)(
+        StartStream(Trigger.Continuous(1)),
+        ExpectFailure[IllegalStateException] { e =>
+          e.getMessage.contains("queue has exceeded its maximum")
+        }
       )
     }
   }
