@@ -21,6 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
+import java.time.Instant
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -29,6 +30,7 @@ import scala.language.existentials
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -61,6 +63,7 @@ object CatalystTypeConverters {
       case structType: StructType => StructConverter(structType)
       case StringType => StringConverter
       case DateType => DateConverter
+      case TimestampType if SQLConf.get.timestampExternalType == "Instant" => InstantConverter
       case TimestampType => TimestampConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
@@ -315,6 +318,16 @@ object CatalystTypeConverters {
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
   }
 
+  private object InstantConverter extends CatalystTypeConverter[Instant, Instant, Any] {
+    override def toCatalystImpl(scalaValue: Instant): Long =
+      DateTimeUtils.instantToMicros(scalaValue)
+    override def toScala(catalystValue: Any): Instant =
+      if (catalystValue == null) null
+      else DateTimeUtils.microsToInstant(catalystValue.asInstanceOf[Long])
+    override def toScalaImpl(row: InternalRow, column: Int): Instant =
+      DateTimeUtils.microsToInstant(row.getLong(column))
+  }
+
   private class DecimalConverter(dataType: DecimalType)
     extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = {
@@ -421,6 +434,7 @@ object CatalystTypeConverters {
     case s: String => StringConverter.toCatalyst(s)
     case d: Date => DateConverter.toCatalyst(d)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
+    case i: Instant => InstantConverter.toCatalyst(i)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
