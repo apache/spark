@@ -505,13 +505,39 @@ abstract class DescribeTableCommandBase extends RunnableCommand {
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 
-  def describeTable(
-      sparkSession: SparkSession,
-      table: TableIdentifier,
-      partitionSpec: TablePartitionSpec,
-      isExtended: Boolean,
-      result: ArrayBuffer[Row]): Unit = {
+  def describeSchema(
+      schema: StructType,
+      buffer: ArrayBuffer[Row],
+      header: Boolean): Unit = {
+    if (header) {
+      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+    }
+    schema.foreach { column =>
+      append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
+    }
+  }
+
+  def append(
+    buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
+    buffer += Row(column, dataType, comment)
+  }
+}
+/**
+ * Command can of the following form.
+ * {{{
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
+ * }}}
+ */
+case class DescribeTableCommand(
+    table: TableIdentifier,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean)
+  extends DescribeTableCommandBase {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
+
     if (catalog.isTemporaryTable(table)) {
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException(
@@ -533,17 +559,13 @@ abstract class DescribeTableCommandBase extends RunnableCommand {
       if (partitionSpec.nonEmpty) {
         // Outputs the partition-specific info for the DDL command:
         // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
-        describeDetailedPartitionInfo(
-          sparkSession,
-          catalog,
-          metadata,
-          partitionSpec,
-          isExtended,
-          result)
+        describeDetailedPartitionInfo(sparkSession, catalog, metadata, result)
       } else if (isExtended) {
         describeFormattedTableInfo(metadata, result)
       }
     }
+
+    result
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -570,18 +592,14 @@ abstract class DescribeTableCommandBase extends RunnableCommand {
       spark: SparkSession,
       catalog: SessionCatalog,
       metadata: CatalogTable,
-      partitionSpec: TablePartitionSpec,
-      isExtended: Boolean,
       result: ArrayBuffer[Row]): Unit = {
     if (metadata.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(
-        s"DESC PARTITION is not allowed on a view: ${metadata.identifier.identifier}")
+        s"DESC PARTITION is not allowed on a view: ${table.identifier}")
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
-    val partition = catalog.getPartition(metadata.identifier, partitionSpec)
-    if (isExtended) {
-      describeFormattedDetailedPartitionInfo(metadata.identifier, metadata, partition, result)
-    }
+    val partition = catalog.getPartition(table, partitionSpec)
+    if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
   }
 
   private def describeFormattedDetailedPartitionInfo(
@@ -603,41 +621,6 @@ abstract class DescribeTableCommandBase extends RunnableCommand {
     }
     table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
   }
-
-  def describeSchema(
-      schema: StructType,
-      buffer: ArrayBuffer[Row],
-      header: Boolean): Unit = {
-    if (header) {
-      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-    }
-    schema.foreach { column =>
-      append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
-    }
-  }
-
-  private def append(
-    buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
-    buffer += Row(column, dataType, comment)
-  }
-}
-/**
- * Command can of the following form.
- * {{{
- *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
- * }}}
- */
-case class DescribeTableCommand(
-    tableIdent: TableIdentifier,
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean)
-  extends DescribeTableCommandBase {
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val result = new ArrayBuffer[Row]
-    describeTable(sparkSession, tableIdent, partitionSpec, isExtended, result)
-    result
-  }
 }
 
 /**
@@ -654,11 +637,6 @@ case class DescribeQueryCommand(query: LogicalPlan)
     query match {
       case p if p.collectFirst { case _: InsertIntoTable | _: InsertIntoDir => true }.isDefined =>
         throw new AnalysisException("Describe command is not supported for insert statements.")
-      case u: UnresolvedRelation =>
-        describeTable(sparkSession,
-          u.tableIdentifier,
-          Map.empty[String, String],
-          false, result)
       case _ =>
         val queryExecution = sparkSession.sessionState.executePlan(query)
         describeSchema(queryExecution.analyzed.schema, result, header = false)
