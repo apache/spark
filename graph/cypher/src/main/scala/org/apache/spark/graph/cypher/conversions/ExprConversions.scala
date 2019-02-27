@@ -4,6 +4,8 @@ import org.apache.spark.graph.cypher.conversions.TemporalConversions._
 import org.apache.spark.graph.cypher.conversions.TypeConversions._
 import org.apache.spark.graph.cypher.udfs.LegacyUdfs._
 import org.apache.spark.graph.cypher.udfs.TemporalUdfs
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.expressions.{ArrayContains, StringTranslate}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, functions}
 import org.opencypher.okapi.api.types._
@@ -174,7 +176,7 @@ object ExprConversions {
           } else {
             val element = lhs.asSparkSQLExpr
             val array = rhs.asSparkSQLExpr
-            array_contains(array, element)
+            new Column(ArrayContains(element.expr, array.expr))
           }
 
         case LessThan(lhs, rhs) => compare(lt, lhs, rhs)
@@ -318,9 +320,10 @@ object ExprConversions {
 
         case Range(from, to, maybeStep) =>
           val stepCol = maybeStep.map(_.asSparkSQLExpr).getOrElse(ONE_LIT)
-          rangeUdf(from.asSparkSQLExpr, to.asSparkSQLExpr, stepCol)
+          functions.sequence(from.asSparkSQLExpr, to.asSparkSQLExpr, stepCol)
 
-        case Replace(original, search, replacement) => translateColumn(original.asSparkSQLExpr, search.asSparkSQLExpr, replacement.asSparkSQLExpr)
+        case Replace(original, search, replacement) =>
+          new Column(StringTranslate(original.asSparkSQLExpr.expr, search.asSparkSQLExpr.expr, replacement.asSparkSQLExpr.expr))
 
         case Substring(original, start, maybeLength) =>
           val origCol = original.asSparkSQLExpr
@@ -404,7 +407,7 @@ object ExprConversions {
           val containerCol = container.asSparkSQLExpr
 
           container.cypherType.material match {
-            case _: CTList | _: CTMap => containerCol.get(indexCol)
+            case _: CTList | _: CTMap => new Column(UnresolvedExtractValue(containerCol.expr, indexCol.expr))
             case other => throw NotImplementedException(s"Accessing $other by index is not supported")
           }
 
