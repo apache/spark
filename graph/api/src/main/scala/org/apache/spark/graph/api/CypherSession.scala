@@ -12,8 +12,8 @@ trait CypherSession {
   /**
     * Executes a Cypher query on the given input graph.
     *
-    * @param graph      [[PropertyGraph]] on which the query is executed
-    * @param query      Cypher query to execute
+    * @param graph [[PropertyGraph]] on which the query is executed
+    * @param query Cypher query to execute
     */
   def cypher(graph: PropertyGraph, query: String): CypherResult
 
@@ -34,4 +34,11 @@ trait CypherSession {
     * @param relationships [[RelationshipFrame]]s that define the relationships in the graph
     */
   def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame]): PropertyGraph
+
+  /**
+    * Creates a [[PropertyGraph]] from nodes and relationship present in the given [[CypherResult]].
+    *
+    * @param result a [[CypherResult]] containing nodes and/or relationships
+    */
+  def createGraph(result: CypherResult): PropertyGraph
 }

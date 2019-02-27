@@ -10,16 +10,11 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.api.table.RelationalCypherRecords
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
-case class SparkCypherResult(
-  relationalTable: RelationalCypherRecords[DataFrameTable],
-  schema: Schema
-) extends CypherResult {
+case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameTable], schema: Schema) extends CypherResult {
 
   override val df: DataFrame = relationalTable.table.df
 
   private val header: RecordHeader = relationalTable.header
-
-  private lazy val hasMultipleEntities: Boolean = header.entityVars.size > 1
 
   // TODO: Error handling
   override def nodeFrames(varName: String): Seq[NodeFrame] = {
@@ -47,10 +42,9 @@ case class SparkCypherResult(
         .filter(trueLabels.map(df.col).map(_ === true).reduce(_ && _))
         .filter(falseLabels.map(df.col).map(_ === false).foldLeft(functions.lit(true))(_ && _))
         .select(selectColumns.head, selectColumns.tail: _*)
+        .dropDuplicates(idColumn)
 
-      val distinctDf = if (hasMultipleEntities) labelCombinationDf.dropDuplicates(idColumn) else labelCombinationDf
-
-      NodeFrame(distinctDf, idColumn, labels, properties)
+      NodeFrame(labelCombinationDf, idColumn, labels, properties)
     }
   }
 
@@ -76,10 +70,9 @@ case class SparkCypherResult(
       val relTypeDf = df
         .filter(df.col(trueRelType) === true)
         .select(selectColumns.head, selectColumns.tail: _*)
+        .dropDuplicates(idColumn)
 
-      val distinctDf = if (hasMultipleEntities) relTypeDf.dropDuplicates(idColumn) else relTypeDf
-
-      RelationshipFrame(distinctDf, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
+      RelationshipFrame(relTypeDf, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
     }
   }
 

@@ -5,6 +5,7 @@ import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.MappingAdapter._
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
 import org.apache.spark.sql.SparkSession
+import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory, RelationalCypherSession}
@@ -43,6 +44,25 @@ class SparkCypherSession(override val sparkSession: SparkSession) extends Relati
     val relTables = relationships.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
 
     RelationalGraphAdapter(this, graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*))
+  }
+
+  override def createGraph(result: CypherResult): PropertyGraph = {
+    val sparkCypherResult = result match {
+      case r: SparkCypherResult => r
+      case other => throw IllegalArgumentException(
+        expected = "A result that has been created by `SparkCypherSession.cypher`",
+        actual = other.getClass.getSimpleName
+      )
+    }
+
+    val entityVars = sparkCypherResult.relationalTable.header.entityVars
+    val nodeVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTNode).isTrue => v.name }
+    val relVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTRelationship).isTrue => v.name }
+
+    val nodeFrames = nodeVarNames.flatMap(result.nodeFrames).toSeq
+    val relFrames = relVarNames.flatMap(result.relationshipFrames).toSeq
+
+    createGraph(nodeFrames, relFrames)
   }
 
   def cypher(graph: PropertyGraph, query: String): CypherResult = cypher(graph, query, Map.empty)
