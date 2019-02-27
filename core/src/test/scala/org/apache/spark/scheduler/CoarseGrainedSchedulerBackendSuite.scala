@@ -110,7 +110,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
       eventually(timeout(10.seconds)) {
         // Ensure some tasks have started and no task finished, so some executors must be busy.
-        assert(taskStarted.get() == true)
+        assert(taskStarted.get())
         assert(taskEnded.get() == false)
         // Assert we count in slots on both busy and free executors.
         assert(sc.maxNumConcurrentTasks() == 4)

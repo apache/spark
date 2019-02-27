@@ -154,9 +154,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nullStruct_fieldNotNullable = Literal.create(null, typeS_fieldNotNullable)
 
     assert(getStructField(struct_fieldNotNullable, "a").nullable === false)
-    assert(getStructField(struct, "a").nullable === true)
-    assert(getStructField(nullStruct_fieldNotNullable, "a").nullable === true)
-    assert(getStructField(nullStruct, "a").nullable === true)
+    assert(getStructField(struct, "a").nullable)
+    assert(getStructField(nullStruct_fieldNotNullable, "a").nullable)
+    assert(getStructField(nullStruct, "a").nullable)
   }
 
   test("GetArrayStructFields") {

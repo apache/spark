@@ -912,8 +912,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       }
     ssc.start()
     batchCounter.waitUntilBatchesCompleted(1, 10000)
-    assert(shouldCheckpointAllMarkedRDDs === true)
-    assert(rddsCheckpointed === true)
+    assert(shouldCheckpointAllMarkedRDDs)
+    assert(rddsCheckpointed)
   }
 
   /**
