@@ -1688,6 +1688,12 @@ object SQLConf {
     .stringConf
     .checkValues(Set("Timestamp", "Instant"))
     .createWithDefault("Timestamp")
+
+  val DATE_EXTERNAL_TYPE = buildConf("spark.sql.catalyst.dateType")
+    .doc("Java class to/from which an instance of DateType is converted.")
+    .stringConf
+    .checkValues(Set("Date", "LocalDate"))
+    .createWithDefault("Date")
 }
 
 /**
@@ -1876,6 +1882,8 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def timestampExternalType: String = getConf(TIMESTAMP_EXTERNAL_TYPE)
+
+  def dateExternalType: String = getConf(DATE_EXTERNAL_TYPE)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
