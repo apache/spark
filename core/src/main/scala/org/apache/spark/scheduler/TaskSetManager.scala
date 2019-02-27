@@ -542,7 +542,7 @@ private[spark] class TaskSetManager(
 
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
-      sched.taskSetFinished(this)
+      sched.taskSetFinished(this, tasksSuccessful == numTasks)
       if (tasksSuccessful == numTasks) {
         blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
           taskSet.stageId,

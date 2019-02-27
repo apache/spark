@@ -205,8 +205,11 @@ private[spark] class TaskSchedulerImpl(
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
+      // only create a BitSet once for a certain stage since we only remove
+      // that stage when an active TaskSetManager succeed.
+      stageIdToFinishedPartitions.getOrElseUpdate(stage, new BitSet)
+      val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
       stageTaskSets(taskSet.stageAttemptId) = manager
@@ -295,13 +298,15 @@ private[spark] class TaskSchedulerImpl(
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
    * cleaned up.
    */
-  def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
+  def taskSetFinished(manager: TaskSetManager, success: Boolean): Unit = synchronized {
     taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
       taskSetsForStage -= manager.taskSet.stageAttemptId
       if (taskSetsForStage.isEmpty) {
         taskSetsByStageIdAndAttempt -= manager.taskSet.stageId
-        stageIdToFinishedPartitions -= manager.taskSet.stageId
       }
+    }
+    if (success) {
+      stageIdToFinishedPartitions -= manager.taskSet.stageId
     }
     manager.parent.removeSchedulable(manager)
     logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
@@ -859,9 +864,11 @@ private[spark] class TaskSchedulerImpl(
       stageId: Int,
       partitionId: Int,
       taskInfo: TaskInfo) = {
-    val finishedPartitions =
-      stageIdToFinishedPartitions.getOrElseUpdate(stageId, new BitSet)
-    finishedPartitions += partitionId
+    // if we do not find a BitSet for this stage, which means an active TaskSetManager
+    // has already succeeded and removed the stage.
+    stageIdToFinishedPartitions.get(stageId).foreach{
+      finishedPartitions => finishedPartitions += partitionId
+    }
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.markPartitionCompleted(partitionId, Some(taskInfo))
     }
