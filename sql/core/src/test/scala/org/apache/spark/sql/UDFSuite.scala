@@ -504,4 +504,14 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       assert(df.collect().toSeq === Seq(Row(expected)))
     }
   }
+
+  test("Using java.time.LocalDate in UDF") {
+    withSQLConf(SQLConf.DATE_EXTERNAL_TYPE.key -> "LocalDate") {
+      val expected = java.time.LocalDate.parse("2019-02-27")
+      val plusDay = udf((i: java.time.LocalDate) => i.plusDays(1))
+      val df = spark.sql("SELECT DATE '2019-02-26' as d")
+        .select(plusDay('d))
+      assert(df.collect().toSeq === Seq(Row(expected)))
+    }
+  }
 }
