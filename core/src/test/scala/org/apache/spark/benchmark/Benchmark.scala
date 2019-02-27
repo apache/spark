@@ -111,16 +111,17 @@ private[spark] class Benchmark(
     // The results are going to be processor specific so it is useful to include that.
     out.println(Benchmark.getJVMOSInfo())
     out.println(Benchmark.getProcessorName())
-    out.printf("%-40s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
-      "Per Row(ns)", "Relative")
+    out.printf("%-40s %16s %12s %13s %10s %16s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
+      "Per Row(ns)", "Relative", "Stdev (ms)")
     out.println("-" * 96)
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      out.printf("%-40s %16s %12s %13s %10s\n",
+      out.printf("%-40s %16s %12s %13s %10s %16s\n",
         benchmark.name,
         "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
         "%10.1f" format result.bestRate,
         "%6.1f" format (1000 / result.bestRate),
-        "%3.1fX" format (firstBest / result.bestMs))
+        "%3.1fX" format (firstBest / result.bestMs),
+        "%5.0f" format result.stdevMs)
     }
     out.println
     // scalastyle:on
@@ -158,7 +159,8 @@ private[spark] class Benchmark(
     // scalastyle:on
     val best = runTimes.min
     val avg = runTimes.sum / runTimes.size
-    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0)
+    val stdev = math.sqrt(runTimes.map(time => math.pow(time - avg, 2)).sum / runTimes.size)
+    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0, stdev / 1000000.0)
   }
 }
 
@@ -191,7 +193,7 @@ private[spark] object Benchmark {
   }
 
   case class Case(name: String, fn: Timer => Unit, numIters: Int)
-  case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
+  case class Result(avgMs: Double, bestRate: Double, bestMs: Double, stdevMs: Double)
 
   /**
    * This should return a user helpful processor information. Getting at this depends on the OS.
