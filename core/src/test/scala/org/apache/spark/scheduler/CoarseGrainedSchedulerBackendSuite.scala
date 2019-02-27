@@ -127,10 +127,13 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   // Here we just have test for one happy case instead of all cases: other cases are covered in
   // FsHistoryProviderSuite.
   test("custom log url for Spark UI is applied") {
+    val customExecutorLogUrl = "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}/users/{{USER}}" +
+      "/containers/{{CONTAINER_ID}}/{{FILE_NAME}}"
+
     val conf = new SparkConf()
       .set(CPUS_PER_TASK, 2)
-      .set(UI.CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true))
-      .setMaster("local-cluster[4, 3, 1024]")
+      .set(UI.CUSTOM_EXECUTOR_LOG_URL, customExecutorLogUrl)
+      .setMaster("local-cluster[0, 3, 1024]")
       .setAppName("test")
 
     sc = new SparkContext(conf)
@@ -138,8 +141,14 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
 
-    val logUrls = getTestExecutorLogUrls
-    val attributes = getTestExecutorAttributes
+    val logUrls = Map(
+      "stdout" -> "http://oldhost:8888/logs/dummy/stdout",
+      "stderr" -> "http://oldhost:8888/logs/dummy/stderr")
+    val attributes = Map(
+      "CLUSTER_ID" -> "cl1",
+      "USER" -> "dummy",
+      "CONTAINER_ID" -> "container1",
+      "LOG_FILES" -> "stdout,stderr")
 
     var executorAddedCount: Int = 0
     val listener = new SparkListener() {
@@ -181,23 +190,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       { return }
     )
   }
-
-  private def getCustomExecutorLogUrl(includeFileName: Boolean): String = {
-    val baseUrl = "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}/users/{{USER}}/containers/" +
-      "{{CONTAINER_ID}}"
-    if (includeFileName) baseUrl + "/{{FILE_NAME}}" else baseUrl
-  }
-
-  private def getTestExecutorLogUrls: Map[String, String] = Map(
-    "stdout" -> "http://oldhost:8888/logs/dummy/stdout",
-    "stderr" -> "http://oldhost:8888/logs/dummy/stderr")
-
-  private def getTestExecutorAttributes: Map[String, String] = Map(
-    "CLUSTER_ID" -> "cl1",
-    "USER" -> "dummy",
-    "CONTAINER_ID" -> "container1",
-    "LOG_FILES" -> "stdout,stderr"
-  )
 
   private def getExpectedCustomExecutorLogUrl(
       attributes: Map[String, String],
