@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -221,6 +222,9 @@ object JavaTypeInference {
                 c == classOf[java.lang.Boolean] =>
         createDeserializerForTypesSupportValueOf(path, c)
 
+      case c if c == classOf[java.time.LocalDate] =>
+        createDeserializerForLocalDate(path)
+
       case c if c == classOf[java.sql.Date] =>
         createDeserializerForSqlDate(path)
 
@@ -390,6 +394,14 @@ object JavaTypeInference {
             DateTimeUtils.getClass,
             TimestampType,
             "fromJavaTimestamp",
+            inputObject :: Nil,
+            returnNullable = false)
+
+        case c if c == classOf[java.sql.Date] && SQLConf.get.dateExternalType == "LocalDate" =>
+          StaticInvoke(
+            DateTimeUtils.getClass,
+            DateType,
+            "localDateToDays",
             inputObject :: Nil,
             returnNullable = false)
 
