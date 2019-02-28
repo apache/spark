@@ -25,7 +25,6 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.{DecisionTreeModel, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
