@@ -185,7 +185,9 @@ case class FileSourceScanExec(
     ret
   }
 
-  private def partitionOnlyAvailableAtRuntime: Boolean = {
+  // partitionFilters can contain subqueries whose results are available only at runtime so
+  // accessing selectedPartitions should be guarded by this method during planning
+  private def hasPartitionsAvailableAtRunTime: Boolean = {
     partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
   }
 
@@ -225,7 +227,7 @@ case class FileSourceScanExec(
           val sortColumns =
             spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
 
-          val sortOrder = if (sortColumns.nonEmpty && !partitionOnlyAvailableAtRuntime) {
+          val sortOrder = if (sortColumns.nonEmpty && !hasPartitionsAvailableAtRunTime) {
             // In case of bucketing, its possible to have multiple files belonging to the
             // same bucket in a given relation. Each of these files are locally sorted
             // but those files combined together are not globally sorted. Given that,
@@ -275,7 +277,7 @@ case class FileSourceScanExec(
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
     val withOptPartitionCount = if (relation.partitionSchemaOption.isDefined &&
-      !partitionOnlyAvailableAtRuntime) {
+      !hasPartitionsAvailableAtRunTime) {
       metadata + ("PartitionCount" -> selectedPartitions.size.toString)
     } else {
       metadata
