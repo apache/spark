@@ -46,11 +46,11 @@ import org.apache.spark.unsafe.types.UTF8String
  *   StringType -> String
  *   DecimalType -> java.math.BigDecimal or scala.math.BigDecimal or Decimal
  *
- *   DateType -> java.sql.Date when spark.sql.catalyst.dateType is set to Date
- *   DateType -> java.time.LocalDate when spark.sql.catalyst.dateType is set to LocalDate
+ *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+ *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
  *
- *   TimestampType -> java.sql.Timestamp when spark.sql.catalyst.timestampType is set to Timestamp
- *   TimestampType -> java.time.Instant when spark.sql.catalyst.timestampType is set to Instant
+ *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+ *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
