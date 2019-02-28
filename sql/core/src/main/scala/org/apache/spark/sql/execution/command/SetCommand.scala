@@ -161,7 +161,7 @@ object SetCommand {
  *   reset;
  * }}}
  */
-case object ResetCommand extends RunnableCommand with Logging {
+case class ResetCommand() extends RunnableCommand with Logging {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sessionState.conf.clear()

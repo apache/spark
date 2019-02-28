@@ -377,8 +377,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param newArgs the new product arguments.
    */
   def makeCopy(newArgs: Array[AnyRef]): BaseType = attachTree(this, "makeCopy") {
-    // Skip no-arg constructors that are just there for kryo.
-    val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0)
+    val ctors = getClass.getConstructors
     if (ctors.isEmpty) {
       sys.error(s"No valid constructor for $nodeName")
     }
