@@ -634,13 +634,8 @@ case class DescribeQueryCommand(query: LogicalPlan)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    query match {
-      case p if p.collectFirst { case _: InsertIntoTable | _: InsertIntoDir => true }.isDefined =>
-        throw new AnalysisException("Describe command is not supported for insert statements.")
-      case _ =>
-        val queryExecution = sparkSession.sessionState.executePlan(query)
-        describeSchema(queryExecution.analyzed.schema, result, header = false)
-    }
+    val queryExecution = sparkSession.sessionState.executePlan(query)
+    describeSchema(queryExecution.analyzed.schema, result, header = false)
     result
   }
 }

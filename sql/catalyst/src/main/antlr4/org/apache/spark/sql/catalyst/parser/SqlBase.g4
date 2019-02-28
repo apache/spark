@@ -166,7 +166,7 @@ statement
     | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
-    | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
+    | (DESC | DESCRIBE) QUERY? descQuery                               #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE tableIdentifier
@@ -254,6 +254,10 @@ locationSpec
 
 query
     : ctes? queryNoWith
+    ;
+
+descQuery
+    : queryTerm queryOrganization
     ;
 
 insertInto
