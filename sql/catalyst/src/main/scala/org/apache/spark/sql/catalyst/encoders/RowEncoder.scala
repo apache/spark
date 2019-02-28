@@ -93,7 +93,7 @@ object RowEncoder {
         dataType = ObjectType(udtClass), false)
       Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
-    case TimestampType if SQLConf.get.timestampExternalType == "Instant" =>
+    case TimestampType if SQLConf.get.datetimeJava8ApiEnabled =>
       StaticInvoke(
         DateTimeUtils.getClass,
         TimestampType,
@@ -109,7 +109,7 @@ object RowEncoder {
         inputObject :: Nil,
         returnNullable = false)
 
-    case DateType if SQLConf.get.dateExternalType == "LocalDate" =>
+    case DateType if SQLConf.get.datetimeJava8ApiEnabled =>
       StaticInvoke(
         DateTimeUtils.getClass,
         DateType,
@@ -244,10 +244,10 @@ object RowEncoder {
 
   def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
-    case TimestampType if SQLConf.get.timestampExternalType == "Instant" =>
+    case TimestampType if SQLConf.get.datetimeJava8ApiEnabled =>
       ObjectType(classOf[java.time.Instant])
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
-    case DateType if SQLConf.get.dateExternalType == "LocalDate" =>
+    case DateType if SQLConf.get.datetimeJava8ApiEnabled =>
       ObjectType(classOf[java.time.LocalDate])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -291,7 +291,7 @@ object RowEncoder {
         dataType = ObjectType(udtClass))
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
-    case TimestampType if SQLConf.get.timestampExternalType == "Instant" =>
+    case TimestampType if SQLConf.get.datetimeJava8ApiEnabled =>
       StaticInvoke(
         DateTimeUtils.getClass,
         ObjectType(classOf[java.time.Instant]),
@@ -307,7 +307,7 @@ object RowEncoder {
         input :: Nil,
         returnNullable = false)
 
-    case DateType if SQLConf.get.dateExternalType == "LocalDate" =>
+    case DateType if SQLConf.get.datetimeJava8ApiEnabled =>
       StaticInvoke(
         DateTimeUtils.getClass,
         ObjectType(classOf[java.time.LocalDate]),

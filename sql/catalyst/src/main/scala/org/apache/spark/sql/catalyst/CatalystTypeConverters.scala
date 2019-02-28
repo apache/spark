@@ -62,9 +62,9 @@ object CatalystTypeConverters {
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
       case StringType => StringConverter
-      case DateType if SQLConf.get.dateExternalType == "LocalDate" => LocalDateConverter
+      case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
-      case TimestampType if SQLConf.get.timestampExternalType == "Instant" => InstantConverter
+      case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter

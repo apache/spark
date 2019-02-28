@@ -397,7 +397,7 @@ object JavaTypeInference {
             inputObject :: Nil,
             returnNullable = false)
 
-        case c if c == classOf[java.sql.Date] && SQLConf.get.dateExternalType == "LocalDate" =>
+        case c if c == classOf[java.sql.Date] && SQLConf.get.datetimeJava8ApiEnabled =>
           StaticInvoke(
             DateTimeUtils.getClass,
             DateType,
