@@ -104,7 +104,7 @@ private[mesos] class MesosSubmitRequestServlet(
     val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
     val driverMemoryOverhead = sparkProperties.get(config.DRIVER_MEMORY_OVERHEAD.key)
     val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
-    val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
+    val name = sparkProperties.getOrElse("spark.app.name", mainClass)
 
     // Construct driver description
     val conf = new SparkConf(false).setAll(sparkProperties)
