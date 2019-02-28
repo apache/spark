@@ -129,4 +129,31 @@ package object config {
         "when launching drivers. Default is to accept all offers with sufficient resources.")
       .stringConf
       .createWithDefault("")
+
+  private[spark] val MAX_DRIVERS =
+    ConfigBuilder("spark.mesos.maxDrivers").intConf.createWithDefault(200)
+
+  private[spark] val RETAINED_DRIVERS =
+    ConfigBuilder("spark.mesos.retainedDrivers").intConf.createWithDefault(200)
+
+  private[spark] val CLUSTER_RETRY_WAIT_MAX_SECONDS =
+    ConfigBuilder("spark.mesos.cluster.retry.wait.max")
+        .intConf
+        .createWithDefault(60) // 1 minute
+
+  private[spark] val ENABLE_FETCHER_CACHE =
+    ConfigBuilder("spark.mesos.fetcherCache.enable")
+        .doc("If set to true, all URIs (example: `spark.executor.uri`, `spark.mesos.uris`) will " +
+            "be cached by the Mesos Fetcher Cache.")
+        .booleanConf
+        .createWithDefault(false)
+
+  private[spark] val URIS_TO_DOWNLOAD =
+    ConfigBuilder("spark.mesos.uris")
+        .doc("A comma-separated list of URIs to be downloaded to the sandbox when driver or " +
+            "executor is launched by Mesos. This applies to both coarse-grained and fine-grained " +
+            "mode.")
+        .stringConf
+        .toSequence
+        .createWithDefault(Nil)
 }

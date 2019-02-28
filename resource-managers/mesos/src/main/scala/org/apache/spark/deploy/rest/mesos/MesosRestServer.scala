@@ -27,6 +27,7 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest._
+import org.apache.spark.internal.config
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.util.Utils
 
@@ -92,13 +93,14 @@ private[mesos] class MesosSubmitRequestServlet(
 
     // Optional fields
     val sparkProperties = request.sparkProperties
-    val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")
-    val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
-    val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
+    val driverExtraJavaOptions = sparkProperties.get(config.DRIVER_JAVA_OPTIONS.key)
+    val driverExtraClassPath = sparkProperties.get(config.DRIVER_CLASS_PATH.key)
+    val driverExtraLibraryPath = sparkProperties.get(config.DRIVER_LIBRARY_PATH.key)
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
-    val driverMemory = sparkProperties.get("spark.driver.memory")
+    val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
+    val driverMemoryOverhead = sparkProperties.get(config.DRIVER_MEMORY_OVERHEAD.key)
     val driverCores = sparkProperties.get("spark.driver.cores")
-    val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
+    val name = sparkProperties.getOrElse("spark.app.name", mainClass)
 
     // Construct driver description
     val conf = new SparkConf(false).setAll(sparkProperties)
