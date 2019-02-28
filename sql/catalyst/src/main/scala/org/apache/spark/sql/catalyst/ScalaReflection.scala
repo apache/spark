@@ -322,13 +322,12 @@ object ScalaReflection extends ScalaReflection {
           val newTypePath = (s"""- field (class: "$clsName", """ +
               s"""name: "$fieldName")""") +: walkedTypePath
 
-          // For tuples, we based grab the inner fields by ordinal instead of name.
           deserializerForWithNullSafety(
             path,
-            dataType,
             nullable = nullable,
             newTypePath,
             (expr, typePath) => {
+              // For tuples, we based grab the inner fields by ordinal instead of name.
               if (cls.getName startsWith "scala.Tuple") {
                 deserializerFor(
                   fieldType,

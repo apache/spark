@@ -329,7 +329,6 @@ object JavaTypeInference {
             s""", name: "$fieldName")""") +: walkedTypePath
           val setter = deserializerForWithNullSafety(
             path,
-            dataType,
             nullable = nullable,
             newTypePath,
             (expr, typePath) => deserializerFor(fieldType,

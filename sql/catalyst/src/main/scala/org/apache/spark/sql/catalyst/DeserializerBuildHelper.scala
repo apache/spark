@@ -44,25 +44,38 @@ object DeserializerBuildHelper {
     upCastToExpectedType(newPath, dataType, walkedTypePath)
   }
 
+  /**
+   * Returns an expression that can be used to deserialize input expression.
+   *
+   * @param expr The input expression that can be used to extract serialized value.
+   * @param nullable Whether deserialized expression evalutes to null value.
+   * @param walkedTypePath The paths from top to bottom to access current field when deserializing.
+   * @param funcForCreatingDeserializer Given input expression and typed path, this function
+   *                                    returns deserializer expression.
+   */
   def deserializerForWithNullSafety(
       expr: Expression,
-      dataType: DataType,
       nullable: Boolean,
       walkedTypePath: Seq[String],
-      funcForCreatingNewExpr: (Expression, Seq[String]) => Expression): Expression = {
-    val newExpr = funcForCreatingNewExpr(expr, walkedTypePath)
+      funcForCreatingDeserializer: (Expression, Seq[String]) => Expression): Expression = {
+    val newExpr = funcForCreatingDeserializer(expr, walkedTypePath)
     expressionWithNullSafety(newExpr, nullable, walkedTypePath)
   }
 
+  /**
+   * This returns deserializer expression as `deserializerForWithNullSafety` does. The only
+   * difference is this method adds `UpCast` to input expression to avoid possible runtime
+   * error caused by type mimatch between serialized column data type and deserializing type.
+   */
   def deserializerForWithNullSafetyAndUpcast(
       expr: Expression,
       dataType: DataType,
       nullable: Boolean,
       walkedTypePath: Seq[String],
-      funcForCreatingNewExpr: (Expression, Seq[String]) => Expression): Expression = {
+      funcForCreatingDeserializer: (Expression, Seq[String]) => Expression): Expression = {
     val casted = upCastToExpectedType(expr, dataType, walkedTypePath)
-    deserializerForWithNullSafety(casted, dataType, nullable, walkedTypePath,
-      funcForCreatingNewExpr)
+    deserializerForWithNullSafety(casted, nullable, walkedTypePath,
+      funcForCreatingDeserializer)
   }
 
   private def expressionWithNullSafety(
