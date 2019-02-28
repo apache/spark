@@ -569,7 +569,6 @@ class SparkContext(config: SparkConf) extends Logging {
     _taskScheduler.postStartHook()
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
-    // Register JVMCPUSource to the metrics system if spark.metrics.cpu.time.driver.enabled==true
     _env.metricsSystem.registerSource(new JVMCPUSource())
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
