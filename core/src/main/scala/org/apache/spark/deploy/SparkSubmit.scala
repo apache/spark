@@ -171,7 +171,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         try {
           proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              runMain(args)
+              runMain(args, uninitLog)
             }
           })
         } catch {
@@ -189,13 +189,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
             }
         }
       } else {
-        runMain(args)
+        runMain(args, uninitLog)
       }
-    }
-
-    // Let the main class re-initialize the logging system once it starts.
-    if (uninitLog) {
-      Logging.uninitialize()
     }
 
     // In standalone cluster mode, there are two submission gateways:
@@ -814,8 +809,13 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    */
-  private def runMain(args: SparkSubmitArguments): Unit = {
+  private def runMain(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
     val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
+    // Let the main class re-initialize the logging system once it starts.
+    if (uninitLog) {
+      Logging.uninitialize()
+    }
+
     // scalastyle:off println
     if (args.verbose) {
       printStream.println(s"Main class:\n$childMainClass")
