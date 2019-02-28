@@ -25,6 +25,7 @@ import java.util
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
@@ -157,7 +158,6 @@ private[hive] object IsolatedClientLoader extends Logging {
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Sparks classloader.
  * @param sharesHadoopClasses When true, we will share Hadoop classes between Spark and
- * @param rootClassLoader The system root classloader. Must not know about Hive classes.
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  */
 private[hive] class IsolatedClientLoader(
@@ -168,14 +168,10 @@ private[hive] class IsolatedClientLoader(
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
     val sharesHadoopClasses: Boolean = true,
-    val rootClassLoader: ClassLoader = ClassLoader.getSystemClassLoader.getParent.getParent,
     val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader,
     val sharedPrefixes: Seq[String] = Seq.empty,
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
-
-  // Check to make sure that the root classloader does not know about Hive.
-  assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
@@ -191,8 +187,8 @@ private[hive] class IsolatedClientLoader(
     (sharesHadoopClasses && isHadoopClass) ||
     name.startsWith("scala.") ||
     (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
-    name.startsWith("java.lang.") ||
-    name.startsWith("java.net") ||
+    name.startsWith("java.") ||
+    name.startsWith("javax.") ||
     sharedPrefixes.exists(name.startsWith)
   }
 
@@ -214,6 +210,22 @@ private[hive] class IsolatedClientLoader(
   private[hive] val classLoader: MutableURLClassLoader = {
     val isolatedClassLoader =
       if (isolationOn) {
+        val rootClassLoader: ClassLoader =
+          if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+            // In Java 9, the boot classloader can see few JDK classes. The intended parent
+            // classloader for delegation is now the platform classloader.
+            // See http://java9.wtf/class-loading/
+            val platformCL =
+              classOf[ClassLoader].getMethod("getPlatformClassLoader").
+                invoke(null).asInstanceOf[ClassLoader]
+            // Check to make sure that the root classloader does not know about Hive.
+            assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+            platformCL
+          } else {
+            // The boot classloader is represented by null (the instance itself isn't accessible)
+            // and before Java 9 can see all JDK classes
+            null
+          }
         new URLClassLoader(allJars, rootClassLoader) {
           override def loadClass(name: String, resolve: Boolean): Class[_] = {
             val loaded = findLoadedClass(name)
