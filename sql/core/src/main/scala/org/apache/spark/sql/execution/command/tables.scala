@@ -494,7 +494,7 @@ case class TruncateTableCommand(
   }
 }
 
-abstract class DescribeTableCommandBase extends RunnableCommand {
+abstract class DescribeCommandBase extends RunnableCommand {
   override val output: Seq[Attribute] = Seq(
     // Column names are based on Hive.
     AttributeReference("col_name", StringType, nullable = false,
@@ -532,7 +532,7 @@ case class DescribeTableCommand(
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean)
-  extends DescribeTableCommandBase {
+  extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
@@ -630,7 +630,7 @@ case class DescribeTableCommand(
  * }}}
  */
 case class DescribeQueryCommand(query: LogicalPlan)
-  extends DescribeTableCommandBase {
+  extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]

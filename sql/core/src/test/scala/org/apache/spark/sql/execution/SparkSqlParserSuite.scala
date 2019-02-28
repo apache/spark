@@ -240,8 +240,10 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
+    assertEqual("describe t",
+      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
     assertEqual("describe table t",
-      DescribeQueryCommand(UnresolvedRelation(TableIdentifier("t", None))))
+      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
     assertEqual("describe table extended t",
       DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = true))
     assertEqual("describe table formatted t",
