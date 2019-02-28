@@ -185,8 +185,10 @@ case class FileSourceScanExec(
     ret
   }
 
-  // partitionFilters can contain subqueries whose results are available only at runtime so
-  // accessing selectedPartitions should be guarded by this method during planning
+  /**
+   * partitionFilters can contain subqueries whose results are available only at runtime so
+   * accessing selectedPartitions should be guarded by this method during planning
+   */
   private def hasPartitionsAvailableAtRunTime: Boolean = {
     partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
   }
