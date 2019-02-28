@@ -48,13 +48,22 @@ Some of the commonly used options are:
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
-<b>&#8224;</b> A common deployment strategy is to submit your application from a gateway machine
-that is
-physically co-located with your worker machines (e.g. Master node in a standalone EC2 cluster).
-In this setup, `client` mode is appropriate. In `client` mode, the driver is launched directly
-within the `spark-submit` process which acts as a *client* to the cluster. The input and
-output of the application is attached to the console. Thus, this mode is especially suitable
-for applications that involve the REPL (e.g. Spark shell).
+<b>&#8224;</b>In `client` mode, the driver is launched directly within the `spark-submit` process on
+the machine which was used to submit the Spark job, and it will act as a *client* to the cluster.
+In this mode, the input and output of the application is attached to the console, thus, this mode is
+especially suitable for applications that involve the REPL (e.g. Spark shell).
+However, if the process used to submit the job terminates, the machine hosting it is shut down,
+crashes or loses network connectivity, that ends the execution of the job on the (remote) cluster as well.
+
+If `cluster` mode is specified, the driver program is executed on one of the cluster machines, requiring no
+connection from the (client) machine which was used for submitting the Spark job: the Spark job will run
+until it completes, gets terminated or the cluster service used for hosting the driver becomes unavailable
+(e.g. the cluster service is stopped, it crashes on the cluster machine elected for the execution of the driver,
+or the cluster machine itself crashes or loses network connectivity).
+
+A common deployment strategy is to submit your application from a gateway machine
+that is physically co-located with your worker machines (e.g. Master node in a standalone EC2 cluster).
+In this setup, `client` mode is appropriate.
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
