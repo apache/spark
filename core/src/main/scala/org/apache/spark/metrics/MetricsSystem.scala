@@ -260,7 +260,4 @@ private[spark] object MetricsSystemInstances {
 
   // The Spark cluster scheduler when running on Mesos
   val MESOS_CLUSTER = "mesos_cluster"
-
-  // The special instance name for test cases
-  val TEST = "test"
 }
