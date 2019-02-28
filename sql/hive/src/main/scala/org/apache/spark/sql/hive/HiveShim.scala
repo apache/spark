@@ -163,16 +163,18 @@ private[hive] object HiveShim {
         val kryo = borrowKryo.invoke(serUtilClass)
         val deserializeObjectByKryo = findMethod(serUtilClass, deserializeMethodName,
           kryo.getClass.getSuperclass, classOf[InputStream], classOf[Class[_]])
-        deserializeObjectByKryo.setAccessible(true)
-        deserializeObjectByKryo.invoke(null, kryo, is, clazz).asInstanceOf[UDFType]
+        try {
+          deserializeObjectByKryo.invoke(null, kryo, is, clazz).asInstanceOf[UDFType]
+        } finally {
+          serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
+        }
       } else {
         val runtimeSerializationKryo = utilClass.getField("runtimeSerializationKryo")
         val threadLocalValue = runtimeSerializationKryo.get(utilClass)
         val getMethod = threadLocalValue.getClass.getMethod("get")
         val kryo = getMethod.invoke(threadLocalValue)
-        val deserializeObjectByKryo = findMethod(utilClass,
-          deserializeMethodName, kryo.getClass, classOf[InputStream], classOf[Class[_]])
-        deserializeObjectByKryo.setAccessible(true)
+        val deserializeObjectByKryo = findMethod(utilClass, deserializeMethodName,
+          kryo.getClass, classOf[InputStream], classOf[Class[_]])
         deserializeObjectByKryo.invoke(null, kryo, is, clazz).asInstanceOf[UDFType]
       }
     }
@@ -183,16 +185,18 @@ private[hive] object HiveShim {
         val kryo = borrowKryo.invoke(serUtilClass)
         val serializeObjectByKryo = findMethod(serUtilClass, serializeMethodName,
           kryo.getClass.getSuperclass, classOf[Object], classOf[OutputStream])
-        serializeObjectByKryo.setAccessible(true)
-        serializeObjectByKryo.invoke(null, kryo, function, out)
+        try {
+          serializeObjectByKryo.invoke(null, kryo, function, out)
+        } finally {
+          serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
+        }
       } else {
         val runtimeSerializationKryo = utilClass.getField("runtimeSerializationKryo")
         val threadLocalValue = runtimeSerializationKryo.get(utilClass)
         val getMethod = threadLocalValue.getClass.getMethod("get")
         val kryo = getMethod.invoke(threadLocalValue)
-        val serializeObjectByKryo = findMethod(utilClass,
-          serializeMethodName, kryo.getClass, classOf[Object], classOf[OutputStream])
-        serializeObjectByKryo.setAccessible(true)
+        val serializeObjectByKryo = findMethod(utilClass, serializeMethodName,
+          kryo.getClass, classOf[Object], classOf[OutputStream])
         serializeObjectByKryo.invoke(null, kryo, function, out)
       }
     }

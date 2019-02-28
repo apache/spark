@@ -64,9 +64,11 @@ object TestHive
         .set(UI_ENABLED, false)
         .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
         // Hive changed the default of hive.metastore.disallow.incompatible.col.type.changes
-        // From false to true. For details, see the JIRA HIVE-12320
+        // from false to true. We can remove it once upgrade built-in hive to 2.4.0.
+        // For details, see the JIRA HIVE-12320 and HIVE-17764.
         .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
-        // To compatible with avatica-core:1.13.0
+        // 1. We should exclusion avatica-1.8.0.jar which conflict with jackson-databind-2.9.6.
+        // 2. set hive.cbo.enable to false to workaround class not found error.
         .set("spark.hadoop.hive.cbo.enable", "false")
         // Disable ConvertToLocalRelation for better test coverage. Test cases built on
         // LocalRelation will exercise the optimization rules better by disabling it as
