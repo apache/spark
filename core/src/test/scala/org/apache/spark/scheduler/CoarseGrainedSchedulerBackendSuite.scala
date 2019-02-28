@@ -131,7 +131,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       "/containers/{{CONTAINER_ID}}/{{FILE_NAME}}"
 
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
       .set(UI.CUSTOM_EXECUTOR_LOG_URL, customExecutorLogUrl)
       .setMaster("local-cluster[0, 3, 1024]")
       .setAppName("test")
@@ -170,11 +169,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       backend.driverEndpoint.askSync[Boolean](
         RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
 
-      eventually(timeout(executorUpTimeout)) {
-        // Ensure all executors have been launched.
-        assert(sc.getExecutorIds().length == 3)
-      }
-
+      sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
       assert(executorAddedCount === 3)
     } finally {
       sc.removeSparkListener(listener)
