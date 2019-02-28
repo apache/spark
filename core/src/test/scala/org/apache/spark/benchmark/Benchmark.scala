@@ -158,6 +158,7 @@ private[spark] class Benchmark(
     // scalastyle:off
     println(s"  Stopped after $i iterations, ${NANOSECONDS.toMillis(runTimes.sum)} ms")
     // scalastyle:on
+    assert(runTimes.nonEmpty)
     val best = runTimes.min
     val avg = runTimes.sum / runTimes.size
     val stdev = if (runTimes.size > 1) {
