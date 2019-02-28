@@ -119,6 +119,13 @@ object PartitioningUtils {
       Map.empty[String, DataType]
     }
 
+    // SPARK-26990: use user specified field names if case insensitive.
+    val userSpecifiedNames = if (userSpecifiedSchema.isDefined && !caseSensitive) {
+      CaseInsensitiveMap(userSpecifiedSchema.get.fields.map(f => f.name -> f.name).toMap)
+    } else {
+      Map.empty[String, String]
+    }
+
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes, timeZone)
@@ -163,7 +170,9 @@ object PartitioningUtils {
         columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
           // We always assume partition columns are nullable since we've no idea whether null values
           // will be appended in the future.
-          StructField(name, userSpecifiedDataTypes.getOrElse(name, dataType), nullable = true)
+          val resultName = userSpecifiedNames.getOrElse(name, name)
+          val resultDataType = userSpecifiedDataTypes.getOrElse(name, dataType)
+          StructField(resultName, resultDataType, nullable = true)
         }
       }
 
