@@ -244,7 +244,17 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
+    val tsm = new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
+    // TaskSet got submitted by DAGScheduler may have some already completed
+    // tasks since DAGScheduler does not always know all the tasks that have
+    // been completed by other tasksets when completing a stage, so we mark
+    // those tasks as finished here to avoid launching duplicate tasks, while
+    // holding the TaskSchedulerImpl lock.
+    // See SPARK-25250 and markPartitionCompletedInAllTaskSets()`
+    stageIdToFinishedPartitions.get(taskSet.stageId).foreach {
+      finishedPartitions => finishedPartitions.foreach(tsm.markPartitionCompleted(_, None))
+    }
+    tsm
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {

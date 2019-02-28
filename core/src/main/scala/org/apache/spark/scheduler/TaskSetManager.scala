@@ -189,18 +189,6 @@ private[spark] class TaskSetManager(
     addPendingTask(i)
   }
 
-  {
-    // TaskSet got submitted by DAGScheduler may have some already completed
-    // tasks since DAGScheduler does not always know all the tasks that have
-    // been completed by other tasksets when completing a stage, so we mark
-    // those tasks as finished here to avoid launching duplicate tasks, while
-    // holding the TaskSchedulerImpl lock.
-    // See SPARK-25250 and markPartitionCompletedInAllTaskSets()`
-    sched.stageIdToFinishedPartitions.get(taskSet.stageId).foreach {
-      finishedPartitions => finishedPartitions.foreach(markPartitionCompleted(_, None))
-    }
-  }
-
   /**
    * Track the set of locality levels which are valid given the tasks locality preferences and
    * the set of currently available executors.  This is updated as executors are added and removed.
