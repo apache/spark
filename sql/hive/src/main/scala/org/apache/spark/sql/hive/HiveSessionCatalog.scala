@@ -66,10 +66,11 @@ private[sql] class HiveSessionCatalog(
       name: String,
       clazz: Class[_],
       input: Seq[Expression]): Expression = {
-
-    Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
-      var udfExpr: Option[Expression] = None
-      try {
+    val originalClassLoader = Thread.currentThread().getContextClassLoader()
+    Thread.currentThread().setContextClassLoader(clazz.getClassLoader)
+    try {
+      Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
+        var udfExpr: Option[Expression] = None
         // When we instantiate hive UDF wrapper class, we may throw exception if the input
         // expressions don't satisfy the hive UDF, such as type mismatch, input number
         // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
@@ -93,23 +94,25 @@ private[sql] class HiveSessionCatalog(
           udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
           udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
         }
-      } catch {
-        case NonFatal(e) =>
-          val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
-          val errorMsg =
-            if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-              s"$noHandlerMsg\nPlease make sure your function overrides " +
-                "`public StructObjectInspector initialize(ObjectInspector[] args)`."
-            } else {
-              noHandlerMsg
-            }
-          val analysisException = new AnalysisException(errorMsg)
-          analysisException.setStackTrace(e.getStackTrace)
-          throw analysisException
+        udfExpr.getOrElse {
+          throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+        }
       }
-      udfExpr.getOrElse {
-        throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
-      }
+    } catch {
+      case NonFatal(e) =>
+        val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+        val errorMsg =
+          if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+            s"$noHandlerMsg\nPlease make sure your function overrides " +
+              "`public StructObjectInspector initialize(ObjectInspector[] args)`."
+          } else {
+            noHandlerMsg
+          }
+        val analysisException = new AnalysisException(errorMsg)
+        analysisException.setStackTrace(e.getStackTrace)
+        throw analysisException
+    } finally {
+      Thread.currentThread().setContextClassLoader(originalClassLoader)
     }
   }
 
