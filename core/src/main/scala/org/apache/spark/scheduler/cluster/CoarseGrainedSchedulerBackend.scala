@@ -25,6 +25,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod.PROXY
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -404,7 +405,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val ugi = UserGroupInformation.getCurrentUser()
         val tokens = if (dtm.renewalEnabled) {
           dtm.start()
-        } else if (ugi.hasKerberosCredentials()) {
+        } else if (ugi.hasKerberosCredentials() || ugi.getAuthenticationMethod == PROXY) {
           val creds = ugi.getCredentials()
           dtm.obtainDelegationTokens(creds)
           SparkHadoopUtil.get.serialize(creds)
