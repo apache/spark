@@ -310,4 +310,19 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     SQLConf.unregister(fallback)
   }
 
+  test("SPARK-26205: spark.sql.optimizer.inSetSwitchThreshold must be handled correctly") {
+    spark.sessionState.conf.clear()
+
+    assert(spark.conf.get(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD) == 400)
+    spark.conf.set(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key, 50)
+    assert(spark.conf.get(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD) == 50)
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key, -1)
+    }
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key, 601)
+    }
+
+    spark.sessionState.conf.clear()
+  }
 }

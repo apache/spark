@@ -196,7 +196,7 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val smallNumItemsSeq = Seq(5, 10, 25, 50, 100, 200)
-    val largeNumItemsSeq = Seq(450, 500, 550)
+    val largeNumItemsSeq = Seq(300, 400, 500)
     val largeNumRows = 10000000
     val smallNumRows = 1000000
     val minNumIters = 5
