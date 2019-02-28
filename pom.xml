@@ -264,9 +264,11 @@
       <url>https://repository.apache.org/content/repositories/orgapacheparquet-1023/</url>
       <releases>
         <enabled>true</enabled>
+        <updatePolicy>always</updatePolicy>
       </releases>
       <snapshots>
         <enabled>false</enabled>
+        <updatePolicy>always</updatePolicy>
       </snapshots>
     </repository>
   </repositories>
