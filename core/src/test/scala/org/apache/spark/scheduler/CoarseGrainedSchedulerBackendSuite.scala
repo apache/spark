@@ -159,21 +159,17 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       }
     }
 
-    try {
-      sc.addSparkListener(listener)
+    sc.addSparkListener(listener)
 
-      backend.driverEndpoint.askSync[Boolean](
-        RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
-      backend.driverEndpoint.askSync[Boolean](
-        RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
-      backend.driverEndpoint.askSync[Boolean](
-        RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
 
-      sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
-      assert(executorAddedCount === 3)
-    } finally {
-      sc.removeSparkListener(listener)
-    }
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(executorAddedCount === 3)
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
