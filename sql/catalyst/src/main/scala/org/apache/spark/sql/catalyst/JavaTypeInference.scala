@@ -332,10 +332,9 @@ object JavaTypeInference {
           val (dataType, nullable) = inferDataType(fieldType)
           val newTypePathForField = walkedTypePath.copy()
           newTypePathForField.recordField(fieldType.getType.getTypeName, fieldName)
-          val setter = deserializerForWithNullSafety(
+          val setter = expressionWithNullSafety(
             deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePathForField),
               newTypePathForField),
-            dataType,
             nullable = nullable,
             newTypePathForField)
           p.getWriteMethod.getName -> setter

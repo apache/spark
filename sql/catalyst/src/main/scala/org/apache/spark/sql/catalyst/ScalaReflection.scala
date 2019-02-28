@@ -341,9 +341,8 @@ object ScalaReflection extends ScalaReflection {
               addToPath(path, fieldName, dataType, newPathForField),
               newPathForField)
           }
-          deserializerForWithNullSafety(
+          expressionWithNullSafety(
             newPath,
-            dataType,
             nullable = nullable,
             newPathForField)
         }
