@@ -17,34 +17,47 @@
 
 package org.apache.spark.sql.catalyst
 
-case class WalkedTypePath(walkedPaths: Seq[String] = Nil) extends Serializable {
-  def recordRoot(className: String): WalkedTypePath =
-    newInstance(s"""- root class: "$className"""")
+import scala.collection.mutable
 
-  def recordOption(className: String): WalkedTypePath =
-    newInstance(s"""- option value class: "$className"""")
+case class WalkedTypePath() extends Serializable {
+  val walkedPaths: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
 
-  def recordArray(elementClassName: String): WalkedTypePath =
-    newInstance(s"""- array element class: "$elementClassName"""")
+  def recordRoot(className: String): Unit =
+    record(s"""- root class: "$className"""")
 
-  def recordMap(keyClassName: String, valueClassName: String): WalkedTypePath = {
-    newInstance(s"""- map key class: "$keyClassName"""" +
+  def recordOption(className: String): Unit =
+    record(s"""- option value class: "$className"""")
+
+  def recordArray(elementClassName: String): Unit =
+    record(s"""- array element class: "$elementClassName"""")
+
+  def recordMap(keyClassName: String, valueClassName: String): Unit = {
+    record(s"""- map key class: "$keyClassName"""" +
         s""", value class: "$valueClassName"""")
   }
 
-  def recordKeyForMap(keyClassName: String): WalkedTypePath =
-    newInstance(s"""- map key class: "$keyClassName"""")
+  def recordKeyForMap(keyClassName: String): Unit =
+    record(s"""- map key class: "$keyClassName"""")
 
-  def recordValueForMap(valueClassName: String): WalkedTypePath =
-    newInstance(s"""- map value class: "$valueClassName"""")
+  def recordValueForMap(valueClassName: String): Unit =
+    record(s"""- map value class: "$valueClassName"""")
 
-  def recordField(className: String, fieldName: String): WalkedTypePath =
-    newInstance(s"""- field (class: "$className", name: "$fieldName")""")
+  def recordField(className: String, fieldName: String): Unit =
+    record(s"""- field (class: "$className", name: "$fieldName")""")
 
-  override def toString: String = {
-    walkedPaths.mkString("\n")
+  def copy(): WalkedTypePath = {
+    val copied = WalkedTypePath()
+    copied.walkedPaths ++= walkedPaths
+    copied
   }
 
-  private def newInstance(newRecord: String): WalkedTypePath =
-    WalkedTypePath(newRecord +: walkedPaths)
+  override def toString: String = {
+    // to speed up appending element we are adding element at last and apply reverse
+    // just before printing it out
+    walkedPaths.reverse.mkString("\n")
+  }
+
+  private def record(newRecord: String): Unit = {
+    walkedPaths += newRecord
+  }
 }

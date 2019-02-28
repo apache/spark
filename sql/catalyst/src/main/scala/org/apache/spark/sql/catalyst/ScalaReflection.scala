@@ -137,7 +137,8 @@ object ScalaReflection extends ScalaReflection {
    */
   def deserializerForType(tpe: `Type`): Expression = {
     val clsName = getClassNameFromType(tpe)
-    val walkedTypePath = new WalkedTypePath().recordRoot(clsName)
+    val walkedTypePath = WalkedTypePath()
+    walkedTypePath.recordRoot(clsName)
     val Schema(dataType, nullable) = schemaFor(tpe)
 
     // Assumes we are deserializing the first column of a row.
@@ -164,8 +165,8 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         val className = getClassNameFromType(optType)
-        val newTypePath = walkedTypePath.recordOption(className)
-        WrapOption(deserializerFor(optType, path, newTypePath), dataTypeFor(optType))
+        walkedTypePath.recordOption(className)
+        WrapOption(deserializerFor(optType, path, walkedTypePath), dataTypeFor(optType))
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
         createDeserializerForTypesSupportValueOf(path,
@@ -226,7 +227,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
-        val newTypePath = walkedTypePath.recordArray(className)
+        walkedTypePath.recordArray(className)
 
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
@@ -234,7 +235,7 @@ object ScalaReflection extends ScalaReflection {
             element,
             dataType,
             nullable = elementNullable,
-            newTypePath,
+            walkedTypePath,
             (casted, typePath) => deserializerFor(elementType, casted, typePath))
         }
 
@@ -261,14 +262,14 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
-        val newTypePath = walkedTypePath.recordArray(className)
+        walkedTypePath.recordArray(className)
 
         val mapFunction: Expression => Expression = element => {
           deserializerForWithNullSafetyAndUpcast(
             element,
             dataType,
             nullable = elementNullable,
-            newTypePath,
+            walkedTypePath,
             (casted, typePath) => deserializerFor(elementType, casted, typePath))
         }
 
@@ -287,12 +288,15 @@ object ScalaReflection extends ScalaReflection {
         val classNameForKey = getClassNameFromType(keyType)
         val classNameForValue = getClassNameFromType(valueType)
 
-        val newTypePath = walkedTypePath.recordMap(classNameForKey, classNameForValue)
+        val newPathForKey = walkedTypePath.copy()
+        newPathForKey.recordMap(classNameForKey, classNameForValue)
+        val newPathForValue = walkedTypePath.copy()
+        newPathForValue.recordMap(classNameForKey, classNameForValue)
 
         UnresolvedCatalystToExternalMap(
           path,
-          p => deserializerFor(keyType, p, newTypePath),
-          p => deserializerFor(valueType, p, newTypePath),
+          p => deserializerFor(keyType, p, newPathForKey),
+          p => deserializerFor(valueType, p, newPathForValue),
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
@@ -322,27 +326,26 @@ object ScalaReflection extends ScalaReflection {
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
           val Schema(dataType, nullable) = schemaFor(fieldType)
           val clsName = getClassNameFromType(fieldType)
-          val newTypePath = walkedTypePath.recordField(clsName, fieldName)
+          val newPathForField = walkedTypePath.copy()
+          newPathForField.recordField(clsName, fieldName)
 
           // For tuples, we based grab the inner fields by ordinal instead of name.
+          val newPath = if (cls.getName startsWith "scala.Tuple") {
+            deserializerFor(
+              fieldType,
+              addToPathOrdinal(path, i, dataType, newPathForField),
+              newPathForField)
+          } else {
+            deserializerFor(
+              fieldType,
+              addToPath(path, fieldName, dataType, newPathForField),
+              newPathForField)
+          }
           deserializerForWithNullSafety(
-            path,
+            newPath,
             dataType,
             nullable = nullable,
-            newTypePath,
-            (expr, typePath) => {
-              if (cls.getName startsWith "scala.Tuple") {
-                deserializerFor(
-                  fieldType,
-                  addToPathOrdinal(expr, i, dataType, typePath),
-                  newTypePath)
-              } else {
-                deserializerFor(
-                  fieldType,
-                  addToPath(expr, fieldName, dataType, typePath),
-                  newTypePath)
-              }
-            })
+            newPathForField)
         }
 
         val newInstance = NewInstance(cls, arguments, ObjectType(cls), propagateNull = false)
@@ -370,7 +373,8 @@ object ScalaReflection extends ScalaReflection {
    */
   def serializerForType(tpe: `Type`): Expression = ScalaReflection.cleanUpReflectionObjects {
     val clsName = getClassNameFromType(tpe)
-    val walkedTypePath = new WalkedTypePath().recordRoot(clsName)
+    val walkedTypePath = WalkedTypePath()
+    walkedTypePath.recordRoot(clsName)
 
     // The input object to `ExpressionEncoder` is located at first column of an row.
     val isPrimitive = tpe.typeSymbol.asClass.isPrimitive
@@ -393,11 +397,11 @@ object ScalaReflection extends ScalaReflection {
       dataTypeFor(elementType) match {
         case dt: ObjectType =>
           val clsName = getClassNameFromType(elementType)
-          val newPath = walkedTypePath.recordArray(clsName)
+          walkedTypePath.recordArray(clsName)
           createSerializerForMapObjects(input, dt,
-            serializerFor(_, elementType, newPath, seenTypeSet))
+            serializerFor(_, elementType, walkedTypePath, seenTypeSet))
 
-         case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
+        case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
                     FloatType | DoubleType) =>
           val cls = input.dataType.asInstanceOf[ObjectType].cls
           if (cls.isArray && cls.getComponentType.isPrimitive) {
@@ -417,9 +421,9 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         val className = getClassNameFromType(optType)
-        val newPath = walkedTypePath.recordOption(className)
+        walkedTypePath.recordOption(className)
         val unwrapped = UnwrapOption(dataTypeFor(optType), inputObject)
-        serializerFor(unwrapped, optType, newPath, seenTypeSet)
+        serializerFor(unwrapped, optType, walkedTypePath, seenTypeSet)
 
       // Since List[_] also belongs to localTypeOf[Product], we put this case before
       // "case t if definedByConstructorParams(t)" to make sure it will match to the
@@ -436,8 +440,11 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val keyClsName = getClassNameFromType(keyType)
         val valueClsName = getClassNameFromType(valueType)
-        val keyPath = walkedTypePath.recordKeyForMap(keyClsName)
-        val valuePath = walkedTypePath.recordValueForMap(valueClsName)
+
+        val keyPath = walkedTypePath.copy()
+        keyPath.recordKeyForMap(keyClsName)
+        val valuePath = walkedTypePath.copy()
+        valuePath.recordValueForMap(valueClsName)
 
         createSerializerForMap(
           inputObject,
@@ -526,7 +533,8 @@ object ScalaReflection extends ScalaReflection {
           val fieldValue = Invoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
             returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
           val clsName = getClassNameFromType(fieldType)
-          val newPath = walkedTypePath.recordField(clsName, fieldName)
+          val newPath = walkedTypePath.copy()
+          newPath.recordField(clsName, fieldName)
           (fieldName, serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t))
         }
         createSerializerForObject(inputObject, fields)

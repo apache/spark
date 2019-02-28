@@ -45,12 +45,10 @@ object DeserializerBuildHelper {
   }
 
   def deserializerForWithNullSafety(
-      expr: Expression,
+      newExpr: Expression,
       dataType: DataType,
       nullable: Boolean,
-      walkedTypePath: WalkedTypePath,
-      funcForCreatingNewExpr: (Expression, WalkedTypePath) => Expression): Expression = {
-    val newExpr = funcForCreatingNewExpr(expr, walkedTypePath)
+      walkedTypePath: WalkedTypePath): Expression = {
     expressionWithNullSafety(newExpr, nullable, walkedTypePath)
   }
 
@@ -61,8 +59,8 @@ object DeserializerBuildHelper {
       walkedTypePath: WalkedTypePath,
       funcForCreatingNewExpr: (Expression, WalkedTypePath) => Expression): Expression = {
     val casted = upCastToExpectedType(expr, dataType, walkedTypePath)
-    deserializerForWithNullSafety(casted, dataType, nullable, walkedTypePath,
-      funcForCreatingNewExpr)
+    deserializerForWithNullSafety(funcForCreatingNewExpr(casted, walkedTypePath), dataType,
+      nullable, walkedTypePath)
   }
 
   private def expressionWithNullSafety(
@@ -72,7 +70,7 @@ object DeserializerBuildHelper {
     if (nullable) {
       expr
     } else {
-      AssertNotNull(expr, walkedTypePath)
+      AssertNotNull(expr, walkedTypePath.copy())
     }
   }
 
@@ -171,6 +169,6 @@ object DeserializerBuildHelper {
     case _: StructType => expr
     case _: ArrayType => expr
     case _: MapType => expr
-    case _ => UpCast(expr, expected, walkedTypePath)
+    case _ => UpCast(expr, expected, walkedTypePath.copy())
   }
 }
