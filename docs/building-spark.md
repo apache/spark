@@ -12,7 +12,7 @@ redirect_from: "building-with-maven.html"
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.5.4 and Java 8.
+Building Spark using Maven requires Maven 3.6.0 and Java 8.
 Note that support for Java 7 was removed as of Spark 2.2.0.
 
 ### Setting up Maven's Memory Usage
@@ -137,6 +137,14 @@ can be set to control the SBT build. For example:
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
 prompt.
+
+### Setting up SBT's Memory Usage
+Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
+
+    -Xmx2g
+    -XX:ReservedCodeCacheSize=512m
+
+For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](http://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 
 ## Speeding up Compilation
 

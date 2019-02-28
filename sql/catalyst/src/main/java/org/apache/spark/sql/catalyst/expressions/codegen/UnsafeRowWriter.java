@@ -132,7 +132,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   }
 
   public long getFieldOffset(int ordinal) {
-    return startingOffset + nullBitsSize + 8 * ordinal;
+    return startingOffset + nullBitsSize + 8L * ordinal;
   }
 
   public void write(int ordinal, boolean value) {

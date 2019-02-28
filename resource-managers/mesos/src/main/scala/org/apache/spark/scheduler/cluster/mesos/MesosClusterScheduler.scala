@@ -32,6 +32,7 @@ import org.apache.mesos.Protos.TaskStatus.Reason
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
@@ -365,8 +366,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverExecutorURI(desc: MesosDriverDescription): Option[String] = {
-    desc.conf.getOption("spark.executor.uri")
-      .orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
+    desc.conf.get(config.EXECUTOR_URI).orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
   }
 
   private def getDriverFrameworkID(desc: MesosDriverDescription): String = {
@@ -432,7 +432,7 @@ private[spark] class MesosClusterScheduler(
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
     val confUris = List(conf.getOption("spark.mesos.uris"),
       desc.conf.getOption("spark.mesos.uris"),
-      desc.conf.getOption("spark.submit.pyFiles")).flatMap(
+      Some(desc.conf.get(SUBMIT_PYTHON_FILES).mkString(","))).flatMap(
       _.map(_.split(",").map(_.trim))
     ).flatten
 
@@ -474,7 +474,7 @@ private[spark] class MesosClusterScheduler(
     } else if (executorUri.isDefined) {
       val folderBasename = executorUri.get.split('/').last.split('.').head
 
-      val entries = conf.getOption("spark.executor.extraLibraryPath")
+      val entries = conf.get(EXECUTOR_LIBRARY_PATH)
         .map(path => Seq(path) ++ desc.command.libraryPathEntries)
         .getOrElse(desc.command.libraryPathEntries)
 
@@ -528,22 +528,22 @@ private[spark] class MesosClusterScheduler(
       options ++= Seq("--class", desc.command.mainClass)
     }
 
-    desc.conf.getOption("spark.executor.memory").foreach { v =>
+    desc.conf.getOption(EXECUTOR_MEMORY.key).foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
-    desc.conf.getOption("spark.cores.max").foreach { v =>
+    desc.conf.getOption(CORES_MAX.key).foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
-    desc.conf.getOption("spark.submit.pyFiles").foreach { pyFiles =>
-      val formattedFiles = pyFiles.split(",")
-        .map { path => new File(sandboxPath, path.split("/").last).toString() }
-        .mkString(",")
-      options ++= Seq("--py-files", formattedFiles)
-    }
+
+    val pyFiles = desc.conf.get(SUBMIT_PYTHON_FILES)
+    val formattedFiles = pyFiles.map { path =>
+      new File(sandboxPath, path.split("/").last).toString()
+    }.mkString(",")
+    options ++= Seq("--py-files", formattedFiles)
 
     // --conf
     val replicatedOptionsBlacklist = Set(
-      "spark.jars", // Avoids duplicate classes in classpath
+      JARS.key, // Avoids duplicate classes in classpath
       "spark.submit.deployMode", // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master
     )

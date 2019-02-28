@@ -95,11 +95,13 @@ private[spark] class MetricsSystem private (
 
   metricsConfig.initialize()
 
-  def start() {
+  def start(registerStaticSources: Boolean = true) {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
-    StaticSources.allSources.foreach(registerSource)
-    registerSources()
+    if (registerStaticSources) {
+      StaticSources.allSources.foreach(registerSource)
+      registerSources()
+    }
     SharedMetricRegistries.getDefault.addListener(defaultListener)
     registerSinks()
     sinks.foreach(_.start())
@@ -133,7 +135,7 @@ private[spark] class MetricsSystem private (
   private[spark] def buildRegistryName(source: Source): String = {
     val metricsNamespace = conf.get(METRICS_NAMESPACE).orElse(conf.getOption("spark.app.id"))
 
-    val executorId = conf.getOption("spark.executor.id")
+    val executorId = conf.get(EXECUTOR_ID)
     val defaultName = MetricRegistry.name(source.sourceName)
 
     if (instance == "driver" || instance == "executor") {

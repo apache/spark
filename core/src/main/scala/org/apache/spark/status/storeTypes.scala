@@ -68,7 +68,8 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
  */
 private[spark] class JobDataWrapper(
     val info: JobData,
-    val skippedStages: Set[Int]) {
+    val skippedStages: Set[Int],
+    val sqlExecutionId: Option[Long]) {
 
   @JsonIgnore @KVIndex
   private def id: Int = info.jobId

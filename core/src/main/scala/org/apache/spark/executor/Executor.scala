@@ -127,7 +127,7 @@ private[spark] class Executor(
   private val userClassPathFirst = conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
 
   // Whether to monitor killed / interrupted tasks
-  private val taskReaperEnabled = conf.getBoolean("spark.task.reaper.enabled", false)
+  private val taskReaperEnabled = conf.get(TASK_REAPER_ENABLED)
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -168,7 +168,7 @@ private[spark] class Executor(
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val maxDirectResultSize = Math.min(
-    conf.getSizeAsBytes("spark.task.maxDirectResultSize", 1L << 20),
+    conf.get(TASK_MAX_DIRECT_RESULT_SIZE),
     RpcUtils.maxMessageSizeBytes(conf))
 
   private val maxResultSize = conf.get(MAX_RESULT_SIZE)
@@ -444,7 +444,7 @@ private[spark] class Executor(
 
           if (freedMemory > 0 && !threwException) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
-            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+            if (conf.get(UNSAFE_EXCEPTION_ON_MEMORY_LEAK)) {
               throw new SparkException(errMsg)
             } else {
               safeLogWarning("Managed memory leak detected",
@@ -457,7 +457,7 @@ private[spark] class Executor(
             val errMsg =
               s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
                 releasedLocks.mkString("[", ", ", "]")
-            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false)) {
+            if (conf.get(STORAGE_EXCEPTION_PIN_LEAK)) {
               throw new SparkException(errMsg)
             } else {
               safeLogInfo("block locks were not released by task",
@@ -708,13 +708,11 @@ private[spark] class Executor(
 
     private[this] val taskId: Long = taskRunner.taskId
 
-    private[this] val killPollingIntervalMs: Long =
-      conf.getTimeAsMs("spark.task.reaper.pollingInterval", "10s")
+    private[this] val killPollingIntervalMs: Long = conf.get(TASK_REAPER_POLLING_INTERVAL)
 
-    private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.reaper.killTimeout", "-1")
+    private[this] val killTimeoutMs: Long = conf.get(TASK_REAPER_KILL_TIMEOUT)
 
-    private[this] val takeThreadDump: Boolean =
-      conf.getBoolean("spark.task.reaper.threadDump", true)
+    private[this] val takeThreadDump: Boolean = conf.get(TASK_REAPER_THREAD_DUMP)
 
     override def run(): Unit = {
       val startTimeMs = System.currentTimeMillis()

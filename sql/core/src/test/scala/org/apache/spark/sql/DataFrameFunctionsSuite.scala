@@ -89,13 +89,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val msg1 = intercept[Exception] {
       df5.select(map_from_arrays($"k", $"v")).collect
     }.getMessage
-    assert(msg1.contains("Cannot use null as map key!"))
+    assert(msg1.contains("Cannot use null as map key"))
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
       df6.select(map_from_arrays($"k", $"v")).collect
     }.getMessage
-    assert(msg2.contains("The given two arrays should have the same length"))
+    assert(msg2.contains("The key array and value array of MapData must have the same length"))
   }
 
   test("struct with column name") {
@@ -2588,7 +2588,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val ex3 = intercept[Exception] {
       dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
     }
-    assert(ex3.getMessage.contains("Cannot use null as map key!"))
+    assert(ex3.getMessage.contains("Cannot use null as map key"))
 
     val ex4 = intercept[AnalysisException] {
       dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
@@ -2907,6 +2907,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
     }
     assert(ex.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("SPARK-26370: Fix resolution of higher-order function for the same identifier") {
+    val df = Seq(
+      (Seq(1, 9, 8, 7), 1, 2),
+      (Seq(5, 9, 7), 2, 2),
+      (Seq.empty, 3, 2),
+      (null, 4, 2)
+    ).toDF("i", "x", "d")
+
+    checkAnswer(df.selectExpr("x", "exists(i, x -> x % d == 0)"),
+      Seq(
+        Row(1, true),
+        Row(2, false),
+        Row(3, false),
+        Row(4, null)))
+    checkAnswer(df.filter("exists(i, x -> x % d == 0)"),
+      Seq(Row(Seq(1, 9, 8, 7), 1, 2)))
+    checkAnswer(df.select("x").filter("exists(i, x -> x % d == 0)"),
+      Seq(Row(1)))
   }
 }
 

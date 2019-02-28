@@ -24,6 +24,18 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
+  val KUBERNETES_CONTEXT =
+    ConfigBuilder("spark.kubernetes.context")
+      .doc("The desired context from your K8S config file used to configure the K8S " +
+        "client for interacting with the cluster.  Useful if your config file has " +
+        "multiple clusters or user identities defined.  The client library used " +
+        "locates the config file via the KUBECONFIG environment variable or by defaulting " +
+        "to .kube/config under your home directory.  If not specified then your current " +
+        "context is used.  You can always override specific aspects of the config file " +
+        "provided configuration using other Spark on K8S configuration options.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
@@ -60,7 +72,8 @@ private[spark] object Config extends Logging {
       .doc("Comma separated list of the Kubernetes secrets used " +
         "to access private image registries.")
       .stringConf
-      .createOptional
+      .toSequence
+      .createWithDefault(Nil)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
@@ -112,16 +125,16 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  // For testing only.
+  val KUBERNETES_DRIVER_POD_NAME_PREFIX =
+    ConfigBuilder("spark.kubernetes.driver.resourceNamePrefix")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
-      .internal()
-      .stringConf
-      .createWithDefault("spark")
-
-  val KUBERNETES_PYSPARK_PY_FILES =
-    ConfigBuilder("spark.kubernetes.python.pyFiles")
-      .doc("The PyFiles that are distributed via client arguments")
       .internal()
       .stringConf
       .createOptional
@@ -162,30 +175,6 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
-
-  val FILES_DOWNLOAD_LOCATION =
-    ConfigBuilder("spark.kubernetes.mountDependencies.filesDownloadDir")
-      .doc("Location to download files to in the driver and executors. When using " +
-        "spark-submit, this directory must be empty and will be mounted as an empty directory " +
-        "volume on the driver and executor pods.")
-      .stringConf
-      .createWithDefault("/var/spark-data/spark-files")
-
-  val EXECUTOR_SUBMITTED_SMALL_FILES_SECRET =
-    ConfigBuilder("spark.kubernetes.mountdependencies.smallfiles.executor.secretName")
-      .doc("Name of the secret that should be mounted into the executor containers for" +
-        " distributing submitted small files without the resource staging server.")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val EXECUTOR_SUBMITTED_SMALL_FILES_SECRET_MOUNT_PATH =
-    ConfigBuilder("spark.kubernetes.mountdependencies.smallfiles.executor.secretMountPath")
-      .doc(s"Mount path in the executors for the secret given by" +
-        s" ${EXECUTOR_SUBMITTED_SMALL_FILES_SECRET.key}")
-      .internal()
-      .stringConf
-      .createOptional
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
@@ -304,6 +293,13 @@ private[spark] object Config extends Logging {
     "spark.kubernetes.authenticate.submission"
 
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+
+  val KUBERNETES_DELETE_EXECUTORS =
+    ConfigBuilder("spark.kubernetes.executor.deleteOnTermination")
+      .doc("If set to false then executor pods will not be deleted in case " +
+        "of failure or normal termination.")
+      .booleanConf
+      .createWithDefault(true)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

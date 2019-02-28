@@ -20,14 +20,16 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
+import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -475,7 +477,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
     val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
-    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+    checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, reduce") {
@@ -1646,6 +1648,57 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = data.toDS
     checkDataset(ds, data: _*)
     checkAnswer(ds.select("x"), Seq(Row(1), Row(2)))
+  }
+
+  test("SPARK-26233: serializer should enforce decimal precision and scale") {
+    val s = StructType(Seq(StructField("a", StringType), StructField("b", DecimalType(38, 8))))
+    val encoder = RowEncoder(s)
+    implicit val uEnc = encoder
+    val df = spark.range(2).map(l => Row(l.toString, BigDecimal.valueOf(l + 0.1111)))
+    checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),
+      Seq(Row("0", BigDecimal.valueOf(0.1111)), Row("1", BigDecimal.valueOf(1.1111))))
+  }
+
+  test("SPARK-26366: return nulls which are not filtered in except") {
+    val inputDF = sqlContext.createDataFrame(
+      sparkContext.parallelize(Seq(Row("0", "a"), Row("1", null))),
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true))))
+
+    val exceptDF = inputDF.filter(col("a").isin("0") or col("b") > "c")
+    checkAnswer(inputDF.except(exceptDF), Seq(Row("1", null)))
+  }
+
+  test("SPARK-26619: Prune the unused serializers from SerializeFromObjec") {
+    val data = Seq(("a", 1), ("b", 2), ("c", 3))
+    val ds = data.toDS().map(t => (t._1, t._2 + 1)).select("_1")
+    val serializer = ds.queryExecution.optimizedPlan.collect {
+      case s: SerializeFromObject => s
+    }.head
+    assert(serializer.serializer.size == 1)
+    checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
+  }
+
+  test("SPARK-26706: Fix Cast.mayTruncate for bytes") {
+    val thrownException = intercept[AnalysisException] {
+      spark.range(Long.MaxValue - 10, Long.MaxValue).as[Byte]
+        .map(b => b - 1)
+        .collect()
+    }
+    assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+  }
+
+  test("SPARK-26690: checkpoints should be executed with an execution id") {
+    def assertExecutionId: UserDefinedFunction = udf(AssertExecutionId.apply _)
+    spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
+  }
+}
+
+object AssertExecutionId {
+  def apply(id: Long): Long = {
+    assert(TaskContext.get().getLocalProperty(SQLExecution.EXECUTION_ID_KEY) != null)
+    id
   }
 }
 

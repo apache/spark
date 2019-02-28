@@ -17,7 +17,6 @@
 
 import gc
 import os
-import socket
 import sys
 from tempfile import NamedTemporaryFile
 import threading
@@ -77,11 +76,12 @@ class Broadcast(object):
             # we're on the driver.  We want the pickled data to end up in a file (maybe encrypted)
             f = NamedTemporaryFile(delete=False, dir=sc._temp_dir)
             self._path = f.name
-            python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)
+            self._sc = sc
+            self._python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)
             if sc._encryption_enabled:
                 # with encryption, we ask the jvm to do the encryption for us, we send it data
                 # over a socket
-                port, auth_secret = python_broadcast.setupEncryptionServer()
+                port, auth_secret = self._python_broadcast.setupEncryptionServer()
                 (encryption_sock_file, _) = local_connect_and_auth(port, auth_secret)
                 broadcast_out = ChunkedStream(encryption_sock_file, 8192)
             else:
@@ -89,12 +89,14 @@ class Broadcast(object):
                 broadcast_out = f
             self.dump(value, broadcast_out)
             if sc._encryption_enabled:
-                python_broadcast.waitTillDataReceived()
-            self._jbroadcast = sc._jsc.broadcast(python_broadcast)
+                self._python_broadcast.waitTillDataReceived()
+            self._jbroadcast = sc._jsc.broadcast(self._python_broadcast)
             self._pickle_registry = pickle_registry
         else:
             # we're on an executor
             self._jbroadcast = None
+            self._sc = None
+            self._python_broadcast = None
             if sock_file is not None:
                 # the jvm is doing decryption for us.  Read the value
                 # immediately from the sock_file
@@ -134,7 +136,15 @@ class Broadcast(object):
         """ Return the broadcasted value
         """
         if not hasattr(self, "_value") and self._path is not None:
-            self._value = self.load_from_path(self._path)
+            # we only need to decrypt it here when encryption is enabled and
+            # if its on the driver, since executor decryption is handled already
+            if self._sc is not None and self._sc._encryption_enabled:
+                port, auth_secret = self._python_broadcast.setupDecryptionServer()
+                (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                self._python_broadcast.waitTillBroadcastDataSent()
+                return self.load(decrypted_sock_file)
+            else:
+                self._value = self.load_from_path(self._path)
         return self._value
 
     def unpersist(self, blocking=False):

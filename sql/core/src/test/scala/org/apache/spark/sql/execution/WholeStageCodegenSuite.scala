@@ -330,4 +330,13 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(abc, Row(1, "a"))
   }
+
+  test("SPARK-26680: Stream in groupBy does not cause StackOverflowError") {
+    val groupByCols = Stream(col("key"))
+    val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
+      .groupBy(groupByCols: _*)
+      .max("value")
+
+    checkAnswer(df, Seq(Row(1, 3), Row(2, 3)))
+  }
 }

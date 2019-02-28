@@ -522,7 +522,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts,
 
 A key step in many graph analytics tasks is aggregating information about the neighborhood of each
 vertex.
-For example, we might want to know the number of followers each user has or the average age of the
+For example, we might want to know the number of followers each user has or the average age of
 the followers of each user.  Many iterative graph algorithms (e.g., PageRank, Shortest Path, and
 connected components) repeatedly aggregate properties of neighboring vertices (e.g., current
 PageRank Value, shortest path to the source, and smallest reachable vertex id).
@@ -700,7 +700,7 @@ a new value for the vertex property, and then send messages to neighboring verti
 super step.  Unlike Pregel, messages are computed in parallel as a
 function of the edge triplet and the message computation has access to both the source and
 destination vertex attributes.  Vertices that do not receive a message are skipped within a super
-step.  The Pregel operators terminates iteration and returns the final graph when there are no
+step.  The Pregel operator terminates iteration and returns the final graph when there are no
 messages remaining.
 
 > Note, unlike more standard Pregel implementations, vertices in GraphX can only send messages to

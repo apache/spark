@@ -33,7 +33,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
 
   before {
     filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile
-    conf = new SparkConf(false).set("spark.metrics.conf", filePath)
+    conf = new SparkConf(false).set(METRICS_CONF, filePath)
     securityMgr = new SecurityManager(conf)
   }
 

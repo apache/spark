@@ -1196,33 +1196,40 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     selectQuery match {
       case Some(q) =>
-        // Hive does not allow to use a CTAS statement to create a partitioned table.
-        if (tableDesc.partitionColumnNames.nonEmpty) {
-          val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
-            "create a partitioned table using Hive's file formats. " +
-            "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
-            "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
-            "CTAS statement."
-          operationNotAllowed(errorMessage, ctx)
-        }
-
         // Don't allow explicit specification of schema for CTAS.
-        if (schema.nonEmpty) {
+        if (dataCols.nonEmpty) {
           operationNotAllowed(
             "Schema may not be specified in a Create Table As Select (CTAS) statement",
             ctx)
         }
 
+        // When creating partitioned table with CTAS statement, we can't specify data type for the
+        // partition columns.
+        if (partitionCols.nonEmpty) {
+          val errorMessage = "Create Partitioned Table As Select cannot specify data type for " +
+            "the partition columns of the target table."
+          operationNotAllowed(errorMessage, ctx)
+        }
+
+        // Hive CTAS supports dynamic partition by specifying partition column names.
+        val partitionColumnNames =
+          Option(ctx.partitionColumnNames)
+            .map(visitIdentifierList(_).toArray)
+            .getOrElse(Array.empty[String])
+
+        val tableDescWithPartitionColNames =
+          tableDesc.copy(partitionColumnNames = partitionColumnNames)
+
         val hasStorageProperties = (ctx.createFileFormat.size != 0) || (ctx.rowFormat.size != 0)
         if (conf.convertCTAS && !hasStorageProperties) {
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
-          val newTableDesc = tableDesc.copy(
+          val newTableDesc = tableDescWithPartitionColNames.copy(
             storage = CatalogStorageFormat.empty.copy(locationUri = locUri),
             provider = Some(conf.defaultDataSourceName))
           CreateTable(newTableDesc, mode, Some(q))
         } else {
-          CreateTable(tableDesc, mode, Some(q))
+          CreateTable(tableDescWithPartitionColNames, mode, Some(q))
         }
       case None => CreateTable(tableDesc, mode, None)
     }

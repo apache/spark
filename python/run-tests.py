@@ -19,7 +19,7 @@
 
 from __future__ import print_function
 import logging
-from optparse import OptionParser
+from optparse import OptionParser, OptionGroup
 import os
 import re
 import shutil
@@ -34,7 +34,6 @@ if sys.version < '3':
 else:
     import queue as Queue
 from collections import deque
-from distutils.version import LooseVersion
 from multiprocessing import Manager
 
 
@@ -174,7 +173,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, failed_tes
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.7", "python3.4", "pypy"] if which(x)]
+    python_execs = [x for x in ["python2.7", "python3.6", "pypy"] if which(x)]
     if "python2.7" not in python_execs:
         LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
                        " back to `python` instead")
@@ -204,6 +203,20 @@ def parse_opts():
         help="Enable additional debug logging"
     )
 
+    group = OptionGroup(parser, "Developer Options")
+    group.add_option(
+        "--testnames", type="string",
+        default=None,
+        help=(
+            "A comma-separated list of specific modules, classes and functions of doctest "
+            "or unittest to test. "
+            "For example, 'pyspark.sql.foo' to run the module as unittests or doctests, "
+            "'pyspark.sql.tests FooTests' to run the specific class of unittests, "
+            "'pyspark.sql.tests FooTests.test_foo' to run the specific unittest in the class. "
+            "'--modules' option is ignored if they are given.")
+    )
+    parser.add_option_group(group)
+
     (opts, args) = parser.parse_args()
     if args:
         parser.error("Unsupported arguments: %s" % ' '.join(args))
@@ -227,25 +240,31 @@ def _check_coverage(python_exec):
 
 def main():
     opts = parse_opts()
-    if (opts.verbose):
+    if opts.verbose:
         log_level = logging.DEBUG
     else:
         log_level = logging.INFO
+    should_test_modules = opts.testnames is None
     logging.basicConfig(stream=sys.stdout, level=log_level, format="%(message)s")
     LOGGER.info("Running PySpark tests. Output is in %s", LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
     python_execs = opts.python_executables.split(',')
-    modules_to_test = []
-    for module_name in opts.modules.split(','):
-        if module_name in python_modules:
-            modules_to_test.append(python_modules[module_name])
-        else:
-            print("Error: unrecognized module '%s'. Supported modules: %s" %
-                  (module_name, ", ".join(python_modules)))
-            sys.exit(-1)
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
-    LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
+
+    if should_test_modules:
+        modules_to_test = []
+        for module_name in opts.modules.split(','):
+            if module_name in python_modules:
+                modules_to_test.append(python_modules[module_name])
+            else:
+                print("Error: unrecognized module '%s'. Supported modules: %s" %
+                      (module_name, ", ".join(python_modules)))
+                sys.exit(-1)
+        LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
+    else:
+        testnames_to_test = opts.testnames.split(',')
+        LOGGER.info("Will test the following Python tests: %s", testnames_to_test)
 
     task_queue = Queue.PriorityQueue()
     for python_exec in python_execs:
@@ -260,16 +279,20 @@ def main():
         LOGGER.debug("%s python_implementation is %s", python_exec, python_implementation)
         LOGGER.debug("%s version is: %s", python_exec, subprocess_check_output(
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
-        for module in modules_to_test:
-            if python_implementation not in module.blacklisted_python_implementations:
-                for test_goal in module.python_test_goals:
-                    heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
-                                   'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']
-                    if any(map(lambda prefix: test_goal.startswith(prefix), heavy_tests)):
-                        priority = 0
-                    else:
-                        priority = 100
-                    task_queue.put((priority, (python_exec, test_goal)))
+        if should_test_modules:
+            for module in modules_to_test:
+                if python_implementation not in module.blacklisted_python_implementations:
+                    for test_goal in module.python_test_goals:
+                        heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
+                                       'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']
+                        if any(map(lambda prefix: test_goal.startswith(prefix), heavy_tests)):
+                            priority = 0
+                        else:
+                            priority = 100
+                        task_queue.put((priority, (python_exec, test_goal)))
+        else:
+            for test_goal in testnames_to_test:
+                task_queue.put((0, (python_exec, test_goal)))
 
     # Create the target directory before starting tasks to avoid races.
     target_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'target'))

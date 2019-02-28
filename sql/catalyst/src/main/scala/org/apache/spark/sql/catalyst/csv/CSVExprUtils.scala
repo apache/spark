@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.math.BigDecimal
+import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
+import java.util.Locale
+
 object CSVExprUtils {
   /**
    * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).

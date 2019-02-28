@@ -307,6 +307,63 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
+test_that("createDataFrame Arrow optimization", {
+  skip_if_not_installed("arrow")
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    expected <- collect(createDataFrame(mtcars))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    expect_equal(collect(createDataFrame(mtcars)), expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("createDataFrame Arrow optimization - type specification", {
+  skip_if_not_installed("arrow")
+  rdf <- data.frame(list(list(a = 1,
+                              b = "a",
+                              c = TRUE,
+                              d = 1.1,
+                              e = 1L,
+                              f = as.Date("1990-02-24"),
+                              g = as.POSIXct("1990-02-24 12:34:56"))))
+
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  conf <- callJMethod(sparkSession, "conf")
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    expected <- collect(createDataFrame(rdf))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    expect_equal(collect(createDataFrame(rdf)), expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
 test_that("read/write csv as DataFrame", {
   if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
@@ -1440,6 +1497,14 @@ test_that("column functions", {
   df5 <- createDataFrame(list(list(a = "010101")))
   expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
+  # Test months_between()
+  df <- createDataFrame(list(list(a = as.Date("1997-02-28"),
+                                  b = as.Date("1996-10-30"))))
+  result1 <- collect(select(df, alias(months_between(df[[1]], df[[2]]), "month")))[[1]]
+  expect_equal(result1, 3.93548387)
+  result2 <- collect(select(df, alias(months_between(df[[1]], df[[2]], FALSE), "month")))[[1]]
+  expect_equal(result2, 3.935483870967742)
+
   # Test array_contains(), array_max(), array_min(), array_position(), element_at() and reverse()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
   result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
@@ -1483,6 +1548,13 @@ test_that("column functions", {
   df <- createDataFrame(list(list(list("x", "y"), list(1, 2))), schema = c("k", "v"))
   result <- collect(select(df, map_from_arrays(df$k, df$v)))[[1]]
   expected_entries <- list(as.environment(list(x = 1, y = 2)))
+  expect_equal(result, expected_entries)
+
+  # Test map_from_entries()
+  df <- createDataFrame(list(list(list(listToStruct(list(c1 = "x", c2 = 1L)),
+                                       listToStruct(list(c1 = "y", c2 = 2L))))))
+  result <- collect(select(df, map_from_entries(df[[1]])))[[1]]
+  expected_entries <- list(as.environment(list(x = 1L, y = 2L)))
   expect_equal(result, expected_entries)
 
   # Test array_repeat()
@@ -1542,6 +1614,13 @@ test_that("column functions", {
                         list(list(list(5L, 6L), list(7L, 8L)))))
   result <- collect(select(df, flatten(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, 4L), list(5L, 6L, 7L, 8L)))
+
+  # Test map_concat
+  df <- createDataFrame(list(list(map1 = as.environment(list(x = 1, y = 2)),
+                                  map2 = as.environment(list(a = 3, b = 4)))))
+  result <- collect(select(df, map_concat(df[[1]], df[[2]])))[[1]]
+  expected_entries <- list(as.environment(list(x = 1, y = 2, a = 3, b = 4)))
+  expect_equal(result, expected_entries)
 
   # Test map_entries(), map_keys(), map_values() and element_at()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
@@ -1620,14 +1699,26 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
-  # Test from_csv()
+  # Test from_csv(), schema_of_csv()
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, alias(from_csv(df$col, "a INT"), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
   c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, structType("a INT")), "csv")))
+  expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, schema_of_csv("1")), "csv")))
+  expect_equal(c[[1]][[1]]$`_c0`, 1)
+  c <- collect(select(df, alias(from_csv(df$col, schema_of_csv(lit("1"))), "csv")))
+  expect_equal(c[[1]][[1]]$`_c0`, 1)
 
-  # Test to_json(), from_json()
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+
+  # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
   j <- collect(select(df, alias(to_json(df$people), "json")))
   expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
@@ -1645,7 +1736,9 @@ test_that("column functions", {
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
   df <- as.DataFrame(j)
   schemas <- list(structType(structField("age", "integer"), structField("height", "double")),
-                  "age INT, height DOUBLE")
+                  "age INT, height DOUBLE",
+                  schema_of_json("{\"age\":16,\"height\":176.5}"),
+                  schema_of_json(lit("{\"age\":16,\"height\":176.5}")))
   for (schema in schemas) {
     s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
     expect_equal(ncol(s), 1)
@@ -1653,6 +1746,12 @@ test_that("column functions", {
     expect_is(s[[1]][[1]], "struct")
     expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
+
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
+  expect_equal(c[[1]], "struct<name:string>")
+  c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
+  expect_equal(c[[1]], "struct<name:string>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -1674,12 +1773,16 @@ test_that("column functions", {
 
   # check for unparseable
   df <- as.DataFrame(list(list("a" = "")))
-  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]]$a, NA)
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
 
   # check if array type in string is correctly supported.
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
-  for (schema in list(structType(structField("name", "string")), "name STRING")) {
+  schemas <- list(structType(structField("name", "string")),
+                  "name STRING",
+                  schema_of_json("{\"name\":\"Alice\"}"),
+                  schema_of_json(lit("{\"name\":\"Bob\"}")))
+  for (schema in schemas) {
     arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
     expect_equal(ncol(arr), 1)
     expect_equal(nrow(arr), 1)

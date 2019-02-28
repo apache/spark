@@ -24,9 +24,8 @@ import scala.concurrent.duration._
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
-import org.mockito.Matchers
-import org.mockito.Matchers._
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{any, anyInt, anyLong, anyString, eq => meq}
+import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mockito.MockitoSugar
@@ -592,7 +591,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val expectedCores = 1
     setBackend(Map(
       "spark.cores.max" -> expectedCores.toString,
-      "spark.scheduler.minRegisteredResourcesRatio" -> "1.0"))
+      SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO.key -> "1.0"))
 
     val offers = List(Resources(backend.executorMemory(sc), expectedCores))
     offerResources(offers)
@@ -605,8 +604,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("supports data locality with dynamic allocation") {
     setBackend(Map(
-      "spark.dynamicAllocation.enabled" -> "true",
-      "spark.dynamicAllocation.testing" -> "true",
+      DYN_ALLOCATION_ENABLED.key -> "true",
+      DYN_ALLOCATION_TESTING.key -> "true",
       "spark.locality.wait" -> "1s"))
 
     assert(backend.getExecutorIds().isEmpty)
@@ -688,7 +687,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private def registerMockExecutor(executorId: String, slaveId: String, cores: Integer) = {
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
-    val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty)
+    val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
+      Map.empty)
 
     backend.driverEndpoint.askSync[Boolean](message)
   }
@@ -697,9 +697,9 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       offerId: OfferID,
       filter: Boolean = false): Unit = {
     if (filter) {
-      verify(driver, times(1)).declineOffer(Matchers.eq(offerId), anyObject[Filters])
+      verify(driver, times(1)).declineOffer(meq(offerId), any[Filters]())
     } else {
-      verify(driver, times(1)).declineOffer(Matchers.eq(offerId))
+      verify(driver, times(1)).declineOffer(meq(offerId))
     }
   }
 

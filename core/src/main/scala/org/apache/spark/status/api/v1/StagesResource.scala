@@ -210,7 +210,6 @@ private[v1] class StagesResource extends BaseAppResource {
       (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
         || containsValue(f.launchTime)
         || containsValue(f.resultFetchStart.getOrElse(defaultOptionString))
-        || containsValue(f.duration.getOrElse(defaultOptionString))
         || containsValue(f.executorId) || containsValue(f.host) || containsValue(f.status)
         || containsValue(f.taskLocality) || containsValue(f.speculative)
         || containsValue(f.errorMessage.getOrElse(defaultOptionString))

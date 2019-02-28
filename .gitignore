@@ -98,3 +98,6 @@ spark-warehouse/
 *.Rproj.*
 
 .Rproj.user
+
+# For SBT
+.jvmopts

@@ -1,0 +1,88 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.datasources.noop
+
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
+
+/**
+ * This is no-op datasource. It does not do anything besides consuming its input.
+ * This can be useful for benchmarking or to cache data without any additional overhead.
+ */
+class NoopDataSource
+  extends DataSourceV2
+  with TableProvider
+  with DataSourceRegister
+  with StreamingWriteSupportProvider {
+
+  override def shortName(): String = "noop"
+  override def getTable(options: DataSourceOptions): Table = NoopTable
+  override def createStreamingWriteSupport(
+      queryId: String,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamingWriteSupport = NoopStreamingWriteSupport
+}
+
+private[noop] object NoopTable extends Table with SupportsBatchWrite {
+  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = NoopWriteBuilder
+  override def name(): String = "noop-table"
+  override def schema(): StructType = new StructType()
+}
+
+private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsSaveMode {
+  override def buildForBatch(): BatchWrite = NoopBatchWrite
+  override def mode(mode: SaveMode): WriteBuilder = this
+}
+
+private[noop] object NoopBatchWrite extends BatchWrite {
+  override def createBatchWriterFactory(): DataWriterFactory = NoopWriterFactory
+  override def commit(messages: Array[WriterCommitMessage]): Unit = {}
+  override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+}
+
+private[noop] object NoopWriterFactory extends DataWriterFactory {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = NoopWriter
+}
+
+private[noop] object NoopWriter extends DataWriter[InternalRow] {
+  override def write(record: InternalRow): Unit = {}
+  override def commit(): WriterCommitMessage = null
+  override def abort(): Unit = {}
+}
+
+private[noop] object NoopStreamingWriteSupport extends StreamingWriteSupport {
+  override def createStreamingWriterFactory(): StreamingDataWriterFactory =
+    NoopStreamingDataWriterFactory
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+}
+
+private[noop] object NoopStreamingDataWriterFactory extends StreamingDataWriterFactory {
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = NoopWriter
+}
+

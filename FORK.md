@@ -6,7 +6,6 @@
 * [SPARK-17059](https://issues.apache.org/jira/browse/SPARK-17059) - Allow FileFormat to specify partition pruning strategy via splits
 * [SPARK-24345](https://issues.apache.org/jira/browse/SPARK-24345) - Improve ParseError stop location when offending symbol is a token
 * [SPARK-23795](https://issues.apache.org/jira/browse/SPARK-23795) - Make AbstractLauncher#self() protected
-* [SPARK-23153](https://issues.apache.org/jira/browse/SPARK-23153) - Support application dependencies in submission client's local file system
 * [SPARK-18079](https://issues.apache.org/jira/browse/SPARK-18079) - CollectLimitExec.executeToIterator should perform per-partition limits
 
 * [SPARK-15777](https://issues.apache.org/jira/browse/SPARK-15777) (Partial fix) - Catalog federation
@@ -31,3 +30,9 @@
 * [SPARK-25862](https://issues.apache.org/jira/browse/SPARK-25862) - Removal of `unboundedPreceding`, `unboundedFollowing`, `currentRow`
 * [SPARK-26127](https://issues.apache.org/jira/browse/SPARK-26127) - Removal of deprecated setters from tree regression and classification models
 * [SPARK-25867](https://issues.apache.org/jira/browse/SPARK-25867) - Removal of KMeans computeCost
+* [SPARK-26216](https://issues.apache.org/jira/browse/SPARK-26216) - Change to UserDefinedFunction type
+  * [SPARK-26323](https://issues.apache.org/jira/browse/SPARK-26323) - Scala UDF null checking
+  * [SPARK-26580](https://issues.apache.org/jira/browse/SPARK-26580) - Bring back scala 2.11 behaviour of primitive types null behaviour
+* [SPARK-26133](https://issues.apache.org/jira/browse/SPARK-26133) - Old OneHotEncoder
+* [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215) - StringIndexer multi column support
+* [SPARK-26616](https://issues.apache.org/jira/browse/SPARK-26616) - No document frequency in IDFModel

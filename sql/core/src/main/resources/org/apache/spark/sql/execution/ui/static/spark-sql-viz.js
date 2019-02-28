@@ -42,7 +42,7 @@ function renderPlanViz() {
     setupTooltipForSparkPlanNode(i);
   }
 
-  resizeSvg(svg)
+  resizeSvg(svg);
 }
 
 /* -------------------- *

@@ -95,7 +95,7 @@ trait FileFormat {
       fileIndex: FileIndex,
       filters: Seq[Filter],
       schema: StructType,
-      hadoopConf: Configuration): (FileStatus => Seq[FileSplit]) = {
+      hadoopConf: Configuration): FileStatus => Seq[FileSplit] = {
     stat => Seq(new FileSplit(stat.getPath, 0, stat.getLen, Array.empty))
   }
 
@@ -169,7 +169,7 @@ trait FileFormat {
    * Returns whether this format supports the given [[DataType]] in read/write path.
    * By default all data types are supported.
    */
-  def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
+  def supportDataType(dataType: DataType): Boolean = true
 }
 
 /**

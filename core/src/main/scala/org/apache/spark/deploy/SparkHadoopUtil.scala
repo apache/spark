@@ -38,6 +38,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.util.Utils
 
 /**
@@ -442,7 +443,7 @@ private[spark] object SparkHadoopUtil {
         }
       }
       appendSparkHadoopConfigs(conf, hadoopConf)
-      val bufferSize = conf.get("spark.buffer.size", "65536")
+      val bufferSize = conf.get(BUFFER_SIZE).toString
       hadoopConf.set("io.file.buffer.size", bufferSize)
     }
   }
@@ -466,7 +467,13 @@ private[spark] object SparkHadoopUtil {
     try {
       // Use reflection as this uses apis only avialable in hadoop 3
       val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
-      val builder = builderMethod.invoke(fs, path)
+      // the builder api does not resolve relative paths, nor does it create parent dirs, while
+      // the old api does.
+      if (!fs.mkdirs(path.getParent())) {
+        throw new IOException(s"Failed to create parents of $path")
+      }
+      val qualifiedPath = fs.makeQualified(path)
+      val builder = builderMethod.invoke(fs, qualifiedPath)
       val builderCls = builder.getClass()
       // this may throw a NoSuchMethodException if the path is not on hdfs
       val replicateMethod = builderCls.getMethod("replicate")

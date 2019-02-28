@@ -54,3 +54,4 @@ ALTER TABLE partition_table CHANGE COLUMN c c INT COMMENT 'this is column C';
 -- DROP TEST TABLE
 DROP TABLE test_change;
 DROP TABLE partition_table;
+DROP VIEW global_temp.global_temp_view;

@@ -80,6 +80,11 @@ NULL
 #'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
 #'          \item \code{next_day}: day of the week string.
 #'          }
+#' @param ... additional argument(s).
+#'          \itemize{
+#'          \item \code{months_between}, this contains an optional parameter to specify the
+#'              the result is rounded off to 8 digits.
+#'          }
 #'
 #' @name column_datetime_diff_functions
 #' @rdname column_datetime_diff_functions
@@ -202,14 +207,23 @@ NULL
 #'          \itemize{
 #'          \item \code{from_json}: a structType object to use as the schema to use
 #'              when parsing the JSON string. Since Spark 2.3, the DDL-formatted string is
-#'              also supported for the schema.
-#'          \item \code{from_csv}: a DDL-formatted string
+#'              also supported for the schema. Since Spark 3.0, \code{schema_of_json} or
+#'              the DDL-formatted string literal can also be accepted.
+#'          \item \code{from_csv}: a structType object, DDL-formatted string or \code{schema_of_csv}
 #'          }
-#' @param ... additional argument(s). In \code{to_json}, \code{to_csv} and \code{from_json},
-#'            this contains additional named properties to control how it is converted, accepts
-#'            the same options as the JSON/CSV data source. Additionally \code{to_json} supports
-#'            the "pretty" option which enables pretty JSON generation. In \code{arrays_zip},
-#'            this contains additional Columns of arrays to be merged.
+#' @param ... additional argument(s).
+#'          \itemize{
+#'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
+#'              additional named properties to control how it is converted and accepts the
+#'              same options as the JSON data source.
+#'          \item \code{to_json}: it supports the "pretty" option which enables pretty
+#'              JSON generation.
+#'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
+#'              additional named properties to control how it is converted and accepts the
+#'              same options as the CSV data source.
+#'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
+#'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
+#'          }
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
@@ -221,7 +235,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
-#' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1), array_remove(tmp$v1, 21)))
+#' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -230,15 +244,21 @@ NULL
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
 #' head(select(tmp3, map_entries(tmp3$v3), map_keys(tmp3$v3), map_values(tmp3$v3)))
-#' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
+#' head(select(tmp3, element_at(tmp3$v3, "Valiant"), map_concat(tmp3$v3, tmp3$v3)))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_except(tmp4$v4, tmp4$v5), array_intersect(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_union(tmp4$v4, tmp4$v5)))
-#' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5), map_from_arrays(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5)))
 #' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
 #' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
-#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))}
+#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))
+#' tmp6 <- mutate(df, v7 = create_array(create_array(df$model, df$model)))
+#' head(select(tmp6, flatten(tmp6$v7)))
+#' tmp7 <- mutate(df, v8 = create_array(df$model, df$cyl), v9 = create_array(df$model, df$hp))
+#' head(select(tmp7, map_from_arrays(tmp7$v8, tmp7$v9)))
+#' tmp8 <- mutate(df, v10 = create_array(struct(df$model, df$cyl)))
+#' head(select(tmp8, map_from_entries(tmp8$v10)))}
 NULL
 
 #' Window functions for Column operations
@@ -1716,7 +1736,7 @@ setMethod("radians",
 #' @details
 #' \code{to_date}: Converts the column into a DateType. You may optionally specify
 #' a format according to the rules in:
-#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a DateType if the format is omitted
@@ -1771,12 +1791,16 @@ setMethod("to_date",
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #'
 #' # Converts a map into a JSON object
-#' df2 <- sql("SELECT map('name', 'Bob')) as people")
+#' df2 <- sql("SELECT map('name', 'Bob') as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #'
 #' # Converts an array of maps into a JSON array
 #' df2 <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
-#' df2 <- mutate(df2, people_json = to_json(df2$people))}
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#'
+#' # Converts a map into a pretty JSON object
+#' df2 <- sql("SELECT map('name', 'Bob') as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people, pretty = TRUE))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
           function(x, ...) {
@@ -1808,7 +1832,7 @@ setMethod("to_csv", signature(x = "Column"),
 #' @details
 #' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
 #' a format according to the rules in:
-#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a TimestampType if the format is omitted
@@ -2062,15 +2086,21 @@ setMethod("levenshtein", signature(y = "Column"),
 #' are on the same day of month, or both are the last day of month, time of day will be ignored.
 #' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
 #'
+#' @param roundOff an optional parameter to specify if the result is rounded off to 8 digits
 #' @rdname column_datetime_diff_functions
 #' @aliases months_between months_between,Column-method
 #' @note months_between since 1.5.0
 setMethod("months_between", signature(y = "Column"),
-          function(y, x) {
+          function(y, x, roundOff = NULL) {
             if (class(x) == "Column") {
               x <- x@jc
             }
-            jc <- callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            jc <- if (is.null(roundOff)) {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            } else {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x,
+                           as.logical(roundOff))
+            }
             column(jc)
           })
 
@@ -2229,7 +2259,7 @@ setMethod("n", signature(x = "Column"),
 #' \code{date_format}: Converts a date/timestamp/string to a value of string in the format
 #' specified by the date format given by the second argument. A pattern could be for instance
 #' \code{dd.MM.yyyy} and could return a string like '18.03.1993'. All
-#' pattern letters of \code{java.text.SimpleDateFormat} can be used.
+#' pattern letters of \code{java.time.format.DateTimeFormatter} can be used.
 #' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
@@ -2243,6 +2273,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+setClassUnion("characterOrstructTypeOrColumn", c("character", "structType", "Column"))
+
 #' @details
 #' \code{from_json}: Parses a column containing a JSON string into a Column of \code{structType}
 #' with the specified \code{schema} or array of \code{structType} if \code{as.json.array} is set
@@ -2250,7 +2282,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'
 #' @rdname column_collection_functions
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
-#' @aliases from_json from_json,Column,characterOrstructType-method
+#' @aliases from_json from_json,Column,characterOrstructTypeOrColumn-method
 #' @examples
 #'
 #' \dontrun{
@@ -2258,25 +2290,37 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' df2 <- mutate(df2, d2 = to_json(df2$d, dateFormat = 'dd/MM/yyyy'))
 #' schema <- structType(structField("date", "string"))
 #' head(select(df2, from_json(df2$d2, schema, dateFormat = 'dd/MM/yyyy')))
-
 #' df2 <- sql("SELECT named_struct('name', 'Bob') as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #' schema <- structType(structField("name", "string"))
 #' head(select(df2, from_json(df2$people_json, schema)))
-#' head(select(df2, from_json(df2$people_json, "name STRING")))}
+#' head(select(df2, from_json(df2$people_json, "name STRING")))
+#' head(select(df2, from_json(df2$people_json, schema_of_json(head(df2)$people_json))))}
 #' @note from_json since 2.2.0
-setMethod("from_json", signature(x = "Column", schema = "characterOrstructType"),
+setMethod("from_json", signature(x = "Column", schema = "characterOrstructTypeOrColumn"),
           function(x, schema, as.json.array = FALSE, ...) {
             if (is.character(schema)) {
-              schema <- structType(schema)
+              jschema <- structType(schema)$jobj
+            } else if (class(schema) == "structType") {
+              jschema <- schema$jobj
+            } else {
+              jschema <- schema@jc
             }
 
             if (as.json.array) {
-              jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
-                                     "createArrayType",
-                                     schema$jobj)
-            } else {
-              jschema <- schema$jobj
+              # This case is R-specifically different. Unlike Scala and Python side,
+              # R side has 'as.json.array' option to indicate if the schema should be
+              # treated as struct or element type of array in order to make it more
+              # R-friendly.
+              if (class(schema) == "Column") {
+                jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                       "createArrayType",
+                                       jschema)
+              } else {
+                jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
+                                       "createArrayType",
+                                       jschema)
+              }
             }
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -2286,32 +2330,89 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
+#' \code{schema_of_json}: Parses a JSON string and infers its schema in DDL format.
+#'
+#' @rdname column_collection_functions
+#' @aliases schema_of_json schema_of_json,characterOrColumn-method
+#' @examples
+#'
+#' \dontrun{
+#' json <- "{\"name\":\"Bob\"}"
+#' df <- sql("SELECT * FROM range(1)")
+#' head(select(df, schema_of_json(json)))}
+#' @note schema_of_json since 3.0.0
+setMethod("schema_of_json", signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "character") {
+              col <- callJStatic("org.apache.spark.sql.functions", "lit", x)
+            } else {
+              col <- x@jc
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "schema_of_json",
+                              col, options)
+            column(jc)
+          })
+
+#' @details
 #' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
 #' with the specified \code{schema}.
 #' If the string is unparseable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
-#' @aliases from_csv from_csv,Column,character-method
+#' @aliases from_csv from_csv,Column,characterOrstructTypeOrColumn-method
 #' @examples
 #'
 #' \dontrun{
-#' df <- sql("SELECT 'Amsterdam,2018' as csv")
+#' csv <- "Amsterdam,2018"
+#' df <- sql(paste0("SELECT '", csv, "' as csv"))
 #' schema <- "city STRING, year INT"
-#' head(select(df, from_csv(df$csv, schema)))}
+#' head(select(df, from_csv(df$csv, schema)))
+#' head(select(df, from_csv(df$csv, structType(schema))))
+#' head(select(df, from_csv(df$csv, schema_of_csv(csv))))}
 #' @note from_csv since 3.0.0
-setMethod("from_csv", signature(x = "Column", schema = "characterOrColumn"),
+setMethod("from_csv", signature(x = "Column", schema = "characterOrstructTypeOrColumn"),
           function(x, schema, ...) {
-            if (class(schema) == "Column") {
-              jschema <- schema@jc
-            } else if (is.character(schema)) {
+            if (class(schema) == "structType") {
+              schema <- callJMethod(schema$jobj, "toDDL")
+            }
+
+            if (is.character(schema)) {
               jschema <- callJStatic("org.apache.spark.sql.functions", "lit", schema)
             } else {
-              stop("schema argument should be a column or character")
+              jschema <- schema@jc
             }
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_csv",
                               x@jc, jschema, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{schema_of_csv}: Parses a CSV string and infers its schema in DDL format.
+#'
+#' @rdname column_collection_functions
+#' @aliases schema_of_csv schema_of_csv,characterOrColumn-method
+#' @examples
+#'
+#' \dontrun{
+#' csv <- "Amsterdam,2018"
+#' df <- sql("SELECT * FROM range(1)")
+#' head(select(df, schema_of_csv(csv)))}
+#' @note schema_of_csv since 3.0.0
+setMethod("schema_of_csv", signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "character") {
+              col <- callJStatic("org.apache.spark.sql.functions", "lit", x)
+            } else {
+              col <- x@jc
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "schema_of_csv",
+                              col, options)
             column(jc)
           })
 
@@ -2603,7 +2704,7 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
 #' to a string representing the timestamp of that moment in the current system time zone in the JVM
 #' in the given format.
-#' See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#' See \href{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}{
 #' Customizing Formats} for available options.
 #'
 #' @rdname column_datetime_functions
@@ -3366,6 +3467,23 @@ setMethod("flatten",
           })
 
 #' @details
+#' \code{map_concat}: Returns the union of all the given maps.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_concat map_concat,Column-method
+#' @note map_concat since 3.0.0
+setMethod("map_concat",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(arg) {
+              stopifnot(class(arg) == "Column")
+              arg@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_concat", jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{map_entries}: Returns an unordered array of all entries in the given map.
 #'
 #' @rdname column_collection_functions
@@ -3390,6 +3508,19 @@ setMethod("map_from_arrays",
           signature(x = "Column", y = "Column"),
           function(x, y) {
             jc <- callJStatic("org.apache.spark.sql.functions", "map_from_arrays", x@jc, y@jc)
+            column(jc)
+         })
+
+#' @details
+#' \code{map_from_entries}: Returns a map created from the given array of entries.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_from_entries map_from_entries,Column-method
+#' @note map_from_entries since 3.0.0
+setMethod("map_from_entries",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_from_entries", x@jc)
             column(jc)
          })
 

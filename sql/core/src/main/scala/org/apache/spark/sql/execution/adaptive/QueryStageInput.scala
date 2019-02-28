@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.io.Writer
-
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 
 /**
  * QueryStageInput is the leaf node of a QueryStage and is used to hide its child stage. It gets
@@ -61,11 +59,12 @@ abstract class QueryStageInput extends LeafExecNode {
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      writer: Writer,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): Unit = {
-    childStage.generateTreeString(depth, lastChildren, writer, verbose, "*")
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    childStage.generateTreeString(depth, lastChildren, append, verbose, "*", addSuffix, maxFields)
   }
 }
 
@@ -81,7 +80,11 @@ case class ShuffleQueryStageInput(
     partitionStartIndices: Option[Array[Int]] = None)
   extends QueryStageInput {
 
-  override lazy val metrics = SQLMetrics.getShuffleReadMetrics(sparkContext)
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
 
   override def outputPartitioning: Partitioning = partitionStartIndices.map {
     indices => UnknownPartitioning(indices.length)
@@ -89,7 +92,7 @@ case class ShuffleQueryStageInput(
 
   override def doExecute(): RDD[InternalRow] = {
     val childRDD = childStage.execute().asInstanceOf[ShuffledRowRDD]
-    new ShuffledRowRDD(childRDD.dependency, metrics, partitionStartIndices)
+    new ShuffledRowRDD(childRDD.dependency, readMetrics, partitionStartIndices)
   }
 }
 

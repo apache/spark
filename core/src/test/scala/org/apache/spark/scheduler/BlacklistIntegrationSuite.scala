@@ -20,6 +20,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark._
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests._
 
 class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
@@ -57,10 +58,10 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "With default settings, job can succeed despite multiple bad executors on node",
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
-      config.MAX_TASK_FAILURES.key -> "4",
-      "spark.testing.nHosts" -> "2",
-      "spark.testing.nExecutorsPerHost" -> "5",
-      "spark.testing.nCoresPerExecutor" -> "10"
+      config.TASK_MAX_FAILURES.key -> "4",
+      TEST_N_HOSTS.key -> "2",
+      TEST_N_EXECUTORS_HOST.key -> "5",
+      TEST_N_CORES_EXECUTOR.key -> "10"
     )
   ) {
     // To reliably reproduce the failure that would occur without blacklisting, we have to use 1
@@ -84,7 +85,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     extraConfs = Seq(
        config.BLACKLIST_ENABLED.key -> "true",
       // just to avoid this test taking too long
-      "spark.locality.wait" -> "10ms"
+      config.LOCALITY_WAIT.key -> "10ms"
     )
   ) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
@@ -102,10 +103,10 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
-      "spark.testing.nHosts" -> "2",
-      "spark.testing.nExecutorsPerHost" -> "1",
-      "spark.testing.nCoresPerExecutor" -> "1",
-      "spark.scheduler.blacklist.unschedulableTaskSetTimeout" -> "0s"
+      TEST_N_HOSTS.key -> "2",
+      TEST_N_EXECUTORS_HOST.key -> "1",
+      TEST_N_CORES_EXECUTOR.key -> "1",
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0s"
     )
   ) {
     def runBackend(): Unit = {
@@ -129,9 +130,9 @@ class MultiExecutorMockBackend(
     conf: SparkConf,
     taskScheduler: TaskSchedulerImpl) extends MockBackend(conf, taskScheduler) {
 
-  val nHosts = conf.getInt("spark.testing.nHosts", 5)
-  val nExecutorsPerHost = conf.getInt("spark.testing.nExecutorsPerHost", 4)
-  val nCoresPerExecutor = conf.getInt("spark.testing.nCoresPerExecutor", 2)
+  val nHosts = conf.get(TEST_N_HOSTS)
+  val nExecutorsPerHost = conf.get(TEST_N_EXECUTORS_HOST)
+  val nCoresPerExecutor = conf.get(TEST_N_CORES_EXECUTOR)
 
   override val executorIdToExecutor: Map[String, ExecutorTaskStatus] = {
     (0 until nHosts).flatMap { hostIdx =>

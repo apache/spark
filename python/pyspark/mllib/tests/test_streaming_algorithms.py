@@ -334,7 +334,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         """Test that the model improves on toy data with no. of batches"""
         input_batches = [
             self.sc.parallelize(self.generateLogisticInput(0, 1.5, 100, 42 + i))
-            for i in range(20)]
+            for i in range(40)]
         predict_batches = [
             b.map(lambda lp: (lp.label, lp.features)) for b in input_batches]
 
@@ -364,7 +364,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
                 return True
             return "Latest errors: " + ", ".join(map(lambda x: str(x), errors))
 
-        self._eventually(condition)
+        self._eventually(condition, timeout=60.0)
 
 
 class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):

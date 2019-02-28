@@ -140,17 +140,17 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 
-  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+  override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true
 
-    case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
+    case st: StructType => st.forall { f => supportDataType(f.dataType) }
 
-    case ArrayType(elementType, _) => supportDataType(elementType, isReadPath)
+    case ArrayType(elementType, _) => supportDataType(elementType)
 
     case MapType(keyType, valueType, _) =>
-      supportDataType(keyType, isReadPath) && supportDataType(valueType, isReadPath)
+      supportDataType(keyType) && supportDataType(valueType)
 
-    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _: NullType => true
 
@@ -175,19 +175,20 @@ private[json] class JsonOutputWriter(
          " which can be read back by Spark only if multiLine is enabled.")
   }
 
-  private val writer = CodecStreams.createOutputStreamWriter(
-    context, new Path(path), encoding)
-
-  // create the Generator without separator inserted between 2 records
-  private[this] val gen = new JacksonGenerator(dataSchema, writer, options)
+  private var jacksonGenerator: Option[JacksonGenerator] = None
 
   override def write(row: InternalRow): Unit = {
+    val gen = jacksonGenerator.getOrElse {
+      val os = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)
+      // create the Generator without separator inserted between 2 records
+      val newGen = new JacksonGenerator(dataSchema, os, options)
+      jacksonGenerator = Some(newGen)
+      newGen
+    }
+
     gen.write(row)
     gen.writeLineEnding()
   }
 
-  override def close(): Unit = {
-    gen.close()
-    writer.close()
-  }
+  override def close(): Unit = jacksonGenerator.foreach(_.close())
 }

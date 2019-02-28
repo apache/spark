@@ -31,7 +31,7 @@ import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsLifecycleManager(
-    conf: SparkConf,
+    val conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     // Use a best-effort to track which executors have been removed already. It's not generally
@@ -43,6 +43,8 @@ private[spark] class ExecutorPodsLifecycleManager(
   import ExecutorPodsLifecycleManager._
 
   private val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
+
+  private lazy val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     snapshotsStore.addSubscriber(eventProcessingInterval) {
@@ -123,7 +125,9 @@ private[spark] class ExecutorPodsLifecycleManager(
       schedulerBackend: KubernetesClusterSchedulerBackend,
       execIdsRemovedInRound: mutable.Set[Long]): Unit = {
     removeExecutorFromSpark(schedulerBackend, podState, execId)
-    removeExecutorFromK8s(podState.pod)
+    if (shouldDeleteExecutors) {
+      removeExecutorFromK8s(podState.pod)
+    }
     execIdsRemovedInRound += execId
   }
 

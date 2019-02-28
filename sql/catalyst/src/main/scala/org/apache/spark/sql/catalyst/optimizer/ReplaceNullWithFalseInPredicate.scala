@@ -52,7 +52,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
-    case j @ Join(_, _, _, Some(cond)) => j.copy(condition = Some(replaceNullWithFalse(cond)))
+    case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
     case p: LogicalPlan => p transformExpressions {
       case i @ If(pred, _, _) => i.copy(predicate = replaceNullWithFalse(pred))
       case cw @ CaseWhen(branches, _) =>

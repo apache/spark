@@ -259,12 +259,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
   // overridden by concrete classes.
-  final override def verboseString: String = simpleString
+  final override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
-  override def simpleString: String = toString
+  override def simpleString(maxFields: Int): String = toString
 
   override def toString: String = prettyName + truncatedString(
-    flatArguments.toSeq, "(", ", ", ")")
+    flatArguments.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
@@ -288,7 +288,7 @@ trait Unevaluable extends Expression {
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 }
 
 

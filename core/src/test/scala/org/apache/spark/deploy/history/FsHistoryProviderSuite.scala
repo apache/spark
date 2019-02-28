@@ -34,7 +34,7 @@ import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatcher
-import org.mockito.Matchers.{any, argThat}
+import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
@@ -44,10 +44,12 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.{AppStatusStore, ExecutorSummaryWrapper}
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
@@ -290,11 +292,197 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
+  test("log urls without customization") {
+    val conf = createTestConf()
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("custom log urls, including FILE_NAME") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true))
+
+    // some of available attributes are not used in pattern which should be OK
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      val attr = execInfo.attributes
+      val newLogUrlMap = attr("LOG_FILES").split(",").map { file =>
+        val newLogUrl = getExpectedExecutorLogUrl(attr, Some(file))
+        file -> newLogUrl
+      }.toMap
+
+      execInfo -> newLogUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("custom log urls, excluding FILE_NAME") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = false))
+
+    // some of available attributes are not used in pattern which should be OK
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      val attr = execInfo.attributes
+      val newLogUrl = getExpectedExecutorLogUrl(attr, None)
+
+      execInfo -> Map("log" -> newLogUrl)
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("custom log urls with invalid attribute") {
+    // Here we are referring {{NON_EXISTING}} which is not available in attributes,
+    // which Spark will fail back to provide origin log url with warning log.
+
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true) +
+        "/{{NON_EXISTING}}")
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("custom log urls, LOG_FILES not available while FILE_NAME is specified") {
+    // For this case Spark will fail back to provide origin log url with warning log.
+
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true))
+
+    val executorInfos = (1 to 5).map(
+      createTestExecutorInfo("app1", "user1", _, includingLogFiles = false))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected)
+  }
+
+  test("custom log urls, app not finished, applyIncompleteApplication: true") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true))
+      .set(APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP, true)
+
+    // ensure custom log urls are applied to incomplete application
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      val attr = execInfo.attributes
+      val newLogUrlMap = attr("LOG_FILES").split(",").map { file =>
+        val newLogUrl = getExpectedExecutorLogUrl(attr, Some(file))
+        file -> newLogUrl
+      }.toMap
+
+      execInfo -> newLogUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected, isCompletedApp = false)
+  }
+
+  test("custom log urls, app not finished, applyIncompleteApplication: false") {
+    val conf = createTestConf()
+      .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true))
+      .set(APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP, false)
+
+    // ensure custom log urls are NOT applied to incomplete application
+
+    val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
+
+    val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
+      execInfo -> execInfo.logUrlMap
+    }.toMap
+
+    testHandlingExecutorLogUrl(conf, expected, isCompletedApp = false)
+  }
+
+  private def getCustomExecutorLogUrl(includeFileName: Boolean): String = {
+    val baseUrl = "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}/users/{{USER}}/containers/" +
+      "{{CONTAINER_ID}}"
+    if (includeFileName) baseUrl + "/{{FILE_NAME}}" else baseUrl
+  }
+
+  private def getExpectedExecutorLogUrl(
+      attributes: Map[String, String],
+      fileName: Option[String]): String = {
+    val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
+      s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
+
+    fileName match {
+      case Some(file) => baseUrl + s"/$file"
+      case None => baseUrl
+    }
+  }
+
+  private def testHandlingExecutorLogUrl(
+      conf: SparkConf,
+      expectedLogUrlMap: Map[ExecutorInfo, Map[String, String]],
+      isCompletedApp: Boolean = true): Unit = {
+    val provider = new FsHistoryProvider(conf)
+
+    val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = true)
+
+    val executorAddedEvents = expectedLogUrlMap.keys.zipWithIndex.map { case (execInfo, idx) =>
+      SparkListenerExecutorAdded(1 + idx, s"exec$idx", execInfo)
+    }.toList.sortBy(_.time)
+    val allEvents = List(SparkListenerApplicationStart("app1", Some("app1"), 1L,
+      "test", Some("attempt1"))) ++ executorAddedEvents ++
+      (if (isCompletedApp) List(SparkListenerApplicationEnd(1000L)) else Seq())
+
+    writeFile(attempt1, true, None, allEvents: _*)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      list.head.attempts.size should be (1)
+
+      list.foreach { app =>
+        app.attempts.foreach { attempt =>
+          val appUi = provider.getAppUI(app.id, attempt.attemptId)
+          appUi should not be null
+          val executors = appUi.get.ui.store.executorList(false).iterator
+          executors should not be null
+
+          val iterForExpectation = expectedLogUrlMap.iterator
+
+          var executorCount = 0
+          while (executors.hasNext) {
+            val executor = executors.next()
+            val (expectedExecInfo, expectedLogs) = iterForExpectation.next()
+
+            executor.hostPort should startWith(expectedExecInfo.executorHost)
+            executor.executorLogs should be(expectedLogs)
+
+            executorCount += 1
+          }
+
+          executorCount should be (expectedLogUrlMap.size)
+        }
+      }
+    }
+  }
+
   test("log cleaner") {
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
     val provider = new FsHistoryProvider(
-      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, true, None,
@@ -334,13 +522,52 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("should not clean inprogress application with lastUpdated time less than maxTime") {
+    val firstFileModifiedTime = TimeUnit.DAYS.toMillis(1)
+    val secondFileModifiedTime = TimeUnit.DAYS.toMillis(6)
+    val maxAge = TimeUnit.DAYS.toMillis(7)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(MAX_LOG_AGE_S, maxAge / 1000), clock)
+    val log = newLogFile("inProgressApp1", None, inProgress = true)
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
+    )
+    clock.setTime(firstFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null)
+    )
+
+    clock.setTime(secondFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    clock.setTime(TimeUnit.DAYS.toMillis(10))
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null),
+      SparkListenerJobEnd(0, 1L, JobSucceeded)
+    )
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    // This should not trigger any cleanup
+    updateAndCheck(provider) { list =>
+      list.size should be(1)
+    }
+  }
+
   test("log cleaner for inProgress files") {
     val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
     val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
     val maxAge = TimeUnit.SECONDS.toMillis(40)
     val clock = new ManualClock(0)
     val provider = new FsHistoryProvider(
-      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("inProgressApp1", None, inProgress = true)
     writeFile(log1, true, None,
@@ -423,8 +650,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val maxAge = TimeUnit.SECONDS.toSeconds(40)
     val clock = new ManualClock(0)
     val testConf = new SparkConf()
-    testConf.set("spark.history.fs.logDirectory",
-      Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
+    testConf.set(HISTORY_LOG_DIR, Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
     testConf.set(DRIVER_LOG_DFS_DIR, testDir.getAbsolutePath())
     testConf.set(DRIVER_LOG_CLEANER_ENABLED, true)
     testConf.set(DRIVER_LOG_CLEANER_INTERVAL, maxAge / 4)
@@ -585,6 +811,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
             "test", Some("attempt1")),
           SparkListenerEnvironmentUpdate(Map(
             "Spark Properties" -> properties.toSeq,
+            "Hadoop Properties" -> Seq.empty,
             "JVM Information" -> Seq.empty,
             "System Properties" -> Seq.empty,
             "Classpath Entries" -> Seq.empty
@@ -606,12 +833,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test both history ui admin acls and application acls are configured.
     val conf1 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.history.ui.admin.acls", "user1,user2")
-      .set("spark.history.ui.admin.acls.groups", "group1")
-      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+      .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, Seq("group1"))
+      .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
 
-    createAndCheck(conf1, ("spark.admin.acls", "user"), ("spark.admin.acls.groups", "group")) {
+    createAndCheck(conf1, (ADMIN_ACLS.key, "user"), (ADMIN_ACLS_GROUPS.key, "group")) {
       securityManager =>
         // Test whether user has permission to access UI.
         securityManager.checkUIViewPermissions("user1") should be (true)
@@ -628,10 +855,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test only history ui admin acls are configured.
     val conf2 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.history.ui.admin.acls", "user1,user2")
-      .set("spark.history.ui.admin.acls.groups", "group1")
-      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+      .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, Seq("group1"))
+      .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf2) { securityManager =>
       // Test whether user has permission to access UI.
       securityManager.checkUIViewPermissions("user1") should be (true)
@@ -648,8 +875,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test neither history ui admin acls nor application acls are configured.
      val conf3 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+      .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
+      .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf3) { securityManager =>
       // Test whether user has permission to access UI.
       securityManager.checkUIViewPermissions("user1") should be (false)
@@ -728,53 +955,54 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("clean up stale app information") {
-    val storeDir = Utils.createTempDir()
-    val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-    val clock = new ManualClock()
-    val provider = spy(new FsHistoryProvider(conf, clock))
-    val appId = "new1"
+    withTempDir { storeDir =>
+      val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
+      val clock = new ManualClock()
+      val provider = spy(new FsHistoryProvider(conf, clock))
+      val appId = "new1"
 
-    // Write logs for two app attempts.
-    clock.advance(1)
-    val attempt1 = newLogFile(appId, Some("1"), inProgress = false)
-    writeFile(attempt1, true, None,
-      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
-      SparkListenerJobStart(0, 1L, Nil, null),
-      SparkListenerApplicationEnd(5L)
+      // Write logs for two app attempts.
+      clock.advance(1)
+      val attempt1 = newLogFile(appId, Some("1"), inProgress = false)
+      writeFile(attempt1, true, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
+        SparkListenerJobStart(0, 1L, Nil, null),
+        SparkListenerApplicationEnd(5L)
       )
-    val attempt2 = newLogFile(appId, Some("2"), inProgress = false)
-    writeFile(attempt2, true, None,
-      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("2")),
-      SparkListenerJobStart(0, 1L, Nil, null),
-      SparkListenerApplicationEnd(5L)
+      val attempt2 = newLogFile(appId, Some("2"), inProgress = false)
+      writeFile(attempt2, true, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("2")),
+        SparkListenerJobStart(0, 1L, Nil, null),
+        SparkListenerApplicationEnd(5L)
       )
-    updateAndCheck(provider) { list =>
-      assert(list.size === 1)
-      assert(list(0).id === appId)
-      assert(list(0).attempts.size === 2)
-    }
+      updateAndCheck(provider) { list =>
+        assert(list.size === 1)
+        assert(list(0).id === appId)
+        assert(list(0).attempts.size === 2)
+      }
 
-    // Load the app's UI.
-    val ui = provider.getAppUI(appId, Some("1"))
-    assert(ui.isDefined)
+      // Load the app's UI.
+      val ui = provider.getAppUI(appId, Some("1"))
+      assert(ui.isDefined)
 
-    // Delete the underlying log file for attempt 1 and rescan. The UI should go away, but since
-    // attempt 2 still exists, listing data should be there.
-    clock.advance(1)
-    attempt1.delete()
-    updateAndCheck(provider) { list =>
-      assert(list.size === 1)
-      assert(list(0).id === appId)
-      assert(list(0).attempts.size === 1)
-    }
-    assert(!ui.get.valid)
-    assert(provider.getAppUI(appId, None) === None)
+      // Delete the underlying log file for attempt 1 and rescan. The UI should go away, but since
+      // attempt 2 still exists, listing data should be there.
+      clock.advance(1)
+      attempt1.delete()
+      updateAndCheck(provider) { list =>
+        assert(list.size === 1)
+        assert(list(0).id === appId)
+        assert(list(0).attempts.size === 1)
+      }
+      assert(!ui.get.valid)
+      assert(provider.getAppUI(appId, None) === None)
 
-    // Delete the second attempt's log file. Now everything should go away.
-    clock.advance(1)
-    attempt2.delete()
-    updateAndCheck(provider) { list =>
-      assert(list.isEmpty)
+      // Delete the second attempt's log file. Now everything should go away.
+      clock.advance(1)
+      attempt2.delete()
+      updateAndCheck(provider) { list =>
+        assert(list.isEmpty)
+      }
     }
   }
 
@@ -842,6 +1070,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         SparkListenerApplicationStart("end-event-test", Some("end-event-test"), 1L, "test", None),
         SparkListenerEnvironmentUpdate(Map(
           "Spark Properties" -> Seq.empty,
+          "Hadoop Properties" -> Seq.empty,
           "JVM Information" -> Seq.empty,
           "System Properties" -> Seq.empty,
           "Classpath Entries" -> Seq.empty
@@ -894,7 +1123,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
       argThat(new ArgumentMatcher[Path]() {
-        override def matches(path: Any): Boolean = {
+        override def matches(path: Path): Boolean = {
           path.asInstanceOf[Path].getName.toLowerCase(Locale.ROOT) == "accessdenied"
         }
       }))
@@ -996,7 +1225,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   private def createTestConf(inMemory: Boolean = false): SparkConf = {
     val conf = new SparkConf()
-      .set(EVENT_LOG_DIR, testDir.getAbsolutePath())
+      .set(HISTORY_LOG_DIR, testDir.getAbsolutePath())
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {
@@ -1004,6 +1233,26 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
 
     conf
+  }
+
+  private def createTestExecutorInfo(
+      appId: String,
+      user: String,
+      executorSeqNum: Int,
+      includingLogFiles: Boolean = true): ExecutorInfo = {
+    val host = s"host$executorSeqNum"
+    val container = s"container$executorSeqNum"
+    val cluster = s"cluster$executorSeqNum"
+    val logUrlPrefix = s"http://$host:8888/$appId/$container/origin"
+
+    val executorLogUrlMap = Map("stdout" -> s"$logUrlPrefix/stdout",
+      "stderr" -> s"$logUrlPrefix/stderr")
+
+    val extraAttributes = if (includingLogFiles) Map("LOG_FILES" -> "stdout,stderr") else Map.empty
+    val executorAttributes = Map("CONTAINER_ID" -> container, "CLUSTER_ID" -> cluster,
+      "USER" -> user) ++ extraAttributes
+
+    new ExecutorInfo(host, 1, executorLogUrlMap, executorAttributes)
   }
 
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)

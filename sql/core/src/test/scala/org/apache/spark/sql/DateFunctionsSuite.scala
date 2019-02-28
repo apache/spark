@@ -405,7 +405,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-MM-dd")),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
+      Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
 
     // now switch format
     checkAnswer(

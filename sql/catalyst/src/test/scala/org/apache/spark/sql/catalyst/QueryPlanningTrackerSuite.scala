@@ -23,19 +23,23 @@ class QueryPlanningTrackerSuite extends SparkFunSuite {
 
   test("phases") {
     val t = new QueryPlanningTracker
-    t.measureTime("p1") {
+    t.measurePhase("p1") {
       Thread.sleep(1)
     }
 
-    assert(t.phases("p1") > 0)
+    assert(t.phases("p1").durationMs > 0)
     assert(!t.phases.contains("p2"))
+  }
 
-    val old = t.phases("p1")
+  test("multiple measurePhase call") {
+    val t = new QueryPlanningTracker
+    t.measurePhase("p1") { Thread.sleep(1) }
+    val s1 = t.phases("p1")
+    assert(s1.durationMs > 0)
 
-    t.measureTime("p1") {
-      Thread.sleep(1)
-    }
-    assert(t.phases("p1") > old)
+    t.measurePhase("p1") { Thread.sleep(1) }
+    val s2 = t.phases("p1")
+    assert(s2.durationMs > s1.durationMs)
   }
 
   test("rules") {

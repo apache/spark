@@ -22,51 +22,66 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
-private[spark] class PodTemplateConfigMapStep(
-   conf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
-  def configurePod(pod: SparkPod): SparkPod = {
-    val podWithVolume = new PodBuilder(pod.pod)
-        .editSpec()
-          .addNewVolume()
-            .withName(POD_TEMPLATE_VOLUME)
-            .withNewConfigMap()
-              .withName(POD_TEMPLATE_CONFIGMAP)
-              .addNewItem()
-                .withKey(POD_TEMPLATE_KEY)
-                .withPath(EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
-              .endItem()
-            .endConfigMap()
-          .endVolume()
-        .endSpec()
-      .build()
 
-    val containerWithVolume = new ContainerBuilder(pod.container)
-        .addNewVolumeMount()
-          .withName(POD_TEMPLATE_VOLUME)
-          .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
-        .endVolumeMount()
-      .build()
-    SparkPod(podWithVolume, containerWithVolume)
+  private val hasTemplate = conf.contains(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+
+  def configurePod(pod: SparkPod): SparkPod = {
+    if (hasTemplate) {
+      val podWithVolume = new PodBuilder(pod.pod)
+          .editSpec()
+            .addNewVolume()
+              .withName(POD_TEMPLATE_VOLUME)
+              .withNewConfigMap()
+                .withName(POD_TEMPLATE_CONFIGMAP)
+                .addNewItem()
+                  .withKey(POD_TEMPLATE_KEY)
+                  .withPath(EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
+                .endItem()
+              .endConfigMap()
+            .endVolume()
+          .endSpec()
+        .build()
+
+      val containerWithVolume = new ContainerBuilder(pod.container)
+          .addNewVolumeMount()
+            .withName(POD_TEMPLATE_VOLUME)
+            .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
+          .endVolumeMount()
+        .build()
+      SparkPod(podWithVolume, containerWithVolume)
+    } else {
+      pod
+    }
   }
 
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
-    KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
-      (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+  override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    if (hasTemplate) {
+      Map[String, String](
+        KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
+          (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+    } else {
+      Map.empty
+    }
+  }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    require(conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)
-    val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
-    val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)
-    Seq(new ConfigMapBuilder()
-        .withNewMetadata()
-          .withName(POD_TEMPLATE_CONFIGMAP)
-        .endMetadata()
-        .addToData(POD_TEMPLATE_KEY, podTemplateString)
-      .build())
+    if (hasTemplate) {
+      val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
+      val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)
+      Seq(new ConfigMapBuilder()
+          .withNewMetadata()
+            .withName(POD_TEMPLATE_CONFIGMAP)
+          .endMetadata()
+          .addToData(POD_TEMPLATE_KEY, podTemplateString)
+        .build())
+    } else {
+      Nil
+    }
   }
 }

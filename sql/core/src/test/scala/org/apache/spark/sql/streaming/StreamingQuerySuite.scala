@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, ScanConfig}
+import org.apache.spark.sql.sources.v2.reader.InputPartition
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
@@ -220,10 +220,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+      override def planInputPartitions(start: OffsetV2, end: OffsetV2): Array[InputPartition] = {
         synchronized {
           clock.waitTillTime(1150)
-          super.planInputPartitions(config)
+          super.planInputPartitions(start, end)
         }
       }
     }
@@ -257,7 +257,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     var lastProgressBeforeStop: StreamingQueryProgress = null
 
     testStream(mapped, OutputMode.Complete)(
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AssertStreamExecThreadIsWaitingForTime(1000),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
@@ -370,7 +370,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.message === "Stopped"),
 
       // Test status and progress after query terminated with error
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AdvanceManualClock(1000), // ensure initial trigger completes before AddData
       AddData(inputData, 0),
       AdvanceManualClock(1000), // allow another trigger
@@ -906,12 +906,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(df.logicalPlan.toJSON.contains("StreamingRelationV2"))
 
     testStream(df)(
-      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingExecutionRelation"))
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
 
     testStream(df, useV2Sink = true)(
       StartStream(trigger = Trigger.Continuous(100)),
-      AssertOnQuery(_.logicalPlan.toJSON.contains("ContinuousExecutionRelation"))
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
   }
 

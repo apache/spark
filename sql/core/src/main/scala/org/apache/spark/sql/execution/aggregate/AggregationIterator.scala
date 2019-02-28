@@ -77,6 +77,7 @@ abstract class AggregationIterator(
     val expressionsLength = expressions.length
     val functions = new Array[AggregateFunction](expressionsLength)
     var i = 0
+    val inputAttributeSeq: AttributeSeq = inputAttributes
     while (i < expressionsLength) {
       val func = expressions(i).aggregateFunction
       val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
@@ -86,7 +87,7 @@ abstract class AggregationIterator(
           // this function is Partial or Complete because we will call eval of this
           // function's children in the update method of this aggregate function.
           // Those eval calls require BoundReferences to work.
-          BindReferences.bindReference(func, inputAttributes)
+          BindReferences.bindReference(func, inputAttributeSeq)
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.

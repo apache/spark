@@ -46,8 +46,8 @@ object PythonRunner extends CondaRunner with Logging {
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
     val secret = Utils.createSecret(sparkConf)
-    val presetPythonExec = Provenance.fromConf(sparkConf, PYSPARK_DRIVER_PYTHON)
-      .orElse(Provenance.fromConf(sparkConf, PYSPARK_PYTHON))
+    val presetPythonExec = Provenance.fromConfOpt(sparkConf, PYSPARK_DRIVER_PYTHON)
+      .orElse(Provenance.fromConfOpt(sparkConf, PYSPARK_PYTHON))
       .orElse(Provenance.fromEnv("PYSPARK_DRIVER_PYTHON"))
       .orElse(Provenance.fromEnv("PYSPARK_PYTHON"))
 

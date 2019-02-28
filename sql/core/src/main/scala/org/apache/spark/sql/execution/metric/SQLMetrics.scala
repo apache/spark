@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.metric
 import java.text.NumberFormat
 import java.util.Locale
 
+import scala.concurrent.duration._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
@@ -78,17 +80,10 @@ object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
+  private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
-
-  val REMOTE_BLOCKS_FETCHED = "remoteBlocksFetched"
-  val LOCAL_BLOCKS_FETCHED = "localBlocksFetched"
-  val REMOTE_BYTES_READ = "remoteBytesRead"
-  val REMOTE_BYTES_READ_TO_DISK = "remoteBytesReadToDisk"
-  val LOCAL_BYTES_READ = "localBytesRead"
-  val FETCH_WAIT_TIME = "fetchWaitTime"
-  val RECORDS_READ = "recordsRead"
 
   /**
    * Converts a double value to long value by multiplying a base integer, so we can store it in
@@ -125,6 +120,13 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
+    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc
+  }
+
+  def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+    // Same with createTimingMetric, just normalize the unit of time to millisecond.
+    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
@@ -171,6 +173,8 @@ object SQLMetrics {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
         Utils.msDurationToString
+      } else if (metricsType == NS_TIMING_METRIC) {
+        duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
         throw new IllegalStateException("unexpected metrics type: " + metricsType)
       }
@@ -202,16 +206,4 @@ object SQLMetrics {
         SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
     }
   }
-
-  /**
-   * Create all shuffle read relative metrics and return the Map.
-   */
-  def getShuffleReadMetrics(sc: SparkContext): Map[String, SQLMetric] = Map(
-    REMOTE_BLOCKS_FETCHED -> createMetric(sc, "remote blocks fetched"),
-    LOCAL_BLOCKS_FETCHED -> createMetric(sc, "local blocks fetched"),
-    REMOTE_BYTES_READ -> createSizeMetric(sc, "remote bytes read"),
-    REMOTE_BYTES_READ_TO_DISK -> createSizeMetric(sc, "remote bytes read to disk"),
-    LOCAL_BYTES_READ -> createSizeMetric(sc, "local bytes read"),
-    FETCH_WAIT_TIME -> createTimingMetric(sc, "fetch wait time"),
-    RECORDS_READ -> createMetric(sc, "records read"))
 }

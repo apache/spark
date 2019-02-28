@@ -39,7 +39,7 @@ class DiskStoreSuite extends SparkFunSuite {
     // It will cause error when we tried to re-open the filestore and the
     // memory-mapped byte buffer tot he file has not been GC on Windows.
     assume(!Utils.isWindows)
-    val confKey = "spark.storage.memoryMapThreshold"
+    val confKey = config.STORAGE_MEMORY_MAP_THRESHOLD.key
 
     // Create a non-trivial (not all zeros) byte array
     val bytes = Array.tabulate[Byte](1000)(_.toByte)
@@ -128,11 +128,10 @@ class DiskStoreSuite extends SparkFunSuite {
 
     assert(e.getMessage ===
       s"requirement failed: can't create a byte buffer of size ${blockData.size}" +
-      " since it exceeds 10.0 KB.")
+      " since it exceeds 10.0 KiB.")
   }
 
   test("block data encryption") {
-    val testDir = Utils.createTempDir()
     val testData = new Array[Byte](128 * 1024)
     new Random().nextBytes(testData)
 

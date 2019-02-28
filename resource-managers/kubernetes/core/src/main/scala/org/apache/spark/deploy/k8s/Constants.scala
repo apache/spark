@@ -59,14 +59,9 @@ private[spark] object Constants {
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
-  val ENV_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY"
-  val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
-  val ENV_MOUNTED_FILES_FROM_SECRET_DIR = "SPARK_MOUNTED_FILES_FROM_SECRET_DIR"
-
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
   val ENV_SPARK_USER = "SPARK_USER"
   // Spark app configs for containers
-  val MOUNTED_FILES_SECRET_DIR = "/var/data/spark-submitted-files"
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
   val SPARK_CONF_FILE_NAME = "spark.properties"
@@ -92,25 +87,22 @@ private[spark] object Constants {
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
 
   // Hadoop Configuration
-  val HADOOP_FILE_VOLUME = "hadoop-properties"
+  val HADOOP_CONF_VOLUME = "hadoop-properties"
   val KRB_FILE_VOLUME = "krb5-file"
   val HADOOP_CONF_DIR_PATH = "/opt/hadoop/conf"
   val KRB_FILE_DIR_PATH = "/etc"
   val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
   val HADOOP_CONFIG_MAP_NAME =
     "spark.kubernetes.executor.hadoopConfigMapName"
-  val KRB5_CONFIG_MAP_NAME =
-    "spark.kubernetes.executor.krb5ConfigMapName"
 
   // Kerberos Configuration
-  val KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME = "delegation-tokens"
   val KERBEROS_DT_SECRET_NAME =
     "spark.kubernetes.kerberos.dt-secret-name"
   val KERBEROS_DT_SECRET_KEY =
     "spark.kubernetes.kerberos.dt-secret-key"
-  val KERBEROS_SPARK_USER_NAME =
-    "spark.kubernetes.kerberos.spark-user-name"
   val KERBEROS_SECRET_KEY = "hadoop-tokens"
+  val KERBEROS_KEYTAB_VOLUME = "kerberos-keytab"
+  val KERBEROS_KEYTAB_MOUNT_POINT = "/mnt/secrets/kerberos-keytab"
 
   // Hadoop credentials secrets for the Spark app.
   val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"

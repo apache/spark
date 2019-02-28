@@ -74,7 +74,7 @@ creating table, you can create a table using storage handler at Hive side, and u
     <td><code>inputFormat, outputFormat</code></td>
     <td>
       These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
-      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in pair, and you can not
+      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in a pair, and you can not
       specify them if you already specified the `fileFormat` option.
     </td>
   </tr>
@@ -115,7 +115,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>1.2.1</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> through <code>2.3.4</code>.
+      options are <code>0.12.0</code> through <code>2.3.4</code> and <code>3.1.0</code> through <code>3.1.1</code>.
     </td>
   </tr>
   <tr>

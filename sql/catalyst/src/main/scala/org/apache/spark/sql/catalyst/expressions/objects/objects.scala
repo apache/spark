@@ -587,17 +587,13 @@ case class LambdaVariable(
     dataType: DataType,
     nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
 
-  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
       "The input row of interpreted LambdaVariable should have only 1 field.")
-    if (nullable && input.isNullAt(0)) {
-      null
-    } else {
-      accessor(input, 0)
-    }
+    accessor(input, 0)
   }
 
   override def genCode(ctx: CodegenContext): ExprCode = {

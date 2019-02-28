@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -88,7 +89,7 @@ class CacheManager extends Logging {
   def cacheQuery(
       query: Dataset[_],
       tableName: Option[String] = None,
-      storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
+      storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = {
     val planToCache = query.logicalPlan
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
@@ -100,7 +101,13 @@ class CacheManager extends Logging {
         sparkSession.sessionState.executePlan(planToCache).executedPlan,
         tableName,
         planToCache)
-      cachedData.add(CachedData(planToCache, inMemoryRelation))
+      writeLock {
+        if (lookupCachedData(planToCache).nonEmpty) {
+          logWarning("Data has already been cached.")
+        } else {
+          cachedData.add(CachedData(planToCache, inMemoryRelation))
+        }
+      }
     }
   }
 
@@ -114,7 +121,7 @@ class CacheManager extends Logging {
   def uncacheQuery(
       query: Dataset[_],
       cascade: Boolean,
-      blocking: Boolean = true): Unit = writeLock {
+      blocking: Boolean = true): Unit = {
     uncacheQuery(query.sparkSession, query.logicalPlan, cascade, blocking)
   }
 
@@ -130,58 +137,90 @@ class CacheManager extends Logging {
       spark: SparkSession,
       plan: LogicalPlan,
       cascade: Boolean,
-      blocking: Boolean): Unit = writeLock {
+      blocking: Boolean): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
         _.find(_.sameResult(plan)).isDefined
       } else {
         _.sameResult(plan)
       }
-    val it = cachedData.iterator()
-    while (it.hasNext) {
-      val cd = it.next()
-      if (shouldRemove(cd.plan)) {
-        cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
-        it.remove()
+    val plansToUncache = mutable.Buffer[CachedData]()
+    writeLock {
+      val it = cachedData.iterator()
+      while (it.hasNext) {
+        val cd = it.next()
+        if (shouldRemove(cd.plan)) {
+          plansToUncache += cd
+          it.remove()
+        }
       }
+    }
+    plansToUncache.foreach { cd =>
+      cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
     }
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
-      recacheByCondition(spark, _.find(_.sameResult(plan)).isDefined, clearCache = false)
+      recacheByCondition(spark, cd => {
+        // If the cache buffer has already been loaded, we don't need to recompile the cached plan,
+        // as it does not rely on the plan that has been uncached anymore, it will just produce
+        // data from the cache buffer.
+        // Note that the `CachedRDDBuilder.isCachedColumnBuffersLoaded` call is a non-locking
+        // status test and may not return the most accurate cache buffer state. So the worse case
+        // scenario can be:
+        // 1) The buffer has been loaded, but `isCachedColumnBuffersLoaded` returns false, then we
+        //    will clear the buffer and re-compiled the plan. It is inefficient but doesn't affect
+        //    correctness.
+        // 2) The buffer has been cleared, but `isCachedColumnBuffersLoaded` returns true, then we
+        //    will keep it as it is. It means the physical plan has been re-compiled already in the
+        //    other thread.
+        val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
+        cd.plan.find(_.sameResult(plan)).isDefined && !cacheAlreadyLoaded
+      })
     }
   }
 
   /**
    * Tries to re-cache all the cache entries that refer to the given plan.
    */
-  def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = writeLock {
-    recacheByCondition(spark, _.find(_.sameResult(plan)).isDefined)
+  def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
+    recacheByCondition(spark, _.plan.find(_.sameResult(plan)).isDefined)
   }
 
+  /**
+   *  Re-caches all the cache entries that satisfies the given `condition`.
+   */
   private def recacheByCondition(
       spark: SparkSession,
-      condition: LogicalPlan => Boolean,
-      clearCache: Boolean = true): Unit = {
-    val it = cachedData.iterator()
+      condition: CachedData => Boolean): Unit = {
     val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
-    while (it.hasNext) {
-      val cd = it.next()
-      if (condition(cd.plan)) {
-        if (clearCache) {
-          cd.cachedRepresentation.cacheBuilder.clearCache()
+    writeLock {
+      val it = cachedData.iterator()
+      while (it.hasNext) {
+        val cd = it.next()
+        if (condition(cd)) {
+          needToRecache += cd
+          // Remove the cache entry before we create a new one, so that we can have a different
+          // physical plan.
+          it.remove()
         }
-        // Remove the cache entry before we create a new one, so that we can have a different
-        // physical plan.
-        it.remove()
-        val plan = spark.sessionState.executePlan(cd.plan).executedPlan
-        val newCache = InMemoryRelation(
-          cacheBuilder = cd.cachedRepresentation.cacheBuilder.withCachedPlan(plan),
-          logicalPlan = cd.plan)
-        needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }
-
-    needToRecache.foreach(cachedData.add)
+    needToRecache.map { cd =>
+      cd.cachedRepresentation.cacheBuilder.clearCache()
+      val plan = spark.sessionState.executePlan(cd.plan).executedPlan
+      val newCache = InMemoryRelation(
+        cacheBuilder = cd.cachedRepresentation
+          .cacheBuilder.copy(cachedPlan = plan)(_cachedColumnBuffers = null),
+        logicalPlan = cd.plan)
+      val recomputedPlan = cd.copy(cachedRepresentation = newCache)
+      writeLock {
+        if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
+          logWarning("While recaching, data was already added to cache.")
+        } else {
+          cachedData.add(recomputedPlan)
+        }
+      }
+    }
   }
 
   /** Optionally returns cached data for the given [[Dataset]] */
@@ -219,14 +258,14 @@ class CacheManager extends Logging {
    * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
-  def recacheByPath(spark: SparkSession, resourcePath: String): Unit = writeLock {
+  def recacheByPath(spark: SparkSession, resourcePath: String): Unit = {
     val (fs, qualifiedPath) = {
       val path = new Path(resourcePath)
       val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
       (fs, fs.makeQualified(path))
     }
 
-    recacheByCondition(spark, _.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
+    recacheByCondition(spark, _.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
   }
 
   /**
