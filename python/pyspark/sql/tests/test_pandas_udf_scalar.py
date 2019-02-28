@@ -404,6 +404,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     NotImplementedError,
                     'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
+            with self.assertRaisesRegexp(
+                    NotImplementedError,
+                    'Invalid returnType.*scalar Pandas UDF.*ArrayType.StructType'):
+                pandas_udf(lambda x: x, ArrayType(StructType([StructField('a', IntegerType())])))
 
     def test_vectorized_udf_dates(self):
         schema = StructType().add("idx", LongType()).add("date", DateType())

@@ -1613,7 +1613,7 @@ def to_arrow_type(dt):
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
     elif type(dt) == ArrayType:
-        if type(dt.elementType) == TimestampType:
+        if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == StructType:
