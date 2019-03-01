@@ -151,7 +151,8 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     benchmark.addCase(name) { _ =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         spark
-          .sql(s"SELECT $selectExpr FROM orcTable")
+          .table("orcTable")
+          .select(selectExpr)
           .filter(whereColumn)
           .collect()
       }
@@ -443,9 +444,9 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
           (1 to 1001 by 200).foreach { numFilter =>
-                        val whereColumn = (1 to numFilter)
-                          .map(i => col("c1") === lit(i))
-                          .foldLeft(lit(false))(_ || _)
+            val whereColumn = (1 to numFilter)
+              .map(i => col("c1") === lit(i))
+              .foldLeft(lit(false))(_ || _)
             filterPushDownBenchmarkWithColumn(
               numRows,
               s"Select 1 row with $numFilter filters",
