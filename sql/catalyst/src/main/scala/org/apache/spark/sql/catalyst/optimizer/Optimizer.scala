@@ -128,7 +128,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         RemoveRedundantAliases,
         RemoveNoopOperators,
         SimplifyExtractValueOps,
-        CombineConcats) ++
+        CombineConcats,
+        TransformBinaryComparison) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {

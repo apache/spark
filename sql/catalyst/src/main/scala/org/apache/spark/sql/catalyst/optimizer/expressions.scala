@@ -735,3 +735,119 @@ object CombineConcats extends Rule[LogicalPlan] {
       flattenConcats(concat)
   }
 }
+
+
+/**
+ * Transform binary comparison(such as =, >, <, >=, <=) in conditions to its equivalent form,
+ * leaving attributes alone in one side, so that we can push it down to parquet or others.
+ * For example, this rule can optimize
+ * {{{
+ *   SELECT * FROM table WHERE i + 3 = 5
+ * }}}
+ * to
+ * {{{
+ *   SELECT * FROM table WHERE i = 5 - 3
+ * }}}
+ * when i is Int or Long, and then other rules will further optimize it to
+ * {{{
+ *   SELECT * FROM table WHERE i = 2
+ * }}}
+ */
+object TransformBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case e @ BinaryComparison(left: BinaryArithmetic, right: Literal)
+        if isDataTypeSafe(left.dataType) =>
+        transformLeft(e, left, right)
+      case e @ BinaryComparison(left: Literal, right: BinaryArithmetic)
+        if isDataTypeSafe(right.dataType) =>
+        transformRight(e, left, right)
+    }
+  }
+
+  private def transformLeft(bc: BinaryComparison, left: BinaryArithmetic, right: Literal)
+  : Expression = {
+    left match {
+      case Add(ar: AttributeReference, lit: Literal) if isOptSafe(Subtract(right, lit)) =>
+        bc.makeCopy(Array(ar, Subtract(right, lit)))
+      case Add(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(right, lit)) =>
+        bc.makeCopy(Array(ar, Subtract(right, lit)))
+      case Subtract(ar: AttributeReference, lit: Literal) if isOptSafe(Add(right, lit)) =>
+        bc.makeCopy(Array(ar, Add(right, lit)))
+      case Subtract(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(lit, right)) =>
+        bc.makeCopy(Array(Subtract(lit, right), ar))
+      case _ => bc
+    }
+  }
+
+  private def transformRight(bc: BinaryComparison, left: Literal, right: BinaryArithmetic)
+  : Expression = {
+    right match {
+      case Add(ar: AttributeReference, lit: Literal) if isOptSafe(Subtract(left, lit)) =>
+        bc.makeCopy(Array(Subtract(left, lit), ar))
+      case Add(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(left, lit)) =>
+        bc.makeCopy(Array(Subtract(left, lit), ar))
+      case Subtract(ar: AttributeReference, lit: Literal) if isOptSafe(Add(left, lit)) =>
+        bc.makeCopy(Array(Add(left, lit), ar))
+      case Subtract(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(lit, left)) =>
+        bc.makeCopy(Array(ar, Subtract(lit, left)))
+      case _ => bc
+    }
+  }
+
+  private def isDataTypeSafe(dataType: DataType): Boolean = dataType match {
+    case IntegerType | LongType => true
+    case _ => false
+  }
+
+  private def isOptSafe(e: BinaryArithmetic): Boolean = {
+    val leftVal = e.left.eval(EmptyRow)
+    val rightVal = e.right.eval(EmptyRow)
+
+    e match {
+      case Add(_: Literal, _: Literal) =>
+        e.dataType match {
+          case IntegerType =>
+            isAddSafe(leftVal, rightVal, Int.MinValue, Int.MaxValue)
+          case LongType =>
+            isAddSafe(leftVal, rightVal, Long.MinValue, Long.MaxValue)
+          case _ => false
+        }
+
+      case Subtract(_: Literal, _: Literal) =>
+        e.dataType match {
+          case IntegerType =>
+            isSubtractSafe(leftVal, rightVal, Int.MinValue, Int.MaxValue)
+          case LongType =>
+            isSubtractSafe(leftVal, rightVal, Long.MinValue, Long.MaxValue)
+          case _ => false
+        }
+
+      case _ => false
+    }
+  }
+
+  private def isAddSafe[T](left: Any, right: Any, minValue: T, maxValue: T)
+      (implicit num: Numeric[T]): Boolean = {
+    import num._
+    val leftVal = left.asInstanceOf[T]
+    val rightVal = right.asInstanceOf[T]
+    if (rightVal > zero) {
+      leftVal <= maxValue - rightVal
+    } else {
+      leftVal >= minValue - rightVal
+    }
+  }
+
+  private def isSubtractSafe[T](left: Any, right: Any, minValue: T, maxValue: T)
+      (implicit num: Numeric[T]): Boolean = {
+    import num._
+    val leftVal = left.asInstanceOf[T]
+    val rightVal = right.asInstanceOf[T]
+    if (rightVal > zero) {
+      leftVal >= minValue + rightVal
+    } else {
+      leftVal <= maxValue + rightVal
+    }
+  }
+}
