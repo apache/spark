@@ -310,7 +310,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     SQLConf.unregister(fallback)
   }
 
-  test("[SPARK-24783][SQL]spark.sql.shuffle.partitions=0 should throw exception ") {
+  test("SPARK-24783: spark.sql.shuffle.partitions=0 should throw exception ") {
     val e = intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "0")
     }
