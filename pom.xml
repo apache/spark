@@ -415,6 +415,21 @@
         <artifactId>jaxb-runtime</artifactId>
         <version>2.3.2</version>
         <scope>runtime</scope>
+        <exclusions>
+          <!-- for now, we only write XML in PMML export, and these can be excluded -->
+          <exclusion>
+            <groupId>com.sun.xml.fastinfoset</groupId>
+            <artifactId>FastInfoset</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>txw2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jvnet.staxex</groupId>
+            <artifactId>stax-ex</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
