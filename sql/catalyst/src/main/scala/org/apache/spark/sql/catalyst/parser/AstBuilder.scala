@@ -118,8 +118,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   override def visitDescQuery(ctx: DescQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryTerm).
-      optionalMap(ctx.queryOrganization)(withQueryResultClauses)
+    plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
   }
 
   /**

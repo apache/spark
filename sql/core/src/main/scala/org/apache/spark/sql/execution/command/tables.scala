@@ -505,7 +505,7 @@ abstract class DescribeCommandBase extends RunnableCommand {
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 
-  def describeSchema(
+  protected def describeSchema(
       schema: StructType,
       buffer: ArrayBuffer[Row],
       header: Boolean): Unit = {
@@ -517,7 +517,7 @@ abstract class DescribeCommandBase extends RunnableCommand {
     }
   }
 
-  def append(
+  protected def append(
     buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
     buffer += Row(column, dataType, comment)
   }
