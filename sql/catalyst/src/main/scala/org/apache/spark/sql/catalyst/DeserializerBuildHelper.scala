@@ -62,7 +62,7 @@ object DeserializerBuildHelper {
     if (nullable) {
       expr
     } else {
-      AssertNotNull(expr, walkedTypePath)
+      AssertNotNull(expr, walkedTypePath.getPaths)
     }
   }
 
@@ -161,6 +161,6 @@ object DeserializerBuildHelper {
     case _: StructType => expr
     case _: ArrayType => expr
     case _: MapType => expr
-    case _ => UpCast(expr, expected, walkedTypePath)
+    case _ => UpCast(expr, expected, walkedTypePath.getPaths)
   }
 }

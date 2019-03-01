@@ -1381,7 +1381,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 case class UpCast(
     child: Expression,
     dataType: DataType,
-    walkedTypePath: WalkedTypePath = new WalkedTypePath())
+    walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
 }

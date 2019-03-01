@@ -2528,14 +2528,14 @@ class Analyzer(
    * Replace the [[UpCast]] expression by [[Cast]], and throw exceptions if the cast may truncate.
    */
   object ResolveUpCast extends Rule[LogicalPlan] {
-    private def fail(from: Expression, to: DataType, walkedTypePath: WalkedTypePath) = {
+    private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
       val fromStr = from match {
         case l: LambdaVariable => "array element"
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
         s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
-        "The type path of the target object is:\n" + walkedTypePath + "\n" +
+        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
     }

@@ -354,7 +354,7 @@ object JavaTypeInference {
   def serializerFor(beanClass: Class[_]): Expression = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
     val nullSafeInput = AssertNotNull(inputObject,
-      WalkedTypePath().recordRoot("top level input bean"))
+      WalkedTypePath().recordRoot("top level input bean").getPaths)
     serializerFor(nullSafeInput, TypeToken.of(beanClass))
   }
 

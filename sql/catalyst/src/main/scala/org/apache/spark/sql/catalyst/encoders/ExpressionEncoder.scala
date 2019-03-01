@@ -195,7 +195,7 @@ case class ExpressionEncoder[T](
         case r: BoundReference =>
           // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
           // doesn't allow top-level row to be null, only its columns can be null.
-          AssertNotNull(r, WalkedTypePath().recordRoot("top level Product or row object"))
+          AssertNotNull(r, WalkedTypePath().recordRoot("top level Product or row object").getPaths)
       }
       nullSafeSerializer match {
         case If(_: IsNull, _, s: CreateNamedStruct) => s

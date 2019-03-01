@@ -50,6 +50,8 @@ case class WalkedTypePath(private val walkedPaths: Seq[String] = Nil) extends Se
     walkedPaths.mkString("\n")
   }
 
+  def getPaths: Seq[String] = walkedPaths
+
   private def newInstance(newRecord: String): WalkedTypePath =
     WalkedTypePath(newRecord +: walkedPaths)
 }
