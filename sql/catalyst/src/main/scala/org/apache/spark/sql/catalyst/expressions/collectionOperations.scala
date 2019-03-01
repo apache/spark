@@ -1930,7 +1930,7 @@ case class ArrayPosition(left: Expression, right: Expression)
   """,
   since = "2.4.0")
 case class ElementAt(left: Expression, right: Expression)
-    extends GetMapValueUtil with GetArrayItemUtil {
+  extends GetMapValueUtil with GetArrayItemUtil {
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 

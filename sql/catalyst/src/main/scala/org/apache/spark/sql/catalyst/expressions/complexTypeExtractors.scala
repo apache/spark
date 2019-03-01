@@ -222,7 +222,7 @@ case class GetArrayStructFields(
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
   extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue
-    with NullIntolerant {
+  with NullIntolerant {
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -294,13 +294,10 @@ trait GetArrayItemUtil {
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-  private val child = left
-  private val key = right
-
   /** `Null` is returned for invalid ordinals. */
-  protected def computeNullabilityFromMap: Boolean = if (key.foldable && !key.nullable) {
-    val keyObj = key.eval()
-    child match {
+  protected def computeNullabilityFromMap: Boolean = if (right.foldable && !right.nullable) {
+    val keyObj = right.eval()
+    left match {
       case m: CreateMap if m.resolved =>
         m.keys.zip(m.values).filter { case (k, _) => k.foldable && !k.nullable }.find {
           case (k, _) if k.eval() == keyObj => true

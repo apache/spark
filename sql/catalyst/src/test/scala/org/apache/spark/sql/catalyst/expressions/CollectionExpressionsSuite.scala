@@ -1092,7 +1092,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
-  test("SPARK-26965 correctly handles ElementAt nullability for arrays") {
+  test("correctly handles ElementAt nullability for arrays") {
     // CreateArray case
     val a = AttributeReference("a", IntegerType, nullable = false)()
     val b = AttributeReference("b", IntegerType, nullable = true)()
@@ -1125,7 +1125,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ElementAt(stArray4, Literal(1)).nullable)
   }
 
-  test("SPARK-26965 correctly handles ElementAt nullability for maps") {
+  test("correctly handles ElementAt nullability for maps") {
     // String key test
     val k1 = Literal("k1")
     val v1 = AttributeReference("v1", StringType, nullable = true)()
