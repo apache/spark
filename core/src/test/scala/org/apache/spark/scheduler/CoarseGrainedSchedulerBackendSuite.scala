@@ -148,13 +148,15 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       "USER" -> "dummy",
       "CONTAINER_ID" -> "container1",
       "LOG_FILES" -> "stdout,stderr")
+    val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
+      s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
 
     var executorAddedCount: Int = 0
     val listener = new SparkListener() {
       override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
         executorAddedCount += 1
         assert(executorAdded.executorInfo.logUrlMap === Seq("stdout", "stderr").map { file =>
-          file -> getExpectedCustomExecutorLogUrl(attributes, Some(file))
+          file -> (baseUrl + s"/$file")
         }.toMap)
       }
     }
@@ -181,17 +183,4 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       { return }
     )
   }
-
-  private def getExpectedCustomExecutorLogUrl(
-      attributes: Map[String, String],
-      fileName: Option[String]): String = {
-    val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
-      s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
-
-    fileName match {
-      case Some(file) => baseUrl + s"/$file"
-      case None => baseUrl
-    }
-  }
-
 }
