@@ -195,8 +195,7 @@ object JavaTypeInference {
    */
   def deserializerFor(beanClass: Class[_]): Expression = {
     val typeToken = TypeToken.of(beanClass)
-    val walkedTypePath = WalkedTypePath()
-    walkedTypePath.recordRoot(beanClass.getCanonicalName)
+    val walkedTypePath = new WalkedTypePath().recordRoot(beanClass.getCanonicalName)
     val (dataType, nullable) = inferDataType(typeToken)
 
     // Assumes we are deserializing the first column of a row.
@@ -245,7 +244,7 @@ object JavaTypeInference {
 
       case c if c.isArray =>
         val elementType = c.getComponentType
-        walkedTypePath.recordArray(elementType.getCanonicalName)
+        val newTypePath = walkedTypePath.recordArray(elementType.getCanonicalName)
         val (dataType, elementNullable) = inferDataType(elementType)
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
@@ -253,7 +252,7 @@ object JavaTypeInference {
             element,
             dataType,
             nullable = elementNullable,
-            walkedTypePath,
+            newTypePath,
             (casted, typePath) => deserializerFor(typeToken.getComponentType, casted, typePath))
         }
 
@@ -274,7 +273,7 @@ object JavaTypeInference {
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
-        walkedTypePath.recordArray(et.getType.getTypeName)
+        val newTypePath = walkedTypePath.recordArray(et.getType.getTypeName)
         val (dataType, elementNullable) = inferDataType(et)
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
@@ -282,7 +281,7 @@ object JavaTypeInference {
             element,
             dataType,
             nullable = elementNullable,
-            walkedTypePath,
+            newTypePath,
             (casted, typePath) => deserializerFor(et, casted, typePath))
         }
 
@@ -290,16 +289,13 @@ object JavaTypeInference {
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
-        walkedTypePath.recordMap(keyType.getType.getTypeName,
+        val newTypePath = walkedTypePath.recordMap(keyType.getType.getTypeName,
           valueType.getType.getTypeName)
-
-        val newTypePathForKey = walkedTypePath.copy()
-        val newTypePathForValue = walkedTypePath.copy()
 
         val keyData =
           Invoke(
             UnresolvedMapObjects(
-              p => deserializerFor(keyType, p, newTypePathForKey),
+              p => deserializerFor(keyType, p, newTypePath),
               MapKeys(path)),
             "array",
             ObjectType(classOf[Array[Any]]))
@@ -307,7 +303,7 @@ object JavaTypeInference {
         val valueData =
           Invoke(
             UnresolvedMapObjects(
-              p => deserializerFor(valueType, p, newTypePathForValue),
+              p => deserializerFor(valueType, p, newTypePath),
               MapValues(path)),
             "array",
             ObjectType(classOf[Array[Any]]))
@@ -330,13 +326,12 @@ object JavaTypeInference {
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(fieldType)
-          val newTypePathForField = walkedTypePath.copy()
-          newTypePathForField.recordField(fieldType.getType.getTypeName, fieldName)
+          val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
           val setter = expressionWithNullSafety(
-            deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePathForField),
-              newTypePathForField),
+            deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
+              newTypePath),
             nullable = nullable,
-            newTypePathForField)
+            newTypePath)
           p.getWriteMethod.getName -> setter
         }.toMap
 
@@ -358,10 +353,7 @@ object JavaTypeInference {
    */
   def serializerFor(beanClass: Class[_]): Expression = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
-    val walkedTypePath = WalkedTypePath()
-    walkedTypePath.recordRoot("top level input bean")
-    // not copying walkedTypePath since the instance will be only used here
-    val nullSafeInput = AssertNotNull(inputObject, walkedTypePath)
+    val nullSafeInput = AssertNotNull(inputObject, new WalkedTypePath(Seq("top level input bean")))
     serializerFor(nullSafeInput, TypeToken.of(beanClass))
   }
 

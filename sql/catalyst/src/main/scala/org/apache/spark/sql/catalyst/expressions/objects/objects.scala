@@ -1627,7 +1627,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
  */
-case class AssertNotNull(child: Expression, walkedTypePath: WalkedTypePath = WalkedTypePath())
+case class AssertNotNull(child: Expression, walkedTypePath: WalkedTypePath = new WalkedTypePath())
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
