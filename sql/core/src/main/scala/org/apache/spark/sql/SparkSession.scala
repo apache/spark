@@ -725,12 +725,12 @@ class SparkSession private(
    * @since 2.0.0
    */
   def stop(): Unit = {
-    if (!stopped.compareAndSet(false, true)) {
+    if (stopped.compareAndSet(false, true)) {
+      stopStreamingQueries()
+      sparkContext.stop()
+    } else {
       logInfo("SparkSession already stopped.")
-      return
     }
-    stopStreamingQueries()
-    sparkContext.stop()
   }
 
   /**
