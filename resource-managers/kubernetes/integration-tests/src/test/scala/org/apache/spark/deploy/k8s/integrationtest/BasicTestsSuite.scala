@@ -81,6 +81,12 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       })
   }
 
+  test("Run SparkPi with spark.io.compression.codec=snappy for SPARK-26995.", k8sTestTag) {
+    sparkAppConf
+      .set("spark.io.compression.codec", "snappy")
+    runSparkPiAndVerifyCompletion()
+  }
+
   test("Run extraJVMOptions check on driver", k8sTestTag) {
     sparkAppConf
       .set("spark.driver.extraJavaOptions", "-Dspark.test.foo=spark.test.bar")
@@ -103,4 +109,5 @@ private[spark] object BasicTestsSuite {
   val REMOTE_PAGE_RANK_DATA_FILE =
     "https://storage.googleapis.com/spark-k8s-integration-tests/files/pagerank_data.txt"
   val REMOTE_PAGE_RANK_FILE_NAME = "pagerank_data.txt"
+  val SPARK_HOME_PATH: String = "/opt/spark/"
 }
