@@ -367,6 +367,10 @@ object DateTimeUtils {
     days.toInt
   }
 
+  def localDateToDays(localDate: LocalDate): Int = localDate.toEpochDay.toInt
+
+  def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
+
   /**
    * Trim and parse a given UTF8 date string to a corresponding [[Int]] value.
    * The return type is [[Option]] in order to distinguish between 0 and null. The following

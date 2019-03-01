@@ -221,6 +221,9 @@ object JavaTypeInference {
                 c == classOf[java.lang.Boolean] =>
         createDeserializerForTypesSupportValueOf(path, c)
 
+      case c if c == classOf[java.time.LocalDate] =>
+        createDeserializerForLocalDate(path)
+
       case c if c == classOf[java.sql.Date] =>
         createDeserializerForSqlDate(path)
 
@@ -390,6 +393,14 @@ object JavaTypeInference {
             DateTimeUtils.getClass,
             TimestampType,
             "fromJavaTimestamp",
+            inputObject :: Nil,
+            returnNullable = false)
+
+        case c if c == classOf[java.time.LocalDate] =>
+          StaticInvoke(
+            DateTimeUtils.getClass,
+            DateType,
+            "localDateToDays",
             inputObject :: Nil,
             returnNullable = false)
 
