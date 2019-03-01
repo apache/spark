@@ -25,4 +25,3 @@ DESCRIBE
 -- cleanup
 DROP TABLE desc_temp1;
 DROP TABLE desc_temp2;
-DROP TABLE desc_temp3;
