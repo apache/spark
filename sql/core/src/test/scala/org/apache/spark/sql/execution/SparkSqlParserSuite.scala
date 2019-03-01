@@ -387,4 +387,12 @@ class SparkSqlParserSuite extends AnalysisTest {
       "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
       "Operation not allowed: ALTER VIEW ... AS FROM ... [INSERT INTO ...]+")
   }
+
+  test("database and schema tokens are interchangeable") {
+    assertEqual("CREATE DATABASE foo", parser.parsePlan("CREATE SCHEMA foo"))
+    assertEqual("DROP DATABASE foo", parser.parsePlan("DROP SCHEMA foo"))
+    assertEqual("ALTER DATABASE foo SET DBPROPERTIES ('x' = 'y')",
+      parser.parsePlan("ALTER SCHEMA foo SET DBPROPERTIES ('x' = 'y')"))
+    assertEqual("DESC DATABASE foo", parser.parsePlan("DESC SCHEMA foo"))
+  }
 }
