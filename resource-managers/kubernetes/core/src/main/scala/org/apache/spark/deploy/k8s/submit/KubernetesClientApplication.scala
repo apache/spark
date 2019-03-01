@@ -220,6 +220,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       master,
       Some(kubernetesConf.namespace),
       KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
+      SUBMISSION_CLIENT_PREFIX,
       sparkConf,
       None,
       None)) { kubernetesClient =>

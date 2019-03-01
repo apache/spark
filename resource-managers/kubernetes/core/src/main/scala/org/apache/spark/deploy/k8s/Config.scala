@@ -75,6 +75,12 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val SUBMISSION_CLIENT_PREFIX =
+      "spark.kubernetes.kubernetesClient.submission"
+  val DRIVER_CLIENT_PREFIX =
+      "spark.kubernetes.kubernetesClient.driver"
+  val CLIENT_MODE_CLIENT_PREFIX =
+      "spark.kubernetes.kubernetesClient"
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
@@ -85,6 +91,9 @@ private[spark] object Config extends Logging {
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
   val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
+  val REQUEST_TIMEOUT_SUFFIX = "requestTimeout"
+  val CONNECTION_TIMEOUT_SUFFIX = "connectionTimeout"
+
 
   val KUBERNETES_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")

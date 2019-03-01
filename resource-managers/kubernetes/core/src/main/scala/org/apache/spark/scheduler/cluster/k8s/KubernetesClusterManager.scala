@@ -44,6 +44,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       scheduler: TaskScheduler): SchedulerBackend = {
     val wasSparkSubmittedInClusterMode = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
     val (authConfPrefix,
+      clientConfPrefix,
       apiServerUri,
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt) = if (wasSparkSubmittedInClusterMode) {
@@ -51,11 +52,13 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
           "must be provided.")
       (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+        DRIVER_CLIENT_PREFIX,
         KUBERNETES_MASTER_INTERNAL_URL,
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
     } else {
       (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
+        CLIENT_MODE_CLIENT_PREFIX,
         KubernetesUtils.parseMasterUrl(masterURL),
         None,
         None)
@@ -65,6 +68,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       apiServerUri,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
       authConfPrefix,
+      clientConfPrefix,
       sc.conf,
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt)

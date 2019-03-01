@@ -41,6 +41,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       master: String,
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
+      kubernetesClientPrefix: String,
       sparkConf: SparkConf,
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
@@ -63,6 +64,10 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
+    val requestTimeout =
+      sparkConf.getInt(s"$kubernetesClientPrefix.$REQUEST_TIMEOUT_SUFFIX", 10000)
+    val connectionTimeout =
+      sparkConf.getInt(s"$kubernetesClientPrefix.$CONNECTION_TIMEOUT_SUFFIX", 10000)
     val dispatcher = new Dispatcher(
       ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
 
@@ -79,6 +84,8 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .withApiVersion("v1")
       .withMasterUrl(master)
       .withWebsocketPingInterval(0)
+      .withRequestTimeout(requestTimeout)
+      .withConnectionTimeout(connectionTimeout)
       .withOption(oauthTokenValue) {
         (token, configBuilder) => configBuilder.withOauthToken(token)
       }.withOption(oauthTokenFile) {
