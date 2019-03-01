@@ -402,7 +402,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 //      }
 //    }
 
-    runBenchmark(s"Pushdown benchmark with unbalanced Column") {
+    runBenchmark(s"Predicate conversion benchmark with unbalanced Expression") {
       val numRows = 1
       val width = 2000
 
@@ -411,10 +411,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
         val df = spark.range(1).selectExpr(columns: _*)
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
-        (1000 to 15000 by 2000).foreach { numFilter =>
-//            val whereColumn = (1 to numFilter)
-//              .map(i => col(s"c$i") === lit(0))
-//              .foldLeft(lit(false))(_ || _)
+          (1000 to 15000 by 2000).foreach { numFilter =>
             val whereExpression = (1 to numFilter)
               .map {
                 i => EqualTo(
@@ -423,24 +420,39 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
                     s"c1",
                     IntegerType,
                     nullable = true)()
-                  ).asInstanceOf[Expression]
+                ).asInstanceOf[Expression]
               }
               .foldLeft[Expression](Literal.FalseLiteral)((x, y) => Or(x, y))
-          val benchmark = new Benchmark(s"Select 1 row with $numFilter filters",
-            numRows, minNumIters = 5, output = output)
-          val name = s"Native ORC Vectorized (Pushdown)"
-          benchmark.addCase(name) { _ =>
-            OrcFilters.createFilter(df.schema,
-              DataSourceStrategy.translateFilter(whereExpression).toSeq)
+            val benchmark = new Benchmark(s"Select 1 row with $numFilter filters",
+              numRows, minNumIters = 5, output = output)
+            val name = s"Native ORC Vectorized (Pushdown)"
+            benchmark.addCase(name) { _ =>
+              OrcFilters.createFilter(df.schema,
+                DataSourceStrategy.translateFilter(whereExpression).toSeq)
+            }
+            benchmark.run()
           }
-          benchmark.run()
-//            val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" or ")
-            // Note: InferFiltersFromConstraints will add more filters to this given filters
-//            filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
-//            filterPushDownBenchmarkWithColumn(
-//              numRows,
-//              s"Select 1 row with $numFilter filters",
-//              whereColumn)
+        }
+      }
+    }
+
+    runBenchmark(s"Pushdown benchmark with unbalanced Column") {
+      val numRows = 1
+      val width = 200
+
+      withTempPath { dir =>
+        val columns = (1 to width).map(i => s"id c$i")
+        val df = spark.range(1).selectExpr(columns: _*)
+        withTempTable("orcTable", "parquetTable") {
+          saveAsTable(df, dir)
+          (1 to 1001 by 200).foreach { numFilter =>
+                        val whereColumn = (1 to numFilter)
+                          .map(i => col("c1") === lit(i))
+                          .foldLeft(lit(false))(_ || _)
+            filterPushDownBenchmarkWithColumn(
+              numRows,
+              s"Select 1 row with $numFilter filters",
+              whereColumn)
           }
         }
       }
