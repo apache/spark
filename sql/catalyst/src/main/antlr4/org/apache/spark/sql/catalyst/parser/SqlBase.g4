@@ -78,11 +78,11 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
-    | CREATE DATABASE (IF NOT EXISTS)? identifier
+    | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
-    | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
-    | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
+    | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitionColumnNames=identifierList) |
@@ -163,7 +163,7 @@ statement
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
@@ -272,6 +272,11 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
+    ;
+
+database
+    : DATABASE
+    | SCHEMA
     ;
 
 describeFuncName
@@ -750,7 +755,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// NOTE: You must follow a rule below when you add a new ANTLR taken in this file:
+// NOTE: You must follow a rule below when you add a new ANTLR token in this file:
 //  - All the ANTLR tokens = UNION(`ansiReserved`, `ansiNonReserved`) = UNION(`defaultReserved`, `nonReserved`)
 //
 // Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
@@ -1014,7 +1019,8 @@ SORTED: 'SORTED';
 PURGE: 'PURGE';
 INPUTFORMAT: 'INPUTFORMAT';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
-DATABASE: 'DATABASE' | 'SCHEMA';
+SCHEMA: 'SCHEMA';
+DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
