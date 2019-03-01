@@ -228,7 +228,7 @@ private[kafka010] class KafkaMicroBatchStream(
       until.map {
         case (tp, end) =>
           tp -> sizes.get(tp).map { size =>
-            val begin = from.get(tp).getOrElse(fromNew(tp))
+            val begin = from.getOrElse(tp, fromNew(tp))
             val prorate = limit * (size / total)
             // Don't completely starve small topicpartitions
             val prorateLong = (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
