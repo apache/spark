@@ -130,7 +130,7 @@ private[deploy] class Worker(
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {
-      new File(sys.env.get("SPARK_HOME").getOrElse("."))
+      new File(sys.env.getOrElse("SPARK_HOME", "."))
     }
 
   var workDir: File = null

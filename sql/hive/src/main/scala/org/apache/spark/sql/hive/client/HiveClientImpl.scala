@@ -996,10 +996,8 @@ private[hive] object HiveClientImpl {
       ht: HiveTable): HivePartition = {
     val tpart = new org.apache.hadoop.hive.metastore.api.Partition
     val partValues = ht.getPartCols.asScala.map { hc =>
-      p.spec.get(hc.getName).getOrElse {
-        throw new IllegalArgumentException(
-          s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}")
-      }
+      p.spec.getOrElse(hc.getName, throw new IllegalArgumentException(
+        s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}"))
     }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
