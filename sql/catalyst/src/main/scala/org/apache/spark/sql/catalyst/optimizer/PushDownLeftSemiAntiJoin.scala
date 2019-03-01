@@ -130,24 +130,16 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         val newGrandChildren = union.children.map { Join(_, rightOp, joinType, joinCond, hint) }
         union.withNewChildren(newGrandChildren)
       } else {
-        val pushDown = splitConjunctivePredicates(joinCond.get)
-
-        if (pushDown.nonEmpty) {
-          val pushDownCond = pushDown.reduceLeft(And)
-          val output = union.output
-          val newGrandChildren = union.children.map { grandchild =>
-            val newCond = pushDownCond transform {
-              case e if output.exists(_.semanticEquals(e)) =>
-                grandchild.output(output.indexWhere(_.semanticEquals(e)))
-            }
-            assert(newCond.references.subsetOf(grandchild.outputSet ++ rightOp.outputSet))
-            Join(grandchild, rightOp, joinType, Option(newCond), hint)
+        val output = union.output
+        val newGrandChildren = union.children.map { grandchild =>
+          val newCond = joinCond.get transform {
+            case e if output.exists(_.semanticEquals(e)) =>
+              grandchild.output(output.indexWhere(_.semanticEquals(e)))
           }
-          union.withNewChildren(newGrandChildren)
-        } else {
-          // Nothing to push down
-          join
+          assert(newCond.references.subsetOf(grandchild.outputSet ++ rightOp.outputSet))
+          Join(grandchild, rightOp, joinType, Option(newCond), hint)
         }
+        union.withNewChildren(newGrandChildren)
       }
 
     // LeftSemi/LeftAnti over UnaryNode
@@ -182,22 +174,22 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   private def pushDownJoin(
       join: Join,
       grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
-    val (pushDown, stayUp) = if (join.condition.isDefined) {
-      splitConjunctivePredicates(join.condition.get)
+    if (join.condition.isEmpty) {
+      insertFilter(null)
+    } else {
+      val (pushDown, stayUp) = splitConjunctivePredicates(join.condition.get)
         .partition {_.references.subsetOf(grandchild.outputSet ++ join.right.outputSet)}
-    } else {
-      (Nil, Nil)
-    }
 
-    if (pushDown.nonEmpty) {
-      val newChild = insertFilter(pushDown.reduceLeft(And))
-      if (stayUp.nonEmpty) {
-        Filter(stayUp.reduceLeft(And), newChild)
+      if (pushDown.nonEmpty) {
+        val newChild = insertFilter(pushDown.reduceLeft(And))
+        if (stayUp.nonEmpty) {
+          Filter(stayUp.reduceLeft(And), newChild)
+        } else {
+          newChild
+        }
       } else {
-        newChild
+        join
       }
-    } else {
-      join
     }
   }
 }

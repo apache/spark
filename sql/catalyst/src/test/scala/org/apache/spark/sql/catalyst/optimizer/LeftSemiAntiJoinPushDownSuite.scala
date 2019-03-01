@@ -257,4 +257,19 @@ class LeftSemiPushdownSuite extends PlanTest {
       .analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("Unary: LeftSemiAnti join pushdown - empty join condition") {
+    val originalQuery = testRelation
+      .select(star())
+      .repartition(1)
+      .join(testRelation1, joinType = LeftSemi, condition = None)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .join(testRelation1, joinType = LeftSemi, condition = None)
+      .select('a, 'b, 'c)
+      .repartition(1)
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
