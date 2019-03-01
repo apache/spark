@@ -124,7 +124,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     }
   }
 
-  override def taskSetFinished(manager: TaskSetManager, success: Boolean)
+  override def taskSetFinished(manager: TaskSetManager)
   : Unit = finishedManagers += manager
 
   override def isExecutorAlive(execId: String): Boolean = executors.contains(execId)

@@ -530,7 +530,7 @@ private[spark] class TaskSetManager(
 
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
-      sched.taskSetFinished(this, tasksSuccessful == numTasks)
+      sched.taskSetFinished(this)
       if (tasksSuccessful == numTasks) {
         blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
           taskSet.stageId,
@@ -778,7 +778,11 @@ private[spark] class TaskSetManager(
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
-        isZombie = true
+        // clean up finished partitions for the stage when the active TaskSetManager succeed
+        if (!isZombie) {
+          sched.stageIdToFinishedPartitions -= stageId
+          isZombie = true
+        }
       }
     } else {
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +

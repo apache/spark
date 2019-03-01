@@ -283,7 +283,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // attempt 1 finished (this can happen even if it was marked zombie earlier -- all tasks were
     // already submitted, and then they finish)
-    taskScheduler.taskSetFinished(mgr1, false)
+    taskScheduler.taskSetFinished(mgr1)
 
     // now with another resource offer, we should still schedule all the tasks in attempt2
     val taskDescriptions3 = taskScheduler.resourceOffers(workerOffers).flatten
