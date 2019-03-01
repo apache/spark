@@ -147,6 +147,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
   ): Unit = {
     val benchmark = new Benchmark(title, values, minNumIters = 5, output = output)
     val name = s"Native ORC Vectorized (Pushdown)"
+    // TODO(ivan): Consider adding a case for Parquet here as well.
     benchmark.addCase(name) { _ =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         spark
@@ -406,33 +407,29 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       val numRows = 1
       val width = 2000
 
-      withTempPath { dir =>
-        val columns = (1 to width).map(i => s"id c$i")
-        val df = spark.range(1).selectExpr(columns: _*)
-        withTempTable("orcTable", "parquetTable") {
-          saveAsTable(df, dir)
-          (1000 to 15000 by 2000).foreach { numFilter =>
-            val whereExpression = (1 to numFilter)
-              .map {
-                i => EqualTo(
-                  Literal(0),
-                  AttributeReference(
-                    s"c1",
-                    IntegerType,
-                    nullable = true)()
-                ).asInstanceOf[Expression]
-              }
-              .foldLeft[Expression](Literal.FalseLiteral)((x, y) => Or(x, y))
-            val benchmark = new Benchmark(s"Select 1 row with $numFilter filters",
-              numRows, minNumIters = 5, output = output)
-            val name = s"Native ORC Vectorized (Pushdown)"
-            benchmark.addCase(name) { _ =>
-              OrcFilters.createFilter(df.schema,
-                DataSourceStrategy.translateFilter(whereExpression).toSeq)
-            }
-            benchmark.run()
+      val columns = (1 to width).map(i => s"id c$i")
+      val df = spark.range(1).selectExpr(columns: _*)
+      (1000 to 15000 by 2000).foreach { numFilter =>
+        val whereExpression = (1 to numFilter)
+          .map {
+            i =>
+              EqualTo(
+                Literal(0),
+                AttributeReference(
+                  s"c1",
+                  IntegerType,
+                  nullable = true)()
+              ).asInstanceOf[Expression]
           }
+          .foldLeft[Expression](Literal.FalseLiteral)((x, y) => Or(x, y))
+        val benchmark = new Benchmark(s"Select 1 row with $numFilter filters",
+          numRows, minNumIters = 5, output = output)
+        val name = s"Native ORC Vectorized (Pushdown)"
+        benchmark.addCase(name) { _ =>
+          OrcFilters.createFilter(df.schema,
+            DataSourceStrategy.translateFilter(whereExpression).toSeq)
         }
+        benchmark.run()
       }
     }
 
