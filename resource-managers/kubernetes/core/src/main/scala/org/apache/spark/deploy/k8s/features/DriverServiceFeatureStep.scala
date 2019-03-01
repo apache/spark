@@ -23,8 +23,11 @@ import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.util.{Clock, SystemClock}
 
-private[spark] class DriverServiceFeatureStep(kubernetesConf: KubernetesDriverConf)
+private[spark] class DriverServiceFeatureStep(
+    kubernetesConf: KubernetesDriverConf,
+    clock: Clock = new SystemClock())
   extends KubernetesFeatureConfigStep with Logging {
   import DriverServiceFeatureStep._
 
@@ -39,7 +42,7 @@ private[spark] class DriverServiceFeatureStep(kubernetesConf: KubernetesDriverCo
   private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
     preferredServiceName
   } else {
-    val randomServiceId = KubernetesUtils.uniqueID()
+    val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
     val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
     logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
       s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +

@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
+import com.google.common.net.InternetDomainName
 import io.fabric8.kubernetes.api.model.Service
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -26,6 +27,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.internal.config._
+import org.apache.spark.util.ManualClock
 
 class DriverServiceFeatureStepSuite extends SparkFunSuite {
 
@@ -90,23 +92,37 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(additionalProps(DRIVER_BLOCK_MANAGER_PORT.key) === DEFAULT_BLOCKMANAGER_PORT.toString)
   }
 
-  test("Long prefixes should switch to using a generated name.") {
+  test("Long prefixes should switch to using a generated unique name.") {
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_NAMESPACE, "my-namespace")
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       resourceNamePrefix = Some(LONG_RESOURCE_NAME_PREFIX),
       labels = DRIVER_LABELS)
-    val configurationStep = new DriverServiceFeatureStep(kconf)
+    val clock = new ManualClock()
 
-    val driverService = configurationStep
-      .getAdditionalKubernetesResources()
-      .head
-      .asInstanceOf[Service]
-    assert(!driverService.getMetadata.getName.startsWith(kconf.resourceNamePrefix))
+    // Ensure that multiple services created at the same time generate unique names.
+    val services = (1 to 10).map { _ =>
+      val configurationStep = new DriverServiceFeatureStep(kconf, clock = clock)
+      val serviceName = configurationStep
+        .getAdditionalKubernetesResources()
+        .head
+        .asInstanceOf[Service]
+        .getMetadata
+        .getName
 
-    val additionalProps = configurationStep.getAdditionalPodSystemProperties()
-    assert(!additionalProps(DRIVER_HOST_ADDRESS.key).startsWith(kconf.resourceNamePrefix))
+      val hostAddress = configurationStep
+        .getAdditionalPodSystemProperties()(DRIVER_HOST_ADDRESS.key)
+
+      (serviceName -> hostAddress)
+    }.toMap
+
+    assert(services.size === 10)
+    services.foreach { case (name, address) =>
+      assert(!name.startsWith(kconf.resourceNamePrefix))
+      assert(!address.startsWith(kconf.resourceNamePrefix))
+      assert(InternetDomainName.isValid(address))
+    }
   }
 
   test("Disallow bind address and driver host to be set explicitly.") {

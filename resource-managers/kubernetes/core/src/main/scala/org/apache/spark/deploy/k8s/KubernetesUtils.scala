@@ -27,10 +27,11 @@ import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 private[spark] object KubernetesUtils extends Logging {
 
+  private val systemClock = new SystemClock()
   private lazy val RNG = new SecureRandom()
 
   /**
@@ -218,13 +219,13 @@ private[spark] object KubernetesUtils extends Logging {
    * This avoids using a UUID for uniqueness (too long), and relying solely on the current time
    * (not unique enough).
    */
-  def uniqueID(): String = {
+  def uniqueID(clock: Clock = systemClock): String = {
     val random = new Array[Byte](3)
     synchronized {
       RNG.nextBytes(random)
     }
 
-    val time = java.lang.Long.toHexString(System.currentTimeMillis() & 0xFFFFFFFFFFL)
+    val time = java.lang.Long.toHexString(clock.getTimeMillis() & 0xFFFFFFFFFFL)
     Hex.encodeHexString(random) + time
   }
 
