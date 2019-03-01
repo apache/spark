@@ -2011,8 +2011,6 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         if handlePersistence:
             newDataset.unpersist()
 
-        predictionColNames = []
-        predictionColumns = []
         if self.getRawPredictionCol():
             def func(predictions):
                 predArray = []
@@ -2021,19 +2019,16 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
                 return Vectors.dense(predArray)
 
             rawPredictionUDF = udf(func)
-            predictionColNames.append(self.getRawPredictionCol())
-            predictionColumns.append(rawPredictionUDF(aggregatedDataset[accColName]))
+            aggregatedDataset = aggregatedDataset.withColumn(
+                self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName]))
 
         if self.getPredictionCol():
             # output the index of the classifier with highest confidence as prediction
             labelUDF = udf(lambda predictions: float(max(enumerate(predictions),
                            key=operator.itemgetter(1))[0]), DoubleType())
-            predictionColNames.append(self.getPredictionCol())
-            predictionColumns.append(labelUDF(aggregatedDataset[accColName]))
-
-        # output label and label metadata as prediction
-        return aggregatedDataset.withColumns(
-            predictionColNames, predictionColumns).drop(accColName)
+            aggregatedDataset = aggregatedDataset.withColumn(
+                self.getPredictionCol(), labelUDF(aggregatedDataset[accColName]))
+        return aggregatedDataset.drop(accColName)
 
     @since("2.0.0")
     def copy(self, extra=None):

@@ -1981,29 +1981,6 @@ class DataFrame(object):
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
     @ignore_unicode_prefix
-    def withColumns(self, colNames, cols):
-        """
-        Returns a new :class:`DataFrame` by adding or replacing the
-        existing columns that have the same names.
-
-        Each of the column expression must be an expression over this DataFrame; attempting to add
-        a column from some other dataframe will raise an error.
-
-        :param colNames: a sequence of string, names of the new columns.
-        :param col: a sequence of :class:`Column` expression for the new columns.
-
-        >>> df.withColumns(['age2', 'age3'], [df.age + 2, df.age + 3]).collect()
-        [Row(age=2, name=u'Alice', age2=4, age3=5), Row(age=5, name=u'Bob', age2=7, age3=8)]
-
-        """
-        jcolumns = []
-        for col in cols:
-            assert isinstance(col, Column), "col should be Column"
-            jcolumns.append(col._jc)
-        return DataFrame(self._jdf.withColumns(
-                         self._jseq(colNames), self._jseq(jcolumns)), self.sql_ctx)
-
-    @ignore_unicode_prefix
     @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
