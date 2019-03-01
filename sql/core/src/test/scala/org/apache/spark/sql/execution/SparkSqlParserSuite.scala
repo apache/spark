@@ -394,6 +394,5 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ALTER DATABASE foo SET DBPROPERTIES ('x' = 'y')",
       parser.parsePlan("ALTER SCHEMA foo SET DBPROPERTIES ('x' = 'y')"))
     assertEqual("DESC DATABASE foo", parser.parsePlan("DESC SCHEMA foo"))
-
   }
 }
