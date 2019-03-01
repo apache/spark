@@ -146,12 +146,19 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     selectExpr: String = "*"
   ): Unit = {
     val benchmark = new Benchmark(title, values, minNumIters = 5, output = output)
-    val name = s"Native ORC Vectorized (Pushdown)"
-    // TODO(ivan): Consider adding a case for Parquet here as well.
-    benchmark.addCase(name) { _ =>
+    benchmark.addCase("Native ORC Vectorized (Pushdown)") { _ =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         spark
           .table("orcTable")
+          .select(selectExpr)
+          .filter(whereColumn)
+          .collect()
+      }
+    }
+    benchmark.addCase("Native Parquet Vectorized (Pushdown)") { _ =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        spark
+          .table("parquetTable")
           .select(selectExpr)
           .filter(whereColumn)
           .collect()
