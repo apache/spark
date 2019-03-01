@@ -853,10 +853,12 @@ when running in local mode.
   - shuffleRemoteBytesReadToDisk.count
   - shuffleTotalBytesRead.count
   - shuffleWriteTime.count
+  - finishedTasks.count
   - threadpool.activeTasks
   - threadpool.completeTasks
   - threadpool.currentPool_size
   - threadpool.maxPool_size
+  - threadpool.startedTasks
 
 - namespace=NettyBlockTransfer
   - shuffle-client.usedDirectMemory
