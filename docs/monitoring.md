@@ -813,6 +813,9 @@ This is the component with the largest amount of instrumented metrics
   - states-rowsTotal
   - states-usedBytes
 
+- namespace=JVMCPU
+  - jvmCpuTime
+
 ### Component instance = Executor
 These metrics are exposed by Spark executors. Note, currently they are not available
 when running in local mode.
@@ -834,7 +837,6 @@ when running in local mode.
   - filesystem.hdfs.read_ops
   - filesystem.hdfs.write_bytes
   - filesystem.hdfs.write_ops
-  - jvmCpuTime
   - jvmGCTime.count
   - memoryBytesSpilled.count
   - recordsRead.count
@@ -857,6 +859,9 @@ when running in local mode.
   - threadpool.completeTasks
   - threadpool.currentPool_size
   - threadpool.maxPool_size
+
+- namespace=JVMCPU
+  - jvmCpuTime
 
 - namespace=NettyBlockTransfer
   - shuffle-client.usedDirectMemory
