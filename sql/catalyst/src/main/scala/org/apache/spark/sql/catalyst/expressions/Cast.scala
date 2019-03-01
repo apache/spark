@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
@@ -374,7 +376,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case ByteType =>
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => DateTimeUtils.daysToMillis(d, timeZone) * 1000)
+      buildCast[Int](_, d => MILLISECONDS.toMicros(DateTimeUtils.daysToMillis(d, timeZone)))
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -387,19 +389,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * 1000000L).longValue()
+    (d.toBigDecimal * MICROS_PER_SECOND).longValue()
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
-    if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong
+    if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
   }
 
   // converting seconds to us
-  private[this] def longToTimestamp(t: Long): Long = t * 1000000L
+  private[this] def longToTimestamp(t: Long): Long = SECONDS.toMicros(t)
   // converting us to seconds
-  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
+  private[this] def timestampToLong(ts: Long): Long = {
+    Math.floorDiv(ts, MICROS_PER_SECOND)
+  }
   // converting us to seconds in double
   private[this] def timestampToDouble(ts: Long): Double = {
-    ts / 1000000.0
+    ts / MICROS_PER_SECOND.toDouble
   }
 
   // DateConverter
@@ -409,7 +413,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L, timeZone))
+      buildCast[Long](_, t => DateTimeUtils.millisToDays(MICROSECONDS.toMillis(t), timeZone))
   }
 
   // IntervalConverter
@@ -925,7 +929,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L, $tz);"""
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays(
+            $c / $MICROS_PER_MILLIS, $tz);"""
     case _ =>
       (c, evPrim, evNull) => code"$evNull = true;"
   }
@@ -1032,7 +1037,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz) * 1000;"""
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis(
+            $c, $tz) * $MICROS_PER_MILLIS;"""
     case DecimalType() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
@@ -1041,7 +1047,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           if (Double.isNaN($c) || Double.isInfinite($c)) {
             $evNull = true;
           } else {
-            $evPrim = (long)($c * 1000000L);
+            $evPrim = (long)($c * $MICROS_PER_SECOND);
           }
         """
     case FloatType =>
@@ -1050,7 +1056,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           if (Float.isNaN($c) || Float.isInfinite($c)) {
             $evNull = true;
           } else {
-            $evPrim = (long)($c * 1000000L);
+            $evPrim = (long)($c * $MICROS_PER_SECOND);
           }
         """
   }
@@ -1067,14 +1073,14 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
-    val block = inline"new java.math.BigDecimal(1000000L)"
+    val block = inline"new java.math.BigDecimal($MICROS_PER_SECOND)"
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
-  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * 1000000L"
+  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * (long)$MICROS_PER_SECOND"
   private[this] def timestampToIntegerCode(ts: ExprValue): Block =
-    code"java.lang.Math.floor((double) $ts / 1000000L)"
+    code"java.lang.Math.floorDiv($ts, $MICROS_PER_SECOND)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
-    code"$ts / 1000000.0"
+    code"$ts / (double)$MICROS_PER_SECOND"
 
   private[this] def castToBooleanCode(from: DataType): CastFunction = from match {
     case StringType =>

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.UnaryOperator
 
 import scala.collection.JavaConverters._
@@ -57,6 +58,9 @@ class ContinuousExecution(
 
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
+
+  // Throwable that caused the execution to fail
+  private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
 
   override val logicalPlan: LogicalPlan = {
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
@@ -261,6 +265,11 @@ class ContinuousExecution(
           lastExecution.toRdd
         }
       }
+
+      val f = failure.get()
+      if (f != null) {
+        throw f
+      }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
           state.get() == RECONFIGURING =>
@@ -371,6 +380,35 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
+  }
+
+  /**
+   * Stores error and stops the query execution thread to terminate the query in new thread.
+   */
+  def stopInNewThread(error: Throwable): Unit = {
+    if (failure.compareAndSet(null, error)) {
+      logError(s"Query $prettyIdString received exception $error")
+      stopInNewThread()
+    }
+  }
+
+  /**
+   * Stops the query execution thread to terminate the query in new thread.
+   */
+  private def stopInNewThread(): Unit = {
+    new Thread("stop-continuous-execution") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          ContinuousExecution.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
+      }
+    }.start()
   }
 
   /**

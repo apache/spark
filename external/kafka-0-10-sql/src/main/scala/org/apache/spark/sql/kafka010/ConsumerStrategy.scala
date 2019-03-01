@@ -37,6 +37,15 @@ import org.apache.kafka.common.TopicPartition
 sealed trait ConsumerStrategy {
   /** Create a [[KafkaConsumer]] and subscribe to topics according to a desired strategy */
   def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
+
+  /**
+   * Updates the parameters with security if needed.
+   * Added a function to hide internals and reduce code duplications because all strategy uses it.
+   */
+  protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object]) =
+    KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
 }
 
 /**
@@ -45,7 +54,8 @@ sealed trait ConsumerStrategy {
 case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     consumer.assign(ju.Arrays.asList(partitions: _*))
     consumer
   }
@@ -59,7 +69,8 @@ case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStr
 case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     consumer.subscribe(topics.asJava)
     consumer
   }
@@ -73,7 +84,8 @@ case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
 case class SubscribePatternStrategy(topicPattern: String) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     consumer.subscribe(
       ju.regex.Pattern.compile(topicPattern),
       new NoOpConsumerRebalanceListener())

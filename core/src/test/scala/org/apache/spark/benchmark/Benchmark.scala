@@ -148,13 +148,13 @@ private[spark] class Benchmark(
 
       if (outputPerIteration) {
         // scalastyle:off
-        println(s"Iteration $i took ${runTime / 1000} microseconds")
+        println(s"Iteration $i took ${NANOSECONDS.toMicros(runTime)} microseconds")
         // scalastyle:on
       }
       i += 1
     }
     // scalastyle:off
-    println(s"  Stopped after $i iterations, ${runTimes.sum / 1000000} ms")
+    println(s"  Stopped after $i iterations, ${NANOSECONDS.toMillis(runTimes.sum)} ms")
     // scalastyle:on
     val best = runTimes.min
     val avg = runTimes.sum / runTimes.size

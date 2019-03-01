@@ -51,7 +51,12 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
  * threads, so it needs locks in public API methods to maintain its state. In addition, some
  * [[SchedulerBackend]]s synchronize on themselves when they want to send events here, and then
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
- * we are holding a lock on ourselves.
+ * we are holding a lock on ourselves.  This class is called from many threads, notably:
+ *   * The DAGScheduler Event Loop
+ *   * The RPCHandler threads, responding to status updates from Executors
+ *   * Periodic revival of all offers from the CoarseGrainedSchedulerBackend, to accomodate delay
+ *      scheduling
+ *   * task-result-getter threads
  */
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
@@ -89,11 +94,12 @@ private[spark] class TaskSchedulerImpl(
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
-  // on this class.
+  // on this class.  Protected by `this`
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
   // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
+  // Protected by `this`
   val taskIdToExecutorId = new HashMap[Long, String]
 
   @volatile private var hasReceivedTask = false
@@ -254,7 +260,10 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean = {
+  override def killTaskAttempt(
+      taskId: Long,
+      interruptThread: Boolean,
+      reason: String): Boolean = synchronized {
     logInfo(s"Killing task $taskId: $reason")
     val execId = taskIdToExecutorId.get(taskId)
     if (execId.isDefined) {
@@ -825,9 +834,10 @@ private[spark] class TaskSchedulerImpl(
 
   override def applicationAttemptId(): Option[String] = backend.applicationAttemptId()
 
+  // exposed for testing
   private[scheduler] def taskSetManagerForAttempt(
       stageId: Int,
-      stageAttemptId: Int): Option[TaskSetManager] = {
+      stageAttemptId: Int): Option[TaskSetManager] = synchronized {
     for {
       attempts <- taskSetsByStageIdAndAttempt.get(stageId)
       manager <- attempts.get(stageAttemptId)

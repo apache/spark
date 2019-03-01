@@ -889,10 +889,10 @@ class TreeClassifierParams(object):
 
 
 @inherit_doc
-class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                             HasProbabilityCol, HasRawPredictionCol, DecisionTreeParams,
-                             TreeClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
-                             JavaMLReadable):
+class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol,
+                             HasPredictionCol, HasProbabilityCol, HasRawPredictionCol,
+                             DecisionTreeParams, TreeClassifierParams, HasCheckpointInterval,
+                             HasSeed, JavaMLWritable, JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
@@ -944,6 +944,18 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model.featureImportances == model2.featureImportances
     True
 
+    >>> df3 = spark.createDataFrame([
+    ...     (1.0, 0.2, Vectors.dense(1.0)),
+    ...     (1.0, 0.8, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> si3 = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> si_model3 = si3.fit(df3)
+    >>> td3 = si_model3.transform(df3)
+    >>> dt3 = DecisionTreeClassifier(maxDepth=2, weightCol="weight", labelCol="indexed")
+    >>> model3 = dt3.fit(td3)
+    >>> print(model3.toDebugString)
+    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
+
     .. versionadded:: 1.4.0
     """
 
@@ -952,13 +964,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 seed=None):
+                 seed=None, weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 seed=None)
+                 seed=None, weightCol=None)
         """
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -975,13 +987,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="gini", seed=None):
+                  impurity="gini", seed=None, weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                  seed=None)
+                  seed=None, weightCol=None)
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self._input_kwargs

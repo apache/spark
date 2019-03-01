@@ -31,7 +31,7 @@ import org.apache.spark.kafka010.KafkaTokenUtil
 /**
  * Class to conveniently update Kafka config params, while logging the changes
  */
-private[kafka010] case class KafkaConfigUpdater(module: String, kafkaParams: Map[String, String])
+private[kafka010] case class KafkaConfigUpdater(module: String, kafkaParams: Map[String, Object])
     extends Logging {
   private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
 

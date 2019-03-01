@@ -26,7 +26,8 @@ import scala.language.existentials
 
 import com.google.common.reflect.TypeToken
 
-import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
+import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -194,14 +195,20 @@ object JavaTypeInference {
    */
   def deserializerFor(beanClass: Class[_]): Expression = {
     val typeToken = TypeToken.of(beanClass)
-    deserializerFor(typeToken, GetColumnByOrdinal(0, inferDataType(typeToken)._1))
+    val walkedTypePath = s"""- root class: "${beanClass.getCanonicalName}"""" :: Nil
+    val (dataType, nullable) = inferDataType(typeToken)
+
+    // Assumes we are deserializing the first column of a row.
+    deserializerForWithNullSafetyAndUpcast(GetColumnByOrdinal(0, dataType), dataType,
+      nullable = nullable, walkedTypePath, (casted, walkedTypePath) => {
+        deserializerFor(typeToken, casted, walkedTypePath)
+      })
   }
 
-  private def deserializerFor(typeToken: TypeToken[_], path: Expression): Expression = {
-    /** Returns the current path with a sub-field extracted. */
-    def addToPath(part: String): Expression = UnresolvedExtractValue(path,
-      expressions.Literal(part))
-
+  private def deserializerFor(
+      typeToken: TypeToken[_],
+      path: Expression,
+      walkedTypePath: Seq[String]): Expression = {
     typeToken.getRawType match {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => path
 
@@ -212,74 +219,82 @@ object JavaTypeInference {
                 c == classOf[java.lang.Float] ||
                 c == classOf[java.lang.Byte] ||
                 c == classOf[java.lang.Boolean] =>
-        StaticInvoke(
-          c,
-          ObjectType(c),
-          "valueOf",
-          path :: Nil,
-          returnNullable = false)
+        createDeserializerForTypesSupportValueOf(path, c)
 
       case c if c == classOf[java.sql.Date] =>
-        StaticInvoke(
-          DateTimeUtils.getClass,
-          ObjectType(c),
-          "toJavaDate",
-          path :: Nil,
-          returnNullable = false)
+        createDeserializerForSqlDate(path)
+
+      case c if c == classOf[java.time.Instant] =>
+        createDeserializerForInstant(path)
 
       case c if c == classOf[java.sql.Timestamp] =>
-        StaticInvoke(
-          DateTimeUtils.getClass,
-          ObjectType(c),
-          "toJavaTimestamp",
-          path :: Nil,
-          returnNullable = false)
+        createDeserializerForSqlTimestamp(path)
 
       case c if c == classOf[java.lang.String] =>
-        Invoke(path, "toString", ObjectType(classOf[String]))
+        createDeserializerForString(path, returnNullable = true)
 
       case c if c == classOf[java.math.BigDecimal] =>
-        Invoke(path, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
+        createDeserializerForJavaBigDecimal(path, returnNullable = true)
+
+      case c if c == classOf[java.math.BigInteger] =>
+        createDeserializerForJavaBigInteger(path, returnNullable = true)
 
       case c if c.isArray =>
         val elementType = c.getComponentType
-        val primitiveMethod = elementType match {
-          case c if c == java.lang.Boolean.TYPE => Some("toBooleanArray")
-          case c if c == java.lang.Byte.TYPE => Some("toByteArray")
-          case c if c == java.lang.Short.TYPE => Some("toShortArray")
-          case c if c == java.lang.Integer.TYPE => Some("toIntArray")
-          case c if c == java.lang.Long.TYPE => Some("toLongArray")
-          case c if c == java.lang.Float.TYPE => Some("toFloatArray")
-          case c if c == java.lang.Double.TYPE => Some("toDoubleArray")
-          case _ => None
+        val newTypePath = s"""- array element class: "${elementType.getCanonicalName}"""" +:
+          walkedTypePath
+        val (dataType, elementNullable) = inferDataType(elementType)
+        val mapFunction: Expression => Expression = element => {
+          // upcast the array element to the data type the encoder expected.
+          deserializerForWithNullSafetyAndUpcast(
+            element,
+            dataType,
+            nullable = elementNullable,
+            newTypePath,
+            (casted, typePath) => deserializerFor(typeToken.getComponentType, casted, typePath))
         }
 
-        primitiveMethod.map { method =>
-          Invoke(path, method, ObjectType(c))
-        }.getOrElse {
-          Invoke(
-            MapObjects(
-              p => deserializerFor(typeToken.getComponentType, p),
-              path,
-              inferDataType(elementType)._1),
-            "array",
-            ObjectType(c))
+        val arrayData = UnresolvedMapObjects(mapFunction, path)
+
+        val methodName = elementType match {
+          case c if c == java.lang.Integer.TYPE => "toIntArray"
+          case c if c == java.lang.Long.TYPE => "toLongArray"
+          case c if c == java.lang.Double.TYPE => "toDoubleArray"
+          case c if c == java.lang.Float.TYPE => "toFloatArray"
+          case c if c == java.lang.Short.TYPE => "toShortArray"
+          case c if c == java.lang.Byte.TYPE => "toByteArray"
+          case c if c == java.lang.Boolean.TYPE => "toBooleanArray"
+          // non-primitive
+          case _ => "array"
         }
+        Invoke(arrayData, methodName, ObjectType(c))
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
-        UnresolvedMapObjects(
-          p => deserializerFor(et, p),
-          path,
-          customCollectionCls = Some(c))
+        val newTypePath = s"""- array element class: "${et.getType.getTypeName}"""" +:
+          walkedTypePath
+        val (dataType, elementNullable) = inferDataType(et)
+        val mapFunction: Expression => Expression = element => {
+          // upcast the array element to the data type the encoder expected.
+          deserializerForWithNullSafetyAndUpcast(
+            element,
+            dataType,
+            nullable = elementNullable,
+            newTypePath,
+            (casted, typePath) => deserializerFor(et, casted, typePath))
+        }
+
+        UnresolvedMapObjects(mapFunction, path, customCollectionCls = Some(c))
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
+        val newTypePath = (s"""- map key class: "${keyType.getType.getTypeName}"""" +
+          s""", value class: "${valueType.getType.getTypeName}"""") +: walkedTypePath
 
         val keyData =
           Invoke(
             UnresolvedMapObjects(
-              p => deserializerFor(keyType, p),
+              p => deserializerFor(keyType, p, newTypePath),
               MapKeys(path)),
             "array",
             ObjectType(classOf[Array[Any]]))
@@ -287,7 +302,7 @@ object JavaTypeInference {
         val valueData =
           Invoke(
             UnresolvedMapObjects(
-              p => deserializerFor(valueType, p),
+              p => deserializerFor(valueType, p, newTypePath),
               MapValues(path)),
             "array",
             ObjectType(classOf[Array[Any]]))
@@ -300,25 +315,25 @@ object JavaTypeInference {
           returnNullable = false)
 
       case other if other.isEnum =>
-        StaticInvoke(
-          other,
-          ObjectType(other),
-          "valueOf",
-          Invoke(path, "toString", ObjectType(classOf[String]), returnNullable = false) :: Nil,
-          returnNullable = false)
+        createDeserializerForTypesSupportValueOf(
+          createDeserializerForString(path, returnNullable = false),
+          other)
 
       case other =>
         val properties = getJavaBeanReadableAndWritableProperties(other)
         val setters = properties.map { p =>
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
-          val (_, nullable) = inferDataType(fieldType)
-          val constructor = deserializerFor(fieldType, addToPath(fieldName))
-          val setter = if (nullable) {
-            constructor
-          } else {
-            AssertNotNull(constructor, Seq("currently no type path record in java"))
-          }
+          val (dataType, nullable) = inferDataType(fieldType)
+          val newTypePath = (s"""- field (class: "${fieldType.getType.getTypeName}"""" +
+            s""", name: "$fieldName")""") +: walkedTypePath
+          val setter = deserializerForWithNullSafety(
+            path,
+            dataType,
+            nullable = nullable,
+            newTypePath,
+            (expr, typePath) => deserializerFor(fieldType,
+              addToPath(expr, fieldName, dataType, typePath), typePath))
           p.getWriteMethod.getName -> setter
         }.toMap
 

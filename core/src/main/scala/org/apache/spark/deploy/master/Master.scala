@@ -994,9 +994,10 @@ private[deploy] class Master(
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - workerTimeoutMs).toArray
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {
+        val workerTimeoutSecs = TimeUnit.MILLISECONDS.toSeconds(workerTimeoutMs)
         logWarning("Removing %s because we got no heartbeat in %d seconds".format(
-          worker.id, workerTimeoutMs / 1000))
-        removeWorker(worker, s"Not receiving heartbeat for ${workerTimeoutMs / 1000} seconds")
+          worker.id, workerTimeoutSecs))
+        removeWorker(worker, s"Not receiving heartbeat for $workerTimeoutSecs seconds")
       } else {
         if (worker.lastHeartbeat < currentTime - ((reaperIterations + 1) * workerTimeoutMs)) {
           workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it
