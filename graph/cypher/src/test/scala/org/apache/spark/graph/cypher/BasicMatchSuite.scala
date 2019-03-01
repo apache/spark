@@ -10,7 +10,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val nodeData: DataFrame = spark.createDataFrame(Seq(id(0) -> "Alice", id(1) -> "Bob")).toDF("id", "name")
     val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"))
 
-    val graph: PropertyGraph = cypherEngine.createGraph(Seq(nodeDataFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(Seq(nodeDataFrame))
 
     graph.cypher("MATCH (n) RETURN n").df.show()
   }
@@ -21,7 +21,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"))
     val relationshipFrame: RelationshipFrame = RelationshipFrame(df = relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
 
-    val graph: PropertyGraph = cypherEngine.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
     graph.nodes.show()
     graph.relationships.show()
 
@@ -38,7 +38,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val knowsDataFrame: RelationshipFrame = RelationshipFrame(df = knowsData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
     val studyAtDataFrame: RelationshipFrame = RelationshipFrame(df = studyAtData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "STUDY_AT")
 
-    val graph: PropertyGraph = cypherEngine.createGraph(Seq(personDataFrame, universityDataFrame), Seq(knowsDataFrame, studyAtDataFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(Seq(personDataFrame, universityDataFrame), Seq(knowsDataFrame, studyAtDataFrame))
 
     val result: CypherResult = graph.cypher(
       """
@@ -52,11 +52,11 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val berkeleyStudents: Seq[NodeFrame] = result.nodeFrames("p")
     val berkeleyStudentFriends: Seq[NodeFrame] = result.nodeFrames("o")
     val knows: Seq[RelationshipFrame] = result.relationshipFrames("k")
-    val berkeleyGraph: PropertyGraph = cypherEngine.createGraph(berkeleyStudents ++ berkeleyStudentFriends, knows)
+    val berkeleyGraph: PropertyGraph = cypherSession.createGraph(berkeleyStudents ++ berkeleyStudentFriends, knows)
     berkeleyGraph.cypher("MATCH (n:Student)-[:KNOWS]->(o:Student) RETURN n.name AS person, o.name AS friend").df.show()
 
     // Option 2: Use CypherResult to create a new PropertyGraph
-    val berkeleyGraph2 = cypherEngine.createGraph(result)
+    val berkeleyGraph2 = cypherSession.createGraph(result)
     berkeleyGraph2.cypher("MATCH (n:Student)-[:KNOWS]->(o:Student) RETURN n.name AS person, o.name AS friend").df.show()
   }
 

@@ -29,13 +29,13 @@ class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
 
   forAll(scenarios.whiteList) { scenario =>
     test(s"[${WhiteList.name}] $scenario", WhiteList, TckCapsTag, Tag(graphFactory.name)) {
-      scenario(TCKGraph(graphFactory, cypherEngine.graphs.empty)).execute()
+      scenario(TCKGraph(graphFactory, cypherSession.graphs.empty)).execute()
     }
   }
 
   forAll(scenarios.blackList) { scenario =>
     test(s"[${graphFactory.name}, ${BlackList.name}] $scenario", BlackList, TckCapsTag) {
-      val tckGraph = TCKGraph(graphFactory, cypherEngine.graphs.empty)
+      val tckGraph = TCKGraph(graphFactory, cypherSession.graphs.empty)
 
       Try(scenario(tckGraph).execute()) match {
         case Success(_) =>
@@ -97,11 +97,11 @@ class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
     CypherTCK
       .parseFilesystemFeature(file)
       .scenarios
-      .foreach(scenario => scenario(TCKGraph(graphFactory, cypherEngine.graphs.empty)).execute())
+      .foreach(scenario => scenario(TCKGraph(graphFactory, cypherSession.graphs.empty)).execute())
   }
 
   ignore("run single scenario") {
     scenarios.get("Should add or subtract duration to or from date")
-      .foreach(scenario => scenario(TCKGraph(graphFactory, cypherEngine.graphs.empty)).execute())
+      .foreach(scenario => scenario(TCKGraph(graphFactory, cypherSession.graphs.empty)).execute())
   }
 }

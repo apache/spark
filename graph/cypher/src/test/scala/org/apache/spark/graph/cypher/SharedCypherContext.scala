@@ -7,7 +7,7 @@ trait SharedCypherContext extends SharedSparkSession { self: Suite =>
 
   private var _cypherEngine: SparkCypherSession = _
 
-  protected implicit def cypherEngine: SparkCypherSession = _cypherEngine
+  protected implicit def cypherSession: SparkCypherSession = _cypherEngine
 
   override def beforeAll() {
     super.beforeAll()
