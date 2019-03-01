@@ -26,6 +26,7 @@ import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.ExecutorAllocationClient
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.STREAMING_JOB_TIMEOUT
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
@@ -50,6 +51,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // https://gist.github.com/AlainODea/1375759b8720a3f9f094
   private val jobSets: java.util.Map[Time, JobSet] = new ConcurrentHashMap[Time, JobSet]
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
+  private val streamingJobTimeOut = ssc.conf.get(STREAMING_JOB_TIMEOUT)
   private val jobExecutor =
     ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
   private val jobGenerator = new JobGenerator(this)
@@ -128,7 +130,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     // Wait for the queued jobs to complete if indicated
     val terminated = if (processAllReceivedData) {
-      jobExecutor.awaitTermination(1, TimeUnit.HOURS)  // just a very large period of time
+      // just a very large period of time
+      jobExecutor.awaitTermination(streamingJobTimeOut, TimeUnit.HOURS)
     } else {
       jobExecutor.awaitTermination(2, TimeUnit.SECONDS)
     }

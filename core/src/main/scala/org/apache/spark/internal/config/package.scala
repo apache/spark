@@ -1266,4 +1266,10 @@ package object config {
     .doc("Staging directory used while submitting applications.")
     .stringConf
     .createOptional
+
+  private[spark] val STREAMING_JOB_TIMEOUT =
+    ConfigBuilder("spark.streaming.jobTimeout")
+      .doc("Waiting time for the queued streaming jobs to complete.")
+      .timeConf(TimeUnit.HOURS)
+      .createWithDefaultString("1h")
 }
