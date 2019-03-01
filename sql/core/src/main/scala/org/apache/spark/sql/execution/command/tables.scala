@@ -523,7 +523,7 @@ abstract class DescribeCommandBase extends RunnableCommand {
   }
 }
 /**
- * Command can of the following form.
+ * Command that looks like
  * {{{
  *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
  * }}}
@@ -624,10 +624,19 @@ case class DescribeTableCommand(
 }
 
 /**
- * Command can of the following form.
+ * Command that looks like
  * {{{
- *   DESCRIBE [QUERY] query_statement
+ *   DESCRIBE [QUERY] statement
  * }}}
+ *
+ * Parameter 'statement' can be one of the following types :
+ * 1. SELECT statements
+ * 2. SELECT statements inside set operators (UNION, INTERSECT etc)
+ * 3. VALUES statement.
+ * 4. TABLE statement. Example : TABLE table_name
+ * 5. statements of the form 'FROM table SELECT *'
+ *
+ * TODO : support CTEs.
  */
 case class DescribeQueryCommand(query: LogicalPlan)
   extends DescribeCommandBase {
