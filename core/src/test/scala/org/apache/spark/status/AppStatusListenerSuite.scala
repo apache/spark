@@ -1565,11 +1565,17 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(dist.diskUsed === rdd1b1.diskSize + rdd1b2.diskSize)
       assert(dist.memoryRemaining === maxMemory - dist.memoryUsed)
 
-      val part = wrapper.info.partitions.get.find(_.blockName === rdd1b2.blockId.name).get
-      assert(part.storageLevel === level.description)
-      assert(part.memoryUsed === rdd1b2.memSize)
-      assert(part.diskUsed === rdd1b2.diskSize)
-      assert(part.executors === Seq(bm1.executorId))
+      val part1 = wrapper.info.partitions.get.find(_.blockName === rdd1b1.blockId.name).get
+      assert(part1.storageLevel === level.description)
+      assert(part1.memoryUsed === 2 * rdd1b1.memSize)
+      assert(part1.diskUsed === 2 * rdd1b1.diskSize)
+      assert(part1.executors === Seq(bm1.executorId, bm2.executorId))
+
+      val part2 = wrapper.info.partitions.get.find(_.blockName === rdd1b2.blockId.name).get
+      assert(part2.storageLevel === level.description)
+      assert(part2.memoryUsed === rdd1b2.memSize)
+      assert(part2.diskUsed === rdd1b2.diskSize)
+      assert(part2.executors === Seq(bm1.executorId))
     }
 
     check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
