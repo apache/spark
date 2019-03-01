@@ -38,7 +38,6 @@ class LeftSemiPushdownSuite extends PlanTest {
         PushDownPredicate,
         PushDownLeftSemiAntiJoin,
         BooleanSimplification,
-        PushPredicateThroughJoin,
         CollapseProject) :: Nil
   }
 
@@ -73,15 +72,32 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Project: LeftSemiAnti join no pushdown because scalar subq proj exprs") {
-    val subq = ScalarSubquery(testRelation.groupBy('b)(sum('c).as("sum")))
+  test("Project: LeftSemiAnti join non correlated scalar subq") {
+    val subq = ScalarSubquery(testRelation.groupBy('b)(sum('c).as("sum")).analyze)
     val originalQuery = testRelation
       .select(subq.as("sum"))
       .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
+      .join(testRelation1, joinType = LeftSemi, condition = Some(subq === 'd))
       .select(subq.as("sum"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Project: LeftSemiAnti join no pushdown - correlated scalar subq in projection list") {
+    val testRelation2 = LocalRelation('e.int, 'f.int)
+    val subqPlan = testRelation2.groupBy('e)(sum('f).as("sum")).where('e === 'a)
+    val subqExpr = ScalarSubquery(subqPlan)
+    val originalQuery = testRelation
+      .select(subqExpr.as("sum"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .select(subqExpr.as("sum"))
       .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd))
       .analyze
 
@@ -146,16 +162,16 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Aggregate: LeftSemiAnti join no pushdown because scalar subq aggr exprs") {
-    val subq = ScalarSubquery(testRelation.groupBy('b)(sum('c).as("sum")))
+  test("Aggregate: LeftSemiAnti join non-correlated scalar subq aggr exprs") {
+    val subq = ScalarSubquery(testRelation.groupBy('b)(sum('c).as("sum")).analyze)
     val originalQuery = testRelation
       .groupBy('a) ('a, subq.as("sum"))
       .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd && 'a === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
+      .join(testRelation1, joinType = LeftSemi, condition = Some(subq === 'd && 'a === 'd))
       .groupBy('a) ('a, subq.as("sum"))
-      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd && 'a === 'd))
       .analyze
 
     comparePlans(optimized, correctAnswer)

@@ -35,7 +35,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // LeftSemi/LeftAnti over Project
     case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if pList.forall(_.deterministic) && !pList.exists(ScalarSubquery.hasScalarSubquery) &&
+      if pList.forall(_.deterministic) &&
+        !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
       if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
@@ -53,7 +54,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
     // LeftSemi/LeftAnti over Aggregate
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
       if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
-        !agg.aggregateExpressions.exists(ScalarSubquery.hasScalarSubquery) =>
+        !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
       if (joinCond.isEmpty) {
         // No join condition, just push down Join below Aggregate
         agg.copy(child = Join(agg.child, rightOp, joinType, joinCond, hint))
