@@ -370,6 +370,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
+   * Create a [[DescribeQueryCommand]] logical command.
+   */
+  override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
+    DescribeQueryCommand(visitQueryToDesc(ctx.queryToDesc()))
+  }
+
+  /**
    * Type to keep track of a table header: (identifier, isTemporary, ifNotExists, isExternal).
    */
   type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
