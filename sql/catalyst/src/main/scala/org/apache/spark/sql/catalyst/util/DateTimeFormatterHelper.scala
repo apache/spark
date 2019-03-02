@@ -61,11 +61,12 @@ private object DateTimeFormatterHelper {
   val cache = CacheBuilder.newBuilder()
     .maximumSize(128)
     .build[(String, Locale), DateTimeFormatter]()
+  val fractionPattern = "fraction-pattern"
 
   private def appendPattern(pattern: String): DateTimeFormatterBuilder = {
     val builder = new DateTimeFormatterBuilder().parseCaseInsensitive()
 
-    if (pattern == TimestampFormatter.fractionPattern) {
+    if (pattern == fractionPattern) {
       builder
         .append(DateTimeFormatter.ISO_LOCAL_DATE)
         .appendLiteral(' ')

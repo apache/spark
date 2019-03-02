@@ -82,8 +82,7 @@ object TimestampFormatter {
     apply(defaultPattern, timeZone, defaultLocale)
   }
 
-  val fractionPattern = "fraction-pattern"
   def getFractionFormatter(timeZone: TimeZone): TimestampFormatter = {
-    apply(fractionPattern, timeZone, defaultLocale)
+    apply(DateTimeFormatterHelper.fractionPattern, timeZone, defaultLocale)
   }
 }
