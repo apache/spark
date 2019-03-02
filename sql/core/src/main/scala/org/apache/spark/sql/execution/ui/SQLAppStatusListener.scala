@@ -77,7 +77,27 @@ class SQLAppStatusListener(
 
     val executionId = executionIdString.toLong
     val jobId = event.jobId
+    val isExecNotExists = liveExecutions.get(executionId) == null
     val exec = getOrCreateExecution(executionId)
+
+    if (isExecNotExists) {
+      val sqlStoreData =
+        Some(kvstore.read(classOf[SQLExecutionUIData], executionId))
+      // Should not overwrite the kvstore with new entry, if it already has the SQLExecution data
+      // corresponding to the execId.
+      if (sqlStoreData.nonEmpty) {
+        val sqlExecutionData = sqlStoreData.get
+        exec.description = sqlExecutionData.description
+        exec.details = sqlExecutionData.details
+        exec.physicalPlanDescription = sqlExecutionData.physicalPlanDescription
+        exec.metrics = sqlExecutionData.metrics
+        exec.submissionTime = sqlExecutionData.submissionTime
+        exec.completionTime = sqlExecutionData.completionTime
+        exec.jobs = sqlExecutionData.jobs
+        exec.stages = sqlExecutionData.stages
+        exec.metricsValues = sqlExecutionData.metricValues
+      }
+    }
 
     // Record the accumulator IDs for the stages of this job, so that the code that keeps
     // track of the metrics knows which accumulators to look at.
