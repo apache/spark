@@ -1696,7 +1696,7 @@ object SQLConf {
       "Catalyst's TimestampType and DateType. If it is set to false, java.sql.Timestamp " +
       "and java.sql.Date are used for the same purpose.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 }
 
 /**
