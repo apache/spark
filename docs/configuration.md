@@ -354,9 +354,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
     classes in the driver. This feature can be used to mitigate conflicts between Spark's
-    dependencies and user dependencies. It is currently an experimental feature.
-
-    This is used in cluster mode only.
+    dependencies and user dependencies. It is currently an experimental feature. This is used in cluster mode only.
   </td>
 </tr>
 <tr>
@@ -365,7 +363,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Extra classpath entries to prepend to the classpath of executors. This exists primarily for
     backwards-compatibility with older versions of Spark. Users typically should not need to set
-    this option.
+    this option. Also see <code>spark.executor.userClassPathFirst</code> to load extra class first.
   </td>
 </tr>
 <tr>
