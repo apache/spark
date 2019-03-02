@@ -585,7 +585,8 @@ class MicroBatchExecution(
     withProgressLocked {
       sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
-      commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
+      assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
+        s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
       committedOffsets ++= availableOffsets
     }
     logDebug(s"Completed batch ${currentBatchId}")
