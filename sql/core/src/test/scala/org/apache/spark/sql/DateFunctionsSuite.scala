@@ -568,9 +568,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val y1 = "2016-02-29"
     val y2 = "2017-02-29"
     val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
+    val ts6 = Timestamp.valueOf("2017-02-28 00:00:00")
     val df2 = Seq(y1, y2).toDF("y")
     checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(
-      Row(ts5.getTime / 1000L), Row(null)))
+      Row(ts5.getTime / 1000L), Row(ts6.getTime / 1000L)))
 
     val now = sql("select unix_timestamp()").collect().head.getLong(0)
     checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
@@ -613,9 +614,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val y1 = "2016-02-29"
     val y2 = "2017-02-29"
     val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
+    val ts6 = Timestamp.valueOf("2017-02-28 00:00:00")
     val df2 = Seq(y1, y2).toDF("y")
     checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(
-      Row(ts5.getTime / 1000L), Row(null)))
+      Row(ts5.getTime / 1000L), Row(ts6.getTime / 1000L)))
 
     // invalid format
     checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')"), Seq(
