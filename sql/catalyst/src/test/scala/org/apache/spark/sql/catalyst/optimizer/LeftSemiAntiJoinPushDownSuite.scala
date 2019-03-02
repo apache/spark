@@ -134,7 +134,6 @@ class LeftSemiPushdownSuite extends PlanTest {
 
   test("Aggregate: LeftSemiAnti join partial pushdown") {
     val originalQuery = testRelation
-      // .select('b.as('alias1))
       .groupBy('b)('b, sum('c).as('sum))
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 10))
 
@@ -154,10 +153,7 @@ class LeftSemiPushdownSuite extends PlanTest {
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
-      .groupBy('b)('b, sum('c).as('sum))
-      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 'd))
-      .analyze
+    val correctAnswer = originalQuery.analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -217,19 +213,19 @@ class LeftSemiPushdownSuite extends PlanTest {
   }
 
   test("Union: LeftSemiAnti join pushdown") {
-      val testRelation2 = LocalRelation('x.int, 'y.int, 'z.int)
+    val testRelation2 = LocalRelation('x.int, 'y.int, 'z.int)
 
-      val originalQuery = Union(Seq(testRelation, testRelation2))
-        .join(testRelation1, joinType = LeftSemi, condition = Some('a === 'd))
+    val originalQuery = Union(Seq(testRelation, testRelation2))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('a === 'd))
 
-      val optimized = Optimize.execute(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
-      val correctAnswer = Union(Seq(
-        testRelation.join(testRelation1, joinType = LeftSemi, condition = Some('a === 'd)),
-        testRelation2.join(testRelation1, joinType = LeftSemi, condition = Some('x === 'd))))
-        .analyze
+    val correctAnswer = Union(Seq(
+      testRelation.join(testRelation1, joinType = LeftSemi, condition = Some('a === 'd)),
+      testRelation2.join(testRelation1, joinType = LeftSemi, condition = Some('x === 'd))))
+      .analyze
 
-      comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("Union: LeftSemiAnti join no pushdown in self join scenario") {
@@ -270,6 +266,34 @@ class LeftSemiPushdownSuite extends PlanTest {
       .select('a, 'b, 'c)
       .repartition(1)
       .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Unary: LeftSemiAnti join pushdown - partial pushdown") {
+    val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode('c_arr), alias = Some("arr"), outputNames = Seq("out_col"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'b === 'out_col))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelationWithArrayType
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
+      .generate(Explode('c_arr), alias = Some("arr"), outputNames = Seq("out_col"))
+      .where('b === 'out_col)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Unary: LeftSemiAnti join pushdown - no pushdown") {
+    val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode('c_arr), alias = Some("arr"), outputNames = Seq("out_col"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'd === 'out_col))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
     comparePlans(optimized, correctAnswer)
   }
 }

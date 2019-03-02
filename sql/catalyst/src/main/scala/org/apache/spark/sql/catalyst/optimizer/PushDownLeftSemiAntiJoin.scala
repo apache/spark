@@ -146,7 +146,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
     case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
       if PushDownPredicate.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       pushDownJoin(join, u.child) { joinCond =>
-        u.withNewChildren(Seq(Join(u.child, rightOp, joinType, Option(joinCond), hint)))
+        u.withNewChildren(Seq(Join(u.child, rightOp, joinType, joinCond, hint)))
       }
   }
 
@@ -173,15 +173,16 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   private def pushDownJoin(
       join: Join,
-      grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+      grandchild: LogicalPlan)(insertJoin: Option[Expression] => LogicalPlan): LogicalPlan = {
     if (join.condition.isEmpty) {
-      insertFilter(null)
+      insertJoin(None)
     } else {
       val (pushDown, stayUp) = splitConjunctivePredicates(join.condition.get)
         .partition {_.references.subsetOf(grandchild.outputSet ++ join.right.outputSet)}
 
-      if (pushDown.nonEmpty) {
-        val newChild = insertFilter(pushDown.reduceLeft(And))
+      val rightOpColumns = AttributeSet(stayUp.toSet).intersect(join.right.outputSet)
+      if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
+        val newChild = insertJoin(Option(pushDown.reduceLeft(And)))
         if (stayUp.nonEmpty) {
           Filter(stayUp.reduceLeft(And), newChild)
         } else {
