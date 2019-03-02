@@ -28,6 +28,7 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.linalg import Vectors
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -1717,7 +1718,8 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaClassificationModel
         return self._call_java("weights")
 
 
-class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol):
+class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol,
+                      HasRawPredictionCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
@@ -1758,6 +1760,8 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     >>> df = spark.read.format("libsvm").load(data_path)
     >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
+    >>> ovr.getRawPredictionCol()
+    'rawPrediction'
     >>> model = ovr.fit(df)
     >>> model.models[0].coefficients
     DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
@@ -1781,16 +1785,18 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     >>> model2 = OneVsRestModel.load(model_path)
     >>> model2.transform(test0).head().prediction
     0.0
+    >>> model.transform(test2).columns
+    ['features', 'rawPrediction', 'prediction']
 
     .. versionadded:: 2.0.0
     """
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None, weightCol=None, parallelism=1):
+                 rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 classifier=None, weightCol=None, parallelism=1):
+                 rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         """
         super(OneVsRest, self).__init__()
         self._setDefault(parallelism=1)
@@ -1800,10 +1806,10 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  classifier=None, weightCol=None, parallelism=1):
+                  rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  classifier=None, weightCol=None, parallelism=1):
+                  rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
@@ -1814,8 +1820,6 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         featuresCol = self.getFeaturesCol()
         predictionCol = self.getPredictionCol()
         classifier = self.getClassifier()
-        assert isinstance(classifier, HasRawPredictionCol),\
-            "Classifier %s doesn't extend from HasRawPredictionCol." % type(classifier)
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
@@ -1884,10 +1888,12 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         featuresCol = java_stage.getFeaturesCol()
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
+        rawPredictionCol = java_stage.getRawPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
         parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       classifier=classifier, parallelism=parallelism)
+                       rawPredictionCol=rawPredictionCol, classifier=classifier,
+                       parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -1904,6 +1910,7 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
+        _java_obj.setRawPredictionCol(self.getRawPredictionCol())
         return _java_obj
 
     def _make_java_param_pair(self, param, value):
@@ -1994,7 +2001,8 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         # update the accumulator column with the result of prediction of models
         aggregatedDataset = newDataset
         for index, model in enumerate(self.models):
-            rawPredictionCol = model._call_java("getRawPredictionCol")
+            rawPredictionCol = self.getRawPredictionCol()
+
             columns = origCols + [rawPredictionCol, accColName]
 
             # add temporary column to store intermediate scores and update
@@ -2015,14 +2023,24 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         if handlePersistence:
             newDataset.unpersist()
 
-        # output the index of the classifier with highest confidence as prediction
-        labelUDF = udf(
-            lambda predictions: float(max(enumerate(predictions), key=operator.itemgetter(1))[0]),
-            DoubleType())
+        if self.getRawPredictionCol():
+            def func(predictions):
+                predArray = []
+                for x in predictions:
+                    predArray.append(x)
+                return Vectors.dense(predArray)
 
-        # output label and label metadata as prediction
-        return aggregatedDataset.withColumn(
-            self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])).drop(accColName)
+            rawPredictionUDF = udf(func)
+            aggregatedDataset = aggregatedDataset.withColumn(
+                self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName]))
+
+        if self.getPredictionCol():
+            # output the index of the classifier with highest confidence as prediction
+            labelUDF = udf(lambda predictions: float(max(enumerate(predictions),
+                           key=operator.itemgetter(1))[0]), DoubleType())
+            aggregatedDataset = aggregatedDataset.withColumn(
+                self.getPredictionCol(), labelUDF(aggregatedDataset[accColName]))
+        return aggregatedDataset.drop(accColName)
 
     @since("2.0.0")
     def copy(self, extra=None):
