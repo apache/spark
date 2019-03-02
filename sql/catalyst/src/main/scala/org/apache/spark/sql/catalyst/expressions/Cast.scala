@@ -1378,10 +1378,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
  * Cast the child expression to the target data type, but will throw error if the cast might
  * truncate, e.g. long -> int, timestamp -> data.
  */
-case class UpCast(
-    child: Expression,
-    dataType: DataType,
-    walkedTypePath: Seq[String] = Nil)
+case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
 }
