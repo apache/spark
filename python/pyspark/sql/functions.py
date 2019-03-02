@@ -37,11 +37,22 @@ from pyspark.sql.types import StringType, DataType
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 
-def _create_function(name, doc=""):
-    """ Create a function for aggregator by name"""
+def _create_name_function(name, doc=""):
+    """ Create a column-name-based function by name"""
     def _(col):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
+        return Column(jc)
+    _.__name__ = name
+    _.__doc__ = doc
+    return _
+
+
+def _create_function(name, doc=""):
+    """ Create a column-based function by name"""
+    def _(col):
+        sc = SparkContext._active_spark_context
+        jc = getattr(sc._jvm.functions, name)(_to_java_column(col))
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -79,20 +90,26 @@ def _create_window_function(name, doc=''):
     _.__doc__ = 'Window function: ' + doc
     return _
 
+
 _lit_doc = """
     Creates a :class:`Column` of literal value.
 
     >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
     [Row(height=5, spark_user=True)]
     """
-_functions = {
+_name_functions = {
     'lit': _lit_doc,
     'col': 'Returns a :class:`Column` based on the given column name.',
     'column': 'Returns a :class:`Column` based on the given column name.',
     'asc': 'Returns a sort expression based on the ascending order of the given column name.',
     'desc': 'Returns a sort expression based on the descending order of the given column name.',
+}
 
+_functions = {
+    'upper': 'Converts a string expression to upper case.',
+    'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
+    'abs': 'Computes the absolute value.',
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
@@ -135,9 +152,10 @@ _functions_1_4 = {
                      as if computed by `java.lang.Math.tanh()`""",
     'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
     'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
+    'bitwiseNOT': 'Computes bitwise not.',
 }
 
-_functions_2_4 = {
+_name_functions_2_4 = {
     'asc_nulls_first': 'Returns a sort expression based on the ascending order of the given' +
                        ' column name, and null values return before non-null values.',
     'asc_nulls_last': 'Returns a sort expression based on the ascending order of the given' +
@@ -250,6 +268,8 @@ _window_functions = {
 _functions_deprecated = {
 }
 
+for _name, _doc in _name_functions.items():
+    globals()[_name] = since(1.3)(_create_name_function(_name, _doc))
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
@@ -264,8 +284,8 @@ for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 for _name, _message in _functions_deprecated.items():
     globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
-for _name, _doc in _functions_2_4.items():
-    globals()[_name] = since(2.4)(_create_function(_name, _doc))
+for _name, _doc in _name_functions_2_4.items():
+    globals()[_name] = since(2.4)(_create_name_function(_name, _doc))
 del _name, _doc
 
 
@@ -572,15 +592,6 @@ def randn(seed=None):
     else:
         jc = sc._jvm.functions.randn()
     return Column(jc)
-
-
-@since(1.3)
-def abs(col):
-    """
-    Computes the absolute value.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.abs(_to_java_column(col)))
 
 
 @since(1.5)
@@ -1438,77 +1449,19 @@ def hash(*cols):
 
 # ---------------------- String/Binary functions ------------------------------
 
-
-@since(1.3)
-def lower(col):
-    """
-    Converts a string column to lower case.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.lower(_to_java_column(col)))
-
-
-@since(1.3)
-def upper(col):
-    """
-    Converts a string column to upper case.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.upper(_to_java_column(col)))
+_string_functions = {
+    'ascii': 'Computes the numeric value of the first character of the string column.',
+    'base64': 'Computes the BASE64 encoding of a binary column and returns it as a string column.',
+    'unbase64': 'Decodes a BASE64 encoded string column and returns it as a binary column.',
+    'ltrim': 'Trim the spaces from left end for the specified string value.',
+    'rtrim': 'Trim the spaces from right end for the specified string value.',
+    'trim': 'Trim the spaces from both ends for the specified string column.',
+}
 
 
-@since(1.5)
-def ltrim(col):
-    """
-    Trim the spaces from left end for the specified string value.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.ltrim(_to_java_column(col)))
-
-
-@since(1.5)
-def rtrim(col):
-    """
-    Trim the spaces from right end for the specified string value.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.rtrim(_to_java_column(col)))
-
-
-@since(1.5)
-def trim(col):
-    """
-    Trim the spaces from both ends for the specified string column.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.trim(_to_java_column(col)))
-
-
-@since(1.5)
-def ascii(col):
-    """
-    Computes the numeric value of the first character of the string column.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.ascii(_to_java_column(col)))
-
-
-@since(1.5)
-def base64(col):
-    """
-    Computes the BASE64 encoding of a binary column and returns it as a string column.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.base64(_to_java_column(col)))
-
-
-@since(1.5)
-def unbase64(col):
-    """
-    Decodes a BASE64 encoded string column and returns it as a binary column.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.unbase64(_to_java_column(col)))
+for _name, _doc in _string_functions.items():
+    globals()[_name] = since(1.5)(_create_function(_name, _doc))
+del _name, _doc
 
 
 @since(1.5)
@@ -1812,15 +1765,6 @@ def bin(col):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.bin(_to_java_column(col))
     return Column(jc)
-
-
-@since(1.4)
-def bitwiseNOT(col):
-    """
-    Computes bitwise not.
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.bitwiseNOT(_to_java_column(col)))
 
 
 @ignore_unicode_prefix
