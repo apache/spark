@@ -156,6 +156,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>DEREF</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>DESC</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DESCRIBE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>QUERY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DESCRIPTOR</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DETERMINISTIC</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>DFS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
