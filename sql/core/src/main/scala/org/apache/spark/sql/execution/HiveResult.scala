@@ -78,7 +78,7 @@ object HiveResult {
     BinaryType)
 
   private lazy val dateFormatter = DateFormatter()
-  private lazy val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(
     DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone))
 
   /** Hive outputs fields of structs slightly differently than top level attributes. */

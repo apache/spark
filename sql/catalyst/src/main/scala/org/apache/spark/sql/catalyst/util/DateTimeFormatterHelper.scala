@@ -72,7 +72,7 @@ private object DateTimeFormatterHelper {
         .appendValue(ChronoField.HOUR_OF_DAY, 2).appendLiteral(':')
         .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
         .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
-        .appendFraction(ChronoField.NANO_OF_SECOND, 1, 6, true)
+        .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
     } else {
       builder.appendPattern(pattern)
     }
