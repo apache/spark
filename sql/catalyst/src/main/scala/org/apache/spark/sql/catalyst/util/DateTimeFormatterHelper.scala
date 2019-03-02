@@ -62,10 +62,24 @@ private object DateTimeFormatterHelper {
     .maximumSize(128)
     .build[(String, Locale), DateTimeFormatter]()
 
+  private def appendPattern(pattern: String): DateTimeFormatterBuilder = {
+    val builder = new DateTimeFormatterBuilder().parseCaseInsensitive()
+
+    if (pattern == TimestampFormatter.fractionPattern) {
+      builder
+        .append(DateTimeFormatter.ISO_LOCAL_DATE)
+        .appendLiteral(' ')
+        .appendValue(ChronoField.HOUR_OF_DAY, 2).appendLiteral(':')
+        .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
+        .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
+        .appendFraction(ChronoField.NANO_OF_SECOND, 1, 6, true)
+    } else {
+      builder.appendPattern(pattern)
+    }
+  }
+
   def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    new DateTimeFormatterBuilder()
-      .parseCaseInsensitive()
-      .appendPattern(pattern)
+    appendPattern(pattern)
       .parseDefaulting(ChronoField.ERA, 1)
       .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
       .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
