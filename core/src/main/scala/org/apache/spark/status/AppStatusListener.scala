@@ -213,8 +213,8 @@ private[spark] class AppStatusListener(
       }
       // remove partition information
       liveRDDs.values.foreach { rdd =>
-        rdd.getPartitions.values.
-          filter(_.executors.contains(event.executorId)).foreach { partition =>
+        rdd.getPartitions.values
+          .filter(_.executors.contains(event.executorId)).foreach { partition =>
           partition.executors.filter(_ == event.executorId).foreach { _ =>
             if (partition.executors.length == 1) {
               rdd.removePartition(partition.blockName)

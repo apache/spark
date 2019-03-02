@@ -1593,7 +1593,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(wrapper.info.memoryUsed === rdd1b1.memSize)
       assert(wrapper.info.diskUsed === rdd1b1.diskSize)
       assert(wrapper.info.dataDistribution.get.size === 1L)
-      assert(wrapper.info.partitions.get.size ===1L)
+      assert(wrapper.info.partitions.get.size === 1L)
 
       val dist = wrapper.info.dataDistribution.get.find(_.address == bm2.hostPort).get
       assert(dist.memoryUsed === rdd1b1.memSize)
@@ -1605,6 +1605,17 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(part.memoryUsed === rdd1b1.memSize)
       assert(part.diskUsed === rdd1b1.diskSize)
       assert(part.executors === Seq(bm2.executorId))
+    }
+
+    // Remove Executor 2.
+    listener.onExecutorRemoved(createExecutorRemovedEvent(2))
+    // Check that storage cost is zero as both exec are down
+    check[RDDStorageInfoWrapper](rdd1b1.rddId) { wrapper =>
+      assert(wrapper.info.numCachedPartitions === 0)
+      assert(wrapper.info.memoryUsed === 0)
+      assert(wrapper.info.diskUsed === 0)
+      assert(wrapper.info.dataDistribution.isEmpty)
+      assert(wrapper.info.partitions.get.isEmpty)
     }
   }
 
