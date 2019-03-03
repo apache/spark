@@ -127,6 +127,19 @@ setMethod("orderBy",
 #' "0" means "current row", while "-1" means the row before the current row, and "5" means the
 #' fifth row after the current row.
 #'
+#' We recommend users use \code{Window.unboundedPreceding}, \code{Window.unboundedFollowing},
+#' and \code{Window.currentRow} to specify special boundary values, rather than using long values
+#' directly.
+#'
+#' A range-based boundary is based on the actual value of the ORDER BY
+#' expression(s). An offset is used to alter the value of the ORDER BY expression, for
+#' instance if the current order by expression has a value of 10 and the lower bound offset
+#' is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+#' number of constraints on the ORDER BY expressions: there can be only one expression and this
+#' expression must have a numerical data type. An exception can be made when the offset is
+#' unbounded, because no value modification is needed, in this case multiple and non-numeric
+#' ORDER BY expression are allowed.
+#'
 #' @param x a WindowSpec
 #' @param start boundary start, inclusive.
 #'              The frame is unbounded if this is the minimum long value.
@@ -139,7 +152,14 @@ setMethod("orderBy",
 #' @family windowspec_method
 #' @examples
 #' \dontrun{
-#'   rowsBetween(ws, 0, 3)
+#'   id <- c(rep(1, 3), rep(2, 3), 3)
+#'   desc <- c('New','New','Good','New','Good','Good','New')
+#'   df <- data.frame(id, desc)
+#'   df <- createDataFrame(df)
+#'   w1 <- orderBy(windowPartitionBy('desc'), df$id)
+#'   w2 <- rowsBetween(w1,0,3)
+#'   df1 <- withColumn(df, “sum”, over(sum(df$id), w2))
+#'   head(df1)
 #' }
 #' @note rowsBetween since 2.0.0
 setMethod("rowsBetween",
@@ -158,6 +178,19 @@ setMethod("rowsBetween",
 #' "current row", while "-1" means one off before the current row, and "5" means the five off
 #' after the current row.
 #'
+#' We recommend users use \code{Window.unboundedPreceding}, \code{Window.unboundedFollowing},
+#' and \code{Window.currentRow} to specify special boundary values, rather than using long values
+#' directly.
+#'
+#' A range-based boundary is based on the actual value of the ORDER BY
+#' expression(s). An offset is used to alter the value of the ORDER BY expression, for
+#' instance if the current order by expression has a value of 10 and the lower bound offset
+#' is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+#' number of constraints on the ORDER BY expressions: there can be only one expression and this
+#' expression must have a numerical data type. An exception can be made when the offset is
+#' unbounded, because no value modification is needed, in this case multiple and non-numeric
+#' ORDER BY expression are allowed.
+#'
 #' @param x a WindowSpec
 #' @param start boundary start, inclusive.
 #'              The frame is unbounded if this is the minimum long value.
@@ -170,7 +203,14 @@ setMethod("rowsBetween",
 #' @family windowspec_method
 #' @examples
 #' \dontrun{
-#'   rangeBetween(ws, 0, 3)
+#'   id <- c(rep(1, 3), rep(2, 3), 3)
+#'   desc <- c('New','New','Good','New','Good','Good','New')
+#'   df <- data.frame(id, desc)
+#'   df <- createDataFrame(df)
+#'   w1 <- orderBy(windowPartitionBy('desc'), df$id)
+#'   w2 <- rangeBetween(w1,0,3)
+#'   df1 <- withColumn(df, “sum”, over(sum(df$id), w2))
+#'   head(df1)
 #' }
 #' @note rangeBetween since 2.0.0
 setMethod("rangeBetween",
