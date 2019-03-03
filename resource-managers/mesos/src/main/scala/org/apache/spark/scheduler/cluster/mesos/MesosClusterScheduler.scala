@@ -426,7 +426,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
-    val useFetchCache = desc.conf.get(config.ENABLE_FETCHER_CACHE)
+    val useFetchCache = desc.conf.get(config.ENABLE_FETCHER_CACHE) || conf.get(config.ENABLE_FETCHER_CACHE)
     val confUris = (conf.get(config.URIS_TO_DOWNLOAD) ++
       desc.conf.get(config.URIS_TO_DOWNLOAD) ++
       desc.conf.get(SUBMIT_PYTHON_FILES)).toList

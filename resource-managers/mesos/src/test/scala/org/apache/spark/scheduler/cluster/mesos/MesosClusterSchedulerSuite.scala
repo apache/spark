@@ -280,6 +280,30 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(uris.asScala.forall(_.getCache))
   }
 
+  test("supports setting fetcher cache on the dispatcher") {
+    setScheduler(Map(config.ENABLE_FETCHER_CACHE.key -> "true"))
+
+    val mem = 1000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map(config.EXECUTOR_HOME.key -> "test",
+          "spark.app.name" -> "test"),
+        "s1",
+        new Date()))
+
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+    val uris = launchedTasks.head.getCommand.getUrisList
+    assert(uris.asScala.forall(_.getCache))
+  }
+
   test("supports disabling fetcher cache") {
     setScheduler()
 
