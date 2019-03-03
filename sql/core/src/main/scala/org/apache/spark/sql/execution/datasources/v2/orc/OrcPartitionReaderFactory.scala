@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.orc.{OrcConf, OrcFile}
+import org.apache.orc.{OrcConf, OrcFile, TypeDescription}
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
@@ -67,6 +67,9 @@ case class OrcPartitionReaderFactory(
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
 
+    val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, requiredDataSchema.catalogString)
+
     val filePath = new Path(new URI(file.filePath))
 
     val fs = filePath.getFileSystem(conf)
@@ -74,23 +77,21 @@ case class OrcPartitionReaderFactory(
     val reader = OrcFile.createReader(filePath, readerOptions)
 
     val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readSchema, reader, conf)
+      isCaseSensitive, dataSchema, requiredDataSchema, reader, conf)
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader[InternalRow]
     } else {
       val requestedColIds = requestedColIdsOrEmptyFile.get
-      assert(requestedColIds.length == readSchema.length,
+      assert(requestedColIds.length == requiredDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
+
       val taskConf = new Configuration(conf)
-      taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
-        requestedColIds.filter(_ != -1).sorted.mkString(","))
 
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
       val orcRecordReader = new OrcInputFormat[OrcStruct]
         .createRecordReader(fileSplit, taskAttemptContext)
 
@@ -112,6 +113,8 @@ case class OrcPartitionReaderFactory(
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
 
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, readSchema.catalogString)
+
     val filePath = new Path(new URI(file.filePath))
 
     val fs = filePath.getFileSystem(conf)
@@ -128,8 +131,6 @@ case class OrcPartitionReaderFactory(
       assert(requestedColIds.length == readSchema.length,
         "[BUG] requested column IDs do not match required schema")
       val taskConf = new Configuration(conf)
-      taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
-        requestedColIds.filter(_ != -1).sorted.mkString(","))
 
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
@@ -144,7 +145,7 @@ case class OrcPartitionReaderFactory(
       }
 
       batchReader.initBatch(
-        reader.getSchema,
+        TypeDescription.fromString(readSchema.catalogString),
         readSchema.fields,
         requestedColIds,
         requestedPartitionColIds,

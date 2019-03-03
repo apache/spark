@@ -206,7 +206,7 @@ class OrcFileFormat
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
-            reader.getSchema,
+            TypeDescription.fromString(requiredSchema.catalogString),
             resultSchema.fields,
             requestedDataColIds,
             requestedPartitionColIds,
