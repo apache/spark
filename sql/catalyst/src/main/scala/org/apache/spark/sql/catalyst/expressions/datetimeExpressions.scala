@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.LocalDate
+import java.time.{Instant, LocalDate}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -96,7 +96,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def dataType: DataType = TimestampType
 
   override def eval(input: InternalRow): Any = {
-    System.currentTimeMillis() * 1000L
+    instantToMicros(Instant.now())
   }
 
   override def prettyName: String = "current_timestamp"
