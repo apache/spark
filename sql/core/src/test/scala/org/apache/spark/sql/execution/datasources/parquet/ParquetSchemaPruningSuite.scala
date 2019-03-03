@@ -37,10 +37,10 @@ class ParquetSchemaPruningSuite extends SchemaPruningSuite {
     checkScan(query, "struct<name:struct<first:string,middle:string,last:string>>")
     checkAnswer(query.orderBy("id"),
       Row("X.", Row("Jane", "X.", "Doe")) ::
-        Row("Y.", Row("John", "Y.", "Doe")) ::
-        Row(null, Row("Janet", null, "Jones")) ::
-        Row(null, Row("Jim", null, "Jones")) ::
-        Nil)
+      Row("Y.", Row("John", "Y.", "Doe")) ::
+      Row(null, Row("Janet", null, "Jones")) ::
+      Row(null, Row("Jim", null, "Jones")) ::
+      Nil)
   }
 
   testSchemaPruning("select a single complex field and the partition column") {
@@ -60,12 +60,12 @@ class ParquetSchemaPruningSuite extends SchemaPruningSuite {
     // of the contacts relation, even though the fields are selected in different orders.
     checkScan(query,
       "struct<id:int,name:struct<first:string,middle:string,last:string>,address:string,pets:int," +
-        "friends:array<struct<first:string,middle:string,last:string>>," +
-        "relatives:map<string,struct<first:string,middle:string,last:string>>>")
+      "friends:array<struct<first:string,middle:string,last:string>>," +
+      "relatives:map<string,struct<first:string,middle:string,last:string>>>")
     checkAnswer(query.orderBy("id"),
       Row(2, "Jones", null, "Janet", null, null, null, null, null, null, null, "567 Maple Drive") ::
-        Row(3, "Jones", null, "Jim", null, null, null, null, null, null, null, "6242 Ash Street") ::
-        Nil)
+      Row(3, "Jones", null, "Jim", null, null, null, null, null, null, null, "6242 Ash Street") ::
+      Nil)
   }
 
   testSchemaPruning("empty schema intersection") {
