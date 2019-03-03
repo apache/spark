@@ -352,7 +352,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def catalogString: String = {
     // in catalogString, we should not truncate
-    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}:${f.dataType.catalogString}")
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.catalogString}")
     s"struct<${fieldTypes.mkString(",")}>"
   }
 

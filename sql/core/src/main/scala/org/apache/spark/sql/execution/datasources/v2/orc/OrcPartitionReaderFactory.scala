@@ -68,7 +68,8 @@ case class OrcPartitionReaderFactory(
     val conf = broadcastedConf.value.value
 
     val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, requiredDataSchema.catalogString)
+    val requiredDataSchemaString = OrcUtils.orcTypeDescriptionString(requiredDataSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, requiredDataSchemaString)
 
     val filePath = new Path(new URI(file.filePath))
 
@@ -113,7 +114,8 @@ case class OrcPartitionReaderFactory(
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
 
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, readSchema.catalogString)
+    val readSchemaString = OrcUtils.orcTypeDescriptionString(readSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, readSchemaString)
 
     val filePath = new Path(new URI(file.filePath))
 
@@ -145,7 +147,7 @@ case class OrcPartitionReaderFactory(
       }
 
       batchReader.initBatch(
-        TypeDescription.fromString(readSchema.catalogString),
+        TypeDescription.fromString(readSchemaString),
         readSchema.fields,
         requestedColIds,
         requestedPartitionColIds,

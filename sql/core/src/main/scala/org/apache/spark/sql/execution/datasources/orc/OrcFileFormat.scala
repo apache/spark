@@ -159,7 +159,8 @@ class OrcFileFormat
       }
     }
 
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, requiredSchema.catalogString)
+    val requiredSchemaString = OrcUtils.orcTypeDescriptionString(requiredSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, requiredSchemaString)
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
@@ -206,7 +207,7 @@ class OrcFileFormat
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
-            TypeDescription.fromString(requiredSchema.catalogString),
+            TypeDescription.fromString(requiredSchemaString),
             resultSchema.fields,
             requestedDataColIds,
             requestedPartitionColIds,
