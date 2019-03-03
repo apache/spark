@@ -34,6 +34,11 @@ import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   import testImplicits._
 
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set("spark.sql.datetime.java8API.enabled", false)
+  }
+
   val dateSchema = s"""
       {
         "namespace": "logical",
