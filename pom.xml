@@ -179,7 +179,7 @@
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
-    <libthrift.version>0.9.3</libthrift.version>
+    <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
@@ -1945,7 +1945,7 @@
       <dependency>
         <groupId>org.apache.thrift</groupId>
         <artifactId>libfb303</artifactId>
-        <version>${libthrift.version}</version>
+        <version>0.9.3</version>
         <exclusions>
           <exclusion>
             <groupId>org.slf4j</groupId>
