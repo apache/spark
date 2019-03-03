@@ -167,4 +167,7 @@ case class ResetCommand() extends RunnableCommand with Logging {
     sparkSession.sessionState.conf.clear()
     Seq.empty[Row]
   }
+
+  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
+  override def makeCopy(newArgs: Array[AnyRef]): ResetCommand = ResetCommand()
 }
