@@ -34,7 +34,7 @@ trait CypherSession {
     * @param nodes         [[NodeFrame]]s that define the nodes in the graph
     * @param relationships [[RelationshipFrame]]s that define the relationships in the graph
     */
-  def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame]): PropertyGraph
+  def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame] = Seq.empty): PropertyGraph
 
   /**
     * Creates a [[PropertyGraph]] from nodes and relationship present in the given [[CypherResult]].

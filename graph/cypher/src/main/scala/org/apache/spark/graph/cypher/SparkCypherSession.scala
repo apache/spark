@@ -15,7 +15,9 @@ import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
 import org.opencypher.okapi.relational.api.table.RelationalEntityTableFactory
 
 object SparkCypherSession {
-  def create(implicit sparkSession: SparkSession): SparkCypherSession = new SparkCypherSession(sparkSession)
+  def create(implicit sparkSession: SparkSession): CypherSession = new SparkCypherSession(sparkSession)
+
+  private[spark] def createInternal(implicit sparkSession: SparkSession): SparkCypherSession = new SparkCypherSession(sparkSession)
 }
 
 /**
@@ -24,7 +26,7 @@ object SparkCypherSession {
   * This class is the main entry point for working with the spark-graph-cypher module.
   * It wraps a [[SparkSession]] and allows to run Cypher queries over graphs represented as [[org.apache.spark.sql.DataFrame]]s.
   */
-class SparkCypherSession(override val sparkSession: SparkSession) extends RelationalCypherSession[DataFrameTable] with CypherSession {
+private[spark] class SparkCypherSession(override val sparkSession: SparkSession) extends RelationalCypherSession[DataFrameTable] with CypherSession {
 
   override type Result = RelationalCypherResult[DataFrameTable]
   override type Records = SparkCypherRecords
