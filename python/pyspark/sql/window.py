@@ -110,7 +110,7 @@ class Window(object):
         tup = [(1, "a"), (1, "a"), (1, "b"), (2, "b"), (3, "b")]
         df = spark.createDataFrame(tup, ["id", "category"])
         window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
-        df.withColumn("sum",func.sum("id").over(window)).show()
+        df.withColumn("sum", func.sum("id").over(window)).show()
 
         # id category sum
 
@@ -168,10 +168,10 @@ class Window(object):
         SparkSession.builder.config(conf=SparkConf())
         from pyspark.sql import Window
         from pyspark.sql import functions as func
-        tup = [(1, "a"), (1, "a"),(2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
         df = spark.createDataFrame(tup, ["id", "category"])
         window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
-        df.withColumn("sum",func.sum("id").over(window)).show()
+        df.withColumn("sum", func.sum("id").over(window)).show()
 
         # id category sum
 
