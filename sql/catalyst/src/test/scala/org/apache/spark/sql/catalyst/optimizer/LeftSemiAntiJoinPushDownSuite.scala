@@ -138,9 +138,7 @@ class LeftSemiPushdownSuite extends PlanTest {
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = originalQuery.analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery.analyze)
   }
 
   test("Aggregate: LeftSemiAnti join non-correlated scalar subq aggr exprs") {
