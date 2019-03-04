@@ -25,15 +25,17 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 /**
- * Unit tests for transform binary comparision in expressions.
+ * Unit tests for rewrite arithmetic filters on int or long column optimizer.
  */
-class TransformBinaryComparisonSuite extends PlanTest {
+class RewriteArithmeticFiltersOnIntOrLongColumnSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("TransformBinaryComparison", FixedPoint(10),
+      Batch(
+        "RewriteArithmeticFiltersOnIntOrLongColumn",
+        FixedPoint(10),
         ConstantFolding,
-        TransformBinaryComparison) :: Nil
+        RewriteArithmeticFiltersOnIntOrLongColumn) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.long)
@@ -46,7 +48,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnA, Literal(2)) === Literal(8))
 
     val correctAnswer = testRelation
-      .where(columnA === Literal(6)).analyze
+      .where(columnA === Literal(6))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -56,7 +59,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnA, Literal(2)) >= Literal(8))
 
     val correctAnswer = testRelation
-      .where(columnA >= Literal(6)).analyze
+      .where(columnA >= Literal(6))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -66,7 +70,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnA, Literal(2)) <= Literal(8))
 
     val correctAnswer = testRelation
-      .where(columnA <= Literal(6)).analyze
+      .where(columnA <= Literal(6))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -76,7 +81,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(columnA, Literal(2)) <= Literal(8))
 
     val correctAnswer = testRelation
-      .where(columnA <= Literal(10)).analyze
+      .where(columnA <= Literal(10))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -86,7 +92,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(Literal(2), columnA) <= Literal(8))
 
     val correctAnswer = testRelation
-      .where(Literal(-6) <= columnA).analyze
+      .where(Literal(-6) <= columnA)
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -96,7 +103,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(Literal(2), columnA) >= Literal(8))
 
     val correctAnswer = testRelation
-      .where(Literal(-6) >= columnA).analyze
+      .where(Literal(-6) >= columnA)
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -106,7 +114,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(columnA, Literal(10)) >= Literal(Int.MaxValue - 2))
 
     val correctAnswer = testRelation
-      .where(Subtract(columnA, Literal(10)) >= Literal(Int.MaxValue - 2)).analyze
+      .where(Subtract(columnA, Literal(10)) >= Literal(Int.MaxValue - 2))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -116,7 +125,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(Literal(10), columnA) >= Literal(Int.MinValue))
 
     val correctAnswer = testRelation
-      .where(Subtract(Literal(10), columnA) >= Literal(Int.MinValue)).analyze
+      .where(Subtract(Literal(10), columnA) >= Literal(Int.MinValue))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -126,7 +136,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnA, Literal(10)) <= Literal(Int.MinValue + 2))
 
     val correctAnswer = testRelation
-      .where(Add(columnA, Literal(10)) <= Literal(Int.MinValue + 2)).analyze
+      .where(Add(columnA, Literal(10)) <= Literal(Int.MinValue + 2))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -136,7 +147,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnB, Literal(2L)) === Literal(8L))
 
     val correctAnswer = testRelation
-      .where(columnB === Literal(6L)).analyze
+      .where(columnB === Literal(6L))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -146,7 +158,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnB, Literal(2L)) >= Literal(8L))
 
     val correctAnswer = testRelation
-      .where(columnB >= Literal(6L)).analyze
+      .where(columnB >= Literal(6L))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -156,7 +169,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnB, Literal(2L)) <= Literal(8L))
 
     val correctAnswer = testRelation
-      .where(columnB <= Literal(6L)).analyze
+      .where(columnB <= Literal(6L))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -166,7 +180,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(columnB, Literal(2L)) <= Literal(8L))
 
     val correctAnswer = testRelation
-      .where(columnB <= Literal(10L)).analyze
+      .where(columnB <= Literal(10L))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -176,7 +191,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(Literal(2L), columnB) <= Literal(8))
 
     val correctAnswer = testRelation
-      .where(Literal(-6L) <= columnB).analyze
+      .where(Literal(-6L) <= columnB)
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -186,7 +202,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(Literal(2L), columnB) >= Literal(8))
 
     val correctAnswer = testRelation
-      .where(Literal(-6L) >= columnB).analyze
+      .where(Literal(-6L) >= columnB)
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -196,7 +213,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(columnB, Literal(10L)) >= Literal(Long.MaxValue - 2))
 
     val correctAnswer = testRelation
-      .where(Subtract(columnB, Literal(10L)) >= Literal(Long.MaxValue - 2)).analyze
+      .where(Subtract(columnB, Literal(10L)) >= Literal(Long.MaxValue - 2))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -206,7 +224,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Subtract(Literal(10L), columnB) >= Literal(Long.MinValue))
 
     val correctAnswer = testRelation
-      .where(Subtract(Literal(10L), columnB) >= Literal(Long.MinValue)).analyze
+      .where(Subtract(Literal(10L), columnB) >= Literal(Long.MinValue))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -216,7 +235,8 @@ class TransformBinaryComparisonSuite extends PlanTest {
       .where(Add(columnB, Literal(10)) <= Literal(Long.MinValue + 2))
 
     val correctAnswer = testRelation
-      .where(Add(columnB, Literal(10L)) <= Literal(Long.MinValue + 2)).analyze
+      .where(Add(columnB, Literal(10L)) <= Literal(Long.MinValue + 2))
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }

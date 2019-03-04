@@ -129,7 +129,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         RemoveNoopOperators,
         SimplifyExtractValueOps,
         CombineConcats,
-        TransformBinaryComparison) ++
+        RewriteArithmeticFiltersOnIntOrLongColumn) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
