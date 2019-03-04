@@ -131,7 +131,6 @@ private[spark] class MesosClusterScheduler(
   private val queuedCapacity = conf.get(config.MAX_DRIVERS)
   private val retainedDrivers = conf.get(config.RETAINED_DRIVERS)
   private val maxRetryWaitTime = conf.get(config.CLUSTER_RETRY_WAIT_MAX_SECONDS)
-  private val useFetchCache = conf.get(config.ENABLE_FETCHER_CACHE)
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   // Keyed by submission id
@@ -428,6 +427,8 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
+    val useFetchCache = desc.conf.get(config.ENABLE_FETCHER_CACHE) ||
+        conf.get(config.ENABLE_FETCHER_CACHE)
     val confUris = (conf.get(config.URIS_TO_DOWNLOAD) ++
       desc.conf.get(config.URIS_TO_DOWNLOAD) ++
       desc.conf.get(SUBMIT_PYTHON_FILES)).toList
