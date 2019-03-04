@@ -42,7 +42,7 @@ struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'named_struct('a1', tab_a.`a1`, 'b1', tab_a.`b1`) IN (listquery())' due to data type mismatch: 
-The number of columns in the left hand side of a predicate subquery does not match the
+The number of columns in the left hand side of an IN subquery does not match the
 number of columns in the output of subquery.
 #columns in left hand side: 2.
 #columns in right hand side: 1.

@@ -152,14 +152,16 @@ trait CheckAnalysis extends PredicateHelper {
             s
 
           case a @ AnySubquery(values, _, genCmp) =>
-            // ANY/SOME predicate doesn't support multi-column comparison.
+            // ANY/SOME predicate only supports 'EqualTo' operation when multiple columns are
+            // specified as its operands.
             if (values.size > 1) {
               val cmp = genCmp(null, null)
               cmp match {
                 case EqualTo(_, _) => // Ok
                   a
                 case other =>
-                  failAnalysis("ANY/SOME predicate doesn't support multi-column comparison.")
+                  failAnalysis(s"ANY/SOME predicate does not support '${a.cmpSymbol}' operation " +
+                    s"when multiple columns are specified as its operands.")
               }
             } else {
               a

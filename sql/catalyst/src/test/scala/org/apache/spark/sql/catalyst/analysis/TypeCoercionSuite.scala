@@ -1431,8 +1431,8 @@ class TypeCoercionSuite extends AnalysisTest {
    * We use this test to make sure those rules do not fire early.
    */
   test("make sure rules do not fire early") {
-    // PredicateSubqueryConversion
-    val psConversion = TypeCoercion.PredicateSubqueryConversion(conf)
+    // SubqueryAndInSetConversion
+    val psConversion = TypeCoercion.SubqueryAndInSetConversion(conf)
     ruleTest(psConversion,
       In(UnresolvedAttribute("a"), Seq(Literal(1))),
       In(UnresolvedAttribute("a"), Seq(Literal(1)))

@@ -88,7 +88,7 @@ WHERE  (a1, a2) <= ANY (SELECT b1,
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-ANY/SOME predicate doesn't support multi-column comparison.;
+ANY/SOME predicate does not support '<=' operation when multiple columns are specified as its operands.;
 
 
 -- !query 7
@@ -101,7 +101,7 @@ WHERE  (a1, a2) != ANY (SELECT b1,
 struct<>
 -- !query 7 output
 org.apache.spark.sql.AnalysisException
-ANY/SOME predicate doesn't support multi-column comparison.;
+ANY/SOME predicate does not support '!=' operation when multiple columns are specified as its operands.;
 
 
 -- !query 8
@@ -114,7 +114,7 @@ struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'named_struct('a1', a.`a1`, 'a2', a.`a2`) = ANY (listquery())' due to data type mismatch: 
-The number of columns in the left hand side of a predicate subquery does not match the
+The number of columns in the left hand side of an ANY subquery does not match the
 number of columns in the output of subquery.
 #columns in left hand side: 2.
 #columns in right hand side: 1.

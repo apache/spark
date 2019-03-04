@@ -150,9 +150,10 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
   def values: Seq[Expression]
   def query: ListQuery
   def genCmp: (Expression, Expression) => Expression
-  def symbol: String
+  def Symbol: String
+  def sqlSymbol: String
 
-  @transient protected lazy val cmpSymbol: String = genCmp(value, query) match {
+  @transient lazy val cmpSymbol: String = genCmp(value, query) match {
     case b: BinaryComparison =>
       b.symbol
     case _ @ Not(EqualTo(_, _)) =>
@@ -173,7 +174,7 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
     if (values.length != query.childOutputs.length) {
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The number of columns in the left hand side of a predicate subquery does not match the
+           |The number of columns in the left hand side of an $Symbol subquery does not match the
            |number of columns in the output of subquery.
            |#columns in left hand side: ${values.length}.
            |#columns in right hand side: ${query.childOutputs.length}.
@@ -191,7 +192,7 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
       }
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The data type of one or more elements in the left hand side of a predicate subquery
+           |The data type of one or more elements in the left hand side of an $Symbol subquery
            |is not compatible with the data type of the output of the subquery
            |Mismatched columns:
            |[${mismatchedColumns.mkString(", ")}]
@@ -209,7 +210,7 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
   override def foldable: Boolean = children.forall(_.foldable)
 
   private def toString(left: String, right: String): String = {
-    s"$left $symbol ($right)"
+    s"$left $sqlSymbol ($right)"
   }
 
   override def toString: String = toString(value.toString, query.toString)
@@ -232,7 +233,8 @@ case class AnySubquery(
     query: ListQuery,
     genCmp: (Expression, Expression) => Expression) extends PredicateSubquery {
 
-  override def symbol: String = s"$cmpSymbol ANY"
+  override def Symbol: String = "ANY"
+  override def sqlSymbol: String = s"$cmpSymbol ANY"
 }
 
 /**
@@ -242,16 +244,10 @@ case class AnySubquery(
 case class InSubquery(
     values: Seq[Expression],
     query: ListQuery,
-    genCmp: (Expression, Expression) => Expression) extends PredicateSubquery {
+    genCmp: (Expression, Expression) => Expression = EqualTo) extends PredicateSubquery {
 
-  override def symbol: String = "IN"
-}
-
-object InSubquery {
-
-  def apply(values: Seq[Expression], query: ListQuery): InSubquery = {
-    InSubquery(values, query, EqualTo)
-  }
+  override def Symbol: String = "IN"
+  override def sqlSymbol: String = "IN"
 }
 
 /**

@@ -624,6 +624,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val error_plan = Filter(
       AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), GreaterThan), a)
     assertAnalysisError(error_plan,
-      "ANY/SOME predicate doesn't support multi-column comparison" :: Nil)
+      "ANY/SOME predicate does not support '>' operation when " +
+        "multiple columns are specified as its operands." :: Nil)
   }
 }

@@ -9,11 +9,13 @@ CREATE TEMPORARY VIEW a AS SELECT * FROM VALUES
 
 CREATE TEMPORARY VIEW b AS SELECT * FROM VALUES
   (3, 1),
-  (null, 2)
+  (4, 2)
   AS b(b1, b2);
 
 CREATE TEMPORARY VIEW c AS SELECT * FROM VALUES
-  (null, 1)
+  (3, 1),
+  (4, 2),
+  (null, 3)
   AS c(c1, c2);
 
 -- comparison operators
