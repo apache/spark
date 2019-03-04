@@ -171,6 +171,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val OPTIMIZER_INSET_SWITCH_THRESHOLD =
+    buildConf("spark.sql.optimizer.inSetSwitchThreshold")
+      .internal()
+      .doc("Configures the max set size in InSet for which Spark will generate code with " +
+        "switch statements. This is applicable only to bytes, shorts, ints, dates.")
+      .intConf
+      .checkValue(threshold => threshold >= 0 && threshold <= 600, "The max set size " +
+        "for using switch statements in InSet must be non-negative and less than or equal to 600")
+      .createWithDefault(400)
+
   val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -1724,6 +1734,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
+
+  def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
   def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
 
