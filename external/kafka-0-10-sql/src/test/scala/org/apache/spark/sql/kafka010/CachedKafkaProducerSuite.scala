@@ -20,10 +20,13 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.concurrent.ConcurrentMap
 
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester with KafkaTest {
@@ -35,43 +38,68 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     CachedKafkaProducer.clear()
   }
 
+  test("Should not throw exception on calling close with non-existing key.") {
+    val kafkaParams = getKafkaParams()
+    CachedKafkaProducer.close(kafkaParams)
+    assert(getCacheMap().size === 0)
+  }
+
   test("Should return the cached instance on calling getOrCreate with same params.") {
+    val kafkaParams = getKafkaParams()
+    val producer = CachedKafkaProducer.getOrCreate(kafkaParams)
+    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
+    assert(producer === producer2)
+    val cacheMap = getCacheMap()
+    assert(cacheMap.size === 1)
+  }
+
+  test("Should close the correct kafka producer for the given kafkaPrams.") {
+    val kafkaParams = getKafkaParams()
+    val producer: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
+    kafkaParams.put("acks", "1")
+    val producer2: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
+    // With updated conf, a new producer instance should be created.
+    assert(producer != producer2)
+    val cacheMap = getCacheMap()
+    assert(cacheMap.size === 2)
+
+    CachedKafkaProducer.close(kafkaParams)
+    val cacheMap2 = getCacheMap()
+    assert(cacheMap2.size === 1)
+    assert(getCacheMapItem(cacheMap2, 0) === producer)
+  }
+
+  test("Should return new instance on calling getOrCreate with same params but task retry.") {
+    val kafkaParams = getKafkaParams()
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, attemptNumber = 0, null, null, null)
+    TaskContext.setTaskContext(taskContext)
+    val producer = CachedKafkaProducer.getOrCreate(kafkaParams)
+    val retryTaskContext = new TaskContextImpl(0, 0, 0, 0, attemptNumber = 1, null, null, null)
+    TaskContext.setTaskContext(retryTaskContext)
+    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
+    assert(producer != producer2)
+    val cacheMap = getCacheMap()
+    assert(cacheMap.size === 1)
+    assert(getCacheMapItem(cacheMap, 0) === producer2)
+  }
+
+  private def getKafkaParams(): ju.HashMap[String, Object] = {
     val kafkaParams = new ju.HashMap[String, Object]()
     kafkaParams.put("acks", "0")
     // Here only host should be resolvable, it does not need a running instance of kafka server.
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val producer = CachedKafkaProducer.getOrCreate(kafkaParams)
-    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
-    assert(producer == producer2)
-
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
-    val map = CachedKafkaProducer.invokePrivate(cacheMap())
-    assert(map.size == 1)
+    kafkaParams
   }
 
-  test("Should close the correct kafka producer for the given kafkaPrams.") {
-    val kafkaParams = new ju.HashMap[String, Object]()
-    kafkaParams.put("acks", "0")
-    kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
-    kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
-    kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val producer: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
-    kafkaParams.put("acks", "1")
-    val producer2: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
-    // With updated conf, a new producer instance should be created.
-    assert(producer != producer2)
+  private def getCacheMap(): ConcurrentMap[Seq[(String, Object)], KP] = {
+    val getAsMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
+    CachedKafkaProducer.invokePrivate(getAsMap())
+  }
 
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
-    val map = CachedKafkaProducer.invokePrivate(cacheMap())
-    assert(map.size == 2)
-
-    CachedKafkaProducer.close(kafkaParams)
-    val map2 = CachedKafkaProducer.invokePrivate(cacheMap())
-    assert(map2.size == 1)
-    import scala.collection.JavaConverters._
-    val (seq: Seq[(String, Object)], _producer: KP) = map2.asScala.toArray.apply(0)
-    assert(_producer == producer)
+  private def getCacheMapItem(map: ConcurrentMap[Seq[(String, Object)], KP], offset: Int): KP = {
+    val (_: Seq[(String, Object)], _producer: KP) = map.asScala.toArray.apply(0)
+    _producer
   }
 }

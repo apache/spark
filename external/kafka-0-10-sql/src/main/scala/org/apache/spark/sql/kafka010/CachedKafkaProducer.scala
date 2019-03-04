@@ -26,7 +26,7 @@ import org.apache.kafka.clients.producer.KafkaProducer
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 
 private[kafka010] object CachedKafkaProducer extends Logging {
@@ -79,6 +79,10 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * one instance per specified kafkaParams.
    */
   private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = {
+    if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
+      logDebug(s"Reattempt detected, invalidating cached producer for params $kafkaParams")
+      close(kafkaParams)
+    }
     val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParams)
     try {
       guavaCache.get(paramsSeq)
