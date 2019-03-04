@@ -103,14 +103,14 @@ class Window(object):
         offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
         index 4 to index 6.
         """
-        from pyspark.conf import SparkConf
-        SparkSession.builder.config(conf=SparkConf())
         from pyspark.sql import Window
         from pyspark.sql import functions as func
-        tup = [(1, "a"), (1, "a"), (1, "b"), (2, "b"), (3, "b")]
-        df = spark.createDataFrame(tup, ["id", "category"])
+        from pyspark.sql import SQLContext
+        sqlContext = SQLContext(sc)
+        tup =[(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        df = sqlContext.createDataFrame(tup, ["id", "category"])
         window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
-        df.withColumn("sum", func.sum("id").over(window)).show()
+        df.withColumn("sum",func.sum("id").over(window)).show()
 
         # id category sum
 
@@ -164,14 +164,14 @@ class Window(object):
         ORDER BY expression are allowed.
 
         """
-        from pyspark.conf import SparkConf
-        SparkSession.builder.config(conf=SparkConf())
         from pyspark.sql import Window
         from pyspark.sql import functions as func
-        tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
-        df = spark.createDataFrame(tup, ["id", "category"])
+        from pyspark.sql import SQLContext
+        sqlContext = SQLContext(sc)
+        tup =[(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        df = sqlContext.createDataFrame(tup, ["id", "category"])
         window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
-        df.withColumn("sum", func.sum("id").over(window)).show()
+        df.withColumn("sum",func.sum("id").over(window)).show()
 
         # id category sum
 
