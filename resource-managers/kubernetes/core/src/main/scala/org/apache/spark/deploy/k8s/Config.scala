@@ -75,12 +75,6 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
-  val SUBMISSION_CLIENT_PREFIX =
-      "spark.kubernetes.kubernetesClient.submission"
-  val DRIVER_CLIENT_PREFIX =
-      "spark.kubernetes.kubernetesClient.driver"
-  val CLIENT_MODE_CLIENT_PREFIX =
-      "spark.kubernetes.kubernetesClient"
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
@@ -91,41 +85,39 @@ private[spark] object Config extends Logging {
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
   val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
-  val REQUEST_TIMEOUT_SUFFIX = "requestTimeout"
-  val CONNECTION_TIMEOUT_SUFFIX = "connectionTimeout"
 
   val SUBMISSION_CLIENT_REQUEST_TIMEOUT =
-    ConfigBuilder(s"$SUBMISSION_CLIENT_PREFIX.$REQUEST_TIMEOUT_SUFFIX")
+    ConfigBuilder(s"spark.kubernetes.kubernetesClient.submission.requestTimeout")
       .doc("request timeout to be used in milliseconds for starting the driver")
       .intConf
       .createWithDefault(10000)
 
   val SUBMISSION_CLIENT_CONNECTION_TIMEOUT =
-    ConfigBuilder(s"$SUBMISSION_CLIENT_PREFIX.$CONNECTION_TIMEOUT_SUFFIX")
+    ConfigBuilder(s"spark.kubernetes.kubernetesClient.submission.connectionTimeout")
       .doc("connection timeout to be used in milliseconds for starting the driver")
       .intConf
       .createWithDefault(10000)
 
   val DRIVER_CLIENT_REQUEST_TIMEOUT =
-    ConfigBuilder(s"$DRIVER_CLIENT_PREFIX.$REQUEST_TIMEOUT_SUFFIX")
+    ConfigBuilder(s"spark.kubernetes.kubernetesClient.driver.requestTimeout")
       .doc("request timeout to be used in milliseconds for requesting executors")
       .intConf
       .createWithDefault(10000)
 
   val DRIVER_CLIENT_CONNECTION_TIMEOUT =
-    ConfigBuilder(s"$DRIVER_CLIENT_PREFIX.$CONNECTION_TIMEOUT_SUFFIX")
+    ConfigBuilder(s"spark.kubernetes.kubernetesClient.driver.connectionTimeout")
       .doc("connection timeout to be used in milliseconds for requesting executors")
       .intConf
       .createWithDefault(10000)
 
   val CLIENT_MODE_CLIENT_REQUEST_TIMEOUT =
-    ConfigBuilder(s"$CLIENT_MODE_CLIENT_PREFIX.$REQUEST_TIMEOUT_SUFFIX")
+    ConfigBuilder(s"spark.kubernetes.kubernetesClient.requestTimeout")
       .doc("request timeout to be used in milliseconds for requesting executors in client mode")
       .intConf
       .createWithDefault(10000)
 
   val CLIENT_MODE_CLIENT_CONNECTION_TIMEOUT =
-    ConfigBuilder(s"$CLIENT_MODE_CLIENT_PREFIX.$CONNECTION_TIMEOUT_SUFFIX")
+    ConfigBuilder(s"spark.kubernetes.kubernetesClient.connectionTimeout")
       .doc("connection timeout to be used in milliseconds for requesting executors in client mode")
       .intConf
       .createWithDefault(10000)
