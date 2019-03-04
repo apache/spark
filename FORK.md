@@ -19,7 +19,6 @@
     * yarn: YarnClusterSchedulerBackend, YarnSchedulerBackend
 
 * [SPARK-26626](https://issues.apache.org/jira/browse/SPARK-26626) - Limited the maximum size of repeatedly substituted aliases
-* [SPARK-26178](https://issues.apache.org/jira/browse/SPARK-26178) (partial) - Do not use STRICT strategy when parsing timestamps
 
 # Added
 
