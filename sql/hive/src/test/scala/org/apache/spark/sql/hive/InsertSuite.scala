@@ -730,6 +730,23 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+  test("insert overwrite to not exists dir will lead to expected dir is a file indeed.") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+      val notExistsPath = s"$path/noexistdir"
+      val target = new File(notExistsPath)
+      if (target.exists()) {
+        target.delete()
+      }
+      assert(!target.exists())
+
+      sql(s"INSERT OVERWRITE LOCAL DIRECTORY '$notExistsPath' SELECT * FROM src where key < 10")
+
+      assert(target.isFile())
+      assert(!target.isDirectory())
+    }
+  }
+
   test("SPARK-21165: FileFormatWriter should only rely on attributes from analyzed plan") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       withTable("tab1", "tab2") {
