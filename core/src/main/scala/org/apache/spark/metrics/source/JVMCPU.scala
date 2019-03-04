@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 private[spark] class JVMCPUSource extends Source {
 
-  override implicit val metricRegistry = new MetricRegistry()
+  override val metricRegistry = new MetricRegistry()
   override val sourceName = "JVMCPU"
 
   // Dropwizard/Codahale metrics gauge measuring the JVM process CPU time.
