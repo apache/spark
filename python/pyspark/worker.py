@@ -46,7 +46,7 @@ from pyspark import shuffle
 if sys.version >= '3':
     basestring = str
 else:
-    from itertools import imap as map # use iterator map by default
+    from itertools import imap as map  # use iterator map by default
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
