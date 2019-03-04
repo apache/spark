@@ -389,8 +389,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
         val errMsg = intercept[ParseException] {
           parseTableIdentifier(keyword)
         }.getMessage
-        assert(errMsg.contains(s"'$keyword' is reserved and you cannot use this keyword " +
-          "as an identifier."))
+        assert(errMsg.contains("no viable alternative at input"))
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
       }

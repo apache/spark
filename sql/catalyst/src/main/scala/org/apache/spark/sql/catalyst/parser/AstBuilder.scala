@@ -946,7 +946,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
-    TableIdentifier(visitIdentifier(ctx.table), Option(ctx.db).map(_.getText))
+    TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
   }
 
   /**
@@ -1301,8 +1301,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx: FunctionCallContext): FunctionIdentifier = {
       val opt = ctx.trimOption
       if (opt != null) {
-        if (ctx.qualifiedName.getText.toLowerCase(Locale.ROOT) != "trim") {
-          throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
+        if (ctx.functionIdentifier.getText.toLowerCase(Locale.ROOT) != "trim") {
+          throw new ParseException(s"The specified function ${ctx.functionIdentifier.getText} " +
             s"doesn't support with option ${opt.getText}.", ctx)
         }
         opt.getType match {
@@ -1317,7 +1317,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }
     }
     // Create the function call.
-    val name = ctx.qualifiedName.getText
+    val name = ctx.functionIdentifier.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))
@@ -1327,7 +1327,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
-    val funcId = replaceFunctions(visitFunctionName(ctx.qualifiedName), ctx)
+    val funcId = replaceFunctions(visitFunctionName(ctx.functionIdentifier), ctx)
     val function = UnresolvedFunction(funcId, arguments, isDistinct)
 
 
@@ -1348,8 +1348,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ctx.identifier().asScala.map(_.getText) match {
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
-      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
+      case _ => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
+  }
+
+  private def visitFunctionName(ctx: FunctionIdentifierContext): FunctionIdentifier = {
+    val dbOption = if (ctx.db != null) {
+      Some(ctx.db.getText)
+    } else {
+      None
+    }
+    FunctionIdentifier(ctx.functionName.getText, dbOption)
   }
 
   /**
@@ -1421,15 +1430,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.FOLLOWING =>
         value
     }
-  }
-
-  override def visitIdentifier(ctx: IdentifierContext): String = withOrigin(ctx) {
-    val keyword = ctx.getText
-    if (ctx.ansiReserved() != null) {
-      throw new ParseException(
-        s"'$keyword' is reserved and you cannot use this keyword as an identifier.", ctx)
-    }
-    keyword
   }
 
   /**
