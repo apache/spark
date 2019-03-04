@@ -338,7 +338,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("should not apply common subexpression elimination on conditional expressions") {
     val row = InternalRow(null)
     val bound = BoundReference(0, IntegerType, true)
-    val assertNotNull = AssertNotNull(bound, Nil)
+    val assertNotNull = AssertNotNull(bound)
     val expr = If(IsNull(bound), Literal(1), Add(assertNotNull, assertNotNull))
     val projection = GenerateUnsafeProjection.generate(
       Seq(expr), subexpressionEliminationEnabled = true)
