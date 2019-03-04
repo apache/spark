@@ -1,5 +1,6 @@
 package org.apache.spark.graph.api
 
+import org.apache.spark.graph.api.io.PropertyGraphWriter
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -33,4 +34,10 @@ trait PropertyGraph {
     * Returns a [[DataFrame]] that contains a row for each relationship in this graph.
     */
   def relationships: DataFrame
+
+  /**
+    * Returns a [[PropertyGraphWriter]].
+    */
+  def write: PropertyGraphWriter = cypherSession.write(this)
+
 }

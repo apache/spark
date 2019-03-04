@@ -1,9 +1,11 @@
 package org.apache.spark.graph.cypher
 
 import org.apache.spark.graph.api._
+import org.apache.spark.graph.api.io.{ReaderConfig, WriterConfig}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.MappingAdapter._
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
+import org.apache.spark.graph.cypher.io.ReadWriteGraph.GraphImporter
 import org.apache.spark.sql.SparkSession
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
@@ -78,4 +80,41 @@ class SparkCypherSession(override val sparkSession: SparkSession) extends Relati
 
     SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records, relationalGraph.schema)
   }
+
+  override private[spark] def readGraph(config: ReaderConfig): PropertyGraph = {
+    val graphImporter = GraphImporter(sparkSession, config)
+    try {
+      createGraph(graphImporter.nodeFrames, graphImporter.relationshipFrames)
+    } finally {
+      graphImporter.close()
+    }
+  }
+
+  override private[spark] def writeGraph(graph: PropertyGraph, config: WriterConfig): Unit = {
+    import org.apache.spark.graph.cypher.io.ReadWriteGraph._
+
+    val relationalGraph = graph match {
+      case RelationalGraphAdapter(_, relGraph) => relGraph
+      case other => throw IllegalArgumentException(
+        expected = "A graph that has been created by `SparkCypherSession.createGraph`",
+        actual = other.getClass.getSimpleName
+      )
+    }
+
+    val graphDirectoryStructure = SparkGraphDirectoryStructure(config.path)
+
+    relationalGraph.schema.labelCombinations.combos.foreach { combo =>
+      relationalGraph.canonicalNodeTable(combo).write
+        .format(config.source)
+        .mode(config.mode)
+        .save(graphDirectoryStructure.pathToNodeTable(combo))
+    }
+    relationalGraph.schema.relationshipTypes.foreach { relType =>
+      relationalGraph.canonicalRelationshipTable(relType).write
+        .format(config.source)
+        .mode(config.mode)
+        .save(graphDirectoryStructure.pathToRelationshipTable(relType))
+    }
+  }
+
 }

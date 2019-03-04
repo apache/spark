@@ -1,6 +1,7 @@
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.graph.api.io.{PropertyGraphReader, PropertyGraphWriter, ReaderConfig, WriterConfig}
+import org.apache.spark.sql.{SaveMode, SparkSession}
 
 /**
   * Allows for creating [[PropertyGraph]] instances and running Cypher-queries on them.
@@ -41,4 +42,25 @@ trait CypherSession {
     * @param result a [[CypherResult]] containing nodes and/or relationships
     */
   def createGraph(result: CypherResult): PropertyGraph
+
+  /**
+    * Returns a [[PropertyGraphWriter]] for `graph`.
+    */
+  def write(graph: PropertyGraph): PropertyGraphWriter = PropertyGraphWriter(graph, WriterConfig(
+    path = ".",
+    SaveMode.ErrorIfExists,
+    sparkSession.sessionState.conf.defaultDataSourceName)
+  )
+
+  /**
+    * Returns a [[PropertyGraphReader]].
+    */
+  def read: PropertyGraphReader = PropertyGraphReader(this, ReaderConfig(
+    path = ".",
+    sparkSession.sessionState.conf.defaultDataSourceName))
+
+  private[spark] def readGraph(config: ReaderConfig): PropertyGraph
+
+  private[spark] def writeGraph(graph: PropertyGraph, config: WriterConfig): Unit
+
 }
