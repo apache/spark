@@ -389,7 +389,13 @@ case class GetMapValue(child: Expression, key: Expression)
   override def left: Expression = child
   override def right: Expression = key
 
-  /** `Null` is returned for invalid ordinals. */
+  /**
+   * `Null` is returned for invalid ordinals.
+   *
+   * TODO: We could make nullability more precise in foldable cases (e.g., literal input).
+   * But, since the key search is O(n), it takes much time to compute nullability.
+   * If we find efficient key searches, revisit this.
+   */
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
