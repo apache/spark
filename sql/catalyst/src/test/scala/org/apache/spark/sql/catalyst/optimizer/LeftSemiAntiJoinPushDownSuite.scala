@@ -64,12 +64,7 @@ class LeftSemiPushdownSuite extends PlanTest {
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
-      .select(Rand('a), 'b, 'c)
-      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery.analyze)
   }
 
   test("Project: LeftSemiAnti join non correlated scalar subq") {
@@ -96,12 +91,7 @@ class LeftSemiPushdownSuite extends PlanTest {
       .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
-      .select(subqExpr.as("sum"))
-      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd))
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery.analyze)
   }
 
   test("Aggregate: LeftSemiAnti join pushdown") {
@@ -124,12 +114,7 @@ class LeftSemiPushdownSuite extends PlanTest {
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
-      .groupBy('b)('b, Rand(10).as('c))
-      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery.analyze)
   }
 
   test("Aggregate: LeftSemiAnti join partial pushdown") {
@@ -235,7 +220,6 @@ class LeftSemiPushdownSuite extends PlanTest {
       .join(testRelation2, joinType = LeftSemi, condition = Some('a === 'x))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-
     comparePlans(optimized, originalQuery.analyze)
   }
 
@@ -292,8 +276,6 @@ class LeftSemiPushdownSuite extends PlanTest {
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'd === 'out_col))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = originalQuery.analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery.analyze)
   }
 }
