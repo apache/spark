@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import org.apache.spark.sql.internal.SQLConf
-
 /**
- * Synthetic benchmark for nested schema pruning performance for ORC V1 datasource.
+ * Synthetic benchmark for nested schema pruning performance for ORC V2 datasource.
  * To run this benchmark:
  * {{{
  *   1. without sbt:
@@ -28,16 +26,9 @@ import org.apache.spark.sql.internal.SQLConf
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *      Results will be written to "benchmarks/OrcNestedSchemaPruningBenchmark-results.txt".
+ *      Results will be written to "benchmarks/OrcV2NestedSchemaPruningBenchmark-results.txt".
  * }}}
  */
-object OrcNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
+object OrcV2NestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
   override val dataSourceName: String = "orc"
-
-  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc",
-        SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "orc") {
-      super.runBenchmarkSuite(mainArgs)
-    }
-  }
 }
