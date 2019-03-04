@@ -753,7 +753,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value". The text files must be encoded as UTF-8.
+   * contains a single string column named "value".
    * The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
