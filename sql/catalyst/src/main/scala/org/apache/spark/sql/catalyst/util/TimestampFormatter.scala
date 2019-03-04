@@ -47,7 +47,7 @@ class Iso8601TimestampFormatter(
     timeZone: TimeZone,
     locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
-  private lazy val formatter = getOrCreateFormatter(pattern, locale)
+  protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
   private def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
@@ -64,6 +64,13 @@ class Iso8601TimestampFormatter(
     val instant = DateTimeUtils.microsToInstant(us)
     formatter.withZone(timeZone.toZoneId).format(instant)
   }
+}
+
+class FractionTimestampFormatter(timeZone: TimeZone)
+  extends Iso8601TimestampFormatter("", timeZone, TimestampFormatter.defaultLocale) {
+
+  @transient
+  override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 }
 
 object TimestampFormatter {
@@ -83,6 +90,6 @@ object TimestampFormatter {
   }
 
   def getFractionFormatter(timeZone: TimeZone): TimestampFormatter = {
-    apply(DateTimeFormatterHelper.fractionPattern, timeZone, defaultLocale)
+    new FractionTimestampFormatter(timeZone)
   }
 }
