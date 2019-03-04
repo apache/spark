@@ -186,22 +186,20 @@ private[spark] class TaskSetManager(
 
   // An array to store preferred location and its task index
   private val locationWithTaskIndex: ArrayBuffer[(String, Int)] = new ArrayBuffer[(String, Int)]()
+  private val addTaskStartTime = System.nanoTime()
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i, true)
   }
-  // SPARK-27038. Convert preferred location list to rack list in one invocation and zip with the origin index
+  // Convert preferred location list to rack list in one invocation and zip with the origin index
   private val rackWithTaskIndex = sched.getRacksForHosts(locationWithTaskIndex.map(_._1).toList)
     .zip(locationWithTaskIndex.map(_._2))
   for ((rack, index) <- rackWithTaskIndex) {
     pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
   }
-  logInfo(s"Total pending tasks for executor are ${pendingTasksForExecutor.values.sum}, " +
-    s"total pending tasks for host are ${pendingTasksForHost.values.sum}, " +
-    s"total pending tasks for rack are ${pendingTasksForRack.values.sum}, " +
-    s"total pending tasks with no prefs are ${pendingTasksWithNoPrefs.length}, " +
-    s"total pending tasks are ${allPendingTasks.length}")
+  private val addTaskElapsedTime = (System.nanoTime() - addTaskStartTime) / 1e9
+  logInfo(s"Adding pending task takes $addTaskElapsedTime seconds")
 
   /**
    * Track the set of locality levels which are valid given the tasks locality preferences and
