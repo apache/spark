@@ -434,7 +434,7 @@ object DataSourceStrategy {
   protected[sql] def normalizeFilters(
       filters: Seq[Expression],
       attributes: Seq[AttributeReference]): Seq[Expression] = {
-    filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
+    filters.map { e =>
       e transform {
         case a: AttributeReference =>
           a.withName(attributes.find(_.semanticEquals(a)).get.name)
