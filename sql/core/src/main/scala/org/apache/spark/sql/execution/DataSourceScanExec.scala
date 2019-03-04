@@ -187,6 +187,14 @@ case class FileSourceScanExec(
     ret
   }
 
+  /**
+   * [[partitionFilters]] can contain subqueries whose results are available only at runtime so
+   * accessing [[selectedPartitions]] should be guarded by this method during planning
+   */
+  private def hasPartitionsAvailableAtRunTime: Boolean = {
+    partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
+  }
+
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
@@ -223,7 +231,7 @@ case class FileSourceScanExec(
           val sortColumns =
             spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
 
-          val sortOrder = if (sortColumns.nonEmpty) {
+          val sortOrder = if (sortColumns.nonEmpty && !hasPartitionsAvailableAtRunTime) {
             // In case of bucketing, its possible to have multiple files belonging to the
             // same bucket in a given relation. Each of these files are locally sorted
             // but those files combined together are not globally sorted. Given that,
@@ -272,12 +280,12 @@ case class FileSourceScanExec(
         "PushedFilters" -> seqToString(pushedDownFilters),
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
-    val withOptPartitionCount =
-      relation.partitionSchemaOption.map { _ =>
-        metadata + ("PartitionCount" -> selectedPartitions.size.toString)
-      } getOrElse {
-        metadata
-      }
+    val withOptPartitionCount = if (relation.partitionSchemaOption.isDefined &&
+      !hasPartitionsAvailableAtRunTime) {
+      metadata + ("PartitionCount" -> selectedPartitions.size.toString)
+    } else {
+      metadata
+    }
 
     val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
       val numSelectedBuckets = optionalBucketSet.map { b =>
