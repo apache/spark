@@ -34,8 +34,8 @@ class RewriteArithmeticFiltersOnIntOrLongColumnSuite extends PlanTest {
       Batch(
         "RewriteArithmeticFiltersOnIntOrLongColumn",
         FixedPoint(10),
-        ConstantFolding,
-        RewriteArithmeticFiltersOnIntOrLongColumn) :: Nil
+        RewriteArithmeticFiltersOnIntOrLongColumn,
+        ConstantFolding) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.long)

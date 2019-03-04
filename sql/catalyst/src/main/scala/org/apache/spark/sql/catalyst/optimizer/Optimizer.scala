@@ -111,6 +111,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
+        RewriteArithmeticFiltersOnIntOrLongColumn,
         ConstantFolding,
         ReorderAssociativeOperator,
         LikeSimplification,
@@ -128,8 +129,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         RemoveRedundantAliases,
         RemoveNoopOperators,
         SimplifyExtractValueOps,
-        CombineConcats,
-        RewriteArithmeticFiltersOnIntOrLongColumn) ++
+        CombineConcats) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
