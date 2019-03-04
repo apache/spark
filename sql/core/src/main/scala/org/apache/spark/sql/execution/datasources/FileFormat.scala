@@ -132,8 +132,6 @@ trait FileFormat {
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
       private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
 
-      private lazy val joinedRow = new JoinedRow()
-
       // Using lazy val to avoid serialization
       private lazy val appendPartitionColumns =
         GenerateUnsafeProjection.generate(fullSchema, fullSchema)
@@ -150,6 +148,7 @@ trait FileFormat {
             converter(dataRow)
           }
         } else {
+          val joinedRow = new JoinedRow()
           dataReader(file).map { dataRow =>
             converter(joinedRow(dataRow, file.partitionValues))
           }
