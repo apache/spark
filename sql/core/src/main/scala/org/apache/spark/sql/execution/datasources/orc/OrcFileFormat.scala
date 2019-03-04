@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -160,13 +161,13 @@ class OrcFileFormat
     }
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
-
-    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, resultSchemaString)
-
     val sqlConf = sparkSession.sessionState.conf
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
+
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, resultSchemaString)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))

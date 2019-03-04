@@ -70,6 +70,7 @@ case class OrcPartitionReaderFactory(
     val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
     val requiredDataSchemaString = OrcUtils.orcTypeDescriptionString(requiredDataSchema)
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, requiredDataSchemaString)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val filePath = new Path(new URI(file.filePath))
 
@@ -116,6 +117,7 @@ case class OrcPartitionReaderFactory(
 
     val readSchemaString = OrcUtils.orcTypeDescriptionString(readSchema)
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, readSchemaString)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val filePath = new Path(new URI(file.filePath))
 
