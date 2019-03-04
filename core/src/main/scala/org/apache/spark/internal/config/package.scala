@@ -20,6 +20,7 @@ package org.apache.spark.internal
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -113,6 +114,24 @@ package object config {
     ConfigBuilder("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.gcMetrics.youngGenerationGarbageCollectors")
+      .doc("Names of supported young generation garbage collector. A name usually is " +
+        " the return of GarbageCollectorMXBean.getName. The built-in young generation garbage " +
+        s"collectors are ${GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
+      .stringConf
+      .toSequence
+      .createWithDefault(GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
+
+  private[spark] val EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.gcMetrics.oldGenerationGarbageCollectors")
+      .doc("Names of supported old generation garbage collector. A name usually is " +
+        "the return of GarbageCollectorMXBean.getName. The built-in old generation garbage " +
+        s"collectors are ${GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
+      .stringConf
+      .toSequence
+      .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
 
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
