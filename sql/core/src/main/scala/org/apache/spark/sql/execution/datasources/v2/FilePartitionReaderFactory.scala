@@ -17,16 +17,21 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
+abstract class FilePartitionReaderFactory(
+    readSchema: StructType,
+    partitionSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
     val iter = filePartition.files.toIterator.map { file =>
-      new PartitionedFileReader(file, buildReader(file))
+      new PartitionedFileReader(file, buildReaderWithPartitionValues(file))
     }
     new FilePartitionReader[InternalRow](iter)
   }
@@ -35,14 +40,47 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
     val iter = filePartition.files.toIterator.map { file =>
-      new PartitionedFileReader(file, buildColumnarReader(file))
+      new PartitionedFileReader(file, buildColumnarReaderWithPartitionValues(file))
     }
     new FilePartitionReader[ColumnarBatch](iter)
   }
 
-  def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow]
+  /**
+   * Returns a row-based partition reader that can be used to read a single file.
+   */
+  protected def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow]
 
-  def buildColumnarReader(partitionedFile: PartitionedFile): PartitionReader[ColumnarBatch] = {
+  /**
+   * Exactly the same as [[buildReader]] except that the reader returned by this method appends
+   * partition values to [[InternalRow]]s produced by the reader [[buildReader]] returns.
+   */
+  def buildReaderWithPartitionValues(
+      partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
+    val reader = buildReader(partitionedFile)
+    val fullSchema = readSchema.toAttributes ++ partitionSchema.toAttributes
+    val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+    val rowConverter = () => if (partitionSchema.isEmpty) {
+      appendPartitionColumns(reader.get())}
+    else {
+      val joinedRow = new JoinedRow()
+      appendPartitionColumns(joinedRow(reader.get(), partitionedFile.partitionValues))
+    }
+
+    new PartitionReader[InternalRow] {
+      override def next(): Boolean = reader.next()
+
+      override def get(): InternalRow = rowConverter()
+
+      override def close(): Unit = reader.close()
+    }
+  }
+
+  /**
+   * Returns a columnar partition reader that can be used to read a [[PartitionedFile]] including
+   * its partition values.
+   */
+  def buildColumnarReaderWithPartitionValues(
+      partitionedFile: PartitionedFile): PartitionReader[ColumnarBatch] = {
     throw new UnsupportedOperationException("Cannot create columnar reader.")
   }
 }

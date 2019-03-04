@@ -29,8 +29,6 @@ import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources.{PartitionedFile, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -54,7 +52,7 @@ case class OrcPartitionReaderFactory(
     broadcastedConf: Broadcast[SerializableConfiguration],
     dataSchema: StructType,
     partitionSchema: StructType,
-    readSchema: StructType) extends FilePartitionReaderFactory {
+    readSchema: StructType) extends FilePartitionReaderFactory(readSchema, partitionSchema) {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
 
@@ -89,27 +87,24 @@ case class OrcPartitionReaderFactory(
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
-
-      val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
       val orcRecordReader = new OrcInputFormat[OrcStruct]
         .createRecordReader(fileSplit, taskAttemptContext)
 
-      val fullSchema = requiredDataSchema.toAttributes ++ partitionSchema.toAttributes
-      val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+      val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
       val deserializer = new OrcDeserializer(dataSchema, requiredDataSchema, requestedColIds)
 
-      val projection = if (partitionSchema.length == 0) {
-        (value: OrcStruct) => unsafeProjection(deserializer.deserialize(value))
-      } else {
-        val joinedRow = new JoinedRow()
-        (value: OrcStruct) =>
-          unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues))
+      new PartitionReader[InternalRow] {
+        override def next(): Boolean = orcRecordReader.nextKeyValue()
+
+        override def get(): InternalRow = deserializer.deserialize(orcRecordReader.getCurrentValue)
+
+        override def close(): Unit = orcRecordReader.close()
       }
-      new PartitionRecordReaderWithProject(orcRecordReader, projection)
     }
   }
 
-  override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
+  override def buildColumnarReaderWithPartitionValues(
+      file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
 
     val filePath = new Path(new URI(file.filePath))
