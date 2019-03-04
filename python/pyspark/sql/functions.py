@@ -38,7 +38,7 @@ from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 
 def _create_name_function(name, doc=""):
-    """ Create a column-name-based function by name"""
+    """ Create a function that takes a column name argument, by name"""
     def _(col):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
@@ -49,7 +49,7 @@ def _create_name_function(name, doc=""):
 
 
 def _create_function(name, doc=""):
-    """ Create a column-based function by name"""
+    """ Create a function that takes a Column object, by name"""
     def _(col):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.functions, name)(_to_java_column(col))
@@ -90,7 +90,6 @@ def _create_window_function(name, doc=''):
     _.__doc__ = 'Window function: ' + doc
     return _
 
-
 _lit_doc = """
     Creates a :class:`Column` of literal value.
 
@@ -98,6 +97,7 @@ _lit_doc = """
     [Row(height=5, spark_user=True)]
     """
 _name_functions = {
+    # name functions take a column name as their argument
     'lit': _lit_doc,
     'col': 'Returns a :class:`Column` based on the given column name.',
     'column': 'Returns a :class:`Column` based on the given column name.',
