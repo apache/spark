@@ -49,8 +49,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
   private val batchDuration = Seconds(1)
 
   // Dummy parameters for API testing
-  private val dummyEndpointUrl = defaultEndpointUrl
-  private val dummyRegionName = KinesisTestUtils.getRegionNameByEndpoint(dummyEndpointUrl)
+  private val dummyKinesisEndpointUrl = defaultKinesisEndpointUrl
+  private val dummyDynamoEndpointUrl = defaultDynamoEndpointUrl
+  private val dummyRegionName = KinesisTestUtils.getRegionNameByEndpoint(dummyKinesisEndpointUrl)
   private val dummyAWSAccessKey = "dummyAccessKey"
   private val dummyAWSSecretKey = "dummySecretKey"
 
@@ -101,17 +102,17 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
   test("KinesisUtils API") {
     val kinesisStream1 = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
-      dummyEndpointUrl, dummyRegionName,
+      dummyKinesisEndpointUrl, dummyDynamoEndpointUrl, dummyRegionName,
       InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
     val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
-      dummyEndpointUrl, dummyRegionName,
+      dummyKinesisEndpointUrl, dummyDynamoEndpointUrl, dummyRegionName,
       InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
       dummyAWSAccessKey, dummyAWSSecretKey)
   }
 
   test("RDD generation") {
     val inputStream = KinesisUtils.createStream(ssc, appName, "dummyStream",
-      dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, Seconds(2),
+      dummyKinesisEndpointUrl, dummyDynamoEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, Seconds(2),
       StorageLevel.MEMORY_AND_DISK_2, dummyAWSAccessKey, dummyAWSSecretKey)
     assert(inputStream.isInstanceOf[KinesisInputDStream[Array[Byte]]])
 
@@ -137,7 +138,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     nonEmptyRDD shouldBe a [KinesisBackedBlockRDD[_]]
     val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[_]]
     assert(kinesisRDD.regionName === dummyRegionName)
-    assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
+    assert(kinesisRDD.endpointUrl === defaultKinesisEndpointUrl)
     assert(kinesisRDD.kinesisReadConfigs.retryTimeoutMs === batchDuration.milliseconds)
     assert(kinesisRDD.kinesisCreds === BasicCredentials(
       awsAccessKeyId = dummyAWSAccessKey,
@@ -244,7 +245,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       val kinesisStream = KinesisInputDStream.builder.streamingContext(ssc)
       .checkpointAppName(appName)
       .streamName("dummyStream")
-      .endpointUrl(dummyEndpointUrl)
+      .endpointUrl(dummyKinesisEndpointUrl)
+      .dynamoEndpointUrl(dummyDynamoEndpointUrl)
       .regionName(dummyRegionName)
       .initialPosition(new Latest())
       .checkpointInterval(Seconds(10))

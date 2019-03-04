@@ -70,7 +70,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
 
   test("should propagate default values to KinesisInputDStream") {
     val dstream = builder.build()
-    assert(dstream.endpointUrl == DEFAULT_KINESIS_ENDPOINT_URL)
+    assert(dstream.kinesisEndpointUrl == DEFAULT_KINESIS_ENDPOINT_URL)
+    assert(dstream.dynamoEndpointUrl == DEFAULT_DYNAMO_ENDPOINT_URL)
     assert(dstream.regionName == DEFAULT_KINESIS_REGION_NAME)
     assert(dstream.initialPosition == DEFAULT_INITIAL_POSITION)
     assert(dstream.checkpointInterval == batchDuration)
@@ -81,7 +82,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
   }
 
   test("should propagate custom non-auth values to KinesisInputDStream") {
-    val customEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+    val customKinesisEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+    val customDynamoEndpointUrl = "https://dynamodb.us-west-2.amazonaws.com"
     val customRegion = "us-west-2"
     val customInitialPosition = new TrimHorizon()
     val customAppName = "a-very-nice-kinesis-app"
@@ -92,7 +94,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val customCloudWatchCreds = mock[SparkAWSCredentials]
 
     val dstream = builder
-      .endpointUrl(customEndpointUrl)
+      .endpointUrl(customKinesisEndpointUrl)
+      .dynamoEndpointUrl(customDynamoEndpointUrl)
       .regionName(customRegion)
       .initialPosition(customInitialPosition)
       .checkpointAppName(customAppName)
@@ -102,7 +105,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
       .dynamoDBCredentials(customDynamoDBCreds)
       .cloudWatchCredentials(customCloudWatchCreds)
       .build()
-    assert(dstream.endpointUrl == customEndpointUrl)
+    assert(dstream.kinesisEndpointUrl == customKinesisEndpointUrl)
+    assert(dstream.dynamoEndpointUrl == customDynamoEndpointUrl)
     assert(dstream.regionName == customRegion)
     assert(dstream.initialPosition == customInitialPosition)
     assert(dstream.checkpointAppName == customAppName)
@@ -119,7 +123,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val initialPositionAtTimestamp = new AtTimestamp(timestamp)
 
     val dstreamAtTimestamp = builder
-      .endpointUrl(customEndpointUrl)
+      .endpointUrl(customKinesisEndpointUrl)
+      .dynamoEndpointUrl(customDynamoEndpointUrl)
       .regionName(customRegion)
       .initialPosition(initialPositionAtTimestamp)
       .checkpointAppName(customAppName)
@@ -129,7 +134,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
       .dynamoDBCredentials(customDynamoDBCreds)
       .cloudWatchCredentials(customCloudWatchCreds)
       .build()
-    assert(dstreamAtTimestamp.endpointUrl == customEndpointUrl)
+    assert(dstreamAtTimestamp.kinesisEndpointUrl == customKinesisEndpointUrl)
+    assert(dstreamAtTimestamp.dynamoEndpointUrl == customDynamoEndpointUrl)
     assert(dstreamAtTimestamp.regionName == customRegion)
     assert(dstreamAtTimestamp.initialPosition.getPosition
       == initialPositionAtTimestamp.getPosition)

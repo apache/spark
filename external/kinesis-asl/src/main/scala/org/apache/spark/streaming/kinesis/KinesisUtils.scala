@@ -63,7 +63,8 @@ object KinesisUtils {
       ssc: StreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
@@ -72,7 +73,7 @@ object KinesisUtils {
     val cleanedHandler = ssc.sc.clean(messageHandler)
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
+      new KinesisInputDStream[T](ssc, streamName, kinesisEndpointUrl, dynamoEndpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
         cleanedHandler, DefaultCredentials, None, None)
@@ -115,7 +116,8 @@ object KinesisUtils {
       ssc: StreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
@@ -129,7 +131,7 @@ object KinesisUtils {
       val kinesisCredsProvider = BasicCredentials(
         awsAccessKeyId = awsAccessKeyId,
         awsSecretKey = awsSecretKey)
-      new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
+      new KinesisInputDStream[T](ssc, streamName, kinesisEndpointUrl, dynamoEndpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
         cleanedHandler, kinesisCredsProvider, None, None)
@@ -178,7 +180,8 @@ object KinesisUtils {
       ssc: StreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
@@ -199,7 +202,7 @@ object KinesisUtils {
         longLivedCreds = BasicCredentials(
           awsAccessKeyId = awsAccessKeyId,
           awsSecretKey = awsSecretKey))
-      new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
+      new KinesisInputDStream[T](ssc, streamName, kinesisEndpointUrl, dynamoEndpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
         cleanedHandler, kinesisCredsProvider, None, None)
@@ -238,14 +241,15 @@ object KinesisUtils {
       ssc: StreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
       storageLevel: StorageLevel): ReceiverInputDStream[Array[Byte]] = {
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
+      new KinesisInputDStream[Array[Byte]](ssc, streamName, kinesisEndpointUrl, dynamoEndpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
         KinesisInputDStream.defaultMessageHandler, DefaultCredentials, None, None)
@@ -285,7 +289,8 @@ object KinesisUtils {
       ssc: StreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
@@ -296,7 +301,7 @@ object KinesisUtils {
       val kinesisCredsProvider = BasicCredentials(
         awsAccessKeyId = awsAccessKeyId,
         awsSecretKey = awsSecretKey)
-      new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
+      new KinesisInputDStream[Array[Byte]](ssc, streamName, kinesisEndpointUrl, dynamoEndpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
         KinesisInputDStream.defaultMessageHandler, kinesisCredsProvider, None, None)
@@ -338,7 +343,8 @@ object KinesisUtils {
       jssc: JavaStreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
@@ -347,7 +353,7 @@ object KinesisUtils {
       recordClass: Class[T]): JavaReceiverInputDStream[T] = {
     implicit val recordCmt: ClassTag[T] = ClassTag(recordClass)
     val cleanedHandler = jssc.sparkContext.clean(messageHandler.call(_))
-    createStream[T](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
+    createStream[T](jssc.ssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel, cleanedHandler)
   }
 
@@ -388,7 +394,8 @@ object KinesisUtils {
       jssc: JavaStreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
@@ -400,7 +407,7 @@ object KinesisUtils {
     // scalastyle:on
     implicit val recordCmt: ClassTag[T] = ClassTag(recordClass)
     val cleanedHandler = jssc.sparkContext.clean(messageHandler.call(_))
-    createStream[T](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
+    createStream[T](jssc.ssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel, cleanedHandler,
       awsAccessKeyId, awsSecretKey)
   }
@@ -448,7 +455,8 @@ object KinesisUtils {
       jssc: JavaStreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
@@ -463,7 +471,7 @@ object KinesisUtils {
     // scalastyle:on
     implicit val recordCmt: ClassTag[T] = ClassTag(recordClass)
     val cleanedHandler = jssc.sparkContext.clean(messageHandler.call(_))
-    createStream[T](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
+    createStream[T](jssc.ssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel, cleanedHandler,
       awsAccessKeyId, awsSecretKey, stsAssumeRoleArn, stsSessionName, stsExternalId)
   }
@@ -500,13 +508,14 @@ object KinesisUtils {
       jssc: JavaStreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Array[Byte]] = {
-    createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
+    createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel,
       KinesisInputDStream.defaultMessageHandler(_))
   }
@@ -544,14 +553,15 @@ object KinesisUtils {
       jssc: JavaStreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: InitialPositionInStream,
       checkpointInterval: Duration,
       storageLevel: StorageLevel,
       awsAccessKeyId: String,
       awsSecretKey: String): JavaReceiverInputDStream[Array[Byte]] = {
-    createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
+    createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel,
       KinesisInputDStream.defaultMessageHandler(_), awsAccessKeyId, awsSecretKey)
   }
@@ -584,7 +594,8 @@ private class KinesisUtilsPythonHelper {
       jssc: JavaStreamingContext,
       kinesisAppName: String,
       streamName: String,
-      endpointUrl: String,
+      kinesisEndpointUrl: String,
+      dynamoEndpointUrl: String,
       regionName: String,
       initialPositionInStream: Int,
       checkpointInterval: Duration,
@@ -603,17 +614,17 @@ private class KinesisUtilsPythonHelper {
 
     if (stsAssumeRoleArn != null && stsSessionName != null && stsExternalId != null) {
       validateAwsCreds(awsAccessKeyId, awsSecretKey)
-      KinesisUtils.createStream(jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
+      KinesisUtils.createStream(jssc.ssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
         getInitialPositionInStream(initialPositionInStream), checkpointInterval, storageLevel,
         KinesisInputDStream.defaultMessageHandler(_), awsAccessKeyId, awsSecretKey,
         stsAssumeRoleArn, stsSessionName, stsExternalId)
     } else {
       validateAwsCreds(awsAccessKeyId, awsSecretKey)
       if (awsAccessKeyId == null && awsSecretKey == null) {
-        KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
+        KinesisUtils.createStream(jssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
           getInitialPositionInStream(initialPositionInStream), checkpointInterval, storageLevel)
       } else {
-        KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
+        KinesisUtils.createStream(jssc, kinesisAppName, streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName,
           getInitialPositionInStream(initialPositionInStream), checkpointInterval, storageLevel,
           awsAccessKeyId, awsSecretKey)
       }

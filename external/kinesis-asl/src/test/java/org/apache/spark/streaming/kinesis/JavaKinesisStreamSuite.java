@@ -17,16 +17,15 @@
 
 package org.apache.spark.streaming.kinesis;
 
-import com.amazonaws.services.kinesis.model.Record;
-import org.junit.Test;
-
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
+import org.junit.Test;
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
+import com.amazonaws.services.kinesis.model.Record;
 
 /**
  * Demonstrate the use of the KinesisUtils Java API
@@ -34,24 +33,26 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testKinesisStream() {
-    String dummyEndpointUrl = KinesisTestUtils.defaultEndpointUrl();
-    String dummyRegionName = KinesisTestUtils.getRegionNameByEndpoint(dummyEndpointUrl);
+    String dummyKinesisEndpointUrl = KinesisTestUtils.defaultKinesisEndpointUrl();
+    String dummyDynamoEndpointUrl = KinesisTestUtils.defaultDynamoEndpointUrl();
+    String dummyRegionName = KinesisTestUtils.getRegionNameByEndpoint(dummyKinesisEndpointUrl);
 
     // Tests the API, does not actually test data receiving
     JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
-        dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, new Duration(2000),
+            dummyKinesisEndpointUrl, dummyKinesisEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, new Duration(2000),
         StorageLevel.MEMORY_AND_DISK_2());
     ssc.stop();
   }
 
   @Test
   public void testAwsCreds() {
-    String dummyEndpointUrl = KinesisTestUtils.defaultEndpointUrl();
-    String dummyRegionName = KinesisTestUtils.getRegionNameByEndpoint(dummyEndpointUrl);
+    String dummyKinesisEndpointUrl = KinesisTestUtils.defaultKinesisEndpointUrl();
+    String dummyDynamoEndpointUrl = KinesisTestUtils.defaultDynamoEndpointUrl();
+    String dummyRegionName = KinesisTestUtils.getRegionNameByEndpoint(dummyKinesisEndpointUrl);
 
     // Tests the API, does not actually test data receiving
     JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
-        dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, new Duration(2000),
+            dummyKinesisEndpointUrl, dummyDynamoEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, new Duration(2000),
         StorageLevel.MEMORY_AND_DISK_2(), "fakeAccessKey", "fakeSecretKey");
     ssc.stop();
   }
@@ -67,7 +68,7 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
   public void testCustomHandler() {
     // Tests the API, does not actually test data receiving
     JavaDStream<String> kinesisStream = KinesisUtils.createStream(ssc, "testApp", "mySparkStream",
-        "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
+        "https://kinesis.us-west-2.amazonaws.com", "https://dynamodb.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
         new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, String.class);
 
     ssc.stop();
@@ -77,7 +78,7 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
   public void testCustomHandlerAwsCreds() {
     // Tests the API, does not actually test data receiving
     JavaDStream<String> kinesisStream = KinesisUtils.createStream(ssc, "testApp", "mySparkStream",
-        "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
+        "https://kinesis.us-west-2.amazonaws.com", "https://dynamodb.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
         new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, String.class,
         "fakeAccessKey", "fakeSecretKey");
 
@@ -88,7 +89,7 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
   public void testCustomHandlerAwsStsCreds() {
     // Tests the API, does not actually test data receiving
     JavaDStream<String> kinesisStream = KinesisUtils.createStream(ssc, "testApp", "mySparkStream",
-        "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
+        "https://kinesis.us-west-2.amazonaws.com", "https://dynamodb.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
         new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, String.class,
         "fakeAccessKey", "fakeSecretKey", "fakeSTSRoleArn", "fakeSTSSessionName",
         "fakeSTSExternalId");

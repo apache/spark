@@ -17,13 +17,14 @@
 
 package org.apache.spark.streaming.kinesis;
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
-import org.apache.spark.streaming.kinesis.KinesisInitialPositions.TrimHorizon;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.Seconds;
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.TrimHorizon;
 import org.junit.Test;
+
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 
 public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingContext {
   /**
@@ -32,7 +33,8 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
   @Test
   public void testJavaKinesisDStreamBuilder() {
     String streamName = "a-very-nice-stream-name";
-    String endpointUrl = "https://kinesis.us-west-2.amazonaws.com";
+    String kineisEndpointUrl = "https://kinesis.us-west-2.amazonaws.com";
+    String dynamoEndpointUrl = "https://dynamodb.us-west-2.amazonaws.com";
     String region = "us-west-2";
     KinesisInitialPosition initialPosition = new TrimHorizon();
     String appName = "a-very-nice-kinesis-app";
@@ -42,7 +44,8 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
     KinesisInputDStream<byte[]> kinesisDStream = KinesisInputDStream.builder()
       .streamingContext(ssc)
       .streamName(streamName)
-      .endpointUrl(endpointUrl)
+      .endpointUrl(kineisEndpointUrl)
+      .dynamoEndpointUrl(dynamoEndpointUrl)
       .regionName(region)
       .initialPosition(initialPosition)
       .checkpointAppName(appName)
@@ -50,7 +53,8 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
       .storageLevel(storageLevel)
       .build();
     assert(kinesisDStream.streamName() == streamName);
-    assert(kinesisDStream.endpointUrl() == endpointUrl);
+    assert(kinesisDStream.kinesisEndpointUrl() == kineisEndpointUrl);
+    assert(kinesisDStream.dynamoEndpointUrl() == dynamoEndpointUrl);
     assert(kinesisDStream.regionName() == region);
     assert(kinesisDStream.initialPosition().getPosition() == initialPosition.getPosition());
     assert(kinesisDStream.checkpointAppName() == appName);
@@ -67,7 +71,8 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
   @Test
   public void testJavaKinesisDStreamBuilderOldApi() {
     String streamName = "a-very-nice-stream-name";
-    String endpointUrl = "https://kinesis.us-west-2.amazonaws.com";
+    String kinesisEndpointUrl = "https://kinesis.us-west-2.amazonaws.com";
+    String dynamoEndpointUrl = "https://dynamo.us-west-2.amazonaws.com";
     String region = "us-west-2";
     String appName = "a-very-nice-kinesis-app";
     Duration checkpointInterval = Seconds.apply(30);
@@ -76,7 +81,8 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
     KinesisInputDStream<byte[]> kinesisDStream = KinesisInputDStream.builder()
       .streamingContext(ssc)
       .streamName(streamName)
-      .endpointUrl(endpointUrl)
+      .endpointUrl(kinesisEndpointUrl)
+      .dynamoEndpointUrl(dynamoEndpointUrl)
       .regionName(region)
       .initialPositionInStream(InitialPositionInStream.LATEST)
       .checkpointAppName(appName)
@@ -84,7 +90,8 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
       .storageLevel(storageLevel)
       .build();
     assert(kinesisDStream.streamName() == streamName);
-    assert(kinesisDStream.endpointUrl() == endpointUrl);
+    assert(kinesisDStream.kinesisEndpointUrl() == kinesisEndpointUrl);
+    assert(kinesisDStream.dynamoEndpointUrl() == dynamoEndpointUrl);
     assert(kinesisDStream.regionName() == region);
     assert(kinesisDStream.initialPosition().getPosition() == InitialPositionInStream.LATEST);
     assert(kinesisDStream.checkpointAppName() == appName);

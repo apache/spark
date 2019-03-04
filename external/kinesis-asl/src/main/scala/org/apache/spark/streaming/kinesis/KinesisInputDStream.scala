@@ -35,7 +35,8 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 private[kinesis] class KinesisInputDStream[T: ClassTag](
     _ssc: StreamingContext,
     val streamName: String,
-    val endpointUrl: String,
+    val kinesisEndpointUrl: String,
+    val dynamoEndpointUrl: String,
     val regionName: String,
     val initialPosition: KinesisInitialPosition,
     val checkpointAppName: String,
@@ -65,7 +66,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
 
       new KinesisBackedBlockRDD(
-        context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
+        context.sc, regionName, kinesisEndpointUrl, blockIds, seqNumRanges,
         isBlockIdValid = isBlockIdValid,
         messageHandler = messageHandler,
         kinesisCreds = kinesisCreds,
@@ -78,7 +79,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
   }
 
   override def getReceiver(): Receiver[T] = {
-    new KinesisReceiver(streamName, endpointUrl, regionName, initialPosition,
+    new KinesisReceiver(streamName, kinesisEndpointUrl, dynamoEndpointUrl, regionName, initialPosition,
       checkpointAppName, checkpointInterval, _storageLevel, messageHandler,
       kinesisCreds, dynamoDBCreds, cloudWatchCreds)
   }
@@ -99,7 +100,8 @@ object KinesisInputDStream {
     private var checkpointAppName: Option[String] = None
 
     // Params with defaults
-    private var endpointUrl: Option[String] = None
+    private var kinesisEndpointUrl: Option[String] = None
+    private var dynamoEndpointUrl: Option[String] = None
     private var regionName: Option[String] = None
     private var initialPosition: Option[KinesisInitialPosition] = None
     private var checkpointInterval: Option[Duration] = None
@@ -165,7 +167,19 @@ object KinesisInputDStream {
      * @return Reference to this [[KinesisInputDStream.Builder]]
      */
     def endpointUrl(url: String): Builder = {
-      endpointUrl = Option(url)
+      kinesisEndpointUrl = Option(url)
+      this
+    }
+
+    /**
+      * Sets the AWS DynamoDB endpoint URL. Defaults to "https://dynamodb.us-east-1.amazonaws.com" if
+      * no custom value is specified
+      *
+      * @param url DynamoDB endpoint URL to use
+      * @return Reference to this [[KinesisInputDStream.Builder]]
+      */
+    def dynamoEndpointUrl(url: String): Builder = {
+      dynamoEndpointUrl = Option(url)
       this
     }
 
@@ -281,7 +295,8 @@ object KinesisInputDStream {
       new KinesisInputDStream(
         ssc,
         getRequiredParam(streamName, "streamName"),
-        endpointUrl.getOrElse(DEFAULT_KINESIS_ENDPOINT_URL),
+        kinesisEndpointUrl.getOrElse(DEFAULT_KINESIS_ENDPOINT_URL),
+        dynamoEndpointUrl.getOrElse(DEFAULT_DYNAMO_ENDPOINT_URL),
         regionName.getOrElse(DEFAULT_KINESIS_REGION_NAME),
         initialPosition.getOrElse(DEFAULT_INITIAL_POSITION),
         getRequiredParam(checkpointAppName, "checkpointAppName"),
@@ -324,6 +339,8 @@ object KinesisInputDStream {
 
   private[kinesis] val DEFAULT_KINESIS_ENDPOINT_URL: String =
     "https://kinesis.us-east-1.amazonaws.com"
+  private[kinesis] val DEFAULT_DYNAMO_ENDPOINT_URL: String =
+    "https://dynamodb.us-east-1.amazonaws.com"
   private[kinesis] val DEFAULT_KINESIS_REGION_NAME: String = "us-east-1"
   private[kinesis] val DEFAULT_INITIAL_POSITION: KinesisInitialPosition = new Latest()
   private[kinesis] val DEFAULT_STORAGE_LEVEL: StorageLevel = StorageLevel.MEMORY_AND_DISK_2

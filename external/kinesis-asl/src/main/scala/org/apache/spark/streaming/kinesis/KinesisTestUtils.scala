@@ -203,7 +203,8 @@ private[kinesis] object KinesisTestUtils {
 
   val envVarNameForEnablingTests = "ENABLE_KINESIS_TESTS"
   val endVarNameForEndpoint = "KINESIS_TEST_ENDPOINT_URL"
-  val defaultEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+  val defaultKinesisEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+  val defaultDynamoEndpointUrl = "https://dynamo.us-west-2.amazonaws.com"
 
   def getRegionNameByEndpoint(endpoint: String): String = {
     val uri = new java.net.URI(endpoint)
@@ -225,7 +226,7 @@ private[kinesis] object KinesisTestUtils {
           |Kinesis tests that actually send data has been enabled by setting the environment
           |variable $envVarNameForEnablingTests to 1. This will create Kinesis Streams and
           |DynamoDB tables in AWS. Please be aware that this may incur some AWS costs.
-          |By default, the tests use the endpoint URL $defaultEndpointUrl to create Kinesis streams.
+          |By default, the tests use the endpoint URL $defaultKinesisEndpointUrl to create Kinesis streams.
           |To change this endpoint URL to a different region, you can set the environment variable
           |$endVarNameForEndpoint to the desired endpoint URL
           |(e.g. $endVarNameForEndpoint="https://kinesis.us-west-2.amazonaws.com").
@@ -236,7 +237,7 @@ private[kinesis] object KinesisTestUtils {
   }
 
   lazy val endpointUrl = {
-    val url = sys.env.getOrElse(endVarNameForEndpoint, defaultEndpointUrl)
+    val url = sys.env.getOrElse(endVarNameForEndpoint, defaultKinesisEndpointUrl)
     // scalastyle:off println
     // Print this so that they are easily visible on the console and not hidden in the log4j logs.
     println(s"Using endpoint URL $url for creating Kinesis streams for tests.")
