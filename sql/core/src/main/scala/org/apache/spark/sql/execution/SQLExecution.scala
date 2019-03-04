@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.SparkContext
+
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -77,7 +79,9 @@ object SQLExecution {
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
-            description = callSite.shortForm,
+            description = Option(sparkSession.sparkContext
+              .getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+              .getOrElse(callSite.shortForm),
             details = callSite.longForm,
             physicalPlanDescription = queryExecution.toString,
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
