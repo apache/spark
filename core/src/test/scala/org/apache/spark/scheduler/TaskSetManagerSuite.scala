@@ -78,11 +78,17 @@ object FakeRackUtil {
     hostToRack(host) = rack
   }
 
-  def getRackForHost(host: String): Option[String] = {
+  def getRackForHost(host: String, slow: Boolean = false): Option[String] = {
+    if (slow) {
+      Thread.sleep(100) // assume resolving one host takes 100 ms
+    }
     hostToRack.get(host)
   }
 
-  def getRacksForHosts(hosts: List[String]): List[String] = {
+  def getRacksForHosts(hosts: List[String], slow: Boolean = false): List[String] = {
+    if (slow) {
+      Thread.sleep(500) // assume resolving multiple hosts takes 500 ms
+    }
     hosts.flatMap(hostToRack.get)
   }
 }
@@ -101,6 +107,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   val finishedManagers = new ArrayBuffer[TaskSetManager]
   val taskSetsFailed = new ArrayBuffer[String]
   val speculativeTasks = new ArrayBuffer[Int]
+  var slowRackResolve = false
 
   val executors = new mutable.HashMap[String, String]
   for ((execId, host) <- liveExecutors) {
@@ -149,10 +156,11 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   }
 
 
-  override def getRackForHost(value: String): Option[String] = FakeRackUtil.getRackForHost(value)
+  override def getRackForHost(value: String): Option[String] =
+    FakeRackUtil.getRackForHost(value, slowRackResolve)
 
   override def getRacksForHosts(values: List[String]): List[String] =
-    FakeRackUtil.getRacksForHosts(values)
+    FakeRackUtil.getRacksForHosts(values, slowRackResolve)
 }
 
 /**
@@ -1608,5 +1616,29 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       info4)
     verify(sched.dagScheduler).taskEnded(manager.tasks(3), Success, result.value(),
       result.accumUpdates, info3)
+  }
+
+  test("SPARK-27038: Verify the rack resolving time and result when initialing TaskSetManager") {
+    sc = new SparkContext("local", "test")
+    for (i <- 1 to 100) {
+      FakeRackUtil.assignHostToRack("host" + i, "rack" + i)
+    }
+    sched = new FakeTaskScheduler(sc,
+      ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
+    sched.slowRackResolve = true
+    val locations = new ArrayBuffer[Seq[TaskLocation]]()
+    for (i <- 1 to 100) {
+      locations += Seq(TaskLocation("host" + i))
+    }
+    val taskSet = FakeTask.createTaskSet(100, locations: _*)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    var total = 0
+    for (i <- 1 to 100) {
+      total += manager.getPendingTasksForRack("rack" + i).length
+    }
+    assert(total === 100) // verify the total number always equals 100 with/without SPARK-27038
+    // verify elapsed time should be less than 1s, without SPARK-27038, it should be larger 10s
+    assert(manager.addTaskElapsedTime < 1)
   }
 }

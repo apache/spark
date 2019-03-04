@@ -198,7 +198,8 @@ private[spark] class TaskSetManager(
   for ((rack, index) <- rackWithTaskIndex) {
     pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
   }
-  private val addTaskElapsedTime = (System.nanoTime() - addTaskStartTime) / 1e9
+  // visible for testing
+  private[scheduler] val addTaskElapsedTime = (System.nanoTime() - addTaskStartTime) / 1e9
   logInfo(s"Adding pending task takes $addTaskElapsedTime seconds")
 
   /**
@@ -265,24 +266,27 @@ private[spark] class TaskSetManager(
   /**
    * Return the pending tasks list for a given executor ID, or an empty list if
    * there is no map entry for that host
+   * This is visible for testing.
    */
-  private def getPendingTasksForExecutor(executorId: String): ArrayBuffer[Int] = {
+  private[scheduler] def getPendingTasksForExecutor(executorId: String): ArrayBuffer[Int] = {
     pendingTasksForExecutor.getOrElse(executorId, ArrayBuffer())
   }
 
   /**
    * Return the pending tasks list for a given host, or an empty list if
    * there is no map entry for that host
+   * This is visible for testing.
    */
-  private def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
+  private[scheduler] def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
     pendingTasksForHost.getOrElse(host, ArrayBuffer())
   }
 
   /**
    * Return the pending rack-local task list for a given rack, or an empty list if
    * there is no map entry for that rack
+   * This is visible for testing.
    */
-  private def getPendingTasksForRack(rack: String): ArrayBuffer[Int] = {
+  private[scheduler] def getPendingTasksForRack(rack: String): ArrayBuffer[Int] = {
     pendingTasksForRack.getOrElse(rack, ArrayBuffer())
   }
 
