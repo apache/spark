@@ -8,15 +8,14 @@ object HadoopFSUtils {
 
   implicit class RichHadoopFileSystem(fileSystem: FileSystem) {
 
-    def listDirectories(path: String): List[String] = {
+    def listDirectories(path: String): Seq[String] = {
       val p = new Path(path)
-      Try(
-        fileSystem
-          .listStatus(p)
-          .filter(_.isDirectory)
-          .map(_.getPath.getName)
-          .toList
-      ).getOrElse(List.empty)
+      fileSystem
+        .listStatus(p)
+        .collect { case item if item.isDirectory =>
+          item.getPath.getName
+        }
+        .toSeq
     }
 
   }

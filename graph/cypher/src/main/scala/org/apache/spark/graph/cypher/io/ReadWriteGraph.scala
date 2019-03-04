@@ -19,14 +19,20 @@ object ReadWriteGraph {
 
   case class GraphImporter(sparkSession: SparkSession, config: ReaderConfig) {
 
-    import org.apache.spark.graph.cypher.util.HadoopFSUtils._
-
     val directoryStructure: SparkGraphDirectoryStructure = SparkGraphDirectoryStructure(config.path)
-    val fs: FileSystem = FileSystem.get(new URI(config.path), sparkSession.sparkContext.hadoopConfiguration)
+    val (labelCombos, relTypes): (Seq[Set[String]], Seq[String]) = {
+      val fs = FileSystem.get(new URI(config.path), sparkSession.sparkContext.hadoopConfiguration)
+      try {
+        import org.apache.spark.graph.cypher.util.HadoopFSUtils._
+        val combos = fs.listDirectories(directoryStructure.pathToNodeDirectory).map(_.toLabelCombo)
+        val types = fs.listDirectories(directoryStructure.pathToRelationshipDirectory).map(_.toRelationshipType)
+        combos -> types
+      } finally {
+        fs.close()
+      }
+    }
 
     def nodeFrames: Seq[NodeFrame] = {
-      val nodeLabelComboDirectories = fs.listDirectories(directoryStructure.pathToNodeDirectory)
-      val labelCombos = nodeLabelComboDirectories.map(_.toLabelCombo)
       labelCombos.map { combo =>
         val df = sparkSession.read.format(config.source).load(directoryStructure.pathToNodeTable(combo))
         val propertyMappings = df.columns.collect {
@@ -41,8 +47,6 @@ object ReadWriteGraph {
     }
 
     def relationshipFrames: Seq[RelationshipFrame] = {
-      val relTypeDirectories = fs.listDirectories(directoryStructure.pathToRelationshipDirectory)
-      val relTypes = relTypeDirectories.map(_.toRelationshipType)
       relTypes.map { relType =>
         val df = sparkSession.read.format(config.source).load(directoryStructure.pathToRelationshipTable(relType))
         val propertyMappings = df.columns.collect {
@@ -56,10 +60,6 @@ object ReadWriteGraph {
           relType,
           propertyMappings)
       }
-    }
-
-    def close(): Unit = {
-      fs.close()
     }
 
   }

@@ -83,11 +83,7 @@ class SparkCypherSession(override val sparkSession: SparkSession) extends Relati
 
   override private[spark] def readGraph(config: ReaderConfig): PropertyGraph = {
     val graphImporter = GraphImporter(sparkSession, config)
-    try {
-      createGraph(graphImporter.nodeFrames, graphImporter.relationshipFrames)
-    } finally {
-      graphImporter.close()
-    }
+    createGraph(graphImporter.nodeFrames, graphImporter.relationshipFrames)
   }
 
   override private[spark] def writeGraph(graph: PropertyGraph, config: WriterConfig): Unit = {
