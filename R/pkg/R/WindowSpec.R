@@ -153,7 +153,7 @@ setMethod("orderBy",
 #' @examples
 #' \dontrun{
 #'   id <- c(rep(1, 3), rep(2, 3), 3)
-#'   desc <- c('New','New','Good','New','Good','Good','New')
+#'   desc <- c('New', 'New', 'Good', 'New', 'Good', 'Good', 'New')
 #'   df <- data.frame(id, desc)
 #'   df <- createDataFrame(df)
 #'   w1 <- orderBy(windowPartitionBy('desc'), df$id)
@@ -204,7 +204,7 @@ setMethod("rowsBetween",
 #' @examples
 #' \dontrun{
 #'   id <- c(rep(1, 3), rep(2, 3), 3)
-#'   desc <- c('New','New','Good','New','Good','Good','New')
+#'   desc <- c('New', 'New', 'Good', 'New', 'Good', 'Good', 'New')
 #'   df <- data.frame(id, desc)
 #'   df <- createDataFrame(df)
 #'   w1 <- orderBy(windowPartitionBy('desc'), df$id)
