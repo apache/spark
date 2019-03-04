@@ -22,7 +22,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -80,6 +80,10 @@ object FakeRackUtil {
 
   def getRackForHost(host: String): Option[String] = {
     hostToRack.get(host)
+  }
+
+  def getRacksForHosts(hosts: List[String]): List[String] = {
+    hosts.flatMap(hostToRack.get)
   }
 }
 
@@ -146,6 +150,9 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
 
   override def getRackForHost(value: String): Option[String] = FakeRackUtil.getRackForHost(value)
+
+  override def getRacksForHosts(values: List[String]): List[String] =
+    FakeRackUtil.getRacksForHosts(values)
 }
 
 /**
@@ -1316,7 +1323,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
 
     // Assert the task has been black listed on the executor it was last executed on.
-    when(taskSetManagerSpy.addPendingTask(anyInt())).thenAnswer(
+    when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean())).thenAnswer(
       new Answer[Unit] {
         override def answer(invocationOnMock: InvocationOnMock): Unit = {
           val task: Int = invocationOnMock.getArgument(0)
@@ -1330,7 +1337,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val e = new ExceptionFailure("a", "b", Array(), "c", None)
     taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
-    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt())
+    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt(), anyBoolean())
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {

@@ -184,11 +184,24 @@ private[spark] class TaskSetManager(
     t.epoch = epoch
   }
 
+  // An array to store preferred location and its task index
+  private val locationWithTaskIndex: ArrayBuffer[(String, Int)] = new ArrayBuffer[(String, Int)]()
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
-    addPendingTask(i)
+    addPendingTask(i, true)
   }
+  // SPARK-27038. Convert preferred location list to rack list in one invocation and zip with the origin index
+  private val rackWithTaskIndex = sched.getRacksForHosts(locationWithTaskIndex.map(_._1).toList)
+    .zip(locationWithTaskIndex.map(_._2))
+  for ((rack, index) <- rackWithTaskIndex) {
+    pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+  }
+  logInfo(s"Total pending tasks for executor are ${pendingTasksForExecutor.values.sum}, " +
+    s"total pending tasks for host are ${pendingTasksForHost.values.sum}, " +
+    s"total pending tasks for rack are ${pendingTasksForRack.values.sum}, " +
+    s"total pending tasks with no prefs are ${pendingTasksWithNoPrefs.length}, " +
+    s"total pending tasks are ${allPendingTasks.length}")
 
   /**
    * Track the set of locality levels which are valid given the tasks locality preferences and
@@ -214,7 +227,7 @@ private[spark] class TaskSetManager(
   private[scheduler] var emittedTaskSizeWarning = false
 
   /** Add a task to all the pending-task lists that it should be on. */
-  private[spark] def addPendingTask(index: Int) {
+  private[spark] def addPendingTask(index: Int, initialing: Boolean = false) {
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -234,8 +247,13 @@ private[spark] class TaskSetManager(
         case _ =>
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
-      for (rack <- sched.getRackForHost(loc.host)) {
-        pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+
+      if (initialing) {
+        locationWithTaskIndex += ((loc.host, index))
+      } else {
+        for (rack <- sched.getRackForHost(loc.host)) {
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+        }
       }
     }
 
