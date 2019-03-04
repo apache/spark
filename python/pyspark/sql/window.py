@@ -106,6 +106,7 @@ class Window(object):
         from pyspark.sql import Window
         from pyspark.sql import functions as func
         from pyspark.sql import SQLContext
+        sc = SparkContext.getOrCreate()
         sqlContext = SQLContext(sc)
         tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
         df = sqlContext.createDataFrame(tup, ["id", "category"])
@@ -167,6 +168,7 @@ class Window(object):
         from pyspark.sql import Window
         from pyspark.sql import functions as func
         from pyspark.sql import SQLContext
+        sc = SparkContext.getOrCreate()
         sqlContext = SQLContext(sc)
         tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
         df = sqlContext.createDataFrame(tup, ["id", "category"])
