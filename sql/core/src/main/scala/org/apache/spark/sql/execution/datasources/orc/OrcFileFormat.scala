@@ -159,10 +159,11 @@ class OrcFileFormat
       }
     }
 
-    val requiredSchemaString = OrcUtils.orcTypeDescriptionString(requiredSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, requiredSchemaString)
-
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
+
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, resultSchemaString)
+
     val sqlConf = sparkSession.sessionState.conf
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -207,7 +208,7 @@ class OrcFileFormat
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
-            TypeDescription.fromString(requiredSchemaString),
+            TypeDescription.fromString(resultSchemaString),
             resultSchema.fields,
             requestedDataColIds,
             requestedPartitionColIds,
