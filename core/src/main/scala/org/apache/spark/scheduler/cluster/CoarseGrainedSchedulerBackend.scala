@@ -408,7 +408,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val ugi = UserGroupInformation.getCurrentUser()
         val tokens = if (dtm.renewalEnabled) {
           dtm.start()
-        } else if (ugi.hasKerberosCredentials()) {
+        } else if (ugi.hasKerberosCredentials() || SparkHadoopUtil.get.isProxyUser(ugi)) {
           val creds = ugi.getCredentials()
           dtm.obtainDelegationTokens(creds)
           SparkHadoopUtil.get.serialize(creds)
