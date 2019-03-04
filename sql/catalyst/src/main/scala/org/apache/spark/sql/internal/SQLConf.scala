@@ -178,7 +178,7 @@ object SQLConf {
         "switch statements. This is applicable only to bytes, shorts, ints, dates.")
       .intConf
       .checkValue(threshold => threshold >= 0 && threshold <= 600, "The max set size " +
-        "for using switch statements in InSet must be positive and less than or equal to 600")
+        "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
   val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")

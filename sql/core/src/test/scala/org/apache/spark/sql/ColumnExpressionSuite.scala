@@ -415,7 +415,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       }
   }
 
-  test("SPARK-26205: Optimize InSet for bytes, shorts, ints, dates") {
+  test("IN/INSET with bytes, shorts, ints, dates") {
     def check(): Unit = {
       val values = Seq(
         (Byte.MinValue, Some(Short.MinValue), Int.MinValue, Date.valueOf("2017-01-01")),

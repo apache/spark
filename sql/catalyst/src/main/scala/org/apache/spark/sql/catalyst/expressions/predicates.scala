@@ -383,12 +383,6 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
   }
 
-  override def sql: String = {
-    val valueSQL = child.sql
-    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
-    s"($valueSQL IN ($listSQL))"
-  }
-
   private def canBeComputedUsingSwitch: Boolean = child.dataType match {
     case ByteType | ShortType | IntegerType | DateType => true
     case _ => false
@@ -409,6 +403,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     })
   }
 
+  // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
+  // so the code size should not exceed 64KB
   private def genCodeWithSwitch(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val caseValuesGen = hset.filter(_ != null).map(Literal(_).genCode(ctx))
     val valueGen = child.genCode(ctx)
@@ -427,12 +423,18 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
         ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
         if (!${valueGen.isNull}) {
           switch (${valueGen.value}) {
-            ${caseBranches.mkString("")}
+            ${caseBranches.mkString("\n")}
             default:
               ${ev.isNull} = $hasNull;
           }
         }
        """)
+  }
+
+  override def sql: String = {
+    val valueSQL = child.sql
+    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    s"($valueSQL IN ($listSQL))"
   }
 }
 

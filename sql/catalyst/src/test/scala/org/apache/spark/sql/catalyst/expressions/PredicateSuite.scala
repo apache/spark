@@ -242,7 +242,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-26205: Optimize InSet for bytes, shorts, ints, dates using switch statements") {
+  test("switch statements in InSet for bytes, shorts, ints, dates") {
     val byteValues = Set[Any](1.toByte, 2.toByte, Byte.MinValue, Byte.MaxValue)
     val shortValues = Set[Any](-10.toShort, 20.toShort, Short.MinValue, Short.MaxValue)
     val intValues = Set[Any](20, -100, 30, Int.MinValue, Int.MaxValue)
