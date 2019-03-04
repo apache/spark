@@ -70,14 +70,7 @@ class SparkCypherSession(override val sparkSession: SparkSession) extends Relati
   def cypher(graph: PropertyGraph, query: String): CypherResult = cypher(graph, query, Map.empty)
 
   override def cypher(graph: PropertyGraph, query: String, parameters: Map[String, Any]): CypherResult = {
-    val relationalGraph = graph match {
-      case RelationalGraphAdapter(_, relGraph) => relGraph
-      case other => throw IllegalArgumentException(
-        expected = "A graph that has been created by `SparkCypherSession.createGraph`",
-        actual = other.getClass.getSimpleName
-      )
-    }
-
+    val relationalGraph = toRelationalGraph(graph)
     SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records, relationalGraph.schema)
   }
 
@@ -88,15 +81,7 @@ class SparkCypherSession(override val sparkSession: SparkSession) extends Relati
 
   override private[spark] def writeGraph(graph: PropertyGraph, config: WriterConfig): Unit = {
     import org.apache.spark.graph.cypher.io.ReadWriteGraph._
-
-    val relationalGraph = graph match {
-      case RelationalGraphAdapter(_, relGraph) => relGraph
-      case other => throw IllegalArgumentException(
-        expected = "A graph that has been created by `SparkCypherSession.createGraph`",
-        actual = other.getClass.getSimpleName
-      )
-    }
-
+    val relationalGraph = toRelationalGraph(graph)
     val graphDirectoryStructure = SparkGraphDirectoryStructure(config.path)
 
     relationalGraph.schema.labelCombinations.combos.foreach { combo =>
@@ -110,6 +95,16 @@ class SparkCypherSession(override val sparkSession: SparkSession) extends Relati
         .format(config.source)
         .mode(config.mode)
         .save(graphDirectoryStructure.pathToRelationshipTable(relType))
+    }
+  }
+
+  private def toRelationalGraph(graph: PropertyGraph): RelationalCypherGraph[DataFrameTable] = {
+    graph match {
+      case RelationalGraphAdapter(_, relGraph) => relGraph
+      case other => throw IllegalArgumentException(
+        expected = "A graph that has been created by `SparkCypherSession.createGraph`",
+        actual = other.getClass.getSimpleName
+      )
     }
   }
 
