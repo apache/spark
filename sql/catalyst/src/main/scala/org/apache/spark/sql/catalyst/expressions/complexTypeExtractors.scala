@@ -294,14 +294,6 @@ trait GetArrayItemUtil {
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-  /**
-   * `Null` is returned for invalid ordinals.
-   *
-   * TODO: We could make nullability more precise in foldable cases (e.g., literal input).
-   * But, since the key search is O(n), revisit this.
-   */
-  protected def computeNullabilityFromMap: Boolean = true
-
   // todo: current search is O(n), improve it.
   def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
     val map = value.asInstanceOf[MapData]
@@ -396,7 +388,9 @@ case class GetMapValue(child: Expression, key: Expression)
 
   override def left: Expression = child
   override def right: Expression = key
-  override def nullable: Boolean = computeNullabilityFromMap
+
+  /** `Null` is returned for invalid ordinals. */
+  override def nullable: Boolean = true
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
   // todo: current search is O(n), improve it.

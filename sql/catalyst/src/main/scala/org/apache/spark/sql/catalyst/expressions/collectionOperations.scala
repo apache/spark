@@ -1977,7 +1977,7 @@ case class ElementAt(left: Expression, right: Expression)
 
   override def nullable: Boolean = left.dataType match {
     case _: ArrayType => computeNullabilityFromArray(left, right)
-    case _: MapType => computeNullabilityFromMap
+    case _: MapType => true
   }
 
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
