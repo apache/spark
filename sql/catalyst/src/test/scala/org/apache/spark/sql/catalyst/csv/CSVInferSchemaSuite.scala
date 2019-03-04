@@ -27,7 +27,8 @@ import org.apache.spark.sql.types._
 class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   test("String fields types are inferred correctly from null types") {
-    val options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"), false, "GMT")
+    val options = new CSVOptions(
+      Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss", "dateFormat" -> "yyyy-MM-dd"), false, "GMT")
     val inferSchema = new CSVInferSchema(options)
 
     assert(inferSchema.inferField(NullType, "") == NullType)
@@ -36,6 +37,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(NullType, "60") == IntegerType)
     assert(inferSchema.inferField(NullType, "3.5") == DoubleType)
     assert(inferSchema.inferField(NullType, "test") == StringType)
+    // [SPARK-25517] added assert statement for auto inferring DateType
+    assert(inferSchema.inferField(NullType, "2019-03-04") == DateType)
     assert(inferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
     assert(inferSchema.inferField(NullType, "True") == BooleanType)
     assert(inferSchema.inferField(NullType, "FAlSE") == BooleanType)
@@ -47,7 +50,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("String fields types are inferred correctly from other types") {
-    val options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"), false, "GMT")
+    val options = new CSVOptions(
+      Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss", "dateFormat" -> "yyyy/MM/dd"), false, "GMT")
     val inferSchema = new CSVInferSchema(options)
 
     assert(inferSchema.inferField(LongType, "1.0") == DoubleType)
@@ -55,6 +59,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(IntegerType, "1.0") == DoubleType)
     assert(inferSchema.inferField(DoubleType, null) == DoubleType)
     assert(inferSchema.inferField(DoubleType, "test") == StringType)
+    // [SPARK-25517] added assert statement for auto inferring DateType
+    assert(inferSchema.inferField(NullType, "2019/03/04") == DateType)
     assert(inferSchema.inferField(LongType, "2015-08-20 14:57:00") == TimestampType)
     assert(inferSchema.inferField(DoubleType, "2015-08-20 15:57:00") == TimestampType)
     assert(inferSchema.inferField(LongType, "True") == BooleanType)
@@ -123,6 +129,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
     assert(inferSchema.inferField(IntegerType, "\\N") == IntegerType)
     assert(inferSchema.inferField(DoubleType, "\\N") == DoubleType)
+    // [SPARK-25517] added assert statement for auto inferring DateType
+    assert(inferSchema.inferField(DateType, "\\N") == DateType)
     assert(inferSchema.inferField(TimestampType, "\\N") == TimestampType)
     assert(inferSchema.inferField(BooleanType, "\\N") == BooleanType)
     assert(inferSchema.inferField(DecimalType(1, 1), "\\N") == DecimalType(1, 1))
