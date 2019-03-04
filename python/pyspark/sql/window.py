@@ -112,14 +112,14 @@ class Window(object):
         window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
         df.withColumn("sum",func.sum("id").over(window)).show()
 
-        id category sum
+        # id category sum
 
-        1       b    3
-        2       b    5
-        3       b    3
-        1       a    2
-        1       a    3
-        2       a    2
+        # 1       b    3
+        # 2       b    5
+        # 3       b    3
+        # 1       a    2
+        # 1       a    3
+        # 2       a    2
 
         """
 
@@ -173,14 +173,14 @@ class Window(object):
         window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
         df.withColumn("sum",func.sum("id").over(window)).show()
 
-        id category sum
+        # id category sum
 
-        1       b    3
-        2       b    5
-        3       b    3
-        1       a    4
-        1       a    4
-        2       a    2
+        # 1       b    3
+        # 2       b    5
+        # 3       b    3
+        # 1       a    4
+        # 1       a    4
+        # 2       a    2
 
         """
 
