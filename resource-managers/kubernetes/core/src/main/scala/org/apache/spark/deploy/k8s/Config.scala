@@ -94,6 +94,41 @@ private[spark] object Config extends Logging {
   val REQUEST_TIMEOUT_SUFFIX = "requestTimeout"
   val CONNECTION_TIMEOUT_SUFFIX = "connectionTimeout"
 
+  val SUBMISSION_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder(s"$SUBMISSION_CLIENT_PREFIX.$REQUEST_TIMEOUT_SUFFIX")
+      .doc("request timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val SUBMISSION_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder(s"$SUBMISSION_CLIENT_PREFIX.$CONNECTION_TIMEOUT_SUFFIX")
+      .doc("connection timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder(s"$DRIVER_CLIENT_PREFIX.$REQUEST_TIMEOUT_SUFFIX")
+      .doc("request timeout to be used in milliseconds for requesting executors")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder(s"$DRIVER_CLIENT_PREFIX.$CONNECTION_TIMEOUT_SUFFIX")
+      .doc("connection timeout to be used in milliseconds for requesting executors")
+      .intConf
+      .createWithDefault(10000)
+
+  val CLIENT_MODE_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder(s"$CLIENT_MODE_CLIENT_PREFIX.$REQUEST_TIMEOUT_SUFFIX")
+      .doc("request timeout to be used in milliseconds for requesting executors in client mode")
+      .intConf
+      .createWithDefault(10000)
+
+  val CLIENT_MODE_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder(s"$CLIENT_MODE_CLIENT_PREFIX.$CONNECTION_TIMEOUT_SUFFIX")
+      .doc("connection timeout to be used in milliseconds for requesting executors in client mode")
+      .intConf
+      .createWithDefault(10000)
 
   val KUBERNETES_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")

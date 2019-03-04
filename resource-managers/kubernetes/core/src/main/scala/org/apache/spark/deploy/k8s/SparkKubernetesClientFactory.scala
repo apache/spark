@@ -18,6 +18,8 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
+import scala.language.implicitConversions
+
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
@@ -28,6 +30,7 @@ import okhttp3.Dispatcher
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -41,7 +44,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       master: String,
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
-      kubernetesClientPrefix: String,
+      clientType: ClientType.Value,
       sparkConf: SparkConf,
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
@@ -64,10 +67,8 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
-    val requestTimeout =
-      sparkConf.getInt(s"$kubernetesClientPrefix.$REQUEST_TIMEOUT_SUFFIX", 10000)
-    val connectionTimeout =
-      sparkConf.getInt(s"$kubernetesClientPrefix.$CONNECTION_TIMEOUT_SUFFIX", 10000)
+    val requestTimeout = clientType.requestTimeout(sparkConf)
+    val connectionTimeout = clientType.connectionTimeout(sparkConf)
     val dispatcher = new Dispatcher(
       ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
 
@@ -117,5 +118,22 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
         configurator(opt, configBuilder)
       }.getOrElse(configBuilder)
     }
+  }
+
+  object ClientType extends Enumeration {
+    import Config._
+    val Driver = Val(DRIVER_CLIENT_REQUEST_TIMEOUT, DRIVER_CLIENT_CONNECTION_TIMEOUT)
+    val Submission = Val(SUBMISSION_CLIENT_REQUEST_TIMEOUT, SUBMISSION_CLIENT_CONNECTION_TIMEOUT)
+    val ClientMode = Val(CLIENT_MODE_CLIENT_REQUEST_TIMEOUT, CLIENT_MODE_CLIENT_CONNECTION_TIMEOUT)
+
+    protected case class Val(
+        requestTimeoutEntry: ConfigEntry[Int],
+        connectionTimeoutEntry: ConfigEntry[Int])
+      extends super.Val {
+      def requestTimeout(conf: SparkConf): Int = conf.get(requestTimeoutEntry)
+      def connectionTimeout(conf: SparkConf): Int = conf.get(connectionTimeoutEntry)
+    }
+
+    implicit def convert(value: Value): Val = value.asInstanceOf[Val]
   }
 }
