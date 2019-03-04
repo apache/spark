@@ -134,8 +134,8 @@ class SQLAppStatusListener(
         exec.jobs = exec.jobs + (event.jobId -> result)
         exec.endEvents += 1
         // If the jobStart event happened after executionEnd event, remove both stage metrics data
-        // and liveExecution data on jobEnd
-        if(exec.isStoreReadData) {
+        // and liveExecution data on the last jobEnd
+        if(exec.endEvents == exec.jobs.size && exec.isStoreReadData) {
           exec.metricsValues = aggregateMetrics(exec)
           removeStaleMetricsData(exec)
           exec.endEvents += 1
