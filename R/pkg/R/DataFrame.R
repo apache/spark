@@ -950,7 +950,7 @@ setMethod("write.parquet",
 #'
 #' Save the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
-#' Each row becomes a new line in the output file.
+#' Each row becomes a new line in the output file. The text files will be encoded as UTF-8.
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved

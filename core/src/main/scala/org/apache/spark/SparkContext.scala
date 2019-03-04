@@ -827,6 +827,8 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * The text files must be encoded as UTF-8.
+   *
    * @param path path to the text file on a supported file system
    * @param minPartitions suggested minimum number of partitions for the resulting RDD
    * @return RDD of lines of the text file
@@ -843,6 +845,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
    * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * The text files must be encoded as UTF-8.
    *
    * <p> For example, if you have the following files:
    * {{{
