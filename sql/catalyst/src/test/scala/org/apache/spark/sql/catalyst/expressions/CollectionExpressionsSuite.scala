@@ -1125,25 +1125,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ElementAt(stArray4, Literal(1)).nullable)
   }
 
-  test("correctly handles ElementAt nullability for maps") {
-    // String key test
-    val k1 = Literal("k1")
-    val v1 = AttributeReference("v1", StringType, nullable = true)()
-    val k2 = Literal("k2")
-    val v2 = AttributeReference("v2", StringType, nullable = false)()
-    val map1 = CreateMap(k1 :: v1 :: k2 :: v2 :: Nil)
-    assert(ElementAt(map1, Literal("k1")).nullable)
-    assert(!ElementAt(map1, Literal("k2")).nullable)
-    assert(ElementAt(map1, Literal("non-existent-key")).nullable)
-
-    // Complex type key test
-    val k3 = Literal.create((1, "a"))
-    val k4 = Literal.create((2, "b"))
-    val map2 = CreateMap(k3 :: v1 :: k4 :: v2 :: Nil)
-    assert(ElementAt(map2, Literal.create((1, "a"))).nullable)
-    assert(!ElementAt(map2, Literal.create((2, "b"))).nullable)
-  }
-
   test("Concat") {
     // Primitive-type elements
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))

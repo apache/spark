@@ -294,21 +294,13 @@ trait GetArrayItemUtil {
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-  /** `Null` is returned for invalid ordinals. */
-  protected def computeNullabilityFromMap: Boolean = if (right.foldable && !right.nullable) {
-    val keyObj = right.eval()
-    left match {
-      case m: CreateMap if m.resolved =>
-        m.keys.zip(m.values).filter { case (k, _) => k.foldable && !k.nullable }.find {
-          case (k, _) if k.eval() == keyObj => true
-          case _ => false
-        }.map(_._2.nullable).getOrElse(true)
-      case _ =>
-        true
-    }
-  } else {
-    true
-  }
+  /**
+   * `Null` is returned for invalid ordinals.
+   *
+   * TODO: We could make nullability more precise in foldable cases (e.g., literal input).
+   * But, since the key search is O(n), revisit this.
+   */
+  protected def computeNullabilityFromMap: Boolean = true
 
   // todo: current search is O(n), improve it.
   def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
