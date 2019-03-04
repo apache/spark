@@ -18,6 +18,7 @@ import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
 object ReadWriteGraph {
 
   case class GraphImporter(sparkSession: SparkSession, config: ReaderConfig) {
+
     import org.apache.spark.graph.cypher.util.HadoopFSUtils._
 
     val directoryStructure: SparkGraphDirectoryStructure = SparkGraphDirectoryStructure(config.path)
@@ -28,7 +29,9 @@ object ReadWriteGraph {
       val labelCombos = nodeLabelComboDirectories.map(_.toLabelCombo)
       labelCombos.map { combo =>
         val df = sparkSession.read.format(config.source).load(directoryStructure.pathToNodeTable(combo))
-        val propertyMappings = df.columns.filter(_.isPropertyColumnName).map(colName => colName.toProperty -> colName).toMap
+        val propertyMappings = df.columns.collect {
+          case colName if colName.isPropertyColumnName => colName.toProperty -> colName
+        }.toMap
         NodeFrame(
           df,
           SourceIdKey.name,
@@ -42,7 +45,9 @@ object ReadWriteGraph {
       val relTypes = relTypeDirectories.map(_.toRelationshipType)
       relTypes.map { relType =>
         val df = sparkSession.read.format(config.source).load(directoryStructure.pathToRelationshipTable(relType))
-        val propertyMappings = df.columns.filter(_.isPropertyColumnName).map(colName => colName.toProperty -> colName).toMap
+        val propertyMappings = df.columns.collect {
+          case colName if colName.isPropertyColumnName => colName.toProperty -> colName
+        }.toMap
         RelationshipFrame(
           df,
           SourceIdKey.name,
