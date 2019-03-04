@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.ui
 
-import java.util.Date
+import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Function
 
@@ -77,27 +77,28 @@ class SQLAppStatusListener(
 
     val executionId = executionIdString.toLong
     val jobId = event.jobId
-    val isExecNotExists = liveExecutions.get(executionId) == null
-    val exec = getOrCreateExecution(executionId)
-
-    if (isExecNotExists) {
-      val sqlStoreData =
-        Some(kvstore.read(classOf[SQLExecutionUIData], executionId))
-      // Should not overwrite the kvstore with new entry, if it already has the SQLExecution data
-      // corresponding to the execId.
-      if (sqlStoreData.nonEmpty) {
-        val sqlExecutionData = sqlStoreData.get
-        exec.description = sqlExecutionData.description
-        exec.details = sqlExecutionData.details
-        exec.physicalPlanDescription = sqlExecutionData.physicalPlanDescription
-        exec.metrics = sqlExecutionData.metrics
-        exec.submissionTime = sqlExecutionData.submissionTime
-        exec.completionTime = sqlExecutionData.completionTime
-        exec.jobs = sqlExecutionData.jobs
-        exec.stages = sqlExecutionData.stages
-        exec.metricsValues = sqlExecutionData.metricValues
-      }
-    }
+    val exec = Option(liveExecutions.get(executionId))
+      .orElse {
+        try {
+          val sqlStoreData = Some(kvstore.read(classOf[SQLExecutionUIData], executionId)).get
+          // Should not overwrite the kvstore with new entry, if it already has the SQLExecution
+          // data corresponding to the execId.
+          val executionData = getOrCreateExecution(executionId)
+          executionData.description = sqlStoreData.description
+          executionData.details = sqlStoreData.details
+          executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
+          executionData.metrics = sqlStoreData.metrics
+          executionData.submissionTime = sqlStoreData.submissionTime
+          executionData.completionTime = sqlStoreData.completionTime
+          executionData.jobs = sqlStoreData.jobs
+          executionData.stages = sqlStoreData.stages
+          executionData.metricsValues = sqlStoreData.metricValues
+          executionData.isStoreReadData = true
+          Option(executionData)
+        } catch {
+          case _: NoSuchElementException => None
+        }
+      }.getOrElse(getOrCreateExecution(executionId))
 
     // Record the accumulator IDs for the stages of this job, so that the code that keeps
     // track of the metrics knows which accumulators to look at.
@@ -132,6 +133,13 @@ class SQLAppStatusListener(
         }
         exec.jobs = exec.jobs + (event.jobId -> result)
         exec.endEvents += 1
+        // If the jobStart event happened after executionEnd event, remove both stage metrics data
+        // and liveExecution data on jobEnd
+        if(exec.isStoreReadData) {
+          exec.metricsValues = aggregateMetrics(exec)
+          removeStaleMetricsData(exec)
+          exec.endEvents += 1
+        }
         update(exec)
       }
     }
@@ -296,13 +304,18 @@ class SQLAppStatusListener(
       update(exec)
 
       // Remove stale LiveStageMetrics objects for stages that are not active anymore.
-      val activeStages = liveExecutions.values().asScala.flatMap { other =>
-        if (other != exec) other.stages else Nil
-      }.toSet
-      stageMetrics.keySet().asScala
-        .filter(!activeStages.contains(_))
-        .foreach(stageMetrics.remove)
+      removeStaleMetricsData(exec)
     }
+  }
+
+  private def removeStaleMetricsData(exec: LiveExecutionData): Unit = {
+    // Remove stale LiveStageMetrics objects for stages that are not active anymore.
+    val activeStages = liveExecutions.values().asScala.flatMap { other =>
+      if (other != exec) other.stages else Nil
+    }.toSet
+    stageMetrics.keySet().asScala
+      .filter(!activeStages.contains(_))
+      .foreach(stageMetrics.remove)
   }
 
   private def onDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Unit = {
@@ -381,6 +394,9 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   // Just in case job end and execution end arrive out of order, keep track of how many
   // end events arrived so that the listener can stop tracking the execution.
   var endEvents = 0
+  // True, if the execution data has already written to the store, and created a new
+  // LiveExecutionData by reading from the store.
+  var isStoreReadData = false
 
   override protected def doUpdate(): Any = {
     new SQLExecutionUIData(

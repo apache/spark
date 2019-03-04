@@ -402,14 +402,15 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
-      stageInfos = Seq.empty,
+      stageInfos = Seq(createStageInfo(0, 0)),
       createProperties(executionId)))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 0)))
     listener.onJobEnd(SparkListenerJobEnd(
       jobId = 0,
       time = System.currentTimeMillis(),
-      JobFailed(new RuntimeException("Oops"))
-    ))
+      JobFailed(new RuntimeException("Oops"))))
 
+    assert(listener.noLiveData())
     assert(statusStore.execution(executionId).get.completionTime.nonEmpty)
   }
 
