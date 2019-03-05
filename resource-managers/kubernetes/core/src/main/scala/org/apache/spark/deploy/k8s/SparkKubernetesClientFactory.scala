@@ -18,8 +18,6 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
-import scala.language.implicitConversions
-
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
@@ -119,6 +117,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
   }
 
   object ClientType extends Enumeration {
+    import scala.language.implicitConversions
     import Config._
     val Driver = Val(DRIVER_CLIENT_REQUEST_TIMEOUT, DRIVER_CLIENT_CONNECTION_TIMEOUT)
     val Submission = Val(SUBMISSION_CLIENT_REQUEST_TIMEOUT, SUBMISSION_CLIENT_CONNECTION_TIMEOUT)
