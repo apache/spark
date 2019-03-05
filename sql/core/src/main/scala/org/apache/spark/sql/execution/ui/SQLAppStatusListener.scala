@@ -80,10 +80,10 @@ class SQLAppStatusListener(
     val exec = Option(liveExecutions.get(executionId))
       .orElse {
         try {
-          val sqlStoreData = Some(kvstore.read(classOf[SQLExecutionUIData], executionId)).get
           // Should not overwrite the kvstore with new entry, if it already has the SQLExecution
           // data corresponding to the execId.
-          val executionData = getOrCreateExecution(executionId)
+          val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
+          val executionData = new LiveExecutionData(executionId)
           executionData.description = sqlStoreData.description
           executionData.details = sqlStoreData.details
           executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
@@ -93,8 +93,8 @@ class SQLAppStatusListener(
           executionData.jobs = sqlStoreData.jobs
           executionData.stages = sqlStoreData.stages
           executionData.metricsValues = sqlStoreData.metricValues
-          executionData.isStoreReadData = true
-          Option(executionData)
+          executionData.endEvents = sqlStoreData.endEvents.getOrElse(0)
+          Option(liveExecutions.put(executionId, executionData))
         } catch {
           case _: NoSuchElementException => None
         }
@@ -133,13 +133,6 @@ class SQLAppStatusListener(
         }
         exec.jobs = exec.jobs + (event.jobId -> result)
         exec.endEvents += 1
-        // If the jobStart event happened after executionEnd event, remove both stage metrics data
-        // and liveExecution data on the last jobEnd
-        if(exec.endEvents == exec.jobs.size && exec.isStoreReadData) {
-          exec.metricsValues = aggregateMetrics(exec)
-          removeStaleMetricsData(exec)
-          exec.endEvents += 1
-        }
         update(exec)
       }
     }
@@ -303,7 +296,6 @@ class SQLAppStatusListener(
       exec.endEvents += 1
       update(exec)
 
-      // Remove stale LiveStageMetrics objects for stages that are not active anymore.
       removeStaleMetricsData(exec)
     }
   }
@@ -344,7 +336,7 @@ class SQLAppStatusListener(
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
       exec.write(kvstore, now)
-      liveExecutions.remove(exec.executionId)
+      removeLiveEntities(exec)
     } else if (force) {
       exec.write(kvstore, now)
     } else if (liveUpdatePeriodNs >= 0) {
@@ -352,6 +344,11 @@ class SQLAppStatusListener(
         exec.write(kvstore, now)
       }
     }
+  }
+
+  private def removeLiveEntities(exec: LiveExecutionData): Unit = {
+    removeStaleMetricsData(exec)
+    liveExecutions.remove(exec.executionId)
   }
 
   private def isSQLStage(stageId: Int): Boolean = {
@@ -394,9 +391,6 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   // Just in case job end and execution end arrive out of order, keep track of how many
   // end events arrived so that the listener can stop tracking the execution.
   var endEvents = 0
-  // True, if the execution data has already written to the store, and created a new
-  // LiveExecutionData by reading from the store.
-  var isStoreReadData = false
 
   override protected def doUpdate(): Any = {
     new SQLExecutionUIData(
@@ -409,7 +403,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       completionTime,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      Option(endEvents))
   }
 
 }
