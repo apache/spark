@@ -87,37 +87,37 @@ private[spark] object Config extends Logging {
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
 
   val SUBMISSION_CLIENT_REQUEST_TIMEOUT =
-    ConfigBuilder(s"spark.kubernetes.kubernetesClient.submission.requestTimeout")
+    ConfigBuilder("spark.kubernetes.kubernetesClient.submission.requestTimeout")
       .doc("request timeout to be used in milliseconds for starting the driver")
       .intConf
       .createWithDefault(10000)
 
   val SUBMISSION_CLIENT_CONNECTION_TIMEOUT =
-    ConfigBuilder(s"spark.kubernetes.kubernetesClient.submission.connectionTimeout")
+    ConfigBuilder("spark.kubernetes.kubernetesClient.submission.connectionTimeout")
       .doc("connection timeout to be used in milliseconds for starting the driver")
       .intConf
       .createWithDefault(10000)
 
   val DRIVER_CLIENT_REQUEST_TIMEOUT =
-    ConfigBuilder(s"spark.kubernetes.kubernetesClient.driver.requestTimeout")
+    ConfigBuilder("spark.kubernetes.kubernetesClient.driver.requestTimeout")
       .doc("request timeout to be used in milliseconds for requesting executors")
       .intConf
       .createWithDefault(10000)
 
   val DRIVER_CLIENT_CONNECTION_TIMEOUT =
-    ConfigBuilder(s"spark.kubernetes.kubernetesClient.driver.connectionTimeout")
+    ConfigBuilder("spark.kubernetes.kubernetesClient.driver.connectionTimeout")
       .doc("connection timeout to be used in milliseconds for requesting executors")
       .intConf
       .createWithDefault(10000)
 
   val CLIENT_MODE_CLIENT_REQUEST_TIMEOUT =
-    ConfigBuilder(s"spark.kubernetes.kubernetesClient.requestTimeout")
+    ConfigBuilder("spark.kubernetes.kubernetesClient.requestTimeout")
       .doc("request timeout to be used in milliseconds for requesting executors in client mode")
       .intConf
       .createWithDefault(10000)
 
   val CLIENT_MODE_CLIENT_CONNECTION_TIMEOUT =
-    ConfigBuilder(s"spark.kubernetes.kubernetesClient.connectionTimeout")
+    ConfigBuilder("spark.kubernetes.kubernetesClient.connectionTimeout")
       .doc("connection timeout to be used in milliseconds for requesting executors in client mode")
       .intConf
       .createWithDefault(10000)
