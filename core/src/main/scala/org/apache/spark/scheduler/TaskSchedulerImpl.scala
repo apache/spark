@@ -205,11 +205,8 @@ private[spark] class TaskSchedulerImpl(
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val stage = taskSet.stageId
-      // only create a BitSet once for a certain stage since we only remove
-      // that stage when an active TaskSetManager succeed.
-      stageIdToFinishedPartitions.getOrElseUpdate(stage, new BitSet)
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
+      val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
       stageTaskSets(taskSet.stageAttemptId) = manager
@@ -244,6 +241,9 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
+    // only create a BitSet once for a certain stage since we only remove
+    // that stage when an active TaskSetManager succeed.
+    stageIdToFinishedPartitions.getOrElseUpdate(taskSet.stageId, new BitSet)
     val tsm = new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
     // TaskSet got submitted by DAGScheduler may have some already completed
     // tasks since DAGScheduler does not always know all the tasks that have

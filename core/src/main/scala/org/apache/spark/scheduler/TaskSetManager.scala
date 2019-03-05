@@ -811,7 +811,10 @@ private[spark] class TaskSetManager(
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
-          isZombie = true
+          if (!isZombie) {
+            sched.stageIdToFinishedPartitions -= stageId
+            isZombie = true
+          }
         }
         maybeFinishTaskSet()
       }

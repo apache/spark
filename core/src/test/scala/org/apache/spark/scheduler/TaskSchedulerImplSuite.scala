@@ -1200,7 +1200,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         zombieAttempts(partition % 2)
       }
       completeTaskSuccessfully(tsm, partition)
-      assert(taskScheduler.stageIdToFinishedPartitions(0).contains(partition))
     }
 
     assert(finalTsm.isZombie)
