@@ -176,12 +176,14 @@ parallelize <- function(sc, coll, numSlices = 1) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
   } else {
     if (callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)) {
+      connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
       # the length of slices here is the parallelism to use in the jvm's sc.parallelize()
       parallelism <- as.integer(numSlices)
       jserver <- newJObject("org.apache.spark.api.r.RParallelizeServer", sc, parallelism)
       authSecret <- callJMethod(jserver, "secret")
       port <- callJMethod(jserver, "port")
-      conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
+      conn <- socketConnection(
+        port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
       doServerAuth(conn, authSecret)
       writeToConnection(serializedSlices, conn)
       jrdd <- callJMethod(jserver, "getResult")
