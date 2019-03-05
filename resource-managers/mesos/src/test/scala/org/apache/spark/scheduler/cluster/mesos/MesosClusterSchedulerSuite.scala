@@ -502,7 +502,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         Seq("--a=$2", "--b", "x y z"),
         Map(),
         Seq(),
-        Seq("lib1.jar"),
+        Seq(),
         Seq()),
       Map("spark.app.name" -> "app name",
         config.EXECUTOR_URI.key -> "s3a://bucket/spark-version.tgz",
@@ -510,7 +510,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       "s1",
       new Date())
 
-    val expectedCmd = "cd spark-version*; DYLD_LIBRARY_PATH=\"lib1.jar:$DYLD_LIBRARY_PATH\" " +
+    val expectedCmd = "cd spark-version*;  " +
         "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
         "--driver-cores 1.0 --driver-memory 1000M --class Main --py-files  " +
         "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
