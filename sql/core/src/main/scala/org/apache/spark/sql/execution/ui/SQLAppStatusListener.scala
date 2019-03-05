@@ -93,7 +93,7 @@ class SQLAppStatusListener(
           executionData.jobs = sqlStoreData.jobs
           executionData.stages = sqlStoreData.stages
           executionData.metricsValues = sqlStoreData.metricValues
-          executionData.endEvents = sqlStoreData.endEvents.getOrElse(0)
+          executionData.endEvents = sqlStoreData.jobs.size + 1
           Option(liveExecutions.put(executionId, executionData))
         } catch {
           case _: NoSuchElementException => None
@@ -336,7 +336,9 @@ class SQLAppStatusListener(
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
       exec.write(kvstore, now)
-      removeLiveEntities(exec)
+      // remove live data corresponding to the exec, once all the events finished.
+      removeStaleMetricsData(exec)
+      liveExecutions.remove(exec.executionId)
     } else if (force) {
       exec.write(kvstore, now)
     } else if (liveUpdatePeriodNs >= 0) {
@@ -344,11 +346,6 @@ class SQLAppStatusListener(
         exec.write(kvstore, now)
       }
     }
-  }
-
-  private def removeLiveEntities(exec: LiveExecutionData): Unit = {
-    removeStaleMetricsData(exec)
-    liveExecutions.remove(exec.executionId)
   }
 
   private def isSQLStage(stageId: Int): Boolean = {
@@ -403,8 +400,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       completionTime,
       jobs,
       stages,
-      metricsValues,
-      Option(endEvents))
+      metricsValues)
   }
 
 }
