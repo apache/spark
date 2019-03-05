@@ -304,17 +304,18 @@ def _create_batch(series, timezone, safecheck, assign_cols_by_name):
                 raise ValueError("A field of type StructType expects a pandas.DataFrame, "
                                  "but got: %s" % str(type(s)))
 
-            # Assign result columns by schema name if user labeled with strings, else use position
-            struct_arrs = []
-            struct_names = []
-            if assign_cols_by_name and any(isinstance(name, basestring) for name in s.columns):
-                for field in t:
-                    struct_arrs.append(create_array(s[field.name], field.type))
-                    struct_names.append(field.name)
+            # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
+            if len(s) == 0 and len(s.columns) == 0:
+                arrs_names = [(pa.array([], type=field.type), field.name) for field in t]
+            # Assign result columns by schema name if user labeled with strings
+            elif assign_cols_by_name and any(isinstance(name, basestring) for name in s.columns):
+                arrs_names = [(create_array(s[field.name], field.type), field.name) for field in t]
+            # Assign result columns by  position
             else:
-                for i, field in enumerate(t):
-                    struct_arrs.append(create_array(s[s.columns[i]], field.type))
-                    struct_names.append(field.name)
+                arrs_names = [(create_array(s[s.columns[i]], field.type), field.name)
+                              for i, field in enumerate(t)]
+
+            struct_arrs, struct_names = zip(*arrs_names)
 
             # TODO: from_arrays args switched for v0.9.0, remove when bump minimum pyarrow version
             if LooseVersion(pa.__version__) < LooseVersion("0.9.0"):

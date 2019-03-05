@@ -392,6 +392,20 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         res = df.select(f(col('id')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_struct_with_empty_partition(self):
+        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))\
+            .withColumn('name', lit('John Doe'))
+
+        @pandas_udf("first string, last string")
+        def split_expand(n):
+            return n.str.split(expand=True)
+
+        result = df.select(split_expand('name')).collect()
+        self.assertEqual(1, len(result))
+        row = result[0]
+        self.assertEqual('John', row[0]['first'])
+        self.assertEqual('Doe', row[0]['last'])
+
     def test_vectorized_udf_varargs(self):
         df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
         f = pandas_udf(lambda *v: v[0], LongType())
