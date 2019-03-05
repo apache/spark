@@ -58,7 +58,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
     } else {
       (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
-        SparkKubernetesClientFactory.ClientType.ClientMode,
+        SparkKubernetesClientFactory.ClientType.Driver,
         KubernetesUtils.parseMasterUrl(masterURL),
         None,
         None)

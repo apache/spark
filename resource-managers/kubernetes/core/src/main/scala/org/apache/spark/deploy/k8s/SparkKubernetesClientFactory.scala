@@ -124,7 +124,6 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
     import Config._
     val Driver = Val(DRIVER_CLIENT_REQUEST_TIMEOUT, DRIVER_CLIENT_CONNECTION_TIMEOUT)
     val Submission = Val(SUBMISSION_CLIENT_REQUEST_TIMEOUT, SUBMISSION_CLIENT_CONNECTION_TIMEOUT)
-    val ClientMode = Val(CLIENT_MODE_CLIENT_REQUEST_TIMEOUT, CLIENT_MODE_CLIENT_CONNECTION_TIMEOUT)
 
     protected case class Val(
         requestTimeoutEntry: ConfigEntry[Int],

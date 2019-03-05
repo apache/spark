@@ -991,49 +991,31 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.kubernetesClient.submission.connectionTimeout</code></td>
+  <td><code>spark.kubernetes.submission.connectionTimeout</code></td>
   <td>10000</td>
   <td>
-    Connection timeout in milliseconds for the kubernetes client to use for starting the driver. In client mode, use
-    <code>spark.kubernetes.kubernetesClient.connectionTimeout</code> instead.
+    Connection timeout in milliseconds for the kubernetes client to use for starting the driver.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.kubernetesClient.submission.requestTimeout</code></td>
+  <td><code>spark.kubernetes.submission.requestTimeout</code></td>
   <td>10000</td>
   <td>
-    Request timeout in milliseconds for the kubernetes client to use for starting the driver. In client mode, use
-    <code>spark.kubernetes.kubernetesClient.submission.requestTimeout</code> instead.
+    Request timeout in milliseconds for the kubernetes client to use for starting the driver.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.kubernetesClient.driver.connectionTimeout</code></td>
+  <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
   <td>10000</td>
   <td>
     Connection timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
-    In client mode, use <code>spark.kubernetes.kubernetesClient.connectionTimeout</code> instead.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.kubernetesClient.driver.requestTimeout</code></td>
+  <td><code>spark.kubernetes.driver.requestTimeout</code></td>
   <td>10000</td>
   <td>
     Request timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
-    In client mode, use <code>spark.kubernetes.kubernetesClient.connectionTimeout</code> instead.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.kubernetesClient.connectionTimeout</code></td>
-  <td>10000</td>
-  <td>
-    In client mode, connection timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.kubernetesClient.requestTimeout</code></td>
-  <td>10000</td>
-  <td>
-    In client mode, request timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
   </td>
 </tr>
 </table>
