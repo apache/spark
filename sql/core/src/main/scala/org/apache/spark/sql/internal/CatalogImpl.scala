@@ -492,7 +492,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // Uncache the logicalPlan.
       sparkSession.sharedState.cacheManager.uncacheQuery(table, blocking = true)
       // Cache it again.
-      sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableIdent.table))
+      sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableName))
     }
   }
 
