@@ -155,7 +155,7 @@ setMethod("orderBy",
 #'   df <- createDataFrame(df)
 #'   w1 <- orderBy(windowPartitionBy('desc'), df$id)
 #'   w2 <- rowsBetween(w1, 0, 3)
-#'   df1 <- withColumn(df, “sum”, over(sum(df$id), w2))
+#'   df1 <- withColumn(df, "sum", over(sum(df$id), w2))
 #'   head(df1)
 #' }
 #' @note rowsBetween since 2.0.0
