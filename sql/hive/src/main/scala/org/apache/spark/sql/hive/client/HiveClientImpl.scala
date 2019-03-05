@@ -178,6 +178,8 @@ private[hive] class HiveClientImpl(
          """.stripMargin)
       hiveConf.set(k, v)
     }
+    // Disable CBO because we removed the Calcite dependency.
+    hiveConf.setBoolean("hive.cbo.enable", false)
     val state = new SessionState(hiveConf)
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
