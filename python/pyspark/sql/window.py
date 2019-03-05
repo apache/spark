@@ -103,15 +103,15 @@ class Window(object):
         offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
         index 4 to index 6.
         """
-        from pyspark.sql import Window
-        from pyspark.sql import functions as func
-        from pyspark.sql import SQLContext
-        sc = SparkContext.getOrCreate()
-        sqlContext = SQLContext(sc)
-        tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
-        df = sqlContext.createDataFrame(tup, ["id", "category"])
-        window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
-        df.withColumn("sum", func.sum("id").over(window)).show()
+        # from pyspark.sql import Window
+        # from pyspark.sql import functions as func
+        # from pyspark.sql import SQLContext
+        # sc = SparkContext.getOrCreate()
+        # sqlContext = SQLContext(sc)
+        # tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        # df = sqlContext.createDataFrame(tup, ["id", "category"])
+        # window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
+        # df.withColumn("sum", func.sum("id").over(window)).show()
 
         # id category sum
 
@@ -144,8 +144,7 @@ class Window(object):
     def rangeBetween(start, end):
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
-        from `start` (inclusive) to `end` (inclusive).Range Between considers values
-        when computing frame.
+        from `start` (inclusive) to `end` (inclusive).
 
         Both `start` and `end` are relative from the current row. For example,
         "0" means "current row", while "-1" means one off before the current row,
@@ -157,7 +156,7 @@ class Window(object):
 
         A range-based boundary is based on the actual value of the ORDER BY
         expression(s). An offset is used to alter the value of the ORDER BY expression, for
-        instance if the current order by expression has a value of 10 and the lower bound offset
+        instance if the current ORDER BY expression has a value of 10 and the lower bound offset
         is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
         number of constraints on the ORDER BY expressions: there can be only one expression and this
         expression must have a numerical data type. An exception can be made when the offset is
@@ -165,15 +164,15 @@ class Window(object):
         ORDER BY expression are allowed.
 
         """
-        from pyspark.sql import Window
-        from pyspark.sql import functions as func
-        from pyspark.sql import SQLContext
-        sc = SparkContext.getOrCreate()
-        sqlContext = SQLContext(sc)
-        tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
-        df = sqlContext.createDataFrame(tup, ["id", "category"])
-        window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
-        df.withColumn("sum", func.sum("id").over(window)).show()
+        # from pyspark.sql import Window
+        # from pyspark.sql import functions as func
+        # from pyspark.sql import SQLContext
+        # sc = SparkContext.getOrCreate()
+        # sqlContext = SQLContext(sc)
+        # tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        # df = sqlContext.createDataFrame(tup, ["id", "category"])
+        # window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
+        # df.withColumn("sum", func.sum("id").over(window)).show()
 
         # id category sum
 
