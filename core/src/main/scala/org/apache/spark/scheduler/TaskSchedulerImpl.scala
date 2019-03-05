@@ -216,7 +216,7 @@ private[spark] class TaskSchedulerImpl(
       // Mark all the existing TaskSetManagers of this stage as zombie, as we are adding a new one.
       // This is necessary to handle a corner case. Let's say a stage has 10 partitions and has 2
       // TaskSetManagers: TSM1(zombie) and TSM2(active). TSM1 has a running task for partition 10
-      // and it completes. TSM2 finishes tasks for partition 1-19, and thinks he is still active
+      // and it completes. TSM2 finishes tasks for partition 1-9, and thinks he is still active
       // because partition 10 is not completed yet. However, DAGScheduler gets task completion
       // events for all the 10 partitions and thinks the stage is finished. If it's a shuffle stage
       // and somehow it has missing map outputs, then DAGScheduler will resubmit it and create a
