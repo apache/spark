@@ -1814,12 +1814,16 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       if (key != null) {
         val timestamp = System.currentTimeMillis
-        if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
-          logInfo(s"Added JAR $path at $key with timestamp $timestamp")
-          postEnvironmentUpdate()
-        } else {
-          logWarning(s"The jar $path has been added already. Overwriting of added jars " +
-            "is not supported in the current version.")
+        //  SPARK-26602: Make sure the path exists,before adding jar to addedJars
+        val fs = FileSystem.get(hadoopConfiguration)
+        if (fs.exists(new Path(path))) {
+          if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
+            logInfo(s"Added JAR $path at $key with timestamp $timestamp")
+            postEnvironmentUpdate()
+          } else {
+            logWarning(s"The jar $path has been added already. Overwriting of added jars " +
+              "is not supported in the current version.")
+          }
         }
       }
     }
