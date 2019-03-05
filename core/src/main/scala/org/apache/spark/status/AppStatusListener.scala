@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CPUS_PER_TASK
@@ -211,11 +212,11 @@ private[spark] class AppStatusListener(
           update(rdd, now)
         }
       }
-      // remove partition information
+      // Remove all RDD partitions that reference the removed executor
       liveRDDs.values.foreach { rdd =>
         rdd.getPartitions.values
-          .filter(_.executors.contains(event.executorId)).foreach { partition =>
-          partition.executors.filter(_ == event.executorId).foreach { _ =>
+          .filter(_.executors.contains(event.executorId))
+          .foreach { partition =>
             if (partition.executors.length == 1) {
               rdd.removePartition(partition.blockName)
               rdd.memoryUsed = addDeltaToValue(rdd.memoryUsed, partition.memoryUsed * -1)
@@ -225,16 +226,15 @@ private[spark] class AppStatusListener(
                 (partition.memoryUsed / partition.executors.length) * -1)
               rdd.diskUsed = addDeltaToValue(rdd.diskUsed,
                 (partition.diskUsed / partition.executors.length) * -1)
-              partition.update(partition.executors.filter(!_.equals(event.executorId)),
-                rdd.storageLevel,
+              partition.update(partition.executors
+                .filter(!_.equals(event.executorId)), rdd.storageLevel,
                 addDeltaToValue(partition.memoryUsed,
                   (partition.memoryUsed / partition.executors.length) * -1),
                 addDeltaToValue(partition.diskUsed,
                   (partition.diskUsed / partition.executors.length) * -1))
             }
-            update(rdd, now)
           }
-        }
+        update(rdd, now)
       }
       if (isExecutorActiveForLiveStages(exec)) {
         // the executor was running for a currently active stage, so save it for now in
