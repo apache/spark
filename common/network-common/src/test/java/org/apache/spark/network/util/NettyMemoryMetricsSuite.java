@@ -60,10 +60,13 @@ public class NettyMemoryMetricsSuite {
       JavaUtils.closeQuietly(clientFactory);
       clientFactory = null;
     }
-
     if (server != null) {
       JavaUtils.closeQuietly(server);
       server = null;
+    }
+    if (context != null) {
+      JavaUtils.closeQuietly(context);
+      context = null;
     }
   }
 
