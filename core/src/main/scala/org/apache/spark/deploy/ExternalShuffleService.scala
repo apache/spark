@@ -52,8 +52,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val transportConf =
     SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
-  private val transportContext: TransportContext =
-    new TransportContext(transportConf, blockHandler, true)
+  private var transportContext: TransportContext = _
 
   private var server: TransportServer = _
 
@@ -82,6 +81,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       } else {
         Nil
       }
+    transportContext = new TransportContext(transportConf, blockHandler, true)
     server = transportContext.createServer(port, bootstraps.asJava)
 
     shuffleServiceSource.registerMetricSet(server.getAllMetrics)
@@ -106,6 +106,10 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     if (server != null) {
       server.close()
       server = null
+    }
+    if (transportContext != null) {
+      transportContext.close()
+      transportContext = null
     }
   }
 }
