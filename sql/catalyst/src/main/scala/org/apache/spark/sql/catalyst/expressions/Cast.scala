@@ -44,6 +44,10 @@ object Cast {
     case (_, StringType) => true
 
     case (StringType, BinaryType) => true
+    case (ByteType, BinaryType) => true
+    case (ShortType, BinaryType) => true
+    case (IntegerType, BinaryType) => true
+    case (LongType, BinaryType) => true
 
     case (StringType, BooleanType) => true
     case (DateType, BooleanType) => true
@@ -326,6 +330,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
     case StringType => buildCast[UTF8String](_, _.getBytes)
+    case ByteType => buildCast[Byte](_, ToBinary.cast)
+    case ShortType => buildCast[Short](_, ToBinary.cast)
+    case IntegerType => buildCast[Int](_, ToBinary.cast)
+    case LongType => buildCast[Long](_, ToBinary.cast)
   }
 
   // UDFToBoolean
@@ -909,6 +917,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) => code"$evPrim = $c.getBytes();"
+    case ByteType | ShortType | IntegerType | LongType =>
+      (c, evPrim, evNull) => code"$evPrim = ${ToBinary.objectName}.cast($c);"
   }
 
   private[this] def castToDateCode(
@@ -1381,4 +1391,45 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
+}
+
+object ToBinary {
+
+  val objectName: String = ToBinary.getClass.getName.stripSuffix("$")
+
+  def cast(l: Long): Array[Byte] = {
+    val result = new Array[Byte](8)
+    result(0) = (l >>> 56 & 0xFF).toByte
+    result(1) = (l >>> 48 & 0xFF).toByte
+    result(2) = (l >>> 40 & 0xFF).toByte
+    result(3) = (l >>> 32 & 0xFF).toByte
+    result(4) = (l >>> 24 & 0xFF).toByte
+    result(5) = (l >>> 16 & 0xFF).toByte
+    result(6) = (l >>> 8 & 0xFF).toByte
+    result(7) = (l & 0xFF).toByte
+    result
+  }
+
+  def cast(i: Int): Array[Byte] = {
+    val result = new Array[Byte](4)
+    result(0) = (i >>> 24 & 0xFF).toByte
+    result(1) = (i >>> 16 & 0xFF).toByte
+    result(2) = (i >>> 8 & 0xFF).toByte
+    result(3) = (i & 0xFF).toByte
+    result
+  }
+
+  def cast(s: Short): Array[Byte] = {
+    val result = new Array[Byte](2)
+    result(0) = (s >>> 8 & 0xFF).toByte
+    result(1) = (s & 0xFF).toByte
+    result
+  }
+
+  def cast(s: Byte): Array[Byte] = {
+    val result = new Array[Byte](1)
+    result(0) = s
+    result
+  }
+
 }
