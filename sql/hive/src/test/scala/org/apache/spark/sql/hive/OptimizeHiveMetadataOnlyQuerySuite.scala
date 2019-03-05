@@ -65,11 +65,11 @@ class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleto
 
       // verify the matching partitions
       val partitions = spark.internalCreateDataFrame(Distinct(Filter(($"x" < 5).expr,
-        Project(Seq(($"part" + 1).as("x").expr.asInstanceOf[NamedExpression]),
+        Project(Seq(($"part" * 1).as("x").expr.asInstanceOf[NamedExpression]),
           spark.table("metadata_only").logicalPlan.asInstanceOf[SubqueryAlias].child)))
           .queryExecution.toRdd, StructType(Seq(StructField("x", IntegerType))))
 
-      checkAnswer(partitions, Seq(1, 2, 3, 4).toDF("x"))
+      checkAnswer(partitions, Seq(0, 1, 2, 3, 4).toDF("x"))
 
       // verify that the partition predicate was not pushed down to the metastore
       assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount - startCount == 11)
