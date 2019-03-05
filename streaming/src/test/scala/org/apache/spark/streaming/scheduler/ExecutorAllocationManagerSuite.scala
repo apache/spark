@@ -25,7 +25,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
+import org.apache.spark.internal.config._
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -58,7 +58,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         reset(allocationClient)
         when(allocationClient.getExecutorIds()).thenReturn(Seq("1", "2"))
         addBatchProcTime(allocationManager, batchProcTimeMs.toLong)
-        val advancedTime = SCALING_INTERVAL_DEFAULT_SECS * 1000 + 1
+        val advancedTime = STREAMING_DYN_ALLOCATION_SCALING_INTERVAL.defaultValue.get * 1000 + 1
         val expectedWaitTime = clock.getTimeMillis() + advancedTime
         clock.advance(advancedTime)
         // Make sure ExecutorAllocationManager.manageAllocation is called
@@ -101,25 +101,29 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       }
 
       // Batch proc time slightly more than the scale up ratio, should increase allocation by 1
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(Some(3))
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly less than the scale up ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(Some("2"))
       }
