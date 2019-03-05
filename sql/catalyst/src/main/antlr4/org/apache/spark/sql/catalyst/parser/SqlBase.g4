@@ -480,7 +480,7 @@ joinType
     | LEFT SEMI
     | RIGHT OUTER?
     | FULL OUTER?
-    | LEFT? ANTI
+    | LEFT ANTI
     ;
 
 joinCriteria
