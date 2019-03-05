@@ -66,6 +66,14 @@ class Iso8601TimestampFormatter(
   }
 }
 
+/**
+ * The formatter parses/formats timestamps according to the pattern `yyyy-MM-dd HH:mm:ss.[..fff..]`
+ * where `[..fff..]` is a fraction of second up to microsecond resolution. The formatter does not
+ * output trailing zeros in the fraction. For example, the timestamp `2019-03-05 15:00:01.123400` is
+ * formatted as the string `2019-03-05 15:00:01.1234`.
+ *
+ * @param timeZone the time zone in which the formatter parses or format timestamps
+ */
 class FractionTimestampFormatter(timeZone: TimeZone)
   extends Iso8601TimestampFormatter("", timeZone, TimestampFormatter.defaultLocale) {
 
