@@ -249,13 +249,13 @@
       <id>parquet-1.11.0</id>
       <!-- This is a temporary repository to use parquet-mr 1.11.0 release candidate -->
       <name>Parquet 1.11.0 RC4</name>
-      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1023/</url>
+      <url>https://repository.apache.org/content/repositories/snapshots/</url>
       <releases>
         <enabled>true</enabled>
         <updatePolicy>always</updatePolicy>
       </releases>
       <snapshots>
-        <enabled>false</enabled>
+        <enabled>true</enabled>
         <updatePolicy>always</updatePolicy>
       </snapshots>
     </repository>
