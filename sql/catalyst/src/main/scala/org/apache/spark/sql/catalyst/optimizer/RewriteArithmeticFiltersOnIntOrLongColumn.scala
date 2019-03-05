@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
 
@@ -41,8 +41,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
  */
 object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan =>
-      q transformExpressionsUp {
+    case f: Filter =>
+      f transformExpressionsUp {
         case e @ BinaryComparison(left: BinaryArithmetic, right: Literal)
             if isDataTypeSafe(left.dataType) =>
           transformLeft(e, left, right)
