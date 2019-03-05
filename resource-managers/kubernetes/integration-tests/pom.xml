@@ -149,7 +149,7 @@
             <spark.kubernetes.test.namespace>${spark.kubernetes.test.namespace}</spark.kubernetes.test.namespace>
             <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>
             <spark.kubernetes.test.jvmImage>${spark.kubernetes.test.jvmImage}</spark.kubernetes.test.jvmImage>
-            <spark.kubernetes.test.pyImage>${spark.kubernetes.test.pyImage}</spark.kubernetes.test.pyImage>
+            <spark.kubernetes.test.pythonImage>${spark.kubernetes.test.pythonImage}</spark.kubernetes.test.pythonImage>
             <spark.kubernetes.test.rImage>${spark.kubernetes.test.rImage}</spark.kubernetes.test.rImage>
           </systemProperties>
           <tagsToExclude>${test.exclude.tags}</tagsToExclude>
