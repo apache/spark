@@ -486,6 +486,43 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     Utils.verifyFileBasedValueSecrets(launchedTasks)
   }
 
+  test("assembles a valid driver command, escaping all confs and args") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+    val driverDesc = new MesosDriverDescription(
+      "d1",
+      "jar",
+      mem,
+      cpu,
+      true,
+      new Command(
+        "Main",
+        Seq("--a=$2", "--b", "x y z"),
+        Map(),
+        Seq(),
+        Seq(),
+        Seq()),
+      Map("spark.app.name" -> "app name",
+        config.EXECUTOR_URI.key -> "s3a://bucket/spark-version.tgz",
+        "another.conf" -> "\\value"),
+      "s1",
+      new Date())
+
+    val expectedCmd = "cd spark-version*;  " +
+        "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
+        "--driver-cores 1.0 --driver-memory 1000M --class Main --py-files  " +
+        "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
+        "--conf \"another.conf=\\\\value\" " +
+        "--conf \"spark.app.name=app name\" " +
+        "../jar " +
+        "\"--a=\\$2\" " +
+        "--b \"x y z\""
+
+    assert(scheduler.getDriverCommandValue(driverDesc) == expectedCmd)
+  }
+
   private def launchDriverTask(addlSparkConfVars: Map[String, String]): List[TaskInfo] = {
     setScheduler()
     val mem = 1000

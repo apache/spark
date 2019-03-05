@@ -460,7 +460,7 @@ private[spark] class MesosClusterScheduler(
     containerInfo
   }
 
-  private def getDriverCommandValue(desc: MesosDriverDescription): String = {
+  private[mesos] def getDriverCommandValue(desc: MesosDriverDescription): String = {
     val dockerDefined = desc.conf.contains(config.EXECUTOR_DOCKER_IMAGE)
     val executorUri = getDriverExecutorURI(desc)
     // Gets the path to run spark-submit, and the path to the Mesos sandbox.
@@ -500,7 +500,7 @@ private[spark] class MesosClusterScheduler(
       }
     }
 
-    val appArguments = desc.command.arguments.mkString(" ")
+    val appArguments = desc.command.arguments.map(shellEscape).mkString(" ")
 
     s"$executable $cmdOptions $primaryResource $appArguments"
   }
