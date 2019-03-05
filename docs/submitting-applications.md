@@ -48,12 +48,18 @@ Some of the commonly used options are:
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
-<b>&#8224;</b>In `client` mode, the driver is launched directly within the `spark-submit` process on
+<b>&#8224;</b> The exact behaviour depends on the resource-manager (standalone, YARN, Mesos etc.)
+used on the cluster. While some of them offer advanced features (see for example, the
+[support for Kubernetes](https://spark.apache.org/docs/latest/running-on-kubernetes.html#client-mode),
+where the driver can run inside a Kubernetes pod or on a physical host),
+generally, the following is applicable: in `client` mode,
+the driver is launched directly within the `spark-submit` process on
 the machine which was used to submit the Spark job, and it will act as a *client* to the cluster.
 In this mode, the input and output of the application is attached to the console, thus, this mode is
 especially suitable for applications that involve the REPL (e.g. Spark shell).
-However, if the process used to submit the job terminates, the machine hosting it is shut down,
-crashes or loses network connectivity, that ends the execution of the job on the (remote) cluster as well.
+Depending on the resource-manager used and its configuration, the handling of driver failures
+(termination or disconnect) might be different, but in most of the cases that ends the execution
+of the job on the (remote) cluster as well.
 
 If `cluster` mode is specified, the driver program is executed on one of the cluster machines, requiring no
 connection from the (client) machine which was used for submitting the Spark job: the Spark job will run
