@@ -693,6 +693,10 @@ must match with Kafka broker configuration.
 
 When delegation token is available on an executor it can be overridden with JAAS login configuration.
 
+#### Caveats
+
+- Obtaining delegation token for proxy user is not yet supported ([KAFKA-6945](https://issues.apache.org/jira/browse/KAFKA-6945)).
+
 ### JAAS login configuration
 
 JAAS login configuration must placed on all nodes where Spark tries to access Kafka cluster.
