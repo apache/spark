@@ -223,13 +223,13 @@ public class SaslIntegrationSuite {
       long streamId = stream.streamId;
 
       try (
-      // Create a second client, authenticated with a different app ID, and try to read from
-      // the stream created for the previous app.
-      TransportClientFactory clientFactory2 = blockServerContext.createClientFactory(
-          Arrays.asList(new SaslClientBootstrap(conf, "app-2", secretKeyHolder)));
-      TransportClient client2 = clientFactory2.createClient(
-          TestUtils.getLocalHost(), blockServer.getPort())) {
-
+        // Create a second client, authenticated with a different app ID, and try to read from
+        // the stream created for the previous app.
+        TransportClientFactory clientFactory2 = blockServerContext.createClientFactory(
+            Arrays.asList(new SaslClientBootstrap(conf, "app-2", secretKeyHolder)));
+        TransportClient client2 = clientFactory2.createClient(
+            TestUtils.getLocalHost(), blockServer.getPort())
+      ) {
         CountDownLatch chunkReceivedLatch = new CountDownLatch(1);
         ChunkReceivedCallback callback = new ChunkReceivedCallback() {
           @Override

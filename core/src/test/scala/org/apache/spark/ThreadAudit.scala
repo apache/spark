@@ -55,8 +55,8 @@ trait ThreadAudit extends Logging {
      * creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
-     * Manually checked and all of them stopped properly.
+     * Calling [[SparkContext#stop]] will shut down the thread pool of this event group
+     * asynchronously. In each case proper stopping is checked manually.
      */
     "rpc-client.*",
     "rpc-server.*",
@@ -64,9 +64,8 @@ trait ThreadAudit extends Logging {
     /**
      * During [[org.apache.spark.network.TransportContext]] construction a separate event loop could
      * be created for handling ChunkFetchRequest.
-     * The thread pool behind shut down asynchronously triggered by
-     * [[org.apache.spark.network.TransportContext#close]].
-     * Manually checked and all of them stopped properly.
+     * Calling [[org.apache.spark.network.TransportContext#close]] will shut down the thread pool
+     * of this event group asynchronously. In each case proper stopping is checked manually.
      */
     "shuffle-chunk-fetch-handler.*",
 
@@ -74,8 +73,8 @@ trait ThreadAudit extends Logging {
      * During [[SparkContext]] creation BlockManager creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
-     * Manually checked and all of them stopped properly.
+     * Calling [[SparkContext#stop]] will shut down the thread pool of this event group
+     * asynchronously. In each case proper stopping is checked manually.
      */
     "shuffle-client.*",
     "shuffle-server.*"
