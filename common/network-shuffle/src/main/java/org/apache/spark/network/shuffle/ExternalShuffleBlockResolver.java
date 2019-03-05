@@ -321,12 +321,7 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  /**ForTesting**/
-  public void closeForTest() {
-    close();
-  }
-
-  /**ForTesting**/
+  @VisibleForTesting
   public static File getFileForTest(String[] localDirs, int subDirsPerLocalDir, String filename) {
     return getFile(localDirs, subDirsPerLocalDir, filename);
   }

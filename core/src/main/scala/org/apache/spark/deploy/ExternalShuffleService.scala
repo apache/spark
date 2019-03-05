@@ -85,7 +85,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     }
   }
 
-  /** ForTesting */
+  /** Get blockhandler. */
   def getBlockHandler: ExternalShuffleBlockHandler = {
     blockHandler
   }

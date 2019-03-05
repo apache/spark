@@ -66,7 +66,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
   }
 
-  /** ForTesting */
+  @VisibleForTesting
   public ExternalShuffleBlockResolver getBlockResolver() {
     return blockManager;
   }
