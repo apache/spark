@@ -14,7 +14,7 @@ object GraphElementFrame {
         case BinaryType => col
         case StringType => col.cast(BinaryType)
         // TODO: Implement more efficient encoding for IntegerType and LongType
-        // TODO: Constraint to types that make sense as IDs
+        // TODO: Constrain to types that make sense as IDs
         case _ => col.cast(StringType).cast(BinaryType)
       }
     }
@@ -30,12 +30,16 @@ object GraphElementFrame {
   */
 trait GraphElementFrame {
 
+  /**
+    * Initial [[DataFrame]] that can still contain unmapped columns and ID columns that are not of type BinaryType.
+    * The columns are ordered arbitrarily.
+    */
   def initialDf: DataFrame
 
   /**
-    * [[DataFrame]] containing only mapped element data. Each row represents a graph element.
+    * [[DataFrame]] that contains only mapped element data. Each row represents a graph element.
     * Columns in 'initialDf' that do not have BinaryType are converted to BinaryType.
-    * Id columns are first, property columns are sorted alphabetically.
+    * ID columns are first, property columns are sorted alphabetically.
     */
   val df: DataFrame = {
     val mappedColumnNames = idColumns ++ properties.values.toSeq.sorted
