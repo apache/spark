@@ -31,4 +31,5 @@ package org.apache.spark.sql.execution.benchmark
  */
 object ParquetNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
     override val dataSourceName: String = "parquet"
+    override val benchmarkName: String = "Nested Schema Pruning Benchmark For Parquet"
 }

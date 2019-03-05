@@ -31,4 +31,5 @@ package org.apache.spark.sql.execution.benchmark
  */
 object OrcV2NestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
   override val dataSourceName: String = "orc"
+  override val benchmarkName: String = "Nested Schema Pruning Benchmark For ORC v2"
 }

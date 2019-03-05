@@ -33,6 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object OrcNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
   override val dataSourceName: String = "orc"
+  override val benchmarkName: String = "Nested Schema Pruning Benchmark For ORC v1"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc",

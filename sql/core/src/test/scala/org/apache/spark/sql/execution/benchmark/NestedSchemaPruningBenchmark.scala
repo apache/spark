@@ -28,6 +28,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
   val dataSourceName: String
+  val benchmarkName: String
 
   protected val N = 1000000
   protected val numIters = 10
@@ -143,7 +144,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark(s"Nested Schema Pruning Benchmark") {
+    runBenchmark(benchmarkName) {
       withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
         selectBenchmark (N, numIters)
         limitBenchmark (N, numIters)
