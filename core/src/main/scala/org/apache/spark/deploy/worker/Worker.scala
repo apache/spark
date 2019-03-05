@@ -40,7 +40,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
@@ -130,7 +130,7 @@ private[deploy] class Worker(
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {
-      new File(sys.env.get("SPARK_HOME").getOrElse("."))
+      new File(sys.env.getOrElse("SPARK_HOME", "."))
     }
 
   var workDir: File = null
@@ -159,7 +159,8 @@ private[deploy] class Worker(
 
   private var connectionAttemptCount = 0
 
-  private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
+  private val metricsSystem =
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.WORKER, conf, securityMgr)
   private val workerSource = new WorkerSource(this)
 
   val reverseProxy = conf.get(UI_REVERSE_PROXY)

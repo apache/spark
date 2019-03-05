@@ -171,6 +171,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val OPTIMIZER_INSET_SWITCH_THRESHOLD =
+    buildConf("spark.sql.optimizer.inSetSwitchThreshold")
+      .internal()
+      .doc("Configures the max set size in InSet for which Spark will generate code with " +
+        "switch statements. This is applicable only to bytes, shorts, ints, dates.")
+      .intConf
+      .checkValue(threshold => threshold >= 0 && threshold <= 600, "The max set size " +
+        "for using switch statements in InSet must be non-negative and less than or equal to 600")
+      .createWithDefault(400)
+
   val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -1690,11 +1700,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val TIMESTAMP_EXTERNAL_TYPE = buildConf("spark.sql.catalyst.timestampType")
-    .doc("Java class to/from which an instance of TimestampType is converted.")
-    .stringConf
-    .checkValues(Set("Timestamp", "Instant"))
-    .createWithDefault("Timestamp")
+  val DATETIME_JAVA8API_EANBLED = buildConf("spark.sql.datetime.java8API.enabled")
+    .doc("If the configuration property is set to true, java.time.Instant and " +
+      "java.time.LocalDate classes of Java 8 API are used as external types for " +
+      "Catalyst's TimestampType and DateType. If it is set to false, java.sql.Timestamp " +
+      "and java.sql.Date are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -1722,6 +1734,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
+
+  def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
   def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
 
@@ -1882,7 +1896,7 @@ class SQLConf extends Serializable with Logging {
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
-  def timestampExternalType: String = getConf(TIMESTAMP_EXTERNAL_TYPE)
+  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_EANBLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

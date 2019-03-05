@@ -163,7 +163,7 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.9.8</fasterxml.jackson.version>
     <snappy.version>1.1.7.1</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
@@ -179,7 +179,7 @@
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
-    <libthrift.version>0.9.3</libthrift.version>
+    <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
@@ -415,6 +415,21 @@
         <artifactId>jaxb-runtime</artifactId>
         <version>2.3.2</version>
         <scope>runtime</scope>
+        <exclusions>
+          <!-- for now, we only write XML in PMML export, and these can be excluded -->
+          <exclusion>
+            <groupId>com.sun.xml.fastinfoset</groupId>
+            <artifactId>FastInfoset</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>txw2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jvnet.staxex</groupId>
+            <artifactId>stax-ex</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -1930,7 +1945,7 @@
       <dependency>
         <groupId>org.apache.thrift</groupId>
         <artifactId>libfb303</artifactId>
-        <version>${libthrift.version}</version>
+        <version>0.9.3</version>
         <exclusions>
           <exclusion>
             <groupId>org.slf4j</groupId>

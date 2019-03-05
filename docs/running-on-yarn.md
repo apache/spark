@@ -463,6 +463,13 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.exclude.nodes</code></td>
+  <td>(none)</td>
+  <td>
+  Comma-separated list of YARN node names which are excluded from resource allocation.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.metrics.namespace</code></td>
   <td>(none)</td>
   <td>

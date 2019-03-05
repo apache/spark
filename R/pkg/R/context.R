@@ -29,7 +29,7 @@ getMinPartitions <- function(sc, minPartitions) {
 #'
 #' This function reads a text file from HDFS, a local file system (available on all
 #' nodes), or any Hadoop-supported file system URI, and creates an
-#' RDD of strings from it.
+#' RDD of strings from it. The text files must be encoded as UTF-8.
 #'
 #' @param sc SparkContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
