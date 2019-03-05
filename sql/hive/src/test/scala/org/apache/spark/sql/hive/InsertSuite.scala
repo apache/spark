@@ -731,6 +731,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   test("insert overwrite to not exists dir will lead to expected dir is a file indeed.") {
+    val testMaster = System.getProperty("spark.sql.test.master")
+    logWarning(s"Unit test master is $testMaster")
     withTempDir { dir =>
       val path = dir.toURI.getPath
       val notExistsPath = s"$path/noexistdir"
