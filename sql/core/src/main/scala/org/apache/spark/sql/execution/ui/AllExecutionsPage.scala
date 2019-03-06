@@ -158,7 +158,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean): Seq[Node] = {
 
-    val parameterOtherTable = request.getParameterMap().asScala.map { case (name, vals) =>
+    val parameterOtherTable = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith(executionTag)).map { case (name, vals) =>
       name + "=" + vals(0)
     }
 
