@@ -336,7 +336,6 @@ class SQLAppStatusListener(
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
       exec.write(kvstore, now)
-      // remove live data corresponding to the exec, once all the events finished.
       removeStaleMetricsData(exec)
       liveExecutions.remove(exec.executionId)
     } else if (force) {
