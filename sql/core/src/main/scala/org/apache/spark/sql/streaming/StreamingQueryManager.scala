@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
@@ -57,6 +58,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
+
+  sparkSession.sparkContext.addStopHook(stopActiveQueries)
 
   try {
     sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
@@ -366,6 +369,20 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         throw e
     }
     query
+  }
+
+  /**
+   * Stops active streaming queries
+   */
+  private[sql] def stopActiveQueries(): Unit = {
+    active.foreach { query =>
+      try {
+        query.stop()
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Exception while stopping query ${query.id}", e)
+      }
+    }
   }
 
   /** Notify (by the StreamingQuery) that the query has been terminated */

@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
+import java.util.{Arrays, Collections, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
@@ -28,6 +28,7 @@ import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
@@ -83,6 +84,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val startTime = System.currentTimeMillis()
 
+  private[spark] val stopping: AtomicBoolean = new AtomicBoolean(false)
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   private[spark] def assertNotStopped(): Unit = {
@@ -1848,6 +1850,15 @@ class SparkContext(config: SparkConf) extends Logging {
     }.start()
   }
 
+  private val stopHooks = Collections.synchronizedList(new java.util.ArrayList[() => Unit]())
+
+  /**
+   * Adds a hook that is invoked when the spark context is about to be stopped
+   */
+  private[spark] def addStopHook(hook: () => Unit): Unit = {
+    stopHooks.add(hook)
+  }
+
   /**
    * Shut down the SparkContext.
    */
@@ -1856,9 +1867,22 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
-    // Still track the stopped variable for use elsewhere in the code.
+    if (!stopping.compareAndSet(false, true)) {
+      if (stopped.get()) {
+        logInfo("SparkContext already stopped.")
+      } else {
+        logInfo("SparkContext is being stopped.")
+      }
+      return
+    }
+    stopHooks.synchronized {
+      stopHooks.forEach {
+        hook => Try(Utils.logUncaughtExceptions(hook()))
+      }
+    }
     if (!stopped.compareAndSet(false, true)) {
-      logInfo("SparkContext already stopped.")
+      // this should not happen
+      logError("SparkContext already stopped.")
       return
     }
     if (_shutdownHookRef != null) {

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -84,8 +84,6 @@ class SparkSession private(
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
-
-  private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   /**
    * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
@@ -725,12 +723,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def stop(): Unit = {
-    if (stopped.compareAndSet(false, true)) {
-      stopStreamingQueries()
-      sparkContext.stop()
-    } else {
-      logInfo("SparkSession already stopped.")
-    }
+    sparkContext.stop()
   }
 
   /**
@@ -747,22 +740,6 @@ class SparkSession private(
    */
   protected[sql] def parseDataType(dataTypeString: String): DataType = {
     DataType.fromJson(dataTypeString)
-  }
-
-  /**
-   * Stops all active streaming queries
-   */
-  private def stopStreamingQueries(): Unit = {
-    if (!sparkContext.isStopped) {
-      streams.active.foreach { query =>
-        try {
-          query.stop()
-        } catch {
-          case NonFatal(e) =>
-            logError(s"Exception while stopping query ${query.id}", e)
-        }
-      }
-    }
   }
 
   /**
