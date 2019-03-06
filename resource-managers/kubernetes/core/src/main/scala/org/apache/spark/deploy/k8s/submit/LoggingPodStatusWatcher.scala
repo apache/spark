@@ -20,7 +20,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
+import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod}
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 
@@ -174,7 +174,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
         }.getOrElse(Seq(("Container state", "N/A")))
   }
 
-  private def formatTime(time: Time): String = {
-    if (time != null) time.getTime else "N/A"
+  private def formatTime(time: String): String = {
+    if (time != null ||  time != "") time else "N/A"
   }
 }
