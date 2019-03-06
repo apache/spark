@@ -373,6 +373,12 @@ class RankingMetrics(JavaModelWrapper):
     0.33...
     >>> metrics.ndcgAt(10)
     0.48...
+    >>> metrics.recallAt(1)
+    0.06...
+    >>> metrics.recallAt(5)
+    0.35...
+    >>> metrics.recallAt(15)
+    0.66...
 
     .. versionadded:: 1.4.0
     """
@@ -421,6 +427,20 @@ class RankingMetrics(JavaModelWrapper):
         a log warning.
         """
         return self.call("ndcgAt", int(k))
+
+    @since('3.0.0')
+    def recallAt(self, k):
+        """
+        Compute the average recall of all the queries, truncated at ranking position k.
+
+        If for a query, the ranking algorithm returns n results, the recall value
+        will be computed as #(relevant items retrieved) / #(ground truth set).
+        This formula also applies when the size of the ground truth set is less than k.
+
+        If a query has an empty ground truth set, zero will be used as recall together
+        with a log warning.
+        """
+        return self.call("recallAt", int(k))
 
 
 class MultilabelMetrics(JavaModelWrapper):
