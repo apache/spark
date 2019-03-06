@@ -127,12 +127,12 @@ class ExternalShuffleServiceDbSuite extends ShuffleSuite with BeforeAndAfterAll 
       blockHandler = externalShuffleService.getBlockHandler
       blockResolver = blockHandler.getBlockResolver
 
-      val error = intercept[RuntimeException] {
-        val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
-        val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
-        block0Stream.close()
-        assert(sortBlock0 == block0)
-      }.getMessage
+    val error = intercept[RuntimeException] {
+      val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
+      val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
+      block0Stream.close()
+      assert(sortBlock0 == block0)
+    }.getMessage
 
       assert(error.contains("not registered"))
     } finally {
