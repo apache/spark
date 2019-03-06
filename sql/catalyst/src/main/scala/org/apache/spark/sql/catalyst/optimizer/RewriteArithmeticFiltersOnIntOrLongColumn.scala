@@ -46,11 +46,11 @@ object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f: Filter =>
       f transformExpressionsUp {
-        case e @ BinaryComparison(left: BinaryArithmetic, right: Literal)
-            if isDataTypeSafe(left.dataType) =>
+        case e @ BinaryComparison(left: BinaryArithmetic, right: Expression)
+            if right.foldable && isDataTypeSafe(left.dataType) =>
           transformLeft(e, left, right)
-        case e @ BinaryComparison(left: Literal, right: BinaryArithmetic)
-            if isDataTypeSafe(right.dataType) =>
+        case e @ BinaryComparison(left: Expression, right: BinaryArithmetic)
+            if left.foldable && isDataTypeSafe(right.dataType) =>
           transformRight(e, left, right)
       }
   }
@@ -58,33 +58,33 @@ object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with 
   private def transformLeft(
       bc: BinaryComparison,
       left: BinaryArithmetic,
-      right: Literal): Expression = {
+      right: Expression): Expression = {
     left match {
-      case Add(ar: AttributeReference, lit: Literal) if isOptSafe(Subtract(right, lit)) =>
-        bc.makeCopy(Array(ar, Subtract(right, lit)))
-      case Add(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(right, lit)) =>
-        bc.makeCopy(Array(ar, Subtract(right, lit)))
-      case Subtract(ar: AttributeReference, lit: Literal) if isOptSafe(Add(right, lit)) =>
-        bc.makeCopy(Array(ar, Add(right, lit)))
-      case Subtract(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(lit, right)) =>
-        bc.makeCopy(Array(Subtract(lit, right), ar))
+      case Add(ar: AttributeReference, e) if e.foldable && isOptSafe(Subtract(right, e)) =>
+        bc.makeCopy(Array(ar, Subtract(right, e)))
+      case Add(e, ar: AttributeReference) if e.foldable && isOptSafe(Subtract(right, e)) =>
+        bc.makeCopy(Array(ar, Subtract(right, e)))
+      case Subtract(ar: AttributeReference, e) if e.foldable && isOptSafe(Add(right, e)) =>
+        bc.makeCopy(Array(ar, Add(right, e)))
+      case Subtract(e, ar: AttributeReference) if e.foldable && isOptSafe(Subtract(e, right)) =>
+        bc.makeCopy(Array(Subtract(e, right), ar))
       case _ => bc
     }
   }
 
   private def transformRight(
       bc: BinaryComparison,
-      left: Literal,
+      left: Expression,
       right: BinaryArithmetic): Expression = {
     right match {
-      case Add(ar: AttributeReference, lit: Literal) if isOptSafe(Subtract(left, lit)) =>
-        bc.makeCopy(Array(Subtract(left, lit), ar))
-      case Add(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(left, lit)) =>
-        bc.makeCopy(Array(Subtract(left, lit), ar))
-      case Subtract(ar: AttributeReference, lit: Literal) if isOptSafe(Add(left, lit)) =>
-        bc.makeCopy(Array(Add(left, lit), ar))
-      case Subtract(lit: Literal, ar: AttributeReference) if isOptSafe(Subtract(lit, left)) =>
-        bc.makeCopy(Array(ar, Subtract(lit, left)))
+      case Add(ar: AttributeReference, e) if e.foldable && isOptSafe(Subtract(left, e)) =>
+        bc.makeCopy(Array(Subtract(left, e), ar))
+      case Add(e, ar: AttributeReference) if e.foldable && isOptSafe(Subtract(left, e)) =>
+        bc.makeCopy(Array(Subtract(left, e), ar))
+      case Subtract(ar: AttributeReference, e) if e.foldable && isOptSafe(Add(left, e)) =>
+        bc.makeCopy(Array(Add(left, e), ar))
+      case Subtract(e, ar: AttributeReference) if e.foldable && isOptSafe(Subtract(e, left)) =>
+        bc.makeCopy(Array(ar, Subtract(e, left)))
       case _ => bc
     }
   }
@@ -99,7 +99,7 @@ object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with 
     val rightVal = e.right.eval(EmptyRow)
 
     e match {
-      case Add(_: Literal, _: Literal) =>
+      case Add(_, _) =>
         e.dataType match {
           case IntegerType =>
             isAddSafe(leftVal, rightVal, Int.MinValue, Int.MaxValue)
@@ -108,7 +108,7 @@ object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with 
           case _ => false
         }
 
-      case Subtract(_: Literal, _: Literal) =>
+      case Subtract(_, _) =>
         e.dataType match {
           case IntegerType =>
             isSubtractSafe(leftVal, rightVal, Int.MinValue, Int.MaxValue)
