@@ -102,16 +102,16 @@ class Window(object):
         current row starts or ends. For instance, given a row based sliding frame with a lower bound
         offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
         index 4 to index 6.
-        """
-        # from pyspark.sql import Window
-        # from pyspark.sql import functions as func
-        # from pyspark.sql import SQLContext
-        # sc = SparkContext.getOrCreate()
-        # sqlContext = SQLContext(sc)
-        # tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
-        # df = sqlContext.createDataFrame(tup, ["id", "category"])
-        # window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
-        # df.withColumn("sum", func.sum("id").over(window)).show()
+
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
 
         # id category sum
 
@@ -122,7 +122,6 @@ class Window(object):
         # 1       a    3
         # 2       a    2
 
-        """
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
@@ -163,16 +162,15 @@ class Window(object):
         unbounded, because no value modification is needed, in this case multiple and non-numeric
         ORDER BY expression are allowed.
 
-        """
-        # from pyspark.sql import Window
-        # from pyspark.sql import functions as func
-        # from pyspark.sql import SQLContext
-        # sc = SparkContext.getOrCreate()
-        # sqlContext = SQLContext(sc)
-        # tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
-        # df = sqlContext.createDataFrame(tup, ["id", "category"])
-        # window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
-        # df.withColumn("sum", func.sum("id").over(window)).show()
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
 
         # id category sum
 
@@ -183,7 +181,6 @@ class Window(object):
         # 1       a    4
         # 2       a    2
 
-        """
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
