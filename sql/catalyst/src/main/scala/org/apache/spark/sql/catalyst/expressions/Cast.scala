@@ -233,7 +233,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
   private lazy val dateFormatter = DateFormatter()
-  private lazy val timestampFormatter = TimestampFormatter(timeZone)
+  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(timeZone)
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
