@@ -28,7 +28,7 @@ class PropertyGraphReadWrite extends SparkFunSuite with SharedCypherContext with
   private lazy val nodeData: DataFrame = spark.createDataFrame(Seq(id(0) -> "Alice", id(1) -> "Bob")).toDF("id", "name")
   private lazy val relationshipData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), id(0), id(1)))).toDF("id", "source", "target")
   private lazy val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"))
-  private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame(df = relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
+  private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame(relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
 
   test("write a graph with orc") {
     cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame)).write.orc(basePath)
