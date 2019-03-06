@@ -99,15 +99,7 @@ object DateTimeUtils {
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
-    val ts = toJavaTimestamp(us)
-    val timestampString = ts.toString
-    val formatted = tf.format(us)
-
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
-    } else {
-      formatted
-    }
+    tf.format(us)
   }
 
   /**

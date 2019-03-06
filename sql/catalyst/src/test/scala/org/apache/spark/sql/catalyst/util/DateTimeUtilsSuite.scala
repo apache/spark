@@ -33,7 +33,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   private def defaultTz = DateTimeUtils.defaultTimeZone()
 
   test("nanoseconds truncation") {
-    val tf = TimestampFormatter(DateTimeUtils.defaultTimeZone())
+    val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone())
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String) {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultTz)
