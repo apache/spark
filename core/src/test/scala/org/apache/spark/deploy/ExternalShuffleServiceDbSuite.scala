@@ -20,15 +20,13 @@ package org.apache.spark.deploy
 import java.io._
 import java.nio.charset.StandardCharsets
 
-import com.google.common.io.{CharStreams, Closeables, Files}
+import com.google.common.io.CharStreams
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SecurityManager, ShuffleSuite, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, ShuffleSuite, SparkConf}
 import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.network.shuffle.TestShuffleDataContext
 import org.apache.spark.util.Utils
-
 
 /**
  * This suite gets BlockData when the ExternalShuffleService is restarted
@@ -45,7 +43,7 @@ class ExternalShuffleServiceDbSuite extends ShuffleSuite with BeforeAndAfterAll 
 
   var securityManager: SecurityManager = _
   var externalShuffleService: ExternalShuffleService = _
-  var bockHandler: ExternalShuffleBlockHandler = _
+  var blockHandler: ExternalShuffleBlockHandler = _
   var blockResolver: ExternalShuffleBlockResolver = _
 
   override def beforeAll() {
@@ -74,120 +72,73 @@ class ExternalShuffleServiceDbSuite extends ShuffleSuite with BeforeAndAfterAll 
   }
 
   def registerExecutor(): Unit = {
-    sparkConf.set("spark.shuffle.service.db.enabled", "true")
-    externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
+    try {
+      sparkConf.set("spark.shuffle.service.db.enabled", "true")
+      externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
 
-    // external Shuffle Service start
-    externalShuffleService.start()
-    bockHandler = externalShuffleService.getBlockHandler
-    blockResolver = bockHandler.getBlockResolver
-    blockResolver.registerExecutor("app0", "exec0", dataContext.createExecutorInfo(SORT_MANAGER))
-    blockResolver.closeForTest()
-    // external Shuffle Service stop
-    externalShuffleService.stop()
+      // external Shuffle Service start
+      externalShuffleService.start()
+      blockHandler = externalShuffleService.getBlockHandler
+      blockResolver = blockHandler.getBlockResolver
+      blockResolver.registerExecutor("app0", "exec0", dataContext.createExecutorInfo(SORT_MANAGER))
+    } finally {
+      blockHandler.close()
+      // external Shuffle Service stop
+      externalShuffleService.stop()
+    }
   }
 
-  // This test getBlockData will be passed when the external shuffle service is restarted.
-  test("restart External Shuffle Service With InitRegisteredExecutorsDB") {
-    sparkConf.set("spark.shuffle.service.db.enabled", "true")
-    externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
-    // externalShuffleService restart
-    externalShuffleService.start()
-    bockHandler = externalShuffleService.getBlockHandler
-    blockResolver = bockHandler.getBlockResolver
+  // The beforeAll ensures the shuffle data was already written, and then
+  // the shuffle service was stopped. Here we restart the shuffle service
+  // and make we can read the shuffle data
+  test("Recover shuffle data with spark.shuffle.service.db.enabled=true after " +
+    "shuffle service restart") {
+    try {
+      sparkConf.set("spark.shuffle.service.db.enabled", "true")
+      externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
+      // externalShuffleService restart
+      externalShuffleService.start()
+      blockHandler = externalShuffleService.getBlockHandler
+      blockResolver = blockHandler.getBlockResolver
 
-    val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
-    val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
-    block0Stream.close()
-    assert(sortBlock0 == block0)
-    // pass
-    blockResolver.closeForTest()
-    // externalShuffleService stop
-    externalShuffleService.stop()
-
-  }
-
-  // This test getBlockData will't be passed when the external shuffle service is restarted.
-  test("restart External Shuffle Service Without InitRegisteredExecutorsDB") {
-    sparkConf.set("spark.shuffle.service.db.enabled", "false")
-    externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
-    // externalShuffleService restart
-    externalShuffleService.start()
-    bockHandler = externalShuffleService.getBlockHandler
-    blockResolver = bockHandler.getBlockResolver
-
-    val error = intercept[RuntimeException] {
       val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
       val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
       block0Stream.close()
       assert(sortBlock0 == block0)
-    }.getMessage
+      // pass
+    } finally {
+      blockHandler.close()
+      // externalShuffleService stop
+      externalShuffleService.stop()
+    }
 
-    assert(error.contains("not registered"))
-    blockResolver.closeForTest()
-    // externalShuffleService stop
-    externalShuffleService.stop()
   }
 
-  /**
-   * Manages some sort-shuffle data, including the creation
-   * and cleanup of directories that can be read by the
-   *
-   * Copy from org.apache.spark.network.shuffle.TestShuffleDataContext
-   */
-  class TestShuffleDataContext(val numLocalDirs: Int, val subDirsPerLocalDir: Int) {
-    val localDirs: Array[String] = new Array[String](numLocalDirs)
+  // The beforeAll ensures the shuffle data was already written, and then
+  // the shuffle service was stopped. Here we restart the shuffle service ,
+  // but we can't read the shuffle data
+  test("Can't recover shuffle data with spark.shuffle.service.db.enabled=false after" +
+    " shuffle service restart") {
+    try {
+      sparkConf.set("spark.shuffle.service.db.enabled", "false")
+      externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
+      // externalShuffleService restart
+      externalShuffleService.start()
+      blockHandler = externalShuffleService.getBlockHandler
+      blockResolver = blockHandler.getBlockResolver
 
-    def create(): Unit = {
-      for (i <- 0 to numLocalDirs - 1) {
-        localDirs(i) = Files.createTempDir().getAbsolutePath()
-        for (p <- 0 to subDirsPerLocalDir - 1) {
-          new File(localDirs(i), "%02x".format(p)).mkdirs()
-        }
-      }
-    }
+      val error = intercept[RuntimeException] {
+        val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
+        val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
+        block0Stream.close()
+        assert(sortBlock0 == block0)
+      }.getMessage
 
-    def cleanup(): Unit = {
-      for (i <- 0 to numLocalDirs - 1) {
-        try {
-          JavaUtils.deleteRecursively(new File(localDirs(i)))
-        }
-        catch {
-          case e: IOException =>
-            logError("Unable to cleanup localDir = " + localDirs(i), e)
-        }
-      }
-    }
-
-    // Creates reducer blocks in a sort-based data format within our local dirs.
-    def insertSortShuffleData(shuffleId: Int, mapId: Int, blocks: Array[Array[Byte]]): Unit = {
-      val blockId = "shuffle_" + shuffleId + "_" + mapId + "_0"
-      var dataStream: FileOutputStream = null
-      var indexStream: DataOutputStream = null
-      var suppressExceptionsDuringClose = true
-      try {
-        dataStream = new FileOutputStream(ExternalShuffleBlockResolver.getFileForTest(localDirs,
-          subDirsPerLocalDir, blockId + ".data"))
-        indexStream = new DataOutputStream(new FileOutputStream(ExternalShuffleBlockResolver
-          .getFileForTest(localDirs, subDirsPerLocalDir, blockId + ".index")))
-        var offset = 0
-        indexStream.writeLong(offset)
-        for (block <- blocks) {
-          offset += block.length
-          dataStream.write(block)
-          indexStream.writeLong(offset)
-        }
-        suppressExceptionsDuringClose = false
-      } finally {
-        Closeables.close(dataStream, suppressExceptionsDuringClose)
-        Closeables.close(indexStream, suppressExceptionsDuringClose)
-      }
-    }
-
-    // Creates an ExecutorShuffleInfo object based on the given shuffle manager
-    // which targets this context's directories.
-    def createExecutorInfo(shuffleManager: String): ExecutorShuffleInfo = {
-      new ExecutorShuffleInfo(localDirs, subDirsPerLocalDir, shuffleManager)
+      assert(error.contains("not registered"))
+    } finally {
+      blockHandler.close()
+      // externalShuffleService stop
+      externalShuffleService.stop()
     }
   }
 }
