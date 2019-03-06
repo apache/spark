@@ -17,17 +17,13 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.annotation.Experimental;
 
-/**
- * An empty mix-in interface for {@link Table}, to indicate this table supports batch write.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap)} must return a
- * {@link WriteBuilder} with {@link WriteBuilder#buildForBatch()} implemented.
- * </p>
- */
-@Evolving
-public interface SupportsBatchWrite extends SupportsWrite {}
+@Experimental
+public enum TableCapability {
+  BATCH_READ,
+  BATCH_WRITE,
+  TRUNCATE,
+  OVERWRITE_BY_FILTER,
+  OVERWRITE_DYNAMIC
+}

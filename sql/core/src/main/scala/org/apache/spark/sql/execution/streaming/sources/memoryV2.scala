@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util
+import java.util.Collections
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -31,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
-import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
+import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, TableCapability}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
@@ -46,6 +48,8 @@ class MemorySinkV2 extends SupportsStreamingWrite with MemorySinkBase with Loggi
   override def name(): String = "MemorySinkV2"
 
   override def schema(): StructType = StructType(Nil)
+
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {

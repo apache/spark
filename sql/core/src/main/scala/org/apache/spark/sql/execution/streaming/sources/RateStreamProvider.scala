@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util
+import java.util.Collections
+
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
@@ -83,6 +86,8 @@ class RateStreamTable(
   }
 
   override def schema(): StructType = RateStreamProvider.SCHEMA
+
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
     override def build(): Scan = new Scan {
