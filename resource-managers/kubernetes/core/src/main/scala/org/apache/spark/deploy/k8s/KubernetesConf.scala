@@ -190,8 +190,8 @@ private[spark] object KubernetesConf {
   }
 
   def getResourceNamePrefix(appName: String): String = {
-    val launchTime = System.currentTimeMillis()
-    s"$appName-$launchTime"
+    val id = KubernetesUtils.uniqueID()
+    s"$appName-$id"
       .trim
       .toLowerCase(Locale.ROOT)
       .replaceAll("\\s+", "-")

@@ -28,6 +28,7 @@ ARG spark_uid=185
 
 RUN set -ex && \
     apk upgrade --no-cache && \
+    ln -s /lib /lib64 && \
     apk add --no-cache bash tini libc6-compat linux-pam krb5 krb5-libs && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \

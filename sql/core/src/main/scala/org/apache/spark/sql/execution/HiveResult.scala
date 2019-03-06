@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -35,7 +35,7 @@ object HiveResult {
    * `SparkSQLDriver` for CLI applications.
    */
   def hiveResultString(executedPlan: SparkPlan): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(desc: DescribeTableCommand) =>
+    case ExecutedCommandExec(_: DescribeCommandBase) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
       executedPlan.executeCollectPublic().map {

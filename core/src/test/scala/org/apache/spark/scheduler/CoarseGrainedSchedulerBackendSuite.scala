@@ -22,11 +22,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration._
 
 import org.scalatest.concurrent.Eventually
+import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.internal.config.CPUS_PER_TASK
+import org.apache.spark.internal.config.{CPUS_PER_TASK, UI}
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext
@@ -118,6 +122,56 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     } finally {
       sc.removeSparkListener(listener)
     }
+  }
+
+  // Here we just have test for one happy case instead of all cases: other cases are covered in
+  // FsHistoryProviderSuite.
+  test("custom log url for Spark UI is applied") {
+    val customExecutorLogUrl = "http://newhost:9999/logs/clusters/{{CLUSTER_ID}}/users/{{USER}}" +
+      "/containers/{{CONTAINER_ID}}/{{FILE_NAME}}"
+
+    val conf = new SparkConf()
+      .set(UI.CUSTOM_EXECUTOR_LOG_URL, customExecutorLogUrl)
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val mockEndpointRef = mock[RpcEndpointRef]
+    val mockAddress = mock[RpcAddress]
+
+    val logUrls = Map(
+      "stdout" -> "http://oldhost:8888/logs/dummy/stdout",
+      "stderr" -> "http://oldhost:8888/logs/dummy/stderr")
+    val attributes = Map(
+      "CLUSTER_ID" -> "cl1",
+      "USER" -> "dummy",
+      "CONTAINER_ID" -> "container1",
+      "LOG_FILES" -> "stdout,stderr")
+    val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
+      s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
+
+    var executorAddedCount: Int = 0
+    val listener = new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        executorAddedCount += 1
+        assert(executorAdded.executorInfo.logUrlMap === Seq("stdout", "stderr").map { file =>
+          file -> (baseUrl + s"/$file")
+        }.toMap)
+      }
+    }
+
+    sc.addSparkListener(listener)
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(executorAddedCount === 3)
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {

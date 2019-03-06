@@ -22,8 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite, SupportsOutputMode}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -42,9 +41,9 @@ private[noop] object NoopTable extends Table with SupportsBatchWrite with Suppor
 }
 
 private[noop] object NoopWriteBuilder extends WriteBuilder
-  with SupportsSaveMode with SupportsOutputMode {
+  with SupportsSaveMode with SupportsTruncate {
   override def mode(mode: SaveMode): WriteBuilder = this
-  override def outputMode(mode: OutputMode): WriteBuilder = this
+  override def truncate(): WriteBuilder = this
   override def buildForBatch(): BatchWrite = NoopBatchWrite
   override def buildForStreaming(): StreamingWrite = NoopStreamingWrite
 }

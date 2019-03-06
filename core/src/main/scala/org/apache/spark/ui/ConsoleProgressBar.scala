@@ -39,11 +39,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   private val firstDelayMSec = 500L
 
   // The width of terminal
-  private val TerminalWidth = if (!sys.env.getOrElse("COLUMNS", "").isEmpty) {
-    sys.env.get("COLUMNS").get.toInt
-  } else {
-    80
-  }
+  private val TerminalWidth = sys.env.getOrElse("COLUMNS", "80").toInt
 
   private var lastFinishTime = 0L
   private var lastUpdateTime = 0L

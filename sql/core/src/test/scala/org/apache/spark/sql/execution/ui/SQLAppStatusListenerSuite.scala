@@ -140,7 +140,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
         // TODO: this is brittle. There is no requirement that the actual string needs to start
         // with the accumulator value.
         assert(actual.contains(id))
-        val v = actual.get(id).get.trim
+        val v = actual(id).trim
         assert(v.startsWith(value.toString), s"Wrong value for accumulator $id")
       }
     }

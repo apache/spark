@@ -629,6 +629,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   // Java:
    *   df.write().text("/path/to/output")
    * }}}
+   * The text files will be encoded as UTF-8.
    *
    * You can set the following option(s) for writing text files:
    * <ul>
