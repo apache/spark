@@ -79,7 +79,6 @@ object BaseLimitExec {
  * [[LocalLimitExec]] and [[GlobalLimitExec]].
  */
 trait BaseLimitExec extends LimitExec with CodegenSupport {
-  val limit: Int
   override def output: Seq[Attribute] = child.output
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
