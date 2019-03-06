@@ -711,6 +711,16 @@ private[hive] class HiveClientImpl(
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
     if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
+
+    def runProcessor(proc: CommandProcessor, tokens: Array[String], cmd_1: String): Seq[String] = {
+      if (state.out != null) {
+        // scalastyle:off println
+        state.out.println(tokens(0) + " " + cmd_1)
+        // scalastyle:on println
+      }
+      Seq(proc.run(cmd_1).getResponseCode.toString)
+    }
+
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -718,7 +728,9 @@ private[hive] class HiveClientImpl(
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc = shim.getCommandProcessor(tokens(0), conf)
       proc match {
-        case driver: Driver =>
+        // HIVE-18238(Hive 3.0.0) changed the close() function return type.
+        // This change is not compatible with the built-in Hive.
+        case driver: Driver if version != hive.v3_1 =>
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
@@ -733,13 +745,17 @@ private[hive] class HiveClientImpl(
           CommandProcessorFactory.clean(conf)
           results
 
-        case _ =>
-          if (state.out != null) {
-            // scalastyle:off println
-            state.out.println(tokens(0) + " " + cmd_1)
-            // scalastyle:on println
-          }
-          Seq(proc.run(cmd_1).getResponseCode.toString)
+        case _: SetProcessor | _: ResetProcessor =>
+          runProcessor(proc, tokens, cmd_1)
+        case _: AddResourceProcessor | _: DeleteResourceProcessor | _: ListResourceProcessor =>
+          runProcessor(proc, tokens, cmd_1)
+        case _: CompileProcessor | _: CryptoProcessor | _: DfsProcessor | _: ReloadProcessor =>
+          runProcessor(proc, tokens, cmd_1)
+
+        case unsupportedProcessor =>
+          val className = unsupportedProcessor.getClass.getCanonicalName
+          throw new AnalysisException(
+            s"Dose not support Hive ${version.fullVersion} processor: $className")
       }
     } catch {
       case e: Exception =>
