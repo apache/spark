@@ -240,4 +240,15 @@ class RewriteArithmeticFiltersOnIntOrLongColumnSuite extends PlanTest {
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
+
+  test("test of int: 2 - a != 8") {
+    val query = testRelation
+      .where(Subtract(Literal(2), columnA) != Literal(8))
+
+    val correctAnswer = testRelation
+      .where(Literal(-6) != columnA)
+      .analyze
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer)
+  }
 }

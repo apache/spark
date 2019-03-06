@@ -38,6 +38,9 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
  * {{{
  *   SELECT * FROM table WHERE i = 2
  * }}}
+ * The arithmetic operation supports `Add` and `Subtract`. The comparision supports
+ * '=', '>=', '<=', '>', '<', '!='. It only supports type of `INT` and `LONG`,
+ * it doesn't support `FLOAT` or `DOUBLE` for precision issues.
  */
 object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
