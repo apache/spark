@@ -765,6 +765,8 @@ number
 //
 // Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
 // value. In this case, you must add a token `NEWTOKEN` in both `ansiNonReserved` and `nonReserved`.
+//
+// It is recommended to list them in alphabetical order.
 
 // The list of the reserved keywords when `spark.sql.parser.ansi.enabled` is true. Currently, we only reserve
 // the ANSI keywords that almost all the ANSI SQL standards (SQL-92, SQL-99, SQL-2003, SQL-2008, SQL-2011,
@@ -772,7 +774,7 @@ number
 ansiReserved
     : ALL | AND | ANTI | ANY | AS | AUTHORIZATION | BOTH | CASE | CAST | CHECK | COLLATE | COLUMN | CONSTRAINT | CREATE
     | CROSS | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP | CURRENT_USER | DISTINCT | ELSE | END | EXCEPT | FALSE
-    | FETCH | FOR | FOREIGN | FROM | FULL | GRANT | GROUP | HAVING | IN | INNER | INTERSECT | INTO | JOIN | IS
+    | FETCH | FOR | FOREIGN | FROM | FULL | GRANT | GROUP | HAVING | IN | INNER | INTERSECT | INTO | IS | JOIN
     | LEADING | LEFT | NATURAL | NOT | NULL | ON | ONLY | OR | ORDER | OUTER | OVERLAPS | PRIMARY | REFERENCES | RIGHT
     | SELECT | SEMI | SESSION_USER | SETMINUS | SOME | TABLE | THEN | TO | TRAILING | UNION | UNIQUE | USER | USING
     | WHEN | WHERE | WITH
@@ -820,7 +822,7 @@ nonReserved
     | SELECT | SEPARATED | SERDE | SERDEPROPERTIES | SESSION_USER | SET | SETS | SHOW | SKEWED | SOME | SORT | SORTED
     | START | STATISTICS | STORED | STRATIFY | STRUCT | TABLE | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY
     | TERMINATED | THEN | TO | TOUCH | TRAILING | TRANSACTION | TRANSACTIONS | TRANSFORM | TRUE | TRUNCATE | UNARCHIVE
-    | UNBOUNDED | UNCACHE | UNLOCK | UNIQUE | UNSET | USE | USER | VALUES | VIEW | WHEN | WHERE | WINDOW | WITH
+    | UNBOUNDED | UNCACHE | UNIQUE | UNLOCK | UNSET | USE | USER | VALUES | VIEW | WHEN | WHERE | WINDOW | WITH
     ;
 
 SELECT: 'SELECT';
