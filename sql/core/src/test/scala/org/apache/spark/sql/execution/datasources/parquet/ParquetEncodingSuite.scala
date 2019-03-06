@@ -20,8 +20,12 @@ import java.time.{Duration, Period}
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
@@ -122,6 +126,42 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           assert(column.getUTF8String(3 * i + 2).toString == i.toString)
         }
         reader.close()
+      }
+    }
+  }
+
+  test("parquet v2 pages - delta encoding") {
+    val extraOptions = Map[String, String](
+      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false"
+    )
+
+    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+    withSQLConf(
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/test.parquet"
+        val data = (1 to 3).map { i =>
+          (i, i.toLong, Array[Byte](i.toByte), s"test_${i}")
+        }
+
+        spark.createDataFrame(data).write.options(extraOptions).mode("overwrite").parquet(path)
+
+        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+        val columnChunkMetadataList = blockMetadata.getColumns.asScala
+
+        // Verify that indeed delta encoding is used for each column
+        assert(columnChunkMetadataList.length === 4)
+        assert(columnChunkMetadataList(0).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        assert(columnChunkMetadataList(1).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        // Both fixed-length byte array and variable-length byte array (also called BINARY)
+        // are use DELTA_BYTE_ARRAY for encoding
+        assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+        assert(columnChunkMetadataList(3).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+
+        val actual = spark.read.parquet(path).collect()
+        assert(actual.sortBy(_.getInt(0)) === data.map(Row.fromTuple));
       }
     }
   }
