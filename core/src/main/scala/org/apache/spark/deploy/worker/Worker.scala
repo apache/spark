@@ -211,7 +211,7 @@ private[deploy] class Worker(
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
-    workerWebUiUrl = s"http://$publicAddress:${webUi.boundPort}"
+    workerWebUiUrl = s"${webUi.scheme}$publicAddress:${webUi.boundPort}"
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
@@ -528,6 +528,7 @@ private[deploy] class Worker(
             memory_,
             self,
             workerId,
+            webUi.scheme,
             host,
             webUi.boundPort,
             publicAddress,
