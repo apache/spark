@@ -22,7 +22,7 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.Schema
+import org.apache.avro.{AvroRuntimeException, Schema}
 import org.apache.avro.file.DataFileConstants._
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
@@ -36,6 +36,9 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
@@ -152,6 +155,7 @@ private[avro] class AvroFileFormat extends FileFormat
     val broadcastedConf =
       spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val parsedOptions = new AvroOptions(options, hadoopConf)
+    val mode = parsedOptions.parseMode
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
@@ -172,34 +176,56 @@ private[avro] class AvroFileFormat extends FileFormat
             DataFileReader.openReader(in, datumReader)
           } catch {
             case NonFatal(e) =>
-              logError("Exception while opening DataFileReader", e)
+              logError(s"Exception while opening DataFileReader for ${file.filePath}")
               in.close()
-              throw e
+              if (mode == FailFastMode) {
+                throw e
+              }
+              null
           }
         }
 
-        // Ensure that the reader is closed even if the task fails or doesn't consume the entire
-        // iterator of records.
-        Option(TaskContext.get()).foreach { taskContext =>
-          taskContext.addTaskCompletionListener[Unit] { _ =>
-            reader.close()
+        val errorRow: InternalRow = {
+          val cols = requiredSchema.fields.length
+          val e = new GenericRowWithSchema(Array.fill(cols)(null), requiredSchema)
+          RowEncoder(requiredSchema).toRow(e)
+        }
+
+        val deserializer = if (reader == null) {
+          null
+        } else {
+          // Ensure that the reader is closed even if the task fails or doesn't consume the entire
+          // iterator of records.
+          Option(TaskContext.get()).foreach { taskContext =>
+            taskContext.addTaskCompletionListener[Unit] { _ =>
+              reader.close()
+            }
+          }
+          reader.sync(file.start)
+          try {
+            new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
+          } catch {
+            case _: IncompatibleSchemaException if mode != FailFastMode => null
           }
         }
 
-        reader.sync(file.start)
         val stop = file.start + file.length
 
-        val deserializer =
-          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
-
-        new Iterator[InternalRow] {
+        val it = if (deserializer != null) new Iterator[InternalRow] {
           private[this] var completed = false
 
           override def hasNext: Boolean = {
             if (completed) {
               false
             } else {
-              val r = reader.hasNext && !reader.pastSync(stop)
+              val r = try {
+                reader.hasNext && !reader.pastSync(stop)
+              } catch {
+                case e: Exception if mode != FailFastMode =>
+                  // Conflate normal completion and data corruption. Either way nothing left!
+                  logError(s"Reader exception", e)
+                  false
+              }
               if (!r) {
                 reader.close()
                 completed = true
@@ -212,9 +238,23 @@ private[avro] class AvroFileFormat extends FileFormat
             if (!hasNext) {
               throw new NoSuchElementException("next on empty iterator")
             }
-            val record = reader.next()
-            deserializer.deserialize(record).asInstanceOf[InternalRow]
+            try {
+              val record = reader.next()
+              deserializer.deserialize(record).asInstanceOf[InternalRow]
+            } catch {
+              case _: IncompatibleSchemaException if mode != FailFastMode => errorRow
+              case _: AvroRuntimeException if mode != FailFastMode =>
+                completed = true
+                reader.close()
+                errorRow
+            }
           }
+        } else Iterator.fill[InternalRow](1)(errorRow)
+
+        if (mode == DropMalformedMode) {
+          it.withFilter(_ != null)
+        } else {
+          it
         }
       } else {
         Iterator.empty

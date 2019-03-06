@@ -20,7 +20,7 @@ package org.apache.spark.sql.avro
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -51,6 +51,9 @@ class AvroOptions(
    * See Avro spec for details: https://avro.apache.org/docs/1.8.2/spec.html#schema_record .
    */
   val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
+
+  val parseMode: ParseMode =
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 
   /**
    * The `ignoreExtension` option controls ignoring of files without `.avro` extensions in read.
