@@ -45,6 +45,7 @@ private[spark] object Constants {
   // Default and fixed ports
   val DEFAULT_DRIVER_PORT = 7078
   val DEFAULT_BLOCKMANAGER_PORT = 7079
+  val DEFAULT_UI_PORT = 4040
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
   val UI_PORT_NAME = "spark-ui"

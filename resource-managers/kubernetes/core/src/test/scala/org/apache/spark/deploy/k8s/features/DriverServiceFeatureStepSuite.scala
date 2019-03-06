@@ -38,10 +38,11 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     "label1key" -> "label1value",
     "label2key" -> "label2value")
 
-  test("Headless service has a port for the driver RPC and the block manager.") {
+  test("Headless service has a port for the driver RPC, the block manager and driver ui.") {
     val sparkConf = new SparkConf(false)
       .set(DRIVER_PORT, 9000)
       .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
+      .set(UI_PORT_NAME, "4040")
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       labels = DRIVER_LABELS)
@@ -56,6 +57,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     verifyService(
       9000,
       8080,
+      4040,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
       driverService)
   }
@@ -85,6 +87,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     verifyService(
       DEFAULT_DRIVER_PORT,
       DEFAULT_BLOCKMANAGER_PORT,
+      DEFAULT_UI_PORT,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
       resolvedService)
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
@@ -152,6 +155,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
   private def verifyService(
       driverPort: Int,
       blockManagerPort: Int,
+      drierUIPort: Int,
       expectedServiceName: String,
       service: Service): Unit = {
     assert(service.getMetadata.getName === expectedServiceName)
@@ -159,7 +163,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     DRIVER_LABELS.foreach { case (k, v) =>
       assert(service.getSpec.getSelector.get(k) === v)
     }
-    assert(service.getSpec.getPorts.size() === 2)
+    assert(service.getSpec.getPorts.size() === 3)
     val driverServicePorts = service.getSpec.getPorts.asScala
     assert(driverServicePorts.head.getName === DRIVER_PORT_NAME)
     assert(driverServicePorts.head.getPort.intValue() === driverPort)
@@ -167,5 +171,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(driverServicePorts(1).getName === BLOCK_MANAGER_PORT_NAME)
     assert(driverServicePorts(1).getPort.intValue() === blockManagerPort)
     assert(driverServicePorts(1).getTargetPort.getIntVal === blockManagerPort)
+    assert(driverServicePorts(2).getName === UI_PORT_NAME)
+    assert(driverServicePorts(2).getPort.intValue() === drierUIPort)
+    assert(driverServicePorts(2).getTargetPort.getIntVal === drierUIPort)
   }
 }
