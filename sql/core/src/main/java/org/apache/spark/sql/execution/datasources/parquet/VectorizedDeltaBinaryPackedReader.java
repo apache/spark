@@ -25,14 +25,16 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import java.io.IOException;
 
 /**
- * An implementation of the Parquet DELTA_BINARY_PACKED decoder that supports the vectorized interface.
+ * An implementation of the Parquet DELTA_BINARY_PACKED decoder
+ * that supports the vectorized interface.
  */
-public class VectorizedDeltaBinaryPackedReader extends ValuesReader implements VectorizedValuesReader {
-  private final DeltaBinaryPackingValuesReader deltaBinaryPackingValuesReader = new DeltaBinaryPackingValuesReader();
+public class VectorizedDeltaBinaryPackedReader extends ValuesReader
+    implements VectorizedValuesReader {
+  private final DeltaBinaryPackingValuesReader valuesReader = new DeltaBinaryPackingValuesReader();
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    deltaBinaryPackingValuesReader.initFromPage(valueCount, in);
+    valuesReader.initFromPage(valueCount, in);
   }
 
   @Override
@@ -62,15 +64,15 @@ public class VectorizedDeltaBinaryPackedReader extends ValuesReader implements V
 
   @Override
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
-    for (int i =0; i<total; i++) {
-      c.putInt(rowId + i, deltaBinaryPackingValuesReader.readInteger());
+    for (int i = 0; i < total; i++) {
+      c.putInt(rowId + i, valuesReader.readInteger());
     }
   }
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
-    for (int i =0; i<total; i++) {
-      c.putLong(rowId + i, deltaBinaryPackingValuesReader.readLong());
+    for (int i = 0; i < total; i++) {
+      c.putLong(rowId + i, valuesReader.readLong());
     }
   }
 
