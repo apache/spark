@@ -36,12 +36,12 @@ class PartitionReaderWithPartitionValues(
   // Note that we have to apply the converter even though `file.partitionValues` is empty.
   // This is because the converter is also responsible for converting safe `InternalRow`s into
   // `UnsafeRow`s
-  private val rowConverter = () => {
+  private val rowConverter = {
     if (partitionSchema.isEmpty) {
-      unsafeProjection(fileReader.get())}
+      () => unsafeProjection(fileReader.get())}
     else {
       val joinedRow = new JoinedRow()
-      unsafeProjection(joinedRow(fileReader.get(), partitionValues))
+      () => unsafeProjection(joinedRow(fileReader.get(), partitionValues))
     }
   }
 
