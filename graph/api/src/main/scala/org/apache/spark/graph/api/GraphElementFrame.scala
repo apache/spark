@@ -2,18 +2,16 @@ package org.apache.spark.graph.api
 
 import org.apache.spark.graph.api.GraphElementFrame.encodeIdColumns
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.types._
 
 object GraphElementFrame {
 
-  // TODO: Consider creating an expression for this
   def encodeIdColumns(df: DataFrame, idColumnNames: String*): DataFrame = {
     val encodedIdCols = idColumnNames.map { idColumnName =>
       val col = df.col(idColumnName)
       df.schema(idColumnName).dataType match {
         case BinaryType => col
-        case StringType => col.cast(BinaryType)
-        // TODO: Implement more efficient encoding for IntegerType and LongType
+        case StringType | ByteType | ShortType | IntegerType | LongType => col.cast(BinaryType)
         // TODO: Constrain to types that make sense as IDs
         case _ => col.cast(StringType).cast(BinaryType)
       }
