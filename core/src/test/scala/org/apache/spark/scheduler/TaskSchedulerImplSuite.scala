@@ -201,28 +201,39 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Even if one of the task sets has not-serializable tasks, the other task set should
     // still be processed without error
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
-    taskScheduler.submitTasks(taskSet)
+    val taskSet2 = new TaskSet(
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 1, 0, 0, null)
+    taskScheduler.submitTasks(taskSet2)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
   }
 
-  test("refuse to schedule concurrent attempts for the same stage (SPARK-8103)") {
+  test("concurrent attempts for the same stage only have one active taskset") {
     val taskScheduler = setupScheduler()
-    val attempt1 = FakeTask.createTaskSet(1, 0)
-    val attempt2 = FakeTask.createTaskSet(1, 1)
-    taskScheduler.submitTasks(attempt1)
-    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt2) }
+    def isTasksetZombie(taskset: TaskSet): Boolean = {
+      taskScheduler.taskSetManagerForAttempt(taskset.stageId, taskset.stageAttemptId).get.isZombie
+    }
 
-    // OK to submit multiple if previous attempts are all zombie
-    taskScheduler.taskSetManagerForAttempt(attempt1.stageId, attempt1.stageAttemptId)
-      .get.isZombie = true
+    val attempt1 = FakeTask.createTaskSet(1, 0)
+    taskScheduler.submitTasks(attempt1)
+    // The first submitted taskset is active
+    assert(!isTasksetZombie(attempt1))
+
+    val attempt2 = FakeTask.createTaskSet(1, 1)
     taskScheduler.submitTasks(attempt2)
+    // The first submitted taskset is zombie now
+    assert(isTasksetZombie(attempt1))
+    // The newly submitted taskset is active
+    assert(!isTasksetZombie(attempt2))
+
     val attempt3 = FakeTask.createTaskSet(1, 2)
-    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt3) }
-    taskScheduler.taskSetManagerForAttempt(attempt2.stageId, attempt2.stageAttemptId)
-      .get.isZombie = true
     taskScheduler.submitTasks(attempt3)
-    assert(!failedTaskSet)
+    // The first submitted taskset remains zombie
+    assert(isTasksetZombie(attempt1))
+    // The second submitted taskset is zombie now
+    assert(isTasksetZombie(attempt2))
+    // The newly submitted taskset is active
+    assert(!isTasksetZombie(attempt3))
   }
 
   test("don't schedule more tasks after a taskset is zombie") {
