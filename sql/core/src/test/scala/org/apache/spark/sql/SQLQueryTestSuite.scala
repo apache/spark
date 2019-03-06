@@ -48,9 +48,14 @@ import org.apache.spark.sql.types.StructType
  *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
- * To re-generate golden files, run:
+ * To re-generate golden files for entire suite, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
+ *
+ * To re-generate golden file for a single test, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * The format for input files is simple:
