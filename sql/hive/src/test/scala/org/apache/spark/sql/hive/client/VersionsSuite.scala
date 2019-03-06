@@ -582,6 +582,17 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
+    test(s"$version: sql read hive materialized view") {
+      // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
+      if (version == "2.3" || version == "3.1") {
+        val tableName = "materialized_view_tbl"
+        client.runSqlHive("CREATE TABLE materialized_view_tbl (key INT)")
+        client.runSqlHive("CREATE MATERIALIZED VIEW view_1 AS SELECT * FROM materialized_view_tbl")
+        val e = intercept[AnalysisException](versionSpark.table("view_1").collect()).getMessage
+        assert(e.contains("Hive MATERIALIZED_VIEW table is not supported"))
+      }
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Miscellaneous API
     ///////////////////////////////////////////////////////////////////////////
