@@ -156,9 +156,6 @@ private[spark] class CoalescedRDD[T: ClassTag](
 
 private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   extends PartitionCoalescer {
-  def compare(o1: PartitionGroup, o2: PartitionGroup): Boolean = o1.numPartitions < o2.numPartitions
-  def compare(o1: Option[PartitionGroup], o2: Option[PartitionGroup]): Boolean =
-    if (o1 == None) false else if (o2 == None) true else compare(o1.get, o2.get)
 
   val rnd = new scala.util.Random(7919) // keep this class deterministic
 
@@ -213,15 +210,16 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   }
 
   /**
-   * Sorts and gets the least element of the list associated with key in groupHash
+   * Gets the least element of the list associated with key in groupHash
    * The returned PartitionGroup is the least loaded of all groups that represent the machine "key"
    *
    * @param key string representing a partitioned group on preferred machine key
    * @return Option of [[PartitionGroup]] that has least elements for key
    */
-  def getLeastGroupHash(key: String): Option[PartitionGroup] = {
-    groupHash.get(key).map(_.sortWith(compare).head)
-  }
+  def getLeastGroupHash(key: String): Option[PartitionGroup] =
+    groupHash
+      .get(key)
+      .flatMap(group => if (group.isEmpty) None else Some(group.minBy(_.numPartitions)))
 
   def addPartToPGroup(part: Partition, pgroup: PartitionGroup): Boolean = {
     if (!initialHash.contains(part)) {
@@ -297,9 +295,8 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       partitionLocs: PartitionLocations): PartitionGroup = {
     val slack = (balanceSlack * prev.partitions.length).toInt
     // least loaded pref locs
-    val pref = currPrefLocs(p, prev).map(getLeastGroupHash(_)).sortWith(compare)
-    val prefPart = if (pref == Nil) None else pref.head
-
+    val pref = currPrefLocs(p, prev).flatMap(getLeastGroupHash)
+    val prefPart = if (pref.isEmpty) None else Some(pref.minBy(_.numPartitions))
     val r1 = rnd.nextInt(groupArr.size)
     val r2 = rnd.nextInt(groupArr.size)
     val minPowerOfTwo = {
