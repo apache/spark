@@ -87,7 +87,8 @@ public class VectorizedDeltaByteArrayReader extends ValuesReader implements Vect
       Binary binary = deltaByteArrayReader.readBytes();
       ByteBuffer buffer = binary.toByteBuffer();
       if (buffer.hasArray()) {
-        c.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), binary.length());
+        c.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(),
+          binary.length());
       } else {
         byte[] bytes = new byte[binary.length()];
         buffer.get(bytes);
