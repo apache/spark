@@ -94,7 +94,8 @@ class SQLAppStatusListener(
           executionData.stages = sqlStoreData.stages
           executionData.metricsValues = sqlStoreData.metricValues
           executionData.endEvents = sqlStoreData.jobs.size + 1
-          Option(liveExecutions.put(executionId, executionData))
+          liveExecutions.put(executionId, executionData)
+          Some(executionData)
         } catch {
           case _: NoSuchElementException => None
         }
