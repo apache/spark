@@ -1133,11 +1133,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       assert(tsm.runningTasks === 9)
       tsm
     }
-    // we've now got 2 zombie attempts, each with 9 tasks still active but zero active attempt
-    // in taskScheduler.
+    // we've now got 2 zombie attempts, each with 9 tasks still running. And there's no active
+    // attempt exists in taskScheduler by now.
 
     // finish partition 1,2 by completing the tasks before a new attempt for the same stage submit.
-    // And it's possible since the behaviour of submitting new attempt and handling successful task
+    // This is possible since the behaviour of submitting new attempt and handling successful task
     // is from two different threads, which are "task-result-getter" and "dag-scheduler-event-loop"
     // separately.
     (0 until 2).foreach { i =>
@@ -1152,9 +1152,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val finalAttempt = FakeTask.createTaskSet(10, stageAttemptId = 2)
     taskScheduler.submitTasks(finalAttempt)
     val finalTsm = taskScheduler.taskSetManagerForAttempt(0, 2).get
-    // Though, finalTsm gets submitted after some tasks succeeds, but it could also know about the
-    // finished partition by looking into `stageIdToFinishedPartitions` when it is being created,
-    // so that it won't launch any duplicate tasks later.
+    // Though finalTSM gets submitted with 10 tasks, the call to taskScheduler.submitTasks should
+    // realize that 2 tasks have already completed, and mark them appropriately, so it won't launch
+    // any duplicate tasks later (SPARK-25250).
     (0 until 2).map(_ + 1).foreach { partitionId =>
       val index = finalTsm.partitionToIndex(partitionId)
       assert(finalTsm.successful(index))

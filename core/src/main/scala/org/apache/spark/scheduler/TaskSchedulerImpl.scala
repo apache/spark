@@ -250,7 +250,7 @@ private[spark] class TaskSchedulerImpl(
     // been completed by other tasksets when completing a stage, so we mark
     // those tasks as finished here to avoid launching duplicate tasks, while
     // holding the TaskSchedulerImpl lock.
-    // See SPARK-25250 and markPartitionCompletedInAllTaskSets()`
+    // See SPARK-25250 and `markPartitionCompletedInAllTaskSets()`
     stageIdToFinishedPartitions.get(taskSet.stageId).foreach {
       finishedPartitions => finishedPartitions.foreach(tsm.markPartitionCompleted(_, None))
     }

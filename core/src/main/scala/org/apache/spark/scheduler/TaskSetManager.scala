@@ -801,8 +801,9 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: Option[TaskInfo])
-  : Unit = {
+  private[scheduler] def markPartitionCompleted(
+      partitionId: Int,
+      taskInfo: Option[TaskInfo]): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
         if (speculationEnabled && !isZombie) {
