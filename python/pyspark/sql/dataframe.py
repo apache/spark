@@ -24,11 +24,12 @@ if sys.version >= '3':
     from functools import reduce
 else:
     from itertools import imap as map
+from itertools import chain
 
 import warnings
 
 from pyspark import copy_func, since, _NoValue
-from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix, _PyLocalIterator
 from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -528,7 +529,8 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.toPythonIterator()
-        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
+        batch_iter = _PyLocalIterator(sock_info, PickleSerializer())
+        return chain.from_iterable(batch_iter)
 
     @ignore_unicode_prefix
     @since(1.3)

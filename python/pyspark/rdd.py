@@ -41,7 +41,7 @@ else:
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, AutoBatchedSerializer
+    PickleSerializer, pack_long, AutoBatchedSerializer, write_int
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -138,13 +138,50 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def _load_from_socket(sock_info, serializer):
+def _create_local_socket(sock_info):
     (sockfile, sock) = local_connect_and_auth(*sock_info)
-    # The RDD materialization time is unpredicable, if we set a timeout for socket reading
+    # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
+    return sockfile, sock
+
+
+def _load_from_socket(sock_info, serializer):
+    (sockfile, _) = _create_local_socket(sock_info)
     # The socket will be automatically closed when garbage-collected.
     return serializer.load_stream(sockfile)
+
+
+class _PyLocalIterator(object):
+
+    def __init__(self, sock_info, serializer):
+        (self.sockfile, self.sock) = _create_local_socket(sock_info)
+        self.read_iter = serializer.load_stream(self.sockfile)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        # Request more data from Java, then read from stream
+        write_int(1, self.sockfile)
+        self.sockfile.flush()
+        return next(self.read_iter)
+
+    def __del__(self):
+        try:
+            # Tell Java to stop sending data
+            write_int(0, self.sockfile)
+        finally:
+            try:
+                # Attempt to close the socket
+                self.sockfile.close()
+                self.sock.close()
+            except Exception:
+                pass
+
+    def next(self):
+        """For python2 compatibility."""
+        return self.__next__()
 
 
 def ignore_unicode_prefix(f):
@@ -2386,7 +2423,7 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        return _load_from_socket(sock_info, self._jrdd_deserializer)
+        return _PyLocalIterator(sock_info, self._jrdd_deserializer)
 
     def barrier(self):
         """

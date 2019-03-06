@@ -47,7 +47,7 @@ class PythonUDFRunner(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
+        PythonRDD.writeObjectToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
       }
     }

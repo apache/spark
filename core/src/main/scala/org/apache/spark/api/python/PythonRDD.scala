@@ -164,7 +164,22 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
-    serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
+    val (port, secret) = PythonServer.setupOneConnectionServer(
+        authHelper, "serve toLocalIterator") { s =>
+      val out = new DataOutputStream(s.getOutputStream)
+      val in = new DataInputStream(s.getInputStream)
+      Utils.tryWithSafeFinally {
+        val iter = rdd.toLocalIterator
+        while (iter.hasNext && in.readInt() != 0) {
+          writeObjectToStream(iter.next(), out)
+          out.flush()
+        }
+      } {
+        out.close()
+        in.close()
+      }
+    }
+    Array(port, secret)
   }
 
   def readRDDFromFile(
@@ -185,26 +200,23 @@ private[spark] object PythonRDD extends Logging {
     new PythonBroadcast(path)
   }
 
-  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
-
-    def write(obj: Any): Unit = obj match {
-      case null =>
-        dataOut.writeInt(SpecialLengths.NULL)
-      case arr: Array[Byte] =>
-        dataOut.writeInt(arr.length)
-        dataOut.write(arr)
-      case str: String =>
-        writeUTF(str, dataOut)
-      case stream: PortableDataStream =>
-        write(stream.toArray())
-      case (key, value) =>
-        write(key)
-        write(value)
-      case other =>
-        throw new SparkException("Unexpected element type " + other.getClass)
-    }
-
-    iter.foreach(write)
+  def writeObjectToStream(obj: Any, dataOut: DataOutputStream): Unit = obj match {
+    case iter: Iterator[Any] =>
+      iter.foreach(writeObjectToStream(_, dataOut))
+    case null =>
+      dataOut.writeInt(SpecialLengths.NULL)
+    case arr: Array[Byte] =>
+      dataOut.writeInt(arr.length)
+      dataOut.write(arr)
+    case str: String =>
+      writeUTF(str, dataOut)
+    case stream: PortableDataStream =>
+      writeObjectToStream(stream.toArray(), dataOut)
+    case (key, value) =>
+      writeObjectToStream(key, dataOut)
+      writeObjectToStream(value, dataOut)
+    case other =>
+      throw new SparkException("Unexpected element type " + other.getClass)
   }
 
   /**
@@ -393,7 +405,7 @@ private[spark] object PythonRDD extends Logging {
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
     serveToStream(threadName) { out =>
-      writeIteratorToStream(items, new DataOutputStream(out))
+      writeObjectToStream(items, new DataOutputStream(out))
     }
   }
 
