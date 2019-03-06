@@ -580,10 +580,7 @@ public class VectorizedColumnReader {
       this.dataColumn = new VectorizedRleValuesReader();
       this.isCurrentPageDictionaryEncoded = true;
     } else {
-      if (dataEncoding != Encoding.PLAIN) {
-        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
-      }
-      this.dataColumn = new VectorizedPlainValuesReader();
+      this.dataColumn = getValuesReader(dataEncoding);
       this.isCurrentPageDictionaryEncoded = false;
     }
 
@@ -591,6 +588,19 @@ public class VectorizedColumnReader {
       dataColumn.initFromPage(pageValueCount, in);
     } catch (IOException e) {
       throw new IOException("could not read page in col " + descriptor, e);
+    }
+  }
+
+  private ValuesReader getValuesReader(Encoding encoding) {
+    switch (encoding) {
+      case PLAIN:
+        return new VectorizedPlainValuesReader();
+      case DELTA_BYTE_ARRAY:
+        return new VectorizedDeltaByteArrayReader();
+      case DELTA_BINARY_PACKED:
+        return new VectorizedDeltaBinaryPackedReader();
+      default:
+        throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
     }
   }
 
