@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.kafka010
 
 import org.apache.kafka.common.config.SaslConfigs
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.kafka010
 
 import java.{util => ju}
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
@@ -26,7 +26,6 @@ import org.mockito.Mockito.mock
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
-import org.apache.spark.kafka010.KafkaTokenUtil
 import org.apache.spark.kafka010.KafkaTokenUtil.KafkaDelegationTokenIdentifier
 
 /**
