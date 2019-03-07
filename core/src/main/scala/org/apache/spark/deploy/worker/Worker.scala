@@ -64,7 +64,7 @@ private[deploy] class Worker(
   assert (port > 0)
 
   // A scheduled executor used to send messages at the specified time.
-  private val forwordMessageScheduler =
+  private val forwardMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
 
   // A separated thread to clean up the workDir and the directories of finished applications.
@@ -325,7 +325,7 @@ private[deploy] class Worker(
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel(true))
           registrationRetryTimer = Some(
-            forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+            forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
               override def run(): Unit = Utils.tryLogNonFatalError {
                 self.send(ReregisterWithMaster)
               }
@@ -360,7 +360,7 @@ private[deploy] class Worker(
         registered = false
         registerMasterFutures = tryRegisterAllMasters()
         connectionAttemptCount = 0
-        registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
+        registrationRetryTimer = Some(forwardMessageScheduler.scheduleAtFixedRate(
           new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               Option(self).foreach(_.send(ReregisterWithMaster))
@@ -407,7 +407,7 @@ private[deploy] class Worker(
         }
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
-        forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+        forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             self.send(SendHeartbeat)
           }
@@ -415,7 +415,7 @@ private[deploy] class Worker(
         if (CLEANUP_ENABLED) {
           logInfo(
             s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
-          forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+          forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               self.send(WorkDirCleanup)
             }
@@ -668,7 +668,7 @@ private[deploy] class Worker(
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()
-    forwordMessageScheduler.shutdownNow()
+    forwardMessageScheduler.shutdownNow()
     registerMasterThreadPool.shutdownNow()
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
