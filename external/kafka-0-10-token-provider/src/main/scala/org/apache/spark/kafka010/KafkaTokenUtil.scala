@@ -31,6 +31,7 @@ import org.apache.kafka.clients.admin.{AdminClient, CreateDelegationTokenOptions
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.security.JaasContext
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
+import org.apache.kafka.common.security.scram.ScramLoginModule
 import org.apache.kafka.common.security.token.delegation.DelegationToken
 
 import org.apache.spark.SparkConf
@@ -154,7 +155,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private[kafka010] def getKeytabJaasParams(sparkConf: SparkConf): String = {
+  private def getKeytabJaasParams(sparkConf: SparkConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
@@ -167,7 +168,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     params
   }
 
-  def getTicketCacheJaasParams(sparkConf: SparkConf): String = {
+  private def getTicketCacheJaasParams(sparkConf: SparkConf): String = {
     val serviceName = sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)
     require(serviceName.nonEmpty, "Kerberos service name must be defined")
 
@@ -207,5 +208,30 @@ private[spark] object KafkaTokenUtil extends Logging {
         dateFormat.format(tokenInfo.expiryTimestamp),
         dateFormat.format(tokenInfo.maxTimestamp)))
     }
+  }
+
+  def isTokenAvailable(): Boolean = {
+    UserGroupInformation.getCurrentUser().getCredentials.getToken(
+      KafkaTokenUtil.TOKEN_SERVICE) != null
+  }
+
+  def getTokenJaasParams(sparkConf: SparkConf): String = {
+    val token = UserGroupInformation.getCurrentUser().getCredentials.getToken(
+      KafkaTokenUtil.TOKEN_SERVICE)
+    val username = new String(token.getIdentifier)
+    val password = new String(token.getPassword)
+
+    val loginModuleName = classOf[ScramLoginModule].getName
+    val params =
+      s"""
+      |$loginModuleName required
+      | tokenauth=true
+      | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}"
+      | username="$username"
+      | password="$password";
+      """.stripMargin.replace("\n", "")
+    logDebug(s"Scram JAAS params: ${params.replaceAll("password=\".*\"", "password=\"[hidden]\"")}")
+
+    params
   }
 }

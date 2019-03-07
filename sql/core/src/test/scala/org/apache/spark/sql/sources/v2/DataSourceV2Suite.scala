@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.File
+import java.util.OptionalLong
 
 import test.org.apache.spark.sql.sources.v2._
 
@@ -182,6 +183,24 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test ("statistics report data source") {
+    Seq(classOf[ReportStatisticsDataSource], classOf[JavaReportStatisticsDataSource]).foreach {
+      cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          val logical = df.queryExecution.optimizedPlan.collect {
+            case d: DataSourceV2Relation => d
+          }.head
+
+          val statics = logical.computeStats()
+          assert(statics.rowCount.isDefined && statics.rowCount.get === 10,
+            "Row count statics should be reported by data source")
+          assert(statics.sizeInBytes === 80,
+            "Size in bytes statics should be reported by data source")
+        }
+    }
+  }
+
   test("SPARK-23574: no shuffle exchange with single partition") {
     val df = spark.read.format(classOf[SimpleSinglePartitionSource].getName).load().agg(count("*"))
     assert(df.queryExecution.executedPlan.collect { case e: Exchange => e }.isEmpty)
@@ -330,7 +349,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       val options = df.queryExecution.optimizedPlan.collectFirst {
         case d: DataSourceV2Relation => d.options
       }.get
-      assert(options.get(optionName).get == "false")
+      assert(options(optionName) === "false")
     }
   }
 
@@ -351,18 +370,20 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25700: do not read schema when writing in other modes except append mode") {
+  test("SPARK-25700: do not read schema when writing in other modes except append and overwrite") {
     withTempPath { file =>
       val cls = classOf[SimpleWriteOnlyDataSource]
       val path = file.getCanonicalPath
       val df = spark.range(5).select('id as 'i, -'id as 'j)
       // non-append mode should not throw exception, as they don't access schema.
       df.write.format(cls.getName).option("path", path).mode("error").save()
-      df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       df.write.format(cls.getName).option("path", path).mode("ignore").save()
-      // append mode will access schema and should throw exception.
+      // append and overwrite modes will access the schema and should throw exception.
       intercept[SchemaReadAttemptException] {
         df.write.format(cls.getName).option("path", path).mode("append").save()
+      }
+      intercept[SchemaReadAttemptException] {
+        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       }
     }
   }
@@ -619,7 +640,6 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-
 class PartitionAwareDataSource extends TableProvider {
 
   class MyScanBuilder extends SimpleScanBuilder
@@ -683,6 +703,32 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
     new MyTable(options) {
       override def schema(): StructType = {
         throw new SchemaReadAttemptException("schema should not be read.")
+      }
+    }
+  }
+}
+
+class ReportStatisticsDataSource extends TableProvider {
+
+  class MyScanBuilder extends SimpleScanBuilder
+    with SupportsReportStatistics {
+    override def estimateStatistics(): Statistics = {
+      new Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(80)
+
+        override def numRows(): OptionalLong = OptionalLong.of(10)
+      }
+    }
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+    }
+  }
+
+  override def getTable(options: DataSourceOptions): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
+        new MyScanBuilder
       }
     }
   }

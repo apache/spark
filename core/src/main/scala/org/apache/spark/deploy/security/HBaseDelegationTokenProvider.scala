@@ -23,12 +23,12 @@ import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.util.Utils
 
 private[security] class HBaseDelegationTokenProvider
@@ -120,7 +120,9 @@ private[security] class HBaseDelegationTokenProvider
       confCreate.invoke(null, conf).asInstanceOf[Configuration]
     } catch {
       case NonFatal(e) =>
-        logWarning("Fail to invoke HBaseConfiguration", e)
+        // Keep at debug level since this is executed even when HBase tokens are not needed.
+        // Avoids a noisy warning for users who don't care about HBase.
+        logDebug("Unable to load HBaseConfiguration.", e)
         conf
     }
   }

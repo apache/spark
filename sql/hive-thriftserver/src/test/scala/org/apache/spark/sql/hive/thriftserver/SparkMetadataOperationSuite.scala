@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.Properties
+import java.util.{Arrays => JArrays, List => JList, Properties}
 
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet, Utils => JdbcUtils}
 import org.apache.hive.service.auth.PlainSaslHelper
@@ -97,6 +97,91 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       }
       testGetSchemasOperation(null, "db*") { rs =>
         checkResult(Seq("db1", "db2"), rs)
+      }
+    }
+  }
+
+  test("Spark's own GetTablesOperation(SparkGetTablesOperation)") {
+    def testGetTablesOperation(
+        schema: String,
+        tableNamePattern: String,
+        tableTypes: JList[String])(f: HiveQueryResultSet => Unit): Unit = {
+      val rawTransport = new TSocket("localhost", serverPort)
+      val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+      val user = System.getProperty("user.name")
+      val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+      val client = new TCLIService.Client(new TBinaryProtocol(transport))
+      transport.open()
+
+      var rs: HiveQueryResultSet = null
+
+      try {
+        val openResp = client.OpenSession(new TOpenSessionReq)
+        val sessHandle = openResp.getSessionHandle
+
+        val getTableReq = new TGetTablesReq(sessHandle)
+        getTableReq.setSchemaName(schema)
+        getTableReq.setTableName(tableNamePattern)
+        getTableReq.setTableTypes(tableTypes)
+
+        val getTableResp = client.GetTables(getTableReq)
+
+        JdbcUtils.verifySuccess(getTableResp.getStatus)
+
+        rs = new HiveQueryResultSet.Builder(connection)
+          .setClient(client)
+          .setSessionHandle(sessHandle)
+          .setStmtHandle(getTableResp.getOperationHandle)
+          .build()
+
+        f(rs)
+      } finally {
+        rs.close()
+        connection.close()
+        transport.close()
+        rawTransport.close()
+      }
+    }
+
+    def checkResult(tableNames: Seq[String], rs: HiveQueryResultSet): Unit = {
+      if (tableNames.nonEmpty) {
+        for (i <- tableNames.indices) {
+          assert(rs.next())
+          assert(rs.getString("TABLE_NAME") === tableNames(i))
+        }
+      } else {
+        assert(!rs.next())
+      }
+    }
+
+    withJdbcStatement("table1", "table2") { statement =>
+      Seq(
+        "CREATE TABLE table1(key INT, val STRING)",
+        "CREATE TABLE table2(key INT, val STRING)",
+        "CREATE VIEW view1 AS SELECT * FROM table2").foreach(statement.execute)
+
+      testGetTablesOperation("%", "%", null) { rs =>
+        checkResult(Seq("table1", "table2", "view1"), rs)
+      }
+
+      testGetTablesOperation("%", "table1", null) { rs =>
+        checkResult(Seq("table1"), rs)
+      }
+
+      testGetTablesOperation("%", "table_not_exist", null) { rs =>
+        checkResult(Seq.empty, rs)
+      }
+
+      testGetTablesOperation("%", "%", JArrays.asList("TABLE")) { rs =>
+        checkResult(Seq("table1", "table2"), rs)
+      }
+
+      testGetTablesOperation("%", "%", JArrays.asList("VIEW")) { rs =>
+        checkResult(Seq("view1"), rs)
+      }
+
+      testGetTablesOperation("%", "%", JArrays.asList("TABLE", "VIEW")) { rs =>
+        checkResult(Seq("table1", "table2", "view1"), rs)
       }
     }
   }

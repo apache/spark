@@ -207,15 +207,15 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1),
       CheckLastBatch((1, 1), (2, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 2 },
       AddData(inputData, 2, 3),
       CheckLastBatch((2, 2), (3, 2), (4, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 4 }
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 }
     )
 
     // Test with Complete mode
@@ -224,15 +224,15 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1),
       CheckLastBatch((1, 1), (2, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 2 },
       AddData(inputData, 2, 3),
       CheckLastBatch((1, 1), (2, 2), (3, 2), (4, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 4 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 4 }
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 4 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 }
     )
   }
 

@@ -114,7 +114,7 @@ class OneVsRestTests(SparkSessionTestCase):
         ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
         output = model.transform(df)
-        self.assertEqual(output.columns, ["label", "features", "prediction"])
+        self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
 
     def test_parallelism_doesnt_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),

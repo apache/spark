@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.UnaryOperator
 
 import scala.collection.JavaConverters._
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamingWriteSupportProvider, SupportsContinuousRead}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsContinuousRead, SupportsStreamingWrite}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
@@ -42,7 +43,7 @@ class ContinuousExecution(
     name: String,
     checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    sink: StreamingWriteSupportProvider,
+    sink: SupportsStreamingWrite,
     trigger: Trigger,
     triggerClock: Clock,
     outputMode: OutputMode,
@@ -56,6 +57,9 @@ class ContinuousExecution(
 
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
+
+  // Throwable that caused the execution to fail
+  private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
 
   override val logicalPlan: LogicalPlan = {
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
@@ -174,12 +178,8 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createStreamingWriteSupport(
-      s"$runId",
-      withNewSources.schema,
-      outputMode,
-      new DataSourceOptions(extraOptions.asJava))
-    val planWithSink = WriteToContinuousDataSource(writer, withNewSources)
+    val streamingWrite = createStreamingWrite(sink, extraOptions, withNewSources)
+    val planWithSink = WriteToContinuousDataSource(streamingWrite, withNewSources)
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
@@ -214,9 +214,8 @@ class ContinuousExecution(
       trigger.asInstanceOf[ContinuousTrigger].intervalMs.toString)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
-    val epochEndpoint =
-      EpochCoordinatorRef.create(
-        writer, stream, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+    val epochEndpoint = EpochCoordinatorRef.create(
+      streamingWrite, stream, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
@@ -257,6 +256,11 @@ class ContinuousExecution(
           lastExecution.executedPlan
           lastExecution.toRdd
         }
+      }
+
+      val f = failure.get()
+      if (f != null) {
+        throw f
       }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
@@ -368,6 +372,35 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
+  }
+
+  /**
+   * Stores error and stops the query execution thread to terminate the query in new thread.
+   */
+  def stopInNewThread(error: Throwable): Unit = {
+    if (failure.compareAndSet(null, error)) {
+      logError(s"Query $prettyIdString received exception $error")
+      stopInNewThread()
+    }
+  }
+
+  /**
+   * Stops the query execution thread to terminate the query in new thread.
+   */
+  private def stopInNewThread(): Unit = {
+    new Thread("stop-continuous-execution") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          ContinuousExecution.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
+      }
+    }.start()
   }
 
   /**
