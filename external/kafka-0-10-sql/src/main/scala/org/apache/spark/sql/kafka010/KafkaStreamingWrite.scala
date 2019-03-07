@@ -92,7 +92,7 @@ class KafkaStreamDataWriter(
     inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
 
-  private lazy val producer = CachedKafkaProducer.getOrCreate(producerParams)
+  protected lazy val producer: CachedKafkaProducer = CachedKafkaProducer.acquire(producerParams)
 
   def write(row: InternalRow): Unit = {
     checkForErrors()
@@ -112,12 +112,9 @@ class KafkaStreamDataWriter(
   def abort(): Unit = {}
 
   def close(): Unit = {
+    CachedKafkaProducer.release(producer, failedWrite != null)
     checkForErrors()
-    if (producer != null) {
-      producer.flush()
-      producer.inUseCount.decrementAndGet()
-      checkForErrors()
-      CachedKafkaProducer.close(producerParams)
-    }
+    producer.flush()
+    checkForErrors()
   }
 }

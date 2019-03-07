@@ -19,8 +19,9 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.clients.producer.{Callback, ProducerRecord, RecordMetadata}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.types.{BinaryType, StringType}
@@ -35,7 +36,7 @@ private[kafka010] class KafkaWriteTask(
     inputSchema: Seq[Attribute],
     topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
-  private val producer: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(producerConfiguration)
+  protected val producer: CachedKafkaProducer = CachedKafkaProducer.acquire(producerConfiguration)
 
   /**
    * Writes key value data out to topics.
@@ -48,15 +49,17 @@ private[kafka010] class KafkaWriteTask(
   }
 
   def close(): Unit = {
-    producer.inUseCount.decrementAndGet()
+    checkForErrors()
     producer.flush()
     checkForErrors()
+    CachedKafkaProducer.release(producer, offending = failedWrite != null)
   }
 }
 
 private[kafka010] abstract class KafkaRowWriter(
-    inputSchema: Seq[Attribute], topic: Option[String]) {
+    inputSchema: Seq[Attribute], topic: Option[String]) extends Logging {
 
+  protected val producer: CachedKafkaProducer
   // used to synchronize with Kafka callbacks
   @volatile protected var failedWrite: Exception = _
   protected val projection = createProjection
@@ -90,6 +93,9 @@ private[kafka010] abstract class KafkaRowWriter(
 
   protected def checkForErrors(): Unit = {
     if (failedWrite != null) {
+      // Before throwing exception, we should mark this acquired producer as not in use,
+      // for this particular task. Otherwise it will linger on, assuming that it is in use.
+      CachedKafkaProducer.release(producer, offending = true)
       throw failedWrite
     }
   }

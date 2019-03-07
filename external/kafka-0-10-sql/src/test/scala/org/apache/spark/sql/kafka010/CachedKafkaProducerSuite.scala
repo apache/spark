@@ -19,13 +19,15 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
-import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.test.SharedSQLContext
 
-class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester with KafkaTest {
+class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
 
   type KP = KafkaProducer[Array[Byte], Array[Byte]]
 
@@ -34,50 +36,70 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     CachedKafkaProducer.clear()
   }
 
-  test("Should return the cached instance on calling getOrCreate with same params.") {
+  test("Should return the cached instance on calling acquire with same params.") {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
-    val producer = CachedKafkaProducer.getOrCreate(kafkaParams)
-    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
+    val producer = CachedKafkaProducer.acquire(kafkaParams)
+    val producer2 = CachedKafkaProducer.acquire(kafkaParams)
     assert(producer.kafkaProducer == producer2.kafkaProducer)
-    assert(producer.inUseCount.intValue() == 2)
+    assert(producer.getInUseCount == 2)
     val map = CachedKafkaProducer.getAsMap
     assert(map.size == 1)
   }
 
-  test("Should close the correct kafka producer for the given kafkaPrams.") {
+  test("Should return the new instance on calling acquire with different params.") {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
-    val producer: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(kafkaParams)
-    kafkaParams.put("acks", "1")
-    val producer2: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(kafkaParams)
-    // With updated conf, a new producer instance should be created.
+    val producer = CachedKafkaProducer.acquire(kafkaParams)
+    kafkaParams.remove("ack") // mutate the kafka params.
+    val producer2 = CachedKafkaProducer.acquire(kafkaParams)
     assert(producer.kafkaProducer != producer2.kafkaProducer)
-
+    assert(producer.getInUseCount == 1)
+    assert(producer2.getInUseCount == 1)
     val map = CachedKafkaProducer.getAsMap
     assert(map.size == 2)
-    producer2.inUseCount.decrementAndGet()
+  }
 
-    CachedKafkaProducer.close(kafkaParams)
-    assert(producer2.isClosed)
-    val map2 = CachedKafkaProducer.getAsMap
-    assert(map2.size == 1)
-    import scala.collection.JavaConverters._
-    val (seq: Seq[(String, Object)], _producer: CachedKafkaProducer) = map2.asScala.toArray.apply(0)
-    assert(_producer.kafkaProducer == producer.kafkaProducer)
-   }
+  test("Should return the cached instance, even if auth tokens are set up.") {
+    // TODO.
+    // Question: What happens when a delegation token value is changed for a given producer?
+    // we would need to recreate a kafka producer.
+  }
+
+  test("Remove an offending kafka producer from cache.") {
+    import testImplicits._
+    val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
+    intercept[SparkException] {
+      // This will fail because the service is not reachable.
+      df.write
+        .format("kafka")
+        .option("topic", "topic")
+        .option("retries", "1")
+        .option("max.block.ms", "2")
+        .option("request.timeout.ms", "2")
+        .option("linger.ms", "2")
+        .option("kafka.bootstrap.servers", "12.0.0.1:39022")
+        .save()
+    }
+    // Since offending kafka producer is released on error and also invalidated, it should not be in
+    // cache.
+    val map = CachedKafkaProducer.getAsMap
+    assert(map.size == 0)
+  }
 
   test("Should not close a producer in-use.") {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
-    val producer: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(kafkaParams)
-    assert(producer.inUseCount.intValue() > 0)
-    CachedKafkaProducer.close(kafkaParams)
-    assert(producer.inUseCount.intValue() > 0)
+    val producer: CachedKafkaProducer = CachedKafkaProducer.acquire(kafkaParams)
+    producer.kafkaProducer // initializing the producer.
+    assert(producer.getInUseCount.intValue() > 0)
+    // Explicitly cause the producer from guava cache to be evicted.
+    CachedKafkaProducer.evict(producer.getKafkaParams)
+    assert(producer.getInUseCount.intValue() > 0)
     assert(!producer.isClosed, "An in-use producer should not be closed.")
   }
 
  private def generateKafkaParams: ju.HashMap[String, Object] = {
     val kafkaParams = new ju.HashMap[String, Object]()
-    kafkaParams.put("acks", "0")
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
+    kafkaParams.put("ack", "1")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams
