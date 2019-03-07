@@ -19,11 +19,51 @@ package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Experimental;
 
+/**
+ * Capabilities that can be provided by a {@link Table} implementation.
+ * <p>
+ * Tables use {@link Table#capabilities()} to return a set of capabilities. Each capability signals
+ * to Spark that the table supports a feature identified by the capability. For example, returning
+ * {@code BATCH_READ} allows Spark to read from the table using a batch scan.
+ */
 @Experimental
 public enum TableCapability {
+  /**
+   * Signals that the table supports reads in batch execution mode.
+   */
   BATCH_READ,
+
+  /**
+   * Signals that the table supports append writes in batch execution mode.
+   * <p>
+   * Tables that return this capability must support appending data and may also support additional
+   * write modes, like {@link #TRUNCATE}, {@link #OVERWRITE_BY_FILTER}, and
+   * {@link #OVERWRITE_DYNAMIC}.
+   */
   BATCH_WRITE,
+
+  /**
+   * Signals that the table can be truncated in a write operation.
+   * <p>
+   * Truncating a table removes all existing rows.
+   * <p>
+   * See {@link org.apache.spark.sql.sources.v2.writer.SupportsTruncate}.
+   */
   TRUNCATE,
+
+  /**
+   * Signals that the table can replace existing data that matches a filter with appended data in
+   * a write operation.
+   * <p>
+   * See {@link org.apache.spark.sql.sources.v2.writer.SupportsOverwrite}.
+   */
   OVERWRITE_BY_FILTER,
+
+  /**
+   * Signals that the table can dynamically replace existing data partitions with appended data in
+   * a write operation.
+   * <p>
+   * See {@link org.apache.spark.sql.sources.v2.writer.SupportsDynamicOverwrite}.
+   */
   OVERWRITE_DYNAMIC
 }
