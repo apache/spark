@@ -3317,6 +3317,105 @@ test_that("dapplyCollect() on DataFrame with a binary column", {
 
 })
 
+test_that("dapply() Arrow optimization", {
+  skip_if_not_installed("arrow")
+  df <- createDataFrame(mtcars)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    ret <- dapply(df,
+    function(rdf) {
+      stopifnot(class(rdf) == "data.frame")
+      rdf
+    },
+    schema(df))
+    expected <- collect(ret)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- dapply(df,
+                  function(rdf) {
+                    stopifnot(class(rdf) == "data.frame")
+                    # mtcars' hp is more then 50.
+                    stopifnot(all(rdf$hp > 50))
+                    rdf
+                  },
+                  schema(df))
+    actual <- collect(ret)
+    expect_equal(actual, expected)
+    expect_equal(count(ret), nrow(mtcars))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("dapply() Arrow optimization - type specification", {
+  skip_if_not_installed("arrow")
+  # Note that regular dapply() seems not supporting date and timestamps
+  # whereas Arrow-optimized dapply() does.
+  rdf <- data.frame(list(list(a = 1,
+                              b = "a",
+                              c = TRUE,
+                              d = 1.1,
+                              e = 1L)))
+  # numPartitions are set to 8 intentionally to test empty partitions as well.
+  df <- createDataFrame(rdf, numPartitions = 8)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  tryCatch({
+    ret <- dapply(df, function(rdf) { rdf }, schema(df))
+    expected <- collect(ret)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- dapply(df, function(rdf) { rdf }, schema(df))
+    actual <- collect(ret)
+    expect_equal(actual, expected)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
+test_that("dapply() Arrow optimization - type specification (date and timestamp)", {
+  skip_if_not_installed("arrow")
+  rdf <- data.frame(list(list(a = as.Date("1990-02-24"),
+                              b = as.POSIXct("1990-02-24 12:34:56"))))
+  df <- createDataFrame(rdf)
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  tryCatch({
+    ret <- dapply(df, function(rdf) { rdf }, schema(df))
+    expect_equal(collect(ret), rdf)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+  })
+})
+
 test_that("repartition by columns on DataFrame", {
   # The tasks here launch R workers with shuffles. So, we decrease the number of shuffle
   # partitions to reduce the number of the tasks to speed up the test. This is particularly

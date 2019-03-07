@@ -224,7 +224,7 @@ object Block {
       } else {
         args.foreach {
           case _: ExprValue | _: Inline | _: Block =>
-          case _: Int | _: Long | _: Float | _: Double | _: String =>
+          case _: Boolean | _: Int | _: Long | _: Float | _: Double | _: String =>
           case other => throw new IllegalArgumentException(
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }

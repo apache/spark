@@ -373,7 +373,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
   def assertAllowed(writeType: DataType, readType: DataType, name: String, desc: String): Unit = {
     assert(
       DataType.canWrite(writeType, readType, analysis.caseSensitiveResolution, name,
-        errMsg => fail(s"Should not produce errors but was called with: $errMsg")) === true, desc)
+        errMsg => fail(s"Should not produce errors but was called with: $errMsg")), desc)
   }
 
   def assertSingleError(

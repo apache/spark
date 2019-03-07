@@ -293,7 +293,7 @@ class PlannerSuite extends SharedSQLContext {
       case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
         assert(numPartitions === 5)
         assert(shuffle === false)
-        assert(shuffleChild === true)
+        assert(shuffleChild)
     }
   }
 

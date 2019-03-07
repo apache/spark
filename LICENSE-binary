@@ -487,6 +487,15 @@ org.glassfish.jersey.core:jersey-server
 org.glassfish.jersey.media:jersey-media-jaxb
 
 
+Eclipse Distribution License (EDL) 1.0
+--------------------------------------
+
+org.glassfish.jaxb:jaxb-runtime
+jakarta.xml.bind:jakarta.xml.bind-api
+com.sun.istack:istack-commons-runtime
+jakarta.activation:jakarta.activation-api
+
+
 Mozilla Public License (MPL) 1.1
 --------------------------------
 

@@ -23,13 +23,16 @@ import tempfile
 import time
 import unittest
 
+if sys.version >= '3':
+    unicode = str
+
 from datetime import date, datetime
 from decimal import Decimal
 from distutils.version import LooseVersion
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
-from pyspark.sql.functions import array, col, expr, lit, sum, udf, pandas_udf
+from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf
 from pyspark.sql.types import Row
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
@@ -265,6 +268,64 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         result = df.select(array_f(col('array')))
         self.assertEquals(df.collect(), result.collect())
 
+    def test_vectorized_udf_struct_type(self):
+        import pandas as pd
+
+        df = self.spark.range(10)
+        return_type = StructType([
+            StructField('id', LongType()),
+            StructField('str', StringType())])
+
+        def func(id):
+            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+
+        f = pandas_udf(func, returnType=return_type)
+
+        expected = df.select(struct(col('id'), col('id').cast('string').alias('str'))
+                             .alias('struct')).collect()
+
+        actual = df.select(f(col('id')).alias('struct')).collect()
+        self.assertEqual(expected, actual)
+
+        g = pandas_udf(func, 'id: long, str: string')
+        actual = df.select(g(col('id')).alias('struct')).collect()
+        self.assertEqual(expected, actual)
+
+    def test_vectorized_udf_struct_complex(self):
+        import pandas as pd
+
+        df = self.spark.range(10)
+        return_type = StructType([
+            StructField('ts', TimestampType()),
+            StructField('arr', ArrayType(LongType()))])
+
+        @pandas_udf(returnType=return_type)
+        def f(id):
+            return pd.DataFrame({'ts': id.apply(lambda i: pd.Timestamp(i)),
+                                 'arr': id.apply(lambda i: [i, i + 1])})
+
+        actual = df.withColumn('f', f(col('id'))).collect()
+        for i, row in enumerate(actual):
+            id, f = row
+            self.assertEqual(i, id)
+            self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
+            self.assertListEqual([i, i + 1], f[1])
+
+    def test_vectorized_udf_nested_struct(self):
+        nested_type = StructType([
+            StructField('id', IntegerType()),
+            StructField('nested', StructType([
+                StructField('foo', StringType()),
+                StructField('bar', FloatType())
+            ]))
+        ])
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    'Invalid returnType with scalar Pandas UDFs'):
+                pandas_udf(lambda x: x, returnType=nested_type)
+
     def test_vectorized_udf_complex(self):
         df = self.spark.range(10).select(
             col('id').cast('int').alias('a'),
@@ -331,6 +392,20 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         res = df.select(f(col('id')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_struct_with_empty_partition(self):
+        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))\
+            .withColumn('name', lit('John Doe'))
+
+        @pandas_udf("first string, last string")
+        def split_expand(n):
+            return n.str.split(expand=True)
+
+        result = df.select(split_expand('name')).collect()
+        self.assertEqual(1, len(result))
+        row = result[0]
+        self.assertEqual('John', row[0]['first'])
+        self.assertEqual('Doe', row[0]['last'])
+
     def test_vectorized_udf_varargs(self):
         df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
         f = pandas_udf(lambda *v: v[0], LongType())
@@ -343,6 +418,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     NotImplementedError,
                     'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
+            with self.assertRaisesRegexp(
+                    NotImplementedError,
+                    'Invalid returnType.*scalar Pandas UDF.*ArrayType.StructType'):
+                pandas_udf(lambda x: x, ArrayType(StructType([StructField('a', IntegerType())])))
 
     def test_vectorized_udf_dates(self):
         schema = StructType().add("idx", LongType()).add("date", DateType())

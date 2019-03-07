@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, DataType, StructType}
 
 /*
  * This file defines optimization rules related to object manipulation (for the Dataset API).
@@ -107,5 +111,103 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
      case MapObjects(_, _, _, LambdaVariable(_, _, _, false), inputData, None) => inputData
+  }
+}
+
+/**
+ * Prunes unnecessary object serializers from query plan. This rule prunes both individual
+ * serializer and nested fields in serializers.
+ */
+object ObjectSerializerPruning extends Rule[LogicalPlan] {
+
+  /**
+   * Collects all struct types from given data type object, recursively. Supports struct and array
+   * types for now.
+   * TODO(SPARK-26847): support map type.
+   */
+  def collectStructType(dt: DataType, structs: ArrayBuffer[StructType]): ArrayBuffer[StructType] = {
+    dt match {
+      case s @ StructType(fields) =>
+        structs += s
+        fields.map(f => collectStructType(f.dataType, structs))
+      case ArrayType(elementType, _) =>
+        collectStructType(elementType, structs)
+      case _ =>
+    }
+    structs
+  }
+
+  /**
+   * This method prunes given serializer expression by given pruned data type. For example,
+   * given a serializer creating struct(a int, b int) and pruned data type struct(a int),
+   * this method returns pruned serializer creating struct(a int). For now it supports to
+   * prune nested fields in struct and array of struct.
+   * TODO(SPARK-26847): support to prune nested fields in key and value of map type.
+   */
+  def pruneSerializer(
+      serializer: NamedExpression,
+      prunedDataType: DataType): NamedExpression = {
+    val prunedStructTypes = collectStructType(prunedDataType, ArrayBuffer.empty[StructType])
+    var structTypeIndex = 0
+
+    val prunedSerializer = serializer.transformDown {
+      case s: CreateNamedStruct if structTypeIndex < prunedStructTypes.size =>
+        val prunedType = prunedStructTypes(structTypeIndex)
+
+        // Filters out the pruned fields.
+        val prunedFields = s.nameExprs.zip(s.valExprs).filter { case (nameExpr, _) =>
+          val name = nameExpr.eval(EmptyRow).toString
+          prunedType.fieldNames.exists { fieldName =>
+            if (SQLConf.get.caseSensitiveAnalysis) {
+              fieldName.equals(name)
+            } else {
+              fieldName.equalsIgnoreCase(name)
+            }
+          }
+        }.flatMap(pair => Seq(pair._1, pair._2))
+
+        structTypeIndex += 1
+        CreateNamedStruct(prunedFields)
+    }.transformUp {
+      // When we change nested serializer data type, `If` expression will be unresolved because
+      // literal null's data type doesn't match now. We need to align it with new data type.
+      // Note: we should do `transformUp` explicitly to change data types.
+      case i @ If(_: IsNull, Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
+        i.copy(trueValue = Literal(null, ser.dataType))
+    }.asInstanceOf[NamedExpression]
+
+    if (prunedSerializer.dataType.sameType(prunedDataType)) {
+      prunedSerializer
+    } else {
+      serializer
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Project(_, s: SerializeFromObject) =>
+      // Prunes individual serializer if it is not used at all by above projection.
+      val usedRefs = p.references
+      val prunedSerializer = s.serializer.filter(usedRefs.contains)
+
+      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
+
+      if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
+        // Prunes nested fields in serializers.
+        val prunedSchema = SchemaPruning.pruneDataSchema(
+          StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
+        val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
+          pruneSerializer(serializer, prunedSchema(idx).dataType)
+        }
+
+        // Builds new projection.
+        val projectionOverSchema = ProjectionOverSchema(prunedSchema)
+        val newProjects = p.projectList.map(_.transformDown {
+          case projectionOverSchema(expr) => expr
+        }).map { case expr: NamedExpression => expr }
+        p.copy(projectList = newProjects,
+          child = SerializeFromObject(nestedPrunedSerializer, s.child))
+      } else {
+        p.copy(child = SerializeFromObject(prunedSerializer, s.child))
+      }
   }
 }

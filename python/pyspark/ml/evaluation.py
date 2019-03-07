@@ -106,7 +106,7 @@ class JavaEvaluator(JavaParams, Evaluator):
 
 
 @inherit_doc
-class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol,
+class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol, HasWeightCol,
                                     JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
@@ -130,6 +130,16 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     >>> evaluator2 = BinaryClassificationEvaluator.load(bce_path)
     >>> str(evaluator2.getRawPredictionCol())
     'raw'
+    >>> scoreAndLabelsAndWeight = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1], x[2]),
+    ...    [(0.1, 0.0, 1.0), (0.1, 1.0, 0.9), (0.4, 0.0, 0.7), (0.6, 0.0, 0.9),
+    ...     (0.6, 1.0, 1.0), (0.6, 1.0, 0.3), (0.8, 1.0, 1.0)])
+    >>> dataset = spark.createDataFrame(scoreAndLabelsAndWeight, ["raw", "label", "weight"])
+    ...
+    >>> evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw", weightCol="weight")
+    >>> evaluator.evaluate(dataset)
+    0.70...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
+    0.82...
 
     .. versionadded:: 1.4.0
     """
@@ -140,10 +150,10 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 
     @keyword_only
     def __init__(self, rawPredictionCol="rawPrediction", labelCol="label",
-                 metricName="areaUnderROC"):
+                 metricName="areaUnderROC", weightCol=None):
         """
         __init__(self, rawPredictionCol="rawPrediction", labelCol="label", \
-                 metricName="areaUnderROC")
+                 metricName="areaUnderROC", weightCol=None)
         """
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -169,10 +179,10 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     @keyword_only
     @since("1.4.0")
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
-                  metricName="areaUnderROC"):
+                  metricName="areaUnderROC", weightCol=None):
         """
         setParams(self, rawPredictionCol="rawPrediction", labelCol="label", \
-                  metricName="areaUnderROC")
+                  metricName="areaUnderROC", weightCol=None)
         Sets params for binary classification evaluator.
         """
         kwargs = self._input_kwargs

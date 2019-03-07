@@ -130,14 +130,14 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
     expected.foreach {
       case (expectedSynonym, expectedSimilarity) =>
         assert(findSynonymsResult.contains(expectedSynonym))
-        assert(expectedSimilarity ~== findSynonymsResult.get(expectedSynonym).get absTol 1E-5)
+        assert(expectedSimilarity ~== findSynonymsResult(expectedSynonym) absTol 1E-5)
     }
 
     val findSynonymsArrayResult = model.findSynonymsArray("a", 2).toMap
     findSynonymsResult.foreach {
       case (expectedSynonym, expectedSimilarity) =>
         assert(findSynonymsArrayResult.contains(expectedSynonym))
-        assert(expectedSimilarity ~== findSynonymsArrayResult.get(expectedSynonym).get absTol 1E-5)
+        assert(expectedSimilarity ~== findSynonymsArrayResult(expectedSynonym) absTol 1E-5)
     }
   }
 

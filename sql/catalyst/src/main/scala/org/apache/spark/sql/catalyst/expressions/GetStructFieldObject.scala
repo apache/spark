@@ -15,34 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
+import org.apache.spark.sql.types.StructField
 
 /**
- * A stub application ID; can be set in constructor and/or updated later.
- * @param applicationId application ID
- * @param attempt an attempt counter
+ * A Scala extractor that extracts the child expression and struct field from a [[GetStructField]].
+ * This is in contrast to the [[GetStructField]] case class extractor which returns the field
+ * ordinal instead of the field itself.
  */
-class StubApplicationAttemptId(var applicationId: ApplicationId, var attempt: Int)
-    extends ApplicationAttemptId {
-
-  override def setApplicationId(appID: ApplicationId): Unit = {
-    applicationId = appID
-  }
-
-  override def getAttemptId: Int = {
-    attempt
-  }
-
-  override def setAttemptId(attemptId: Int): Unit = {
-    attempt = attemptId
-  }
-
-  override def getApplicationId: ApplicationId = {
-    applicationId
-  }
-
-  override def build(): Unit = {
-  }
+object GetStructFieldObject {
+  def unapply(getStructField: GetStructField): Option[(Expression, StructField)] =
+    Some((
+      getStructField.child,
+      getStructField.childSchema(getStructField.ordinal)))
 }

@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import com.google.common.io.Files
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
@@ -150,8 +150,9 @@ private[deploy] class ExecutorRunner(
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
-      val formattedCommand = command.asScala.mkString("\"", "\" \"", "\"")
-      logInfo(s"Launch command: $formattedCommand")
+      val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala)
+        .mkString("\"", "\" \"", "\"")
+      logInfo(s"Launch command: $redactedCommand")
 
       builder.directory(executorDir)
       builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))
@@ -171,7 +172,7 @@ private[deploy] class ExecutorRunner(
 
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
-        formattedCommand, "=" * 40)
+        redactedCommand, "=" * 40)
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
