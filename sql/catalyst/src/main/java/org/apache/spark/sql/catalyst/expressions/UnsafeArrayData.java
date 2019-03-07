@@ -53,7 +53,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 
 public final class UnsafeArrayData extends ArrayData {
-  public static final SpecializedGettersReader reader = new SpecializedGettersReader(true, true);
+  private static final SpecializedGettersReader reader = new SpecializedGettersReader(true, true);
 
   public static int calculateHeaderPortionInBytes(int numFields) {
     return (int)calculateHeaderPortionInBytes((long)numFields);
