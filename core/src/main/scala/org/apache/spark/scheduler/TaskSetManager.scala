@@ -581,6 +581,7 @@ private[spark] class TaskSetManager(
           currentLocalityIndex = getLocalityIndex(taskLocality)
           lastLaunchTime = curTime
         }
+
         if (isBarrier) {
           var replacedExecId = execId
           if (readyTaskToReservedWorkerOffer.contains(index)) {
