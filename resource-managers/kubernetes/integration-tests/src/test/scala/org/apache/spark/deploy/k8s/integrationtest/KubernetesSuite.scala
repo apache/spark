@@ -265,7 +265,7 @@ class KubernetesSuite extends SparkFunSuite
       println(s"!!! status $resourceStatus for $name")
       val conditions = resourceStatus.getConditions().asScala
       println(s"!!! conditions $conditions for $name")
-      val readyConditions = conditions.filter(cond.getType() == "Ready")
+      val readyConditions = conditions.filter{cond => cond.getType() == "Ready"}
       println(s"!!! ready conditions $conditions for $name")
       val result = readyConditions
         .map(cond => cond.getStatus() == "True")
