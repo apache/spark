@@ -189,6 +189,7 @@ private[spark] class BasicExecutorFeatureStep(
     }.getOrElse(executorContainer)
     val containerWithLifecycle = kubernetesConf.workerDecomissioning match {
       case true =>
+        logger.info("Adding decommission script to lifecycle")
         new ContainerBuilder(executorContainer).editOrNewLifecycle()
           .withNewPreStop()
             .withNewExec()
@@ -198,7 +199,9 @@ private[spark] class BasicExecutorFeatureStep(
           .endPreStop()
           .endLifecycle()
           .build()
-      case false => containerWithLimitCores
+      case false =>
+        logger.info("Decommissioning not enabled, skipping shutdown script")
+        containerWithLimitCores
     }
     val ownerReference = kubernetesConf.driverPod.map { pod =>
       new OwnerReferenceBuilder()

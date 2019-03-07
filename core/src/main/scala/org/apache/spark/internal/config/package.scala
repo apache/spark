@@ -489,11 +489,6 @@ package object config {
       .createWithDefault(false)
   // End blacklist confs
 
-  private[spark] val WORKER_DECOMMISSION_ENABLED =
-    ConfigBuilder("spark.worker.decommission.enabled")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
     ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
       .doc("Whether to un-register all the outputs on the host in condition that we receive " +
