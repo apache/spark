@@ -41,10 +41,10 @@ import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
     with BeforeAndAfterAll with BeforeAndAfter
-    with BasicTestsSuite
+//    with BasicTestsSuite
     with DecommissionSuite
-    with SecretsTestsSuite
-    with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
+//    with SecretsTestsSuite
+//    with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
   with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
@@ -265,8 +265,10 @@ class KubernetesSuite extends SparkFunSuite
       println(s"!!! status $resourceStatus for $name")
       val conditions = resourceStatus.getConditions().asScala
       println(s"!!! conditions $conditions for $name")
+      val conditionTypes = conditions.map(_.getType())
+      println(s"!!! condition types $conditionTypes")
       val readyConditions = conditions.filter{cond => cond.getType() == "Ready"}
-      println(s"!!! ready conditions $conditions for $name")
+      println(s"!!! ready conditions $readyConditions for $name")
       val result = readyConditions
         .map(cond => cond.getStatus() == "True")
         .headOption.getOrElse(false)
@@ -287,12 +289,14 @@ class KubernetesSuite extends SparkFunSuite
           val name = resource.getMetadata.getName
           val namespace = resource.getMetadata().getNamespace()
           action match {
-            case Action.ADDED | Action.MODIFIED =>
-              println(s"Add or modification event received for $name.")
+            case Action.MODIFIED =>
               execPods(name) = resource
-              // If testing decomissioning delete the node 5 seconds after it starts running
-              // Open question: could we put this in the checker
-              if (decomissioningTest) {
+            case Action.ADDED  =>
+              println(s"Add event received for $name.")
+              execPods(name) = resource
+              // If testing decomissioning delete the first with a delay after it starts
+              // running.
+              if (decomissioningTest && execPods.size == 1) {
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
@@ -301,7 +305,7 @@ class KubernetesSuite extends SparkFunSuite
                 }
                 // Sleep a small interval to allow execution of job
                 println("Sleeping before killing pod.")
-                Thread.sleep(100)
+                Thread.sleep(30000)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
@@ -357,13 +361,6 @@ class KubernetesSuite extends SparkFunSuite
         val podsEmpty = execPods.values.isEmpty
         val podsReadyOrDead = anyReadyPods || podsEmpty
         podsReadyOrDead shouldBe (true)
-      }
-      // Sleep a small interval to allow execution
-      Thread.sleep(3000)
-      // Wait for the executors to be removed
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        println(s"decom iteration pods non-empty ${execPods.values.nonEmpty} with ${execPods}")
-        execPods.values.nonEmpty should be (false)
       }
     }
     println(s"Closing watcher with execPods $execPods nonEmpty: ${execPods.values.nonEmpty}")
