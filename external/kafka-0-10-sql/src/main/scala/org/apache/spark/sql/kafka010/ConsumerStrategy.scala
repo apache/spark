@@ -25,6 +25,8 @@ import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.kafka010.KafkaConfigUpdater
+
 /**
  * Subscribe allows you to subscribe to a fixed collection of topics.
  * SubscribePattern allows you to use a regex to specify topics of interest.
