@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.kafka010
 
 import java.{util => ju}
 
@@ -26,12 +26,11 @@ import org.apache.kafka.common.config.SaslConfigs
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Kafka
-import org.apache.spark.kafka010.KafkaTokenUtil
 
 /**
  * Class to conveniently update Kafka config params, while logging the changes
  */
-private[kafka010] case class KafkaConfigUpdater(module: String, kafkaParams: Map[String, Object])
+private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[String, Object])
     extends Logging {
   private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
 
@@ -58,9 +57,9 @@ private[kafka010] case class KafkaConfigUpdater(module: String, kafkaParams: Map
     //   configuration.
     if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
       logDebug("JVM global security configuration detected, using it for login.")
-    } else if (KafkaSecurityHelper.isTokenAvailable()) {
+    } else if (KafkaTokenUtil.isTokenAvailable()) {
       logDebug("Delegation token detected, using it for login.")
-      val jaasParams = KafkaSecurityHelper.getTokenJaasParams(SparkEnv.get.conf)
+      val jaasParams = KafkaTokenUtil.getTokenJaasParams(SparkEnv.get.conf)
       set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
       val mechanism = SparkEnv.get.conf.get(Kafka.TOKEN_SASL_MECHANISM)
       require(mechanism.startsWith("SCRAM"),
