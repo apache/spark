@@ -242,7 +242,7 @@ case class ExpressionEncoder[T](
   }
 
   // The schema after converting `T` to a Spark SQL row. This schema is dependent on the given
-  // serialier.
+  // serializer.
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })
