@@ -128,7 +128,7 @@ private[spark] class BasicDriverConfigurationStep(
           .build())
         .endEnv()
       .addNewEnv()
-        .withName(SPARK_APP_NAME)
+        .withName(ENV_APP_NAME)
         .withValue(appName)
         .endEnv()
       .withNewResources()
