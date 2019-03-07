@@ -254,13 +254,13 @@ class KubernetesSuite extends SparkFunSuite
 
     val execPods = scala.collection.mutable.Map[String, Pod]()
     def checkPodReady(namespace: String, name: String) = {
-      println(s"!!! doing ready check on pod $name")
+      println(s"!!! doing ready check on pod $name in $namespace")
       val execPod = kubernetesTestComponents.kubernetesClient
         .pods()
         .inNamespace(namespace)
         .withName(name)
         .get()
-      println(s"!!! god pod $execPod for $name")
+      println(s"!!! got pod $execPod for $name in namespace $namespace")
       val resourceStatus = execPod.getStatus
       println(s"!!! status $resourceStatus for $name")
       val conditions = resourceStatus.getConditions().asScala
