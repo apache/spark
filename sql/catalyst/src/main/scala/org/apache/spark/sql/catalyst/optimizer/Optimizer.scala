@@ -111,7 +111,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
-        RewriteArithmeticFiltersOnIntOrLongColumn,
+        RewriteArithmeticFiltersOnIntegralColumn,
         ConstantFolding,
         ReorderAssociativeOperator,
         LikeSimplification,

@@ -24,7 +24,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Filter, Project, SubqueryAlias}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_METADATA_ONLY
+import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_EXCLUDED_RULES, OPTIMIZER_METADATA_ONLY}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -60,16 +60,19 @@ class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleto
   }
 
   test("SPARK-23877: filter on projected expression") {
-    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
+    // exclude `RewriteArithmeticFiltersOnIntegralColumn` here because
+    // it will optimize part + 1 < 5 to part < 4 and then pushed to metastore
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true",
+      OPTIMIZER_EXCLUDED_RULES.key -> "RewriteArithmeticFiltersOnIntegralColumn") {
       val startCount = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
 
       // verify the matching partitions
       val partitions = spark.internalCreateDataFrame(Distinct(Filter(($"x" < 5).expr,
-        Project(Seq(($"part" * 1).as("x").expr.asInstanceOf[NamedExpression]),
+        Project(Seq(($"part" + 1).as("x").expr.asInstanceOf[NamedExpression]),
           spark.table("metadata_only").logicalPlan.asInstanceOf[SubqueryAlias].child)))
           .queryExecution.toRdd, StructType(Seq(StructField("x", IntegerType))))
 
-      checkAnswer(partitions, Seq(0, 1, 2, 3, 4).toDF("x"))
+      checkAnswer(partitions, Seq(1, 2, 3, 4).toDF("x"))
 
       // verify that the partition predicate was not pushed down to the metastore
       assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount - startCount == 11)

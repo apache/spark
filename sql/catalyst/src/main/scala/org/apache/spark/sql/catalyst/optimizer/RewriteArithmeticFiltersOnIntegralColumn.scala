@@ -20,29 +20,31 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types._
 
 /**
- * Rewrite arithmetic filters on int or long column to its equivalent form,
- * leaving attribute alone in one side, so that we can push it down to
- * parquet or other file format.
- * For example, this rule can optimize
+ * Rewrite arithmetic filters on an integral-type (e.g., byte, short, int and long)
+ * column to its equivalent form, leaving attribute alone in a left side, so that
+ * we can push it down to datasources (e.g., Parquet and ORC).
+ *
+ * For example, this rule can optimize a query as follows:
  * {{{
  *   SELECT * FROM table WHERE i + 3 = 5
+ *   ==> SELECT * FROM table WHERE i = 5 - 3
  * }}}
- * to
- * {{{
- *   SELECT * FROM table WHERE i = 5 - 3
- * }}}
- * when i is Int or Long, and then other rules will further optimize it to
+ *
+ * Then, the [[ConstantFolding]] rule will further optimize it as follows:
  * {{{
  *   SELECT * FROM table WHERE i = 2
  * }}}
- * The arithmetic operation supports `Add` and `Subtract`. The comparision supports
- * '=', '>=', '<=', '>', '<', '!='. It only supports type of `INT` and `LONG`,
- * it doesn't support `FLOAT` or `DOUBLE` for precision issues.
- */
-object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with PredicateHelper {
+ *
+ * Note:
+ * 1. This rule supports `Add` and `Subtract` in arithmetic expressions.
+ * 2. This rule supports `=`, `>=`, `<=`, `>`, `<`, and `!=` in comparators.
+ * 3. This rule supports integral-type (`byte`, `short`, `int`, `long`) only.
+ *    It doesn't support `float` or `double` because of precision issues.
+  */
+object RewriteArithmeticFiltersOnIntegralColumn extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f: Filter =>
       f transformExpressionsUp {
@@ -90,7 +92,7 @@ object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with 
   }
 
   private def isDataTypeSafe(dataType: DataType): Boolean = dataType match {
-    case IntegerType | LongType => true
+    case ByteType | ShortType | IntegerType | LongType => true
     case _ => false
   }
 
@@ -101,6 +103,10 @@ object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with 
     e match {
       case Add(_, _) =>
         e.dataType match {
+          case ByteType =>
+            isAddSafe(leftVal, rightVal, Byte.MinValue, Byte.MaxValue)
+          case ShortType =>
+            isAddSafe(leftVal, rightVal, Short.MinValue, Short.MaxValue)
           case IntegerType =>
             isAddSafe(leftVal, rightVal, Int.MinValue, Int.MaxValue)
           case LongType =>
@@ -110,6 +116,10 @@ object RewriteArithmeticFiltersOnIntOrLongColumn extends Rule[LogicalPlan] with 
 
       case Subtract(_, _) =>
         e.dataType match {
+          case ByteType =>
+            isSubtractSafe(leftVal, rightVal, Byte.MinValue, Byte.MaxValue)
+          case ShortType =>
+            isSubtractSafe(leftVal, rightVal, Short.MinValue, Short.MaxValue)
           case IntegerType =>
             isSubtractSafe(leftVal, rightVal, Int.MinValue, Int.MaxValue)
           case LongType =>
