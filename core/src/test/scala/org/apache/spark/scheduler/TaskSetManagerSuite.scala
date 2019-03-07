@@ -69,27 +69,47 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
 // Get the rack for a given host
 object FakeRackUtil {
   private val hostToRack = new mutable.HashMap[String, String]()
+  var loopCount = 0
 
   def cleanUp() {
     hostToRack.clear()
+    loopCount = 0
   }
 
   def assignHostToRack(host: String, rack: String) {
     hostToRack(host) = rack
   }
 
-  def getRackForHost(host: String, slow: Boolean = false): Option[String] = {
-    if (slow) {
-      Thread.sleep(100) // assume resolving one host takes 100 ms
-    }
+  def getRackForHost(host: String): Option[String] = {
+    loopCount = simulateRunResolveCommand(Seq(host))
     hostToRack.get(host)
   }
 
-  def getRacksForHosts(hosts: List[String], slow: Boolean = false): List[String] = {
-    if (slow) {
-      Thread.sleep(500) // assume resolving multiple hosts takes 500 ms
+  def getRacksForHosts(hosts: List[String]): List[Option[String]] = {
+    loopCount = simulateRunResolveCommand(hosts)
+    hosts.map(hostToRack.get)
+  }
+
+  /**
+   * This is a simulation of building and executing the resolution command.
+   * Simulate function `runResolveCommand()` in [[org.apache.hadoop.net.ScriptBasedMapping]].
+   * If Seq has 100 elements, it returns 4. If Seq has 1 elements, it returns 1.
+   * @param args a list of arguments
+   * @return script execution times
+   */
+  private def simulateRunResolveCommand(args: Seq[String]): Int = {
+    val maxArgs = 30 // Simulate NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_DEFAULT
+    var numProcessed = 0
+    var loopCount = 0
+    while (numProcessed != args.size) {
+      var start = maxArgs * loopCount
+      numProcessed = start
+      while (numProcessed < (start + maxArgs) && numProcessed < args.size) {
+        numProcessed += 1
+      }
+      loopCount += 1
     }
-    hosts.flatMap(hostToRack.get)
+    loopCount
   }
 }
 
@@ -157,10 +177,10 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
 
   override def getRackForHost(value: String): Option[String] =
-    FakeRackUtil.getRackForHost(value, slowRackResolve)
+    FakeRackUtil.getRackForHost(value)
 
-  override def getRacksForHosts(values: List[String]): List[String] =
-    FakeRackUtil.getRacksForHosts(values, slowRackResolve)
+  override def getRacksForHosts(values: List[String]): List[Option[String]] =
+    FakeRackUtil.getRacksForHosts(values)
 }
 
 /**
@@ -1618,7 +1638,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       result.accumUpdates, info3)
   }
 
-  test("SPARK-27038: Verify the rack resolving time and result when initialing TaskSetManager") {
+  test("SPARK-27038: Verify the rack resolving time has been reduced") {
     sc = new SparkContext("local", "test")
     for (i <- 1 to 100) {
       FakeRackUtil.assignHostToRack("host" + i, "rack" + i)
@@ -1637,8 +1657,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     for (i <- 1 to 100) {
       total += manager.getPendingTasksForRack("rack" + i).length
     }
-    assert(total === 100) // verify the total number always equals 100 with/without SPARK-27038
-    // verify elapsed time should be less than 1s, without SPARK-27038, it should be larger 10s
-    assert(manager.addTaskElapsedTime < 1)
+    assert(total === 100) // verify the total number not changed with SPARK-27038
+    assert(FakeRackUtil.loopCount == 4) // verify script execution loop count decreased
   }
 }

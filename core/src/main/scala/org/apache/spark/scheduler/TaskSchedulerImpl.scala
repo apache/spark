@@ -814,7 +814,7 @@ private[spark] class TaskSchedulerImpl(
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
 
-  def getRacksForHosts(values: List[String]): List[String] = Nil
+  def getRacksForHosts(values: List[String]): List[Option[String]] = values.map(getRackForHost)
 
   private def waitBackendReady(): Unit = {
     if (backend.isReady) {
