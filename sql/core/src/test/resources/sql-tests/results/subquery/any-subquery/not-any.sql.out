@@ -40,7 +40,7 @@ struct<>
 SELECT *
 FROM   a
 WHERE  NOT a1 > ANY (SELECT b1
-                     FROM   b )
+                     FROM   b)
 -- !query 3 schema
 struct<a1:int,a2:int>
 -- !query 3 output
@@ -52,7 +52,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 >= ANY (SELECT b1
-                      FROM   b )
+                      FROM   b)
 -- !query 4 schema
 struct<a1:int,a2:int>
 -- !query 4 output
@@ -63,7 +63,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 < ANY (SELECT b1
-                     FROM   b )
+                     FROM   b)
 -- !query 5 schema
 struct<a1:int,a2:int>
 -- !query 5 output
@@ -75,7 +75,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 <= ANY (SELECT b1
-                      FROM   b )
+                      FROM   b)
 -- !query 6 schema
 struct<a1:int,a2:int>
 -- !query 6 output
@@ -86,7 +86,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 != ANY (SELECT b1
-                      FROM   b )
+                      FROM   b)
 -- !query 7 schema
 struct<a1:int,a2:int>
 -- !query 7 output
@@ -97,7 +97,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 = ANY (SELECT b1
-                     FROM   b )
+                     FROM   b)
 -- !query 8 schema
 struct<a1:int,a2:int>
 -- !query 8 output
@@ -109,7 +109,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 <=> ANY (SELECT b1
-                       FROM   b )
+                       FROM   b)
 -- !query 9 schema
 struct<a1:int,a2:int>
 -- !query 9 output
@@ -122,7 +122,7 @@ NULL	2
 SELECT *
 FROM   a
 WHERE  NOT a1 > ANY (SELECT c1
-                     FROM   c )
+                     FROM   c)
 -- !query 10 schema
 struct<a1:int,a2:int>
 -- !query 10 output
@@ -133,7 +133,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 = ANY (SELECT c1
-                     FROM   c )
+                     FROM   c)
 -- !query 11 schema
 struct<a1:int,a2:int>
 -- !query 11 output
@@ -144,7 +144,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT a1 <=> ANY (SELECT c1
-                       FROM   c )
+                       FROM   c)
 -- !query 12 schema
 struct<a1:int,a2:int>
 -- !query 12 output
@@ -156,7 +156,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT NOT a1 = ANY (SELECT b1
-                         FROM   b )
+                         FROM   b)
 -- !query 13 schema
 struct<a1:int,a2:int>
 -- !query 13 output
@@ -167,7 +167,7 @@ struct<a1:int,a2:int>
 SELECT *
 FROM   a
 WHERE  NOT NOT NOT a1 <=> ANY (SELECT b1
-                               FROM   b )
+                               FROM   b)
 -- !query 14 schema
 struct<a1:int,a2:int>
 -- !query 14 output

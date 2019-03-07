@@ -26,7 +26,7 @@ SELECT a1,
 FROM   a
 WHERE  (a1, a2) = ANY (SELECT b1,
                               b2
-                       FROM   b );
+                       FROM   b);
 
 -- TC 01.02
 SELECT a1
@@ -34,7 +34,7 @@ SELECT a1
 FROM   a
 WHERE  NOT (a1, a2) = ANY (SELECT b1,
                                   b2
-                           FROM   b );
+                           FROM   b);
 
 -- TC 01.03
 SELECT a1
@@ -42,7 +42,7 @@ SELECT a1
 FROM   a
 WHERE  NOT (a1, a2) = ANY (SELECT c1,
                                   c2
-                           FROM   c );
+                           FROM   c);
 
 -- negative cases
 -- TC 02.01
@@ -50,17 +50,17 @@ SELECT *
 FROM   a
 WHERE  (a1, a2) <= ANY (SELECT b1,
                                b2
-                        FROM   b  );
+                        FROM   b);
 
 -- TC 02.02
 SELECT *
 FROM   a
 WHERE  (a1, a2) != ANY (SELECT b1,
                                b2
-                        FROM   b  );
+                        FROM   b);
 
 -- TC 02.03
 SELECT *
 FROM   a
 WHERE  (a1, a2) = ANY (SELECT b1
-                       FROM   b  );
+                       FROM   b);

@@ -45,7 +45,7 @@ SELECT a1,
 FROM   a
 WHERE  (a1, a2) = ANY (SELECT b1,
                               b2
-                       FROM   b )
+                       FROM   b)
 -- !query 3 schema
 struct<a1:int,a2:int>
 -- !query 3 output
@@ -58,7 +58,7 @@ SELECT a1
 FROM   a
 WHERE  NOT (a1, a2) = ANY (SELECT b1,
                                   b2
-                           FROM   b )
+                           FROM   b)
 -- !query 4 schema
 struct<a2:int>
 -- !query 4 output
@@ -71,7 +71,7 @@ SELECT a1
 FROM   a
 WHERE  NOT (a1, a2) = ANY (SELECT c1,
                                   c2
-                           FROM   c )
+                           FROM   c)
 -- !query 5 schema
 struct<a2:int>
 -- !query 5 output
@@ -83,7 +83,7 @@ SELECT *
 FROM   a
 WHERE  (a1, a2) <= ANY (SELECT b1,
                                b2
-                        FROM   b  )
+                        FROM   b)
 -- !query 6 schema
 struct<>
 -- !query 6 output
@@ -96,7 +96,7 @@ SELECT *
 FROM   a
 WHERE  (a1, a2) != ANY (SELECT b1,
                                b2
-                        FROM   b  )
+                        FROM   b)
 -- !query 7 schema
 struct<>
 -- !query 7 output
@@ -108,7 +108,7 @@ ANY/SOME predicate does not support '!=' operation when multiple columns are spe
 SELECT *
 FROM   a
 WHERE  (a1, a2) = ANY (SELECT b1
-                       FROM   b  )
+                       FROM   b)
 -- !query 8 schema
 struct<>
 -- !query 8 output

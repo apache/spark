@@ -187,30 +187,24 @@ class ExpressionParserSuite extends PlanTest {
       expr.asInstanceOf[AnySubquery].genCmp
     }
 
-    val any_subquery = defaultParser.parseExpression("a < any (select b from c)")
+    val anySubquery = defaultParser.parseExpression("a < any (select b from c)")
     compareExpressions(
-      any_subquery,
-      AnySubquery(Seq('a), ListQuery(table("c").select('b)), extractPredicate(any_subquery))
+      anySubquery,
+      AnySubquery(Seq('a), ListQuery(table("c").select('b)), extractPredicate(anySubquery))
     )
 
-    val some_subquery = defaultParser.parseExpression("a = some (select b from c)")
+    val multiColumn = defaultParser.parseExpression("(a, b) = any (select c,d from e)")
     compareExpressions(
-      some_subquery,
-      AnySubquery(Seq('a), ListQuery(table("c").select('b)), extractPredicate(some_subquery))
-    )
-
-    val multi_column = defaultParser.parseExpression("(a, b) = any (select c,d from e)")
-    compareExpressions(
-      multi_column,
+      multiColumn,
       AnySubquery(
         Seq('a, 'b),
         ListQuery(table("e").select('c, 'd)),
-        extractPredicate(multi_column)))
+        extractPredicate(multiColumn)))
 
-    val not_euqal_any = defaultParser.parseExpression("a != any (select b from c)")
+    val notEuqalAny = defaultParser.parseExpression("a != any (select b from c)")
     compareExpressions(
-      not_euqal_any,
-      AnySubquery(Seq('a), ListQuery(table("c").select('b)), extractPredicate(not_euqal_any)))
+      notEuqalAny,
+      AnySubquery(Seq('a), ListQuery(table("c").select('b)), extractPredicate(notEuqalAny)))
   }
 
   test("like expressions") {

@@ -23,76 +23,76 @@ CREATE TEMPORARY VIEW c AS SELECT * FROM VALUES
 SELECT *
 FROM   a
 WHERE  a1 > ANY (SELECT b1
-                 FROM   b );
+                 FROM   b);
 
 -- TC 01.02
 SELECT *
 FROM   a
 WHERE  a1 >= ANY (SELECT b1
-                  FROM   b );
+                  FROM   b);
 
 -- TC 01.03
 SELECT *
 FROM   a
 WHERE  a1 < ANY (SELECT b1
-                 FROM   b );
+                 FROM   b);
 
 -- TC 01.04
 SELECT *
 FROM   a
 WHERE  a1 <= ANY (SELECT b1
-                  FROM   b );
+                  FROM   b);
 
 -- TC 01.05
 SELECT *
 FROM   a
 WHERE  a1 != ANY (SELECT b1
-                  FROM   b );
+                  FROM   b);
 
 -- TC 01.06
 SELECT *
 FROM   a
 WHERE  a1 = ANY (SELECT b1
-                 FROM   b );
+                 FROM   b);
 
 -- TC 01.07
 SELECT *
 FROM   a
 WHERE  a1 <=> ANY (SELECT b1
-                   FROM   b );
+                   FROM   b);
 
 -- compare with `null`
 -- TC 02.01
 SELECT *
 FROM   a
 WHERE  a1 > ANY (SELECT c1
-                 FROM   c );
+                 FROM   c);
 
 -- TC 02.02
 SELECT *
 FROM   a
 WHERE  a1 != ANY (SELECT c1
-                  FROM   c );
+                  FROM   c);
 
 -- TC 02.03
 SELECT *
 FROM   a
 WHERE  a1 = ANY (SELECT c1
-                 FROM   c );
+                 FROM   c);
 
 -- TC 02.04
 SELECT *
 FROM   a
 WHERE  a1 <=> ANY (SELECT c1
-                   FROM   c );
+                   FROM   c);
 -- TC 02.05
 SELECT *
 FROM   a
 WHERE  NOT a1 != ANY (SELECT c1
-                      FROM   c );
+                      FROM   c);
 
 -- TC 02.06
 SELECT *
 FROM   a
 WHERE  NOT a1 = ANY (SELECT c1
-                     FROM   c );
+                     FROM   c);
