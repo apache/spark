@@ -298,7 +298,7 @@ class KubernetesSuite extends SparkFunSuite
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
-                // Sleep a small interval to allow execution & downstream pod ready check to also catch up
+                // Sleep a small interval to allow execution of job
                 println("Sleeping before killing pod.")
                 Thread.sleep(100)
                 // Delete the pod to simulate cluster scale down/migration.
