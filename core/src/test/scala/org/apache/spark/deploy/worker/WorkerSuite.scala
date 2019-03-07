@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
+import java.io.{File, IOException}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Supplier
 
@@ -30,7 +31,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
-import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
+import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, WorkDirCleanup}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker._
@@ -243,6 +244,61 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     }
     worker.handleExecutorStateChanged(
       ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
+    assert(cleanupCalled.get() == value)
+  }
+
+  test("removes our metadata of all executors registered for the given " +
+    "application after WorkDirCleanup when config spark.shuffle.service.db.enabled=true") {
+    testWorkDirCleanupAndRemoveMetadataWithConfig(true)
+  }
+
+  test("don't removes our metadata of all executors registered for the given " +
+    "application after WorkDirCleanup when config spark.shuffle.service.db.enabled=false") {
+    testWorkDirCleanupAndRemoveMetadataWithConfig(false)
+  }
+
+  private def testWorkDirCleanupAndRemoveMetadataWithConfig(value: Boolean) = {
+    val conf = new SparkConf().set("spark.shuffle.service.db.enabled", value.toString)
+    conf.set("spark.worker.cleanup.appDataTtl", 60.toString)
+    conf.set("spark.shuffle.service.enabled", "true")
+
+    val appId = "app1"
+    val execId = "exec1"
+    val cleanupCalled = new AtomicBoolean(false)
+    when(shuffleService.applicationRemoved(any[String])).thenAnswer(new Answer[Unit] {
+      override def answer(invocations: InvocationOnMock): Unit = {
+        cleanupCalled.set(true)
+      }
+    })
+    val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val worker = makeWorker(conf, externalShuffleServiceSupplier)
+
+    val workDir = Option("/tmp/work").map(new File(_)).get
+    try {
+      workDir.mkdirs()
+      if (!workDir.exists() || !workDir.isDirectory) {
+        logError("Failed to create work directory " + workDir)
+      }
+      assert(workDir.isDirectory)
+    } catch {
+      case e: Exception =>
+        logError("Failed to create work directory " + workDir, e)
+    }
+    // initialize workers
+    worker.workDir = workDir
+    // Create the executor's working directory
+    val executorDir = new File(worker.workDir, appId + "/" + execId)
+
+    if (!executorDir.exists()) {
+      if (!executorDir.mkdirs()) {
+        throw new IOException("Failed to create directory " + executorDir)
+      }
+    }
+    executorDir.setLastModified(System.currentTimeMillis - (1000 * 120))
+    worker.receive(WorkDirCleanup)
+    Thread.sleep(10)
     assert(cleanupCalled.get() == value)
   }
 }
