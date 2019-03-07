@@ -314,6 +314,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 0)
     }
     assert(e.getMessage.contains("spark.sql.shuffle.partitions"))
+    val e2 = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, -1)
+    }
+    assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
 }
