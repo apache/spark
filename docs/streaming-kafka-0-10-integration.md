@@ -277,79 +277,9 @@ stream.foreachRDD(rdd -> {
 </div>
 </div>
 
-### Deploying
-
-As with any Spark applications, `spark-submit` is used to launch your application.
-
-For Scala and Java applications, if you are using SBT or Maven for project management, then package `spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}` and its dependencies into the application JAR. Make sure `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` are marked as `provided` dependencies as those are already present in a Spark installation. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
-
-### Security
-
-Kafka 0.9.0.0 introduced several features that increases security in a cluster. For detailed
-description about these possibilities, see [Kafka security docs](http://kafka.apache.org/documentation.html#security).
-
-It's worth noting that security is optional and turned off by default.
-
-Spark supports the following ways to authenticate against Kafka cluster:
-- **Delegation token (introduced in Kafka broker 1.1.0)**
-- **JAAS login configuration**
-
-#### Delegation token
-
-This way the application can be configured via Spark parameters and may not need JAAS login
-configuration (Spark can use Kafka's dynamic JAAS configuration feature). For further information
-about delegation tokens, see [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
-
-The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers` is set,
-Spark considers the following log in options, in order of preference:
-- **JAAS login configuration**, please see example below.
-- **Keytab file**, such as,
-
-      ./bin/spark-submit \
-          --keytab <KEYTAB_FILE> \
-          --principal <PRINCIPAL> \
-          --conf "spark.kafka.bootstrap.servers=<KAFKA_SERVERS>" \
-          ...
-
-- **Kerberos credential cache**, such as,
-
-      ./bin/spark-submit \
-          --conf "spark.kafka.bootstrap.servers=<KAFKA_SERVERS>" \
-          ...
-
-The Kafka delegation token provider can be turned off by setting `spark.security.credentials.kafka.enabled` to `false` (default: `true`).
-
-Spark can be configured to use the following authentication protocols to obtain token (it must match with
-Kafka broker configuration):
-- **SASL SSL (default)**
-- **SSL**
-- **SASL PLAINTEXT (for testing)**
-
-After obtaining delegation token successfully, Spark distributes it across nodes and renews it accordingly.
-Delegation token uses `SCRAM` login module for authentication and because of that the appropriate
-`spark.kafka.sasl.token.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
-must match with Kafka broker configuration.
-
-When delegation token is available on an executor it can be overridden with JAAS login configuration.
-
-##### Caveats
-
-- Obtaining delegation token for proxy user is not yet supported ([KAFKA-6945](https://issues.apache.org/jira/browse/KAFKA-6945)).
-- Kafka native sink is not available so delegation token used only on consumer side.
-
-#### JAAS login configuration
-
-JAAS login configuration must placed on all nodes where Spark tries to access Kafka cluster.
-This provides the possibility to apply any custom authentication logic with a higher cost to maintain.
-This can be done several ways. One possibility is to provide additional JVM parameters, such as,
-
-    ./bin/spark-submit \
-        --driver-java-options "-Djava.security.auth.login.config=/path/to/custom_jaas.conf" \
-        --conf "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=/path/to/custom_jaas.conf" \
-        ...
-
-#### SSL / TLS
+### SSL / TLS
 The new Kafka consumer [supports SSL](http://kafka.apache.org/documentation.html#security_ssl).  To enable it, set kafkaParams appropriately before passing to `createDirectStream` / `createRDD`.  Note that this only applies to communication between Spark and Kafka brokers; you are still responsible for separately [securing](security.html) Spark inter-node communication.
+
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -378,3 +308,17 @@ kafkaParams.put("ssl.key.password", "test1234");
 {% endhighlight %}
 </div>
 </div>
+
+### Deploying
+
+As with any Spark applications, `spark-submit` is used to launch your application.
+
+For Scala and Java applications, if you are using SBT or Maven for project management, then package `spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}` and its dependencies into the application JAR. Make sure `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` are marked as `provided` dependencies as those are already present in a Spark installation. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
+
+### Security
+
+See [Structured Streaming Security](structured-streaming-kafka-integration.html#security).
+
+##### Additional Caveats
+
+- Kafka native sink is not available so delegation token used only on consumer side.
