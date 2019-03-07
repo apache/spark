@@ -204,6 +204,15 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def hashCode(): Int = {
+    scala.util.hashing.MurmurHash3.productHash(cmp)
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case ps: PredicateSubquery => ps.cmp == cmp
+    case _ => false
+  }
+
   private def toString(left: String, right: String): String = {
     s"$left $sqlSymbol ($right)"
   }

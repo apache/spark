@@ -180,31 +180,20 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("any sub-query") {
-    // Since the `genCmp` is generated from `AstBuilder` as a lambda expression
-    // which is not equal to the original comparison expression like `EqualTo`,
-    // we need to extract it from the parsed expression.
-    def extractPredicate(expr: Expression): (Expression, Expression) => Expression = {
-      expr.asInstanceOf[AnySubquery].genCmp
-    }
+    assertEqual(
+      "a < any (select b from c)",
+      AnySubquery(Seq('a), ListQuery(table("c").select('b)), LessThan))
 
-    val anySubquery = defaultParser.parseExpression("a < any (select b from c)")
-    compareExpressions(
-      anySubquery,
-      AnySubquery(Seq('a), ListQuery(table("c").select('b)), extractPredicate(anySubquery))
-    )
+    assertEqual(
+      "(a, b) = any (select c,d from e)",
+      AnySubquery(Seq('a, 'b), ListQuery(table("e").select('c, 'd)), EqualTo))
 
-    val multiColumn = defaultParser.parseExpression("(a, b) = any (select c,d from e)")
-    compareExpressions(
-      multiColumn,
+    assertEqual(
+      "a != any (select b from c)",
       AnySubquery(
-        Seq('a, 'b),
-        ListQuery(table("e").select('c, 'd)),
-        extractPredicate(multiColumn)))
-
-    val notEuqalAny = defaultParser.parseExpression("a != any (select b from c)")
-    compareExpressions(
-      notEuqalAny,
-      AnySubquery(Seq('a), ListQuery(table("c").select('b)), extractPredicate(notEuqalAny)))
+        Seq('a),
+        ListQuery(table("c").select('b)),
+        (e1: Expression, e2: Expression) => Not(EqualTo(e1, e2))))
   }
 
   test("like expressions") {
