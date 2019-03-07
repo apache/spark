@@ -22,6 +22,9 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite.k8sTestTag
 
   test("Test basic decommissioning", k8sTestTag) {
+    // scalastyle:off println
+    println("***TESTING decommissioning***")
+    // scalastyle:on println
     sparkAppConf
       .set("spark.worker.decommission.enabled", "true")
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
@@ -37,6 +40,9 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       appLocator = appLocator,
       isJVM = false,
       decomissioningTest = true)
+    // scalastyle:off println
+    println("***END TESTING decommissioning***")
+    // scalastyle:on println
   }
 }
 
