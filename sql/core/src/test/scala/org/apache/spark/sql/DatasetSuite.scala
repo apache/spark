@@ -20,14 +20,17 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.SparkException
+import org.scalatest.exceptions.TestFailedException
+
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
+import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -63,6 +66,41 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       data.toDS(),
       data: _*)
+  }
+
+  test("toDS should compare map with byte array keys correctly") {
+    // Choose the order of arrays in such way, that sorting keys of different maps by _.toString
+    // will not incidentally put equal keys together.
+    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.toString).toArray
+    arrays(0)(1) = 1.toByte
+    arrays(1)(1) = 2.toByte
+    arrays(2)(1) = 2.toByte
+    arrays(3)(1) = 1.toByte
+
+    val mapA = Map(arrays(0) -> "one", arrays(2) -> "two")
+    val subsetOfA = Map(arrays(0) -> "one")
+    val equalToA = Map(arrays(1) -> "two", arrays(3) -> "one")
+    val notEqualToA1 = Map(arrays(1) -> "two", arrays(3) -> "not one")
+    val notEqualToA2 = Map(arrays(1) -> "two", arrays(4) -> "one")
+
+    // Comparing map with itself
+    checkDataset(Seq(mapA).toDS(), mapA)
+
+    // Comparing map with equivalent map
+    checkDataset(Seq(equalToA).toDS(), mapA)
+    checkDataset(Seq(mapA).toDS(), equalToA)
+
+    // Comparing map with it's subset
+    intercept[TestFailedException](checkDataset(Seq(subsetOfA).toDS(), mapA))
+    intercept[TestFailedException](checkDataset(Seq(mapA).toDS(), subsetOfA))
+
+    // Comparing map with another map differing by single value
+    intercept[TestFailedException](checkDataset(Seq(notEqualToA1).toDS(), mapA))
+    intercept[TestFailedException](checkDataset(Seq(mapA).toDS(), notEqualToA1))
+
+    // Comparing map with another map differing by single key
+    intercept[TestFailedException](checkDataset(Seq(notEqualToA2).toDS(), mapA))
+    intercept[TestFailedException](checkDataset(Seq(mapA).toDS(), notEqualToA2))
   }
 
   test("toDS with RDD") {
@@ -475,7 +513,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
     val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
-    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+    checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, reduce") {
@@ -1171,14 +1209,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df1 = Seq(1, 2, 3, 4).toDF
     assert(df1.schema(0).nullable == false)
     val df2 = Seq(Integer.valueOf(1), Integer.valueOf(2)).toDF
-    assert(df2.schema(0).nullable == true)
+    assert(df2.schema(0).nullable)
 
     val df3 = Seq(Seq(1, 2), Seq(3, 4)).toDF
-    assert(df3.schema(0).nullable == true)
+    assert(df3.schema(0).nullable)
     assert(df3.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
     val df4 = Seq(Seq("a", "b"), Seq("c", "d")).toDF
-    assert(df4.schema(0).nullable == true)
-    assert(df4.schema(0).dataType.asInstanceOf[ArrayType].containsNull == true)
+    assert(df4.schema(0).nullable)
+    assert(df4.schema(0).dataType.asInstanceOf[ArrayType].containsNull)
 
     val df5 = Seq((0, 1.0), (2, 2.0)).toDF("id", "v")
     assert(df5.schema(0).nullable == false)
@@ -1186,32 +1224,32 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df6 = Seq((0, 1.0, "a"), (2, 2.0, "b")).toDF("id", "v1", "v2")
     assert(df6.schema(0).nullable == false)
     assert(df6.schema(1).nullable == false)
-    assert(df6.schema(2).nullable == true)
+    assert(df6.schema(2).nullable)
 
     val df7 = (Tuple1(Array(1, 2, 3)) :: Nil).toDF("a")
-    assert(df7.schema(0).nullable == true)
+    assert(df7.schema(0).nullable)
     assert(df7.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
 
     val df8 = (Tuple1(Array((null: Integer), (null: Integer))) :: Nil).toDF("a")
-    assert(df8.schema(0).nullable == true)
-    assert(df8.schema(0).dataType.asInstanceOf[ArrayType].containsNull == true)
+    assert(df8.schema(0).nullable)
+    assert(df8.schema(0).dataType.asInstanceOf[ArrayType].containsNull)
 
     val df9 = (Tuple1(Map(2 -> 3)) :: Nil).toDF("m")
-    assert(df9.schema(0).nullable == true)
+    assert(df9.schema(0).nullable)
     assert(df9.schema(0).dataType.asInstanceOf[MapType].valueContainsNull == false)
 
     val df10 = (Tuple1(Map(1 -> (null: Integer))) :: Nil).toDF("m")
-    assert(df10.schema(0).nullable == true)
-    assert(df10.schema(0).dataType.asInstanceOf[MapType].valueContainsNull == true)
+    assert(df10.schema(0).nullable)
+    assert(df10.schema(0).dataType.asInstanceOf[MapType].valueContainsNull)
 
     val df11 = Seq(TestDataPoint(1, 2.2, "a", null),
                    TestDataPoint(3, 4.4, "null", (TestDataPoint2(33, "b")))).toDF
     assert(df11.schema(0).nullable == false)
     assert(df11.schema(1).nullable == false)
-    assert(df11.schema(2).nullable == true)
-    assert(df11.schema(3).nullable == true)
+    assert(df11.schema(2).nullable)
+    assert(df11.schema(3).nullable)
     assert(df11.schema(3).dataType.asInstanceOf[StructType].fields(0).nullable == false)
-    assert(df11.schema(3).dataType.asInstanceOf[StructType].fields(1).nullable == true)
+    assert(df11.schema(3).dataType.asInstanceOf[StructType].fields(1).nullable)
   }
 
   Seq(true, false).foreach { eager =>
@@ -1479,7 +1517,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = spark.emptyDataset[Int]
     val ds2 = Seq(1, 2, 3).toDS()
 
-    assert(ds1.isEmpty == true)
+    assert(ds1.isEmpty)
     assert(ds2.isEmpty == false)
   }
 
@@ -1655,6 +1693,38 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df = spark.range(2).map(l => Row(l.toString, BigDecimal.valueOf(l + 0.1111)))
     checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),
       Seq(Row("0", BigDecimal.valueOf(0.1111)), Row("1", BigDecimal.valueOf(1.1111))))
+  }
+
+  test("SPARK-26366: return nulls which are not filtered in except") {
+    val inputDF = sqlContext.createDataFrame(
+      sparkContext.parallelize(Seq(Row("0", "a"), Row("1", null))),
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true))))
+
+    val exceptDF = inputDF.filter(col("a").isin("0") or col("b") > "c")
+    checkAnswer(inputDF.except(exceptDF), Seq(Row("1", null)))
+  }
+
+  test("SPARK-26706: Fix Cast.mayTruncate for bytes") {
+    val thrownException = intercept[AnalysisException] {
+      spark.range(Long.MaxValue - 10, Long.MaxValue).as[Byte]
+        .map(b => b - 1)
+        .collect()
+    }
+    assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+  }
+
+  test("SPARK-26690: checkpoints should be executed with an execution id") {
+    def assertExecutionId: UserDefinedFunction = udf(AssertExecutionId.apply _)
+    spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
+  }
+}
+
+object AssertExecutionId {
+  def apply(id: Long): Long = {
+    assert(TaskContext.get().getLocalProperty(SQLExecution.EXECUTION_ID_KEY) != null)
+    id
   }
 }
 

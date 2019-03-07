@@ -65,6 +65,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       apiServerUri,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
       authConfPrefix,
+      SparkKubernetesClientFactory.ClientType.Driver,
       sc.conf,
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt)
@@ -95,7 +96,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf,
       sc.env.securityManager,
-      KubernetesExecutorBuilder(kubernetesClient, sc.conf),
+      new KubernetesExecutorBuilder(),
       kubernetesClient,
       snapshotsStore,
       new SystemClock())

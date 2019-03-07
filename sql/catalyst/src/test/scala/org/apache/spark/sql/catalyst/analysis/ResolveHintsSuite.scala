@@ -60,7 +60,7 @@ class ResolveHintsSuite extends AnalysisTest {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
       Join(ResolvedHint(testRelation, HintInfo(broadcast = true)),
-        ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None),
+        ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None, JoinHint.NONE),
       caseSensitive = false)
   }
 

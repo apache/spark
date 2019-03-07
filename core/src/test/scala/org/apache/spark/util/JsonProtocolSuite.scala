@@ -66,6 +66,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
       "JVM Information" -> Seq(("GC speed", "9999 objects/s"), ("Java home", "Land of coffee")),
       "Spark Properties" -> Seq(("Job throughput", "80000 jobs/s, regardless of job type")),
+      "Hadoop Properties" -> Seq(("hadoop.tmp.dir", "/usr/local/hadoop/tmp")),
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
@@ -75,13 +76,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"))
     val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -97,7 +99,7 @@ class JsonProtocolSuite extends SparkFunSuite {
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
         Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L))
+          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
         Some(executorUpdates))
     }
@@ -107,7 +109,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
         new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)))
+          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
@@ -137,13 +139,14 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
-    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -761,13 +764,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
-    val expectedJson = pretty(parse(expected))
-    val actualJson = pretty(parse(actual))
+    val expectedJson = parse(expected)
+    val actualJson = parse(actual)
     if (expectedJson != actualJson) {
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
-      println("=== EXPECTED ===\n" + expectedJson + "\n")
-      println("=== ACTUAL ===\n" + actualJson + "\n")
+      println(s"=== EXPECTED ===\n${pretty(expectedJson)}\n")
+      println(s"=== ACTUAL ===\n${pretty(actualJson)}\n")
       // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }
@@ -807,7 +810,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertStackTraceElementEquals(ste1: StackTraceElement, ste2: StackTraceElement) {
-    assert(ste1 === ste2)
+    // This mimics the equals() method from Java 8 and earlier. Java 9 adds checks for
+    // class loader and module, which will cause them to be not equal, when we don't
+    // care about those
+    assert(ste1.getClassName === ste2.getClassName)
+    assert(ste1.getMethodName === ste2.getMethodName)
+    assert(ste1.getLineNumber === ste2.getLineNumber)
+    assert(ste1.getFileName === ste2.getFileName)
   }
 
   /** ----------------------------------- *
@@ -879,7 +888,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     val executorMetricsUpdate =
       if (includeExecutorMetrics) {
         Some(new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L,
-          0L, 0L, 0L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)))
+          0L, 0L, 0L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
       } else {
         None
       }
@@ -1755,6 +1764,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Spark Properties": {
       |    "Job throughput": "80000 jobs/s, regardless of job type"
       |  },
+      |  "Hadoop Properties": {
+      |    "hadoop.tmp.dir": "/usr/local/hadoop/tmp"
+      |  },
       |  "System Properties": {
       |    "Username": "guest",
       |    "Password": "guest"
@@ -1848,6 +1860,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Log Urls" : {
       |      "stderr" : "mystderr",
       |      "stdout" : "mystdout"
+      |    },
+      |    "Attributes" : {
+      |      "ContainerId" : "ct1",
+      |      "User" : "spark"
       |    }
       |  }
       |}
@@ -2090,7 +2106,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "ProcessTreePythonVMemory": 123456,
       |    "ProcessTreePythonRSSMemory": 61728,
       |    "ProcessTreeOtherVMemory": 30364,
-      |    "ProcessTreeOtherRSSMemory": 15182
+      |    "ProcessTreeOtherRSSMemory": 15182,
+      |    "MinorGCCount": 10,
+      |    "MinorGCTime": 90,
+      |    "MajorGCCount": 2,
+      |    "MajorGCTime": 20
       |  }
       |
       |}
@@ -2119,7 +2139,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "ProcessTreePythonVMemory": 123456,
       |    "ProcessTreePythonRSSMemory": 61728,
       |    "ProcessTreeOtherVMemory": 30364,
-      |    "ProcessTreeOtherRSSMemory": 15182
+      |    "ProcessTreeOtherRSSMemory": 15182,
+      |    "MinorGCCount": 10,
+      |    "MinorGCTime": 90,
+      |    "MajorGCCount": 2,
+      |    "MajorGCTime": 20
       |  }
       |}
     """.stripMargin

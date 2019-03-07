@@ -33,7 +33,7 @@ import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.ZkUtils
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, NewPartitions}
+import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions}
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -309,6 +309,10 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     kc.close()
     logInfo("Closed consumer to get latest offsets")
     offsets
+  }
+
+  def listConsumerGroups(): ListConsumerGroupsResult = {
+    adminClient.listConsumerGroups()
   }
 
   protected def brokerConfiguration: Properties = {

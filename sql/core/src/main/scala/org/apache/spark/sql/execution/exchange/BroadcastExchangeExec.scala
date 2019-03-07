@@ -44,10 +44,10 @@ case class BroadcastExchangeExec(
     child: SparkPlan) extends Exchange {
 
   override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
-    "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
-    "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
-    "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
+    "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
+    "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
@@ -79,11 +79,11 @@ case class BroadcastExchangeExec(
           val (numRows, input) = child.executeCollectIterator()
           if (numRows >= 512000000) {
             throw new SparkException(
-              s"Cannot broadcast the table with more than 512 millions rows: $numRows rows")
+              s"Cannot broadcast the table with 512 million or more rows: $numRows rows")
           }
 
           val beforeBuild = System.nanoTime()
-          longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+          longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
 
           // Construct the relation.
           val relation = mode.transform(input, Some(numRows))
@@ -105,11 +105,11 @@ case class BroadcastExchangeExec(
           }
 
           val beforeBroadcast = System.nanoTime()
-          longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
+          longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
 
           // Broadcast the relation
           val broadcasted = sparkContext.broadcast(relation)
-          longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+          longMetric("broadcastTime") += NANOSECONDS.toMillis(System.nanoTime() - beforeBroadcast)
 
           SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
           broadcasted

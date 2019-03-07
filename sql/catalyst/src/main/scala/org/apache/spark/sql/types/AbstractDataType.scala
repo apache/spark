@@ -96,7 +96,7 @@ private[sql] object TypeCollection {
 /**
  * An `AbstractDataType` that matches any concrete data types.
  */
-protected[sql] object AnyDataType extends AbstractDataType {
+protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.

@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * A data source for reading text files.
+ * A data source for reading text files. The text files must be encoded as UTF-8.
  */
 class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
@@ -139,7 +139,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
   }
 
-  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean =
+  override def supportDataType(dataType: DataType): Boolean =
     dataType == StringType
 }
 
@@ -153,7 +153,7 @@ class TextOutputWriter(
   private var outputStream: Option[OutputStream] = None
 
   override def write(row: InternalRow): Unit = {
-    val os = outputStream.getOrElse{
+    val os = outputStream.getOrElse {
       val newStream = CodecStreams.createOutputStream(context, new Path(path))
       outputStream = Some(newStream)
       newStream
@@ -167,6 +167,6 @@ class TextOutputWriter(
   }
 
   override def close(): Unit = {
-    outputStream.map(_.close())
+    outputStream.foreach(_.close())
   }
 }

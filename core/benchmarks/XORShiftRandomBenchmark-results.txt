@@ -1,0 +1,44 @@
+================================================================================================
+Pseudo random
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+nextInt:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+java.util.Random                              1362 / 1362         73.4          13.6       1.0X
+XORShiftRandom                                 227 /  227        440.6           2.3       6.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+nextLong:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+java.util.Random                              2732 / 2732         36.6          27.3       1.0X
+XORShiftRandom                                 629 /  629        159.0           6.3       4.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+nextDouble:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+java.util.Random                              2730 / 2730         36.6          27.3       1.0X
+XORShiftRandom                                 629 /  629        159.0           6.3       4.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+nextGaussian:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+java.util.Random                            10288 / 10288          9.7         102.9       1.0X
+XORShiftRandom                                6351 / 6351         15.7          63.5       1.6X
+
+
+================================================================================================
+hash seed
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Hash seed:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+XORShiftRandom.hashSeed                       1193 / 1195          8.4         119.3       1.0X
+
+

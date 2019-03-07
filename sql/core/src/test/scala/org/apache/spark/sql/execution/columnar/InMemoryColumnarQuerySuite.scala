@@ -429,7 +429,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       val df2 = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("item", "id")
       val df3 = df1.join(df2, Seq("item")).select($"id", $"group".as("item")).distinct()
 
-      df3.unpersist()
+      df3.unpersist(blocking = true)
       val agg_without_cache = df3.groupBy($"item").count()
 
       df3.cache()
@@ -445,7 +445,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     // with a non-empty list
     assert(df.filter($"id".isin(2)).count() == 1)
     assert(df.filter($"id".isin(2, 3)).count() == 2)
-    df.unpersist()
+    df.unpersist(blocking = true)
     val dfNulls = spark.range(10).selectExpr("null as id").cache()
     // with null as value for the attribute
     assert(dfNulls.filter($"id".isin()).count() == 0)
@@ -466,7 +466,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   testWithWholeStageCodegenOnAndOff("SPARK-22348: table cache " +
     "should do partition batch pruning") { codegenEnabled =>
     val df1 = Seq((1, 1), (1, 1), (2, 2)).toDF("x", "y")
-    df1.unpersist()
+    df1.unpersist(blocking = true)
     df1.cache()
 
     // Push predicate to the cached table.

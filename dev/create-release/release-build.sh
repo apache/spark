@@ -84,7 +84,7 @@ GIT_REF=${GIT_REF:-master}
 
 RELEASE_STAGING_LOCATION="https://dist.apache.org/repos/dist/dev/spark"
 
-GPG="gpg -u $GPG_KEY --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch --pinentry-mode loopback"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
@@ -116,7 +116,7 @@ SCALA_2_11_PROFILES=
 if [[ $SPARK_VERSION > "2.3" ]]; then
   BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
   if [[ $SPARK_VERSION < "3.0." ]]; then
-    SCALA_2_11_PROFILES="-Pkafka-0-8"
+    SCALA_2_11_PROFILES="-Pkafka-0-8 -Pflume"
   fi
 else
   PUBLISH_SCALA_2_10=1
@@ -124,6 +124,9 @@ fi
 
 PUBLISH_SCALA_2_12=0
 SCALA_2_12_PROFILES="-Pscala-2.12"
+if [[ $SPARK_VERSION < "3.0." ]]; then
+  SCALA_2_12_PROFILES="-Pflume"
+fi
 if [[ $SPARK_VERSION > "2.4" ]]; then
   PUBLISH_SCALA_2_12=1
 fi
@@ -176,10 +179,14 @@ if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
-  # For source release, exclude copy of binary license/notice
-  rm spark-$SPARK_VERSION/LICENSE-binary
-  rm spark-$SPARK_VERSION/NOTICE-binary
-  rm -r spark-$SPARK_VERSION/licenses-binary
+
+  # For source release in v2.4+, exclude copy of binary license/notice
+  if [[ $SPARK_VERSION > "2.4" ]]; then
+    rm spark-$SPARK_VERSION/LICENSE-binary
+    rm spark-$SPARK_VERSION/NOTICE-binary
+    rm -r spark-$SPARK_VERSION/licenses-binary
+  fi
+
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz

@@ -42,10 +42,6 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
 
   def appName: String = get("spark.app.name", "spark")
 
-  def hadoopConfigMapName: String = s"$resourceNamePrefix-hadoop-config"
-
-  def krbConfigMapName: String = s"$resourceNamePrefix-krb5-file"
-
   def namespace: String = get(KUBERNETES_NAMESPACE)
 
   def imagePullPolicy: String = get(CONTAINER_IMAGE_PULL_POLICY)
@@ -77,8 +73,7 @@ private[spark] class KubernetesDriverConf(
     val appId: String,
     val mainAppResource: MainAppResource,
     val mainClass: String,
-    val appArgs: Array[String],
-    val pyFiles: Seq[String])
+    val appArgs: Array[String])
   extends KubernetesConf(sparkConf) {
 
   override val resourceNamePrefix: String = {
@@ -179,14 +174,11 @@ private[spark] object KubernetesConf {
       appId: String,
       mainAppResource: MainAppResource,
       mainClass: String,
-      appArgs: Array[String],
-      maybePyFiles: Option[String]): KubernetesDriverConf = {
+      appArgs: Array[String]): KubernetesDriverConf = {
     // Parse executor volumes in order to verify configuration before the driver pod is created.
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
 
-    val pyFiles = maybePyFiles.map(Utils.stringToSeq).getOrElse(Nil)
-    new KubernetesDriverConf(sparkConf.clone(), appId, mainAppResource, mainClass, appArgs,
-      pyFiles)
+    new KubernetesDriverConf(sparkConf.clone(), appId, mainAppResource, mainClass, appArgs)
   }
 
   def createExecutorConf(
@@ -198,8 +190,8 @@ private[spark] object KubernetesConf {
   }
 
   def getResourceNamePrefix(appName: String): String = {
-    val launchTime = System.currentTimeMillis()
-    s"$appName-$launchTime"
+    val id = KubernetesUtils.uniqueID()
+    s"$appName-$id"
       .trim
       .toLowerCase(Locale.ROOT)
       .replaceAll("\\s+", "-")

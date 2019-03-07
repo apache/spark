@@ -19,17 +19,19 @@
 
 from __future__ import print_function
 import itertools
-from optparse import OptionParser
+from argparse import ArgumentParser
 import os
 import random
 import re
 import sys
 import subprocess
+import glob
+import shutil
 from collections import namedtuple
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
-from sparktestsupport.toposort import toposort_flatten, toposort
+from sparktestsupport.toposort import toposort_flatten
 import sparktestsupport.modules as modules
 
 
@@ -152,30 +154,6 @@ def determine_java_executable():
     # if the java_exe wasn't set, check for a `java` version on the $PATH
     return java_exe if java_exe else which("java")
 
-
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
-
-
-def determine_java_version(java_exe):
-    """Given a valid java executable will return its version in named tuple format
-    with accessors '.major', '.minor', '.patch', '.update'"""
-
-    raw_output = subprocess.check_output([java_exe, "-version"],
-                                         stderr=subprocess.STDOUT,
-                                         universal_newlines=True)
-
-    raw_output_lines = raw_output.split('\n')
-
-    # find raw version string, eg 'java version "1.8.0_25"'
-    raw_version_str = next(x for x in raw_output_lines if " version " in x)
-
-    match = re.search(r'(\d+)\.(\d+)\.(\d+)', raw_version_str)
-
-    major = int(match.group(1))
-    minor = int(match.group(2))
-    patch = int(match.group(3))
-
-    return JavaVersion(major, minor, patch)
 
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
@@ -424,14 +402,65 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules, parallelism):
+def run_python_tests(test_modules, parallelism, with_coverage=False):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
-    command = [os.path.join(SPARK_HOME, "python", "run-tests")]
+    if with_coverage:
+        # Coverage makes the PySpark tests flaky due to heavy parallelism.
+        # When we run PySpark tests with coverage, it uses 4 for now as
+        # workaround.
+        parallelism = 4
+        script = "run-tests-with-coverage"
+    else:
+        script = "run-tests"
+    command = [os.path.join(SPARK_HOME, "python", script)]
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
+
+    if with_coverage:
+        post_python_tests_results()
+
+
+def post_python_tests_results():
+    if "SPARK_TEST_KEY" not in os.environ:
+        print("[error] 'SPARK_TEST_KEY' environment variable was not set. Unable to post "
+              "PySpark coverage results.")
+        sys.exit(1)
+    spark_test_key = os.environ.get("SPARK_TEST_KEY")
+    # The steps below upload HTMLs to 'github.com/spark-test/pyspark-coverage-site'.
+    # 1. Clone PySpark coverage site.
+    run_cmd([
+        "git",
+        "clone",
+        "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key])
+    # 2. Remove existing HTMLs.
+    run_cmd(["rm", "-fr"] + glob.glob("pyspark-coverage-site/*"))
+    # 3. Copy generated coverage HTMLs.
+    for f in glob.glob("%s/python/test_coverage/htmlcov/*" % SPARK_HOME):
+        shutil.copy(f, "pyspark-coverage-site/")
+    os.chdir("pyspark-coverage-site")
+    try:
+        # 4. Check out to a temporary branch.
+        run_cmd(["git", "symbolic-ref", "HEAD", "refs/heads/latest_branch"])
+        # 5. Add all the files.
+        run_cmd(["git", "add", "-A"])
+        # 6. Commit current HTMLs.
+        run_cmd([
+            "git",
+            "commit",
+            "-am",
+            "Coverage report at latest commit in Apache Spark",
+            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
+        # 7. Delete the old branch.
+        run_cmd(["git", "branch", "-D", "gh-pages"])
+        # 8. Rename the temporary branch to master.
+        run_cmd(["git", "branch", "-m", "gh-pages"])
+        # 9. Finally, force update to our repository.
+        run_cmd(["git", "push", "-f", "origin", "gh-pages"])
+    finally:
+        os.chdir("..")
 
 
 def run_python_packaging_tests():
@@ -443,7 +472,6 @@ def run_python_packaging_tests():
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
-    pass
 
 
 def run_sparkr_tests():
@@ -456,20 +484,20 @@ def run_sparkr_tests():
 
 
 def parse_opts():
-    parser = OptionParser(
+    parser = ArgumentParser(
         prog="run-tests"
     )
-    parser.add_option(
-        "-p", "--parallelism", type="int", default=8,
-        help="The number of suites to test in parallel (default %default)"
+    parser.add_argument(
+        "-p", "--parallelism", type=int, default=8,
+        help="The number of suites to test in parallel (default %(default)d)"
     )
 
-    (opts, args) = parser.parse_args()
-    if args:
-        parser.error("Unsupported arguments: %s" % ' '.join(args))
-    if opts.parallelism < 1:
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+    if args.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
-    return opts
+    return args
 
 
 def main():
@@ -494,8 +522,6 @@ def main():
         print("[error] Cannot find a version of `java` on the system; please",
               " install one and retry.")
         sys.exit(2)
-
-    java_version = determine_java_version(java_exe)
 
     # install SparkR
     if which("R"):
@@ -594,7 +620,11 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, opts.parallelism)
+        # We only run PySpark tests with coverage report in one specific job with
+        # Spark master with SBT in Jenkins.
+        is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
+        run_python_tests(
+            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
@@ -605,6 +635,7 @@ def _test():
     failure_count = doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

@@ -25,13 +25,15 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -241,34 +243,60 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
-    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val source = cls.getConstructor().newInstance().asInstanceOf[DataSourceV2]
-      source match {
-        case provider: BatchWriteSupportProvider =>
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            source,
-            df.sparkSession.sessionState.conf)
-          val options = sessionOptions ++ extraOptions
-
-          if (mode == SaveMode.Append) {
-            val relation = DataSourceV2Relation.createRelationForWrite(source, options)
-            runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan)
-            }
-
-          } else {
-            val writer = provider.createBatchWriteSupport(
-              UUID.randomUUID().toString,
-              df.logicalPlan.output.toStructType,
-              mode,
-              new DataSourceOptions(options.asJava))
-
-            if (writer.isPresent) {
+    val session = df.sparkSession
+    val useV1Sources =
+      session.sessionState.conf.userV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
+    val lookupCls = DataSource.lookupDataSource(source, session.sessionState.conf)
+    val cls = lookupCls.newInstance() match {
+      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
+        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        f.fallBackFileFormat
+      case _ => lookupCls
+    }
+    // In Data Source V2 project, partitioning is still under development.
+    // Here we fallback to V1 if partitioning columns are specified.
+    // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
+    if (classOf[TableProvider].isAssignableFrom(cls) && partitioningColumns.isEmpty) {
+      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        provider, session.sessionState.conf)
+      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "false"
+      val options = sessionOptions ++ extraOptions + checkFilesExistsOption
+      val dsOptions = new DataSourceOptions(options.asJava)
+      provider.getTable(dsOptions) match {
+        case table: SupportsBatchWrite =>
+          lazy val relation = DataSourceV2Relation.create(table, options)
+          mode match {
+            case SaveMode.Append =>
               runCommand(df.sparkSession, "save") {
-                WriteToDataSourceV2(writer.get, df.logicalPlan)
+                AppendData.byName(relation, df.logicalPlan)
               }
-            }
+
+            case SaveMode.Overwrite =>
+              // truncate the table
+              runCommand(df.sparkSession, "save") {
+                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
+              }
+
+            case _ =>
+              table.newWriteBuilder(dsOptions) match {
+                case writeBuilder: SupportsSaveMode =>
+                  val write = writeBuilder.mode(mode)
+                      .withQueryId(UUID.randomUUID().toString)
+                      .withInputDataSchema(df.logicalPlan.schema)
+                      .buildForBatch()
+                  // It can only return null with `SupportsSaveMode`. We can clean it up after
+                  // removing `SupportsSaveMode`.
+                  if (write != null) {
+                    runCommand(df.sparkSession, "save") {
+                      WriteToDataSourceV2(write, df.logicalPlan)
+                    }
+                  }
+
+                case _ =>
+                  throw new AnalysisException(
+                    s"data source ${table.name} does not support SaveMode $mode")
+              }
           }
 
         // Streaming also uses the data source V2 API. So it may be that the data source implements
@@ -530,11 +558,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
    * files. If it is not set, the UTF-8 charset will be used. </li>
    * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
@@ -601,6 +629,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   // Java:
    *   df.write().text("/path/to/output")
    * }}}
+   * The text files will be encoded as UTF-8.
    *
    * You can set the following option(s) for writing text files:
    * <ul>
@@ -649,11 +678,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
    * whitespaces from values being written should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not

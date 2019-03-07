@@ -77,11 +77,16 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("WholeStageCodegen metrics") {
-    // Assume the execution plan is
-    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
+    // Assume the execution plan with node id is
+    // WholeStageCodegen(nodeId = 0)
+    //   Filter(nodeId = 1)
+    //     Range(nodeId = 2)
     // TODO: update metrics in generated operators
     val ds = spark.range(10).filter('id < 5)
-    testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
+    testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
+      0L -> (("WholeStageCodegen", Map(
+        "duration total (min, med, max)" -> {_.toString.matches(timingMetricPattern)})))
+    ), true)
   }
 
   test("Aggregate metrics") {
@@ -91,13 +96,13 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df = testData2.groupBy().count() // 2 partitions
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
+        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 1L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"))
     val shuffleExpected1 = Map(
       "records read" -> 2L,
-      "local blocks fetched" -> 2L,
-      "remote blocks fetched" -> 0L,
+      "local blocks read" -> 2L,
+      "remote blocks read" -> 0L,
       "shuffle records written" -> 2L)
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("HashAggregate", expected1(0))),
@@ -109,13 +114,13 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df2 = testData2.groupBy('a).count()
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
+        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 3L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"))
     val shuffleExpected2 = Map(
       "records read" -> 4L,
-      "local blocks fetched" -> 4L,
-      "remote blocks fetched" -> 0L,
+      "local blocks read" -> 4L,
+      "remote blocks read" -> 0L,
       "shuffle records written" -> 4L)
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("HashAggregate", expected2(0))),
@@ -157,7 +162,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       }
       val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
       nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
+        val probes = metrics(nodeId)._2("avg hash probe bucket list iters (min, med, max)")
         probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
           assert(probe.toDouble > 1.0)
         }
@@ -175,8 +180,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       1L -> (("Exchange", Map(
         "shuffle records written" -> 2L,
         "records read" -> 2L,
-        "local blocks fetched" -> 2L,
-        "remote blocks fetched" -> 0L))),
+        "local blocks read" -> 2L,
+        "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 1L))))
     )
 
@@ -187,17 +192,27 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       1L -> (("Exchange", Map(
         "shuffle records written" -> 4L,
         "records read" -> 4L,
-        "local blocks fetched" -> 4L,
-        "remote blocks fetched" -> 0L))),
+        "local blocks read" -> 4L,
+        "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
     )
   }
 
   test("Sort metrics") {
-    // Assume the execution plan is
-    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val ds = spark.range(10).sort('id)
-    testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
+    // Assume the execution plan with node id is
+    // Sort(nodeId = 0)
+    //   Exchange(nodeId = 1)
+    //     Project(nodeId = 2)
+    //       LocalTableScan(nodeId = 3)
+    // Because of SPARK-25267, ConvertToLocalRelation is disabled in the test cases of sql/core,
+    // so Project here is not collapsed into LocalTableScan.
+    val df = Seq(1, 3, 2).toDF("id").sort('id)
+    testSparkPlanMetricsWithPredicates(df, 2, Map(
+      0L -> (("Sort", Map(
+        "sort time total (min, med, max)" -> {_.toString.matches(timingMetricPattern)},
+        "peak memory total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)},
+        "spill size total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)})))
+    ))
   }
 
   test("SortMergeJoin metrics") {
@@ -216,8 +231,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           "number of output rows" -> 4L))),
         2L -> (("Exchange", Map(
           "records read" -> 4L,
-          "local blocks fetched" -> 2L,
-          "remote blocks fetched" -> 0L,
+          "local blocks read" -> 2L,
+          "remote blocks read" -> 0L,
           "shuffle records written" -> 2L))))
       )
     }
@@ -330,10 +345,10 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastHashJoin(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 1)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
+      1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))
     )
   }
@@ -555,7 +570,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("Scan parquet default.testdataforscan", Map(
           "number of output rows" -> 3L,
-          "number of files" -> 2L))))
+          "number of files read" -> 2L))))
       )
     }
   }

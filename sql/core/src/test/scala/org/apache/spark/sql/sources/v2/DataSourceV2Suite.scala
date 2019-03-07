@@ -18,13 +18,14 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.File
+import java.util.OptionalLong
 
 import test.org.apache.spark.sql.sources.v2._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
@@ -40,14 +41,14 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
+      case d: BatchScanExec =>
         d.batch.asInstanceOf[AdvancedBatch]
     }.head
   }
 
   private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
+      case d: BatchScanExec =>
         d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
     }.head
   }
@@ -182,6 +183,24 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test ("statistics report data source") {
+    Seq(classOf[ReportStatisticsDataSource], classOf[JavaReportStatisticsDataSource]).foreach {
+      cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          val logical = df.queryExecution.optimizedPlan.collect {
+            case d: DataSourceV2Relation => d
+          }.head
+
+          val statics = logical.computeStats()
+          assert(statics.rowCount.isDefined && statics.rowCount.get === 10,
+            "Row count statics should be reported by data source")
+          assert(statics.sizeInBytes === 80,
+            "Size in bytes statics should be reported by data source")
+        }
+    }
+  }
+
   test("SPARK-23574: no shuffle exchange with single partition") {
     val df = spark.read.format(classOf[SimpleSinglePartitionSource].getName).load().agg(count("*"))
     assert(df.queryExecution.executedPlan.collect { case e: Exchange => e }.isEmpty)
@@ -309,7 +328,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       assert(logical.canonicalized.output.length == logicalNumOutput)
 
       val physical = df.queryExecution.executedPlan.collect {
-        case d: DataSourceV2ScanExec => d
+        case d: BatchScanExec => d
       }.head
       assert(physical.canonicalized.output.length == physicalNumOutput)
     }
@@ -329,8 +348,8 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         .format(classOf[DataSourceV2WithSessionConfig].getName).load()
       val options = df.queryExecution.optimizedPlan.collectFirst {
         case d: DataSourceV2Relation => d.options
-      }
-      assert(options.get.get(optionName) == Some("false"))
+      }.get
+      assert(options(optionName) === "false")
     }
   }
 
@@ -351,20 +370,20 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25700: do not read schema when writing in other modes except append mode") {
+  test("SPARK-25700: do not read schema when writing in other modes except append and overwrite") {
     withTempPath { file =>
       val cls = classOf[SimpleWriteOnlyDataSource]
       val path = file.getCanonicalPath
       val df = spark.range(5).select('id as 'i, -'id as 'j)
-      try {
-        df.write.format(cls.getName).option("path", path).mode("error").save()
-        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
-        df.write.format(cls.getName).option("path", path).mode("ignore").save()
-      } catch {
-        case e: SchemaReadAttemptException => fail("Schema read was attempted.", e)
-      }
+      // non-append mode should not throw exception, as they don't access schema.
+      df.write.format(cls.getName).option("path", path).mode("error").save()
+      df.write.format(cls.getName).option("path", path).mode("ignore").save()
+      // append and overwrite modes will access the schema and should throw exception.
       intercept[SchemaReadAttemptException] {
         df.write.format(cls.getName).option("path", path).mode("append").save()
+      }
+      intercept[SchemaReadAttemptException] {
+        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       }
     }
   }
@@ -621,7 +640,6 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-
 class PartitionAwareDataSource extends TableProvider {
 
   class MyScanBuilder extends SimpleScanBuilder
@@ -680,10 +698,38 @@ object SpecificReaderFactory extends PartitionReaderFactory {
 class SchemaReadAttemptException(m: String) extends RuntimeException(m)
 
 class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
-  override def writeSchema(): StructType = {
-    // This is a bit hacky since this source implements read support but throws
-    // during schema retrieval. Might have to rewrite but it's done
-    // such so for minimised changes.
-    throw new SchemaReadAttemptException("read is not supported")
+
+  override def getTable(options: DataSourceOptions): Table = {
+    new MyTable(options) {
+      override def schema(): StructType = {
+        throw new SchemaReadAttemptException("schema should not be read.")
+      }
+    }
+  }
+}
+
+class ReportStatisticsDataSource extends TableProvider {
+
+  class MyScanBuilder extends SimpleScanBuilder
+    with SupportsReportStatistics {
+    override def estimateStatistics(): Statistics = {
+      new Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(80)
+
+        override def numRows(): OptionalLong = OptionalLong.of(10)
+      }
+    }
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+    }
+  }
+
+  override def getTable(options: DataSourceOptions): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
+        new MyScanBuilder
+      }
+    }
   }
 }

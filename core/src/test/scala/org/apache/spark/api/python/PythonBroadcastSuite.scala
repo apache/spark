@@ -24,6 +24,7 @@ import scala.io.Source
 import org.scalatest.Matchers
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -48,7 +49,7 @@ class PythonBroadcastSuite extends SparkFunSuite with Matchers with SharedSparkC
       }
       val broadcast = new PythonBroadcast(broadcastDataFile.getAbsolutePath)
       assertBroadcastIsValid(broadcast)
-      val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+      val conf = new SparkConf().set(KRYO_REGISTRATION_REQUIRED, true)
       val deserializedBroadcast =
         Utils.clone[PythonBroadcast](broadcast, new KryoSerializer(conf).newInstance())
       assertBroadcastIsValid(deserializedBroadcast)

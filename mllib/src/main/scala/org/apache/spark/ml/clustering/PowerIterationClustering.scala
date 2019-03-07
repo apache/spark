@@ -166,6 +166,7 @@ class PowerIterationClustering private[clustering] (
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) {
       lit(1.0)
     } else {
+      SchemaUtils.checkNumericType(dataset.schema, $(weightCol))
       col($(weightCol)).cast(DoubleType)
     }
 
