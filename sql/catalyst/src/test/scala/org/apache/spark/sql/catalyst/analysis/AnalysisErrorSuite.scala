@@ -612,14 +612,10 @@ class AnalysisErrorSuite extends AnalysisTest {
     val b2 = AttributeReference("b2", IntegerType)()
     val a = LocalRelation(a1, a2)
     val b = LocalRelation(b1, b2)
-    // a1 > ANY (SELECT b1 FROM b)
-    val plan1 = Filter(
-      AnySubquery(Seq(a1), ListQuery(Project(Seq(b1), b)), GreaterThan), a)
-    assertAnalysisSuccess(plan1)
     // (a1, a2) = ANY (SELECT b1, b2 FROM b)
-    val plan2 = Filter(
+    val plan = Filter(
       AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), EqualTo), a)
-    assertAnalysisSuccess(plan2)
+    assertAnalysisSuccess(plan)
     // (a1, a2) > ANY (SELECT b1, b2 FROM b)
     val error_plan = Filter(
       AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), GreaterThan), a)
