@@ -86,7 +86,9 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     """
 
     threshold = Param(Params._dummy(), "threshold",
-                      "threshold in binary classification prediction, in range [0, 1]",
+                      "Param for threshold used to binarize continuous features. " +
+                      "The features greater than the threshold will be binarized to 1.0. " +
+                      "The features equal to or less than the threshold will be binarized to 0.0",
                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
