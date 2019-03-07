@@ -122,7 +122,6 @@ class Window(object):
         |  1|       a|  3|
         |  2|       a|  2|
         +---+--------+---+
-        <BLANKLINE>
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
@@ -182,7 +181,6 @@ class Window(object):
         |  1|       a|  4|
         |  2|       a|  2|
         +---+--------+---+
-        <BLANKLINE>
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
@@ -288,8 +286,12 @@ class WindowSpec(object):
 
 def _test():
     import doctest
+    import pyspark.sql.window
     SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod()
+    globs = pyspark.sql.window.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.window, globs=globs,
+        optionflags=doctest.NORMALIZE_WHITESPACE)
     if failure_count:
         sys.exit(-1)
 
