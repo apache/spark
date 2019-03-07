@@ -2036,7 +2036,7 @@ To run a Spark Streaming applications, you need to have the following.
   `spark.streaming.receiver.maxRate` for receivers and `spark.streaming.kafka.maxRatePerPartition`
   for Direct Kafka approach. In Spark 1.5, we have introduced a feature called *backpressure* that
   eliminate the need to set this rate limit, as Spark Streaming automatically figures out the
-  rate limits and dynamically adjusts them if the processing conditions change. This backpressure
+  rate limits and dynamically adjusts them if the processing conditions change.If the first batch of data is very large which causes the first batch is processing all the time and the task can not work normally , using a maximum rate limit can solve the problem .This backpressure
   can be enabled by setting the [configuration parameter](configuration.html#spark-streaming)
   `spark.streaming.backpressure.enabled` to `true`.
 
