@@ -41,7 +41,7 @@ else:
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, AutoBatchedSerializer, write_int
+    PickleSerializer, pack_long, AutoBatchedSerializer, read_int, write_int
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -162,6 +162,9 @@ class _PyLocalIterator(object):
         return self
 
     def __next__(self):
+        has_next = read_int(self.sockfile)
+        if has_next == 0:
+            raise StopIteration
         # Request more data from Java, then read from stream
         write_int(1, self.sockfile)
         self.sockfile.flush()
@@ -170,7 +173,12 @@ class _PyLocalIterator(object):
     def __del__(self):
         try:
             # Tell Java to stop sending data
-            write_int(0, self.sockfile)
+            has_next = read_int(self.sockfile)
+            if has_next != 0:
+                write_int(0, self.sockfile)
+                self.sockfile.flush()
+        except Exception:
+            pass
         finally:
             try:
                 # Attempt to close the socket
