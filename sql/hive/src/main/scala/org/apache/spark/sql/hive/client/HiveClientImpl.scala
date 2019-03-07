@@ -435,8 +435,9 @@ private[hive] class HiveClientImpl(
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
-          case HiveTableType.INDEX_TABLE =>
-            throw new AnalysisException("Hive index table is not supported.")
+          case unsupportedType =>
+            val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
+            throw new AnalysisException(s"Hive $tableTypeStr is not supported.")
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
