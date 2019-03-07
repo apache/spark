@@ -265,11 +265,12 @@ class KubernetesSuite extends SparkFunSuite
       println(s"!!! status $resourceStatus for $name")
       val conditions = resourceStatus.getConditions().asScala
       println(s"!!! conditions $conditions for $name")
-      val result = conditions
-        .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
+      val readyConditions = conditions.filter(cond.getType() == "Ready")
+      println(s"!!! ready conditions $conditions for $name")
+      val result = readyConditions
+        .map(cond => cond.getStatus() == "True")
         .headOption.getOrElse(false)
-      println(s"Pod name ${name} with entry ${execPod} has status" +
-        s"${resourceStatus} with conditions ${conditions} result: ${result}")
+      println(s"Pod name ${name} ready check resulted in ${result}")
       result
     }
     println("Creating watcher...")
