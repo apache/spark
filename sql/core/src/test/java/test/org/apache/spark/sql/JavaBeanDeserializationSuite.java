@@ -67,7 +67,8 @@ public class JavaBeanDeserializationSuite implements Serializable {
     Dataset<ArrayRecord> dataset = spark
       .read()
       .format("json")
-      .schema("id int, intervals array<struct<startTime: bigint, endTime: bigint>>, ints array<int>")
+      .schema("id int, intervals array<struct<startTime: bigint, endTime: bigint>>, " +
+          "ints array<int>")
       .load("src/test/resources/test-data/with-array-fields.json")
       .as(encoder);
 
