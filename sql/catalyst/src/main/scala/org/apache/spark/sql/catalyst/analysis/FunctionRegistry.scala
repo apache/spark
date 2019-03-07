@@ -511,6 +511,11 @@ object FunctionRegistry {
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
 
+    expression[BitwiseAnd]("bitand"),
+    expression[BitwiseNot]("bitnot"),
+    expression[BitwiseOr]("bitor"),
+    expression[BitwiseXor]("bitxor"),
+
     // json
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
