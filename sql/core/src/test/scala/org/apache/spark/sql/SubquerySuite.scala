@@ -21,6 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
+import org.apache.spark.sql.execution.{ExecSubqueryExpression, FileSourceScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -1186,7 +1188,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
+  ignore("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
     withTempView("t1", "t2", "t3") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
@@ -1266,6 +1268,73 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |             LIMIT 1)
         """.stripMargin
       assert(getNumSortsInQuery(query5) == 1)
+    }
+  }
+
+  test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
+    withTempView("t1", "t2") {
+      sql("create temporary view t1(a int) using parquet")
+      sql("create temporary view t2(b int) using parquet")
+      val plan = sql("select * from t2 where b > (select max(a) from t1)")
+      val subqueries = plan.queryExecution.executedPlan.collect {
+        case p => p.subqueries
+      }.flatten
+      assert(subqueries.length == 1)
+    }
+  }
+
+  test("SPARK-26893: Allow pushdown of partition pruning subquery filters to file source") {
+    withTable("a", "b") {
+      spark.range(4).selectExpr("id", "id % 2 AS p").write.partitionBy("p").saveAsTable("a")
+      spark.range(2).write.saveAsTable("b")
+
+      val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
+      checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
+      // need to execute the query before we can examine fs.inputRDDs()
+      assert(df.queryExecution.executedPlan match {
+        case WholeStageCodegenExec(fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _)) =>
+          partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
+            fs.inputRDDs().forall(
+              _.asInstanceOf[FileScanRDD].filePartitions.forall(
+                _.files.forall(_.filePath.contains("p=0"))))
+        case _ => false
+      })
+    }
+  }
+
+  test("SPARK-26078: deduplicate fake self joins for IN subqueries") {
+    withTempView("a", "b") {
+      Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("a")
+      Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("b")
+
+      val df1 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2)
+        """.stripMargin)
+      checkAnswer(df1, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
+      val df2 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id NOT IN (SELECT id FROM b WHERE num = 2)
+        """.stripMargin)
+      checkAnswer(df2, Seq(Row("b", 1, "a"), Row("b", 1, "b")))
+      val df3 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2) OR
+          |c.id IN (SELECT id FROM b WHERE num = 3)
+        """.stripMargin)
+      checkAnswer(df3, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
     }
   }
 }

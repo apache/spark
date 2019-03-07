@@ -25,15 +25,19 @@ import scala.collection.mutable
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.JARS
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI.UI_ENABLED
 
 private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
 
-  val namespaceOption = Option(System.getProperty("spark.kubernetes.test.namespace"))
+  val namespaceOption = Option(System.getProperty(CONFIG_KEY_KUBE_NAMESPACE))
   val hasUserSpecifiedNamespace = namespaceOption.isDefined
   val namespace = namespaceOption.getOrElse(UUID.randomUUID().toString.replaceAll("-", ""))
   val serviceAccountName =
-    Option(System.getProperty("spark.kubernetes.test.serviceAccountName"))
+    Option(System.getProperty(CONFIG_KEY_KUBE_SVC_ACCOUNT))
       .getOrElse("default")
   val kubernetesClient = defaultClient.inNamespace(namespace)
   val clientConfig = kubernetesClient.getConfiguration
@@ -65,8 +69,8 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.executor.cores", "1")
       .set("spark.executors.instances", "1")
       .set("spark.app.name", "spark-test-app")
-      .set("spark.ui.enabled", "true")
-      .set("spark.testing", "false")
+      .set(IS_TESTING.key, "false")
+      .set(UI_ENABLED.key, "true")
       .set("spark.kubernetes.submission.waitAppCompletion", "false")
       .set("spark.kubernetes.authenticate.driver.serviceAccountName", serviceAccountName)
   }
@@ -83,7 +87,7 @@ private[spark] class SparkAppConf {
 
   def get(key: String): String = map.getOrElse(key, "")
 
-  def setJars(jars: Seq[String]): Unit = set("spark.jars", jars.mkString(","))
+  def setJars(jars: Seq[String]): Unit = set(JARS.key, jars.mkString(","))
 
   override def toString: String = map.toString
 

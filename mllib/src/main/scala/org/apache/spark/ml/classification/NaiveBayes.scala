@@ -146,7 +146,7 @@ class NaiveBayes @Since("1.5.0") (
           requireZeroOneBernoulliValues
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
     }
 
@@ -196,7 +196,7 @@ class NaiveBayes @Since("1.5.0") (
         case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
       var j = 0
       while (j < numFeatures) {
@@ -295,7 +295,7 @@ class NaiveBayesModel private[ml] (
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
       // This should never happen.
-      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
   }
 
   @Since("1.6.0")
@@ -329,7 +329,7 @@ class NaiveBayesModel private[ml] (
         bernoulliCalculation(features)
       case _ =>
         // This should never happen.
-        throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
     }
   }
 

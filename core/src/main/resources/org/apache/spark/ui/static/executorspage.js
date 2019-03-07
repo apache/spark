@@ -59,78 +59,6 @@ $(document).ajaxStart(function () {
     $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
 
-function createTemplateURI(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    ind = words.indexOf("history");
-    if(ind > 0) {
-        var baseURI = words.slice(0, ind).join('/') + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    return location.origin + "/static/executorspage-template.html";
-}
-
-function getStandAloneppId(cb) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    //Looks like Web UI is running in standalone mode
-    //Let's get application-id using REST End Point
-    $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
-        if (response && response.length > 0) {
-            var appId = response[0].id
-            cb(appId);
-            return;
-        }
-    });
-}
-
-function createRESTEndPoint(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var newBaseURI = words.slice(0, ind + 2).join('/');
-        return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors"
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var attemptId = words[ind + 2];
-        var newBaseURI = words.slice(0, ind).join('/');
-        if (isNaN(attemptId)) {
-            return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
-        } else {
-            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
-        }
-    }
-    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
-}
-
-function formatLogsCells(execLogs, type) {
-    if (type !== 'display') return Object.keys(execLogs);
-    if (!execLogs) return;
-    var result = '';
-    $.each(execLogs, function (logName, logUrl) {
-        result += '<div><a href=' + logUrl + '>' + logName + '</a></div>'
-    });
-    return result;
-}
-
 function logsExist(execs) {
     return execs.some(function(exec) {
         return !($.isEmptyObject(exec["executorLogs"]));
@@ -178,19 +106,14 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 $(document).ready(function () {
-    $.extend($.fn.dataTable.defaults, {
-        stateSave: true,
-        lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
-        pageLength: 20
-    });
+    setDataTableDefaults();
 
     executorsSummary = $("#active-executors");
 
-    getStandAloneppId(function (appId) {
+    getStandAloneAppId(function (appId) {
 
-        var endPoint = createRESTEndPoint(appId);
+        var endPoint = createRESTEndPointForExecutorsPage(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
-            var summary = [];
             var allExecCnt = 0;
             var allRDDBlocks = 0;
             var allMemoryUsed = 0;
@@ -408,7 +331,7 @@ $(document).ready(function () {
             };
 
             var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
-            $.get(createTemplateURI(appId), function (template) {
+            $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
                 executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
                 var selector = "#active-executors-table";
@@ -581,7 +504,7 @@ $(document).ready(function () {
                         {data: 'allTotalTasks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatDuration(row.allTotalDuration, type) + ' (' + formatDuration(row.allTotalGCTime, type) + ')') : row.allTotalDuration
+                                return type === 'display' ? (formatDuration(row.allTotalDuration) + ' (' + formatDuration(row.allTotalGCTime) + ')') : row.allTotalDuration
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 if (oData.allTotalDuration > 0) {

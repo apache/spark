@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * An immutable string-to-string map in which keys are case-insensitive. This is used to represent
@@ -73,7 +73,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *   </tr>
  * </table>
  */
-@InterfaceStability.Evolving
+@Evolving
 public class DataSourceOptions {
   private final Map<String, String> keyLowerCasedMap;
 
@@ -164,6 +164,11 @@ public class DataSourceOptions {
   public static final String DATABASE_KEY = "database";
 
   /**
+   * The option key for whether to check existence of files for a table.
+   */
+  public static final String CHECK_FILES_EXIST_KEY = "check_files_exist";
+
+  /**
    * Returns all the paths specified by both the singular path option and the multiple
    * paths option.
    */
@@ -196,5 +201,10 @@ public class DataSourceOptions {
    */
   public Optional<String> databaseName() {
     return get(DATABASE_KEY);
+  }
+
+  public Boolean checkFilesExist() {
+    Optional<String> result = get(CHECK_FILES_EXIST_KEY);
+    return result.isPresent() && result.get().equals("true");
   }
 }

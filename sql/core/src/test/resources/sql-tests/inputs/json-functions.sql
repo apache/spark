@@ -55,4 +55,8 @@ select to_json(array(array(1, 2, 3), array(4)));
 -- infer schema of json literal using options
 select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'));
 select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'true', 'prefersDecimal', 'true'));
-
+select schema_of_json(null);
+CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a');
+SELECT schema_of_json(jsonField) FROM jsonTable;
+-- Clean up
+DROP VIEW IF EXISTS jsonTable;

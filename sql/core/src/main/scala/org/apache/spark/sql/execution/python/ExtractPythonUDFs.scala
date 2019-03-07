@@ -24,7 +24,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
 
@@ -131,8 +131,20 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
     expressions.flatMap(collectEvaluableUDFs)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case plan: LogicalPlan => extract(plan)
+  def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    // SPARK-26293: A subquery will be rewritten into join later, and will go through this rule
+    // eventually. Here we skip subquery, as Python UDF only needs to be extracted once.
+    case _: Subquery => plan
+
+    case _ => plan transformUp {
+      // A safe guard. `ExtractPythonUDFs` only runs once, so we will not hit `BatchEvalPython` and
+      // `ArrowEvalPython` in the input plan. However if we hit them, we must skip them, as we can't
+      // extract Python UDFs from them.
+      case p: BatchEvalPython => p
+      case p: ArrowEvalPython => p
+
+      case plan: LogicalPlan => extract(plan)
+    }
   }
 
   /**

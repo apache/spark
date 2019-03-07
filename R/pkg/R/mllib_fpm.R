@@ -183,16 +183,17 @@ setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),
 #' @return A complete set of frequent sequential patterns in the input sequences of itemsets.
 #'         The returned \code{SparkDataFrame} contains columns of sequence and corresponding
 #'         frequency. The schema of it will be:
-#'         \code{sequence: ArrayType(ArrayType(T))} (T is the item type)
-#'         \code{freq: Long}
+#'         \code{sequence: ArrayType(ArrayType(T))}, \code{freq: integer}
+#'         where T is the item type
 #' @rdname spark.prefixSpan
 #' @aliases findFrequentSequentialPatterns,PrefixSpan,SparkDataFrame-method
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
-#'                       list(list(list(1L), list(3L, 2L), list(1L, 2L))),
-#'                       list(list(list(1L, 2L), list(5L))),
-#'                       list(list(list(6L)))), schema = c("sequence"))
+#'                            list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+#'                            list(list(list(1L, 2L), list(5L))),
+#'                            list(list(list(6L)))),
+#'                       schema = c("sequence"))
 #' frequency <- spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L,
 #'                                                   maxLocalProjDBSize = 32000000L)
 #' showDF(frequency)

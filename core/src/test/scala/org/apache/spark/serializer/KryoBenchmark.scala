@@ -22,6 +22,8 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoTest._
 
 /**
@@ -39,7 +41,7 @@ import org.apache.spark.serializer.KryoTest._
 object KryoBenchmark extends BenchmarkBase {
 
   val N = 1000000
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val name = "Benchmark Kryo Unsafe vs safe Serialization"
     runBenchmark(name) {
       val benchmark = new Benchmark(name, N, 10, output = output)
@@ -122,9 +124,9 @@ object KryoBenchmark extends BenchmarkBase {
 
   def createSerializer(useUnsafe: Boolean): SerializerInstance = {
     val conf = new SparkConf()
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
-    conf.set("spark.kryo.unsafe", useUnsafe.toString)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+    conf.set(KRYO_USE_UNSAFE, useUnsafe)
 
     new KryoSerializer(conf).newInstance()
   }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml
 
-// scalastyle:off println
-
 // $example on$
 import org.apache.spark.ml.fpm.PrefixSpan
 // $example off$
@@ -59,4 +57,3 @@ object PrefixSpanExample {
     spark.stop()
   }
 }
-// scalastyle:on println

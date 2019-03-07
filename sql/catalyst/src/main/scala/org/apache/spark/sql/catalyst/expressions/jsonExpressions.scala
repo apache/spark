@@ -23,12 +23,10 @@ import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.json.JsonInferSchema.inferField
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -529,7 +527,7 @@ case class JsonToStructs(
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = JsonExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = options,
       child = child,
       timeZoneId = None)
@@ -538,7 +536,7 @@ case class JsonToStructs(
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = JsonExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
@@ -569,20 +567,22 @@ case class JsonToStructs(
       throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
-    val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
-    val createParser = CreateJacksonParser.utf8String _
-
-    val parserSchema = nullableSchema match {
-      case s: StructType => s
-      case other => StructType(StructField("value", other) :: Nil)
+    val (parserSchema, actualSchema) = nullableSchema match {
+      case s: StructType =>
+        ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
+        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
+      case other =>
+        (StructType(StructField("value", other) :: Nil), other)
     }
+
+    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
+    val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](
       input => rawParser.parse(input, createParser, identity[UTF8String]),
       mode,
       parserSchema,
-      parsedOptions.columnNameOfCorruptRecord,
-      parsedOptions.multiLine)
+      parsedOptions.columnNameOfCorruptRecord)
   }
 
   override def dataType: DataType = nullableSchema
@@ -742,13 +742,17 @@ case class StructsToJson(
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with String2StringExpression with CodegenFallback {
+  extends UnaryExpression with CodegenFallback {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
   def this(child: Expression, options: Expression) = this(
       child = child,
       options = ExprUtils.convertToMapData(options))
+
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = false
 
   @transient
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
@@ -760,26 +764,26 @@ case class SchemaOfJson(
     factory
   }
 
-  override def convert(v: UTF8String): UTF8String = {
-    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
+  @transient
+  private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
+
+  @transient
+  private lazy val json = child.eval().asInstanceOf[UTF8String]
+
+  override def checkInputDataTypes(): TypeCheckResult = child match {
+    case Literal(s, StringType) if s != null => super.checkInputDataTypes()
+    case _ => TypeCheckResult.TypeCheckFailure(
+      s"The input json should be a string literal and not null; however, got ${child.sql}.")
+  }
+
+  override def eval(v: InternalRow): Any = {
+    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
-      inferField(parser, jsonOptions)
+      jsonInferSchema.inferField(parser)
     }
 
     UTF8String.fromString(dt.catalogString)
   }
 
   override def prettyName: String = "schema_of_json"
-}
-
-object JsonExprUtils {
-  def evalSchemaExpr(exp: Expression): DataType = exp match {
-    case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal, _) =>
-      val ddlSchema = e.eval().asInstanceOf[UTF8String]
-      DataType.fromDDL(ddlSchema.toString)
-    case e => throw new AnalysisException(
-      "Schema should be specified in DDL format as a string literal" +
-      s" or output of the schema_of_json function instead of ${e.sql}")
-  }
 }

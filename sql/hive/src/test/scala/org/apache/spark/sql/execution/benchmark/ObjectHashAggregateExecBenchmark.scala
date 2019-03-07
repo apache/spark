@@ -212,7 +212,7 @@ object ObjectHashAggregateExecBenchmark extends BenchmarkBase with SQLHelper {
     Column(approxPercentile.toAggregateExpression(isDistinct))
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Hive UDAF vs Spark AF") {
       hiveUDAFvsSparkAF(2 << 15)
     }

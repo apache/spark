@@ -17,75 +17,213 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchWrite}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsSaveMode, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
  * Deprecated logical plan for writing data into data source v2. This is being replaced by more
  * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
  */
 @deprecated("Use specific logical plans like AppendData instead", "2.4.0")
-case class WriteToDataSourceV2(writeSupport: BatchWriteSupport, query: LogicalPlan)
+case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
   extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 }
 
 /**
- * The physical plan for writing data into data source v2.
+ * Physical plan node for append into a v2 table.
+ *
+ * Rows in the output data set are appended.
  */
-case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: SparkPlan)
-  extends SparkPlan {
-
-  override def children: Seq[SparkPlan] = Seq(query)
-  override def output: Seq[Attribute] = Nil
+case class AppendDataExec(
+    table: SupportsBatchWrite,
+    writeOptions: DataSourceOptions,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = writeSupport.createBatchWriterFactory()
-    val useCommitCoordinator = writeSupport.useCommitCoordinator
-    val rdd = query.execute()
-    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
+    val batchWrite = newWriteBuilder() match {
+      case builder: SupportsSaveMode =>
+        builder.mode(SaveMode.Append).buildForBatch()
 
-    logInfo(s"Start processing data source write support: $writeSupport. " +
+      case builder =>
+        builder.buildForBatch()
+    }
+    doWrite(batchWrite)
+  }
+}
+
+/**
+ * Physical plan node for overwrite into a v2 table.
+ *
+ * Overwrites data in a table matched by a set of filters. Rows matching all of the filters will be
+ * deleted and rows in the output data set are appended.
+ *
+ * This plan is used to implement SaveMode.Overwrite. The behavior of SaveMode.Overwrite is to
+ * truncate the table -- delete all rows -- and append the output data set. This uses the filter
+ * AlwaysTrue to delete all rows.
+ */
+case class OverwriteByExpressionExec(
+    table: SupportsBatchWrite,
+    deleteWhere: Array[Filter],
+    writeOptions: DataSourceOptions,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+
+  private def isTruncate(filters: Array[Filter]): Boolean = {
+    filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val batchWrite = newWriteBuilder() match {
+      case builder: SupportsTruncate if isTruncate(deleteWhere) =>
+        builder.truncate().buildForBatch()
+
+      case builder: SupportsSaveMode if isTruncate(deleteWhere) =>
+        builder.mode(SaveMode.Overwrite).buildForBatch()
+
+      case builder: SupportsOverwrite =>
+        builder.overwrite(deleteWhere).buildForBatch()
+
+      case _ =>
+        throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
+    }
+
+    doWrite(batchWrite)
+  }
+}
+
+/**
+ * Physical plan node for dynamic partition overwrite into a v2 table.
+ *
+ * Dynamic partition overwrite is the behavior of Hive INSERT OVERWRITE ... PARTITION queries, and
+ * Spark INSERT OVERWRITE queries when spark.sql.sources.partitionOverwriteMode=dynamic. Each
+ * partition in the output data set replaces the corresponding existing partition in the table or
+ * creates a new partition. Existing partitions for which there is no data in the output data set
+ * are not modified.
+ */
+case class OverwritePartitionsDynamicExec(
+    table: SupportsBatchWrite,
+    writeOptions: DataSourceOptions,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val batchWrite = newWriteBuilder() match {
+      case builder: SupportsDynamicOverwrite =>
+        builder.overwriteDynamicPartitions().buildForBatch()
+
+      case builder: SupportsSaveMode =>
+        builder.mode(SaveMode.Overwrite).buildForBatch()
+
+      case _ =>
+        throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
+    }
+
+    doWrite(batchWrite)
+  }
+}
+
+case class WriteToDataSourceV2Exec(
+    batchWrite: BatchWrite,
+    query: SparkPlan
+  ) extends V2TableWriteExec {
+
+  import DataSourceV2Implicits._
+
+  def writeOptions: DataSourceOptions = Map.empty[String, String].toDataSourceOptions
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    doWrite(batchWrite)
+  }
+}
+
+/**
+ * Helper for physical plans that build batch writes.
+ */
+trait BatchWriteHelper {
+  def table: SupportsBatchWrite
+  def query: SparkPlan
+  def writeOptions: DataSourceOptions
+
+  def newWriteBuilder(): WriteBuilder = {
+    table.newWriteBuilder(writeOptions)
+        .withInputDataSchema(query.schema)
+        .withQueryId(UUID.randomUUID().toString)
+  }
+}
+
+/**
+ * The base physical plan for writing data into data source v2.
+ */
+trait V2TableWriteExec extends UnaryExecNode {
+  def query: SparkPlan
+
+  var commitProgress: Option[StreamWriterCommitProgress] = None
+
+  override def child: SparkPlan = query
+  override def output: Seq[Attribute] = Nil
+
+  protected def doWrite(batchWrite: BatchWrite): RDD[InternalRow] = {
+    val writerFactory = batchWrite.createBatchWriterFactory()
+    val useCommitCoordinator = batchWrite.useCommitCoordinator
+    val rdd = query.execute()
+    // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
+    // partition rdd to make sure we at least set up one write task to write the metadata.
+    val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
+      sparkContext.parallelize(Array.empty[InternalRow], 1)
+    } else {
+      rdd
+    }
+    val messages = new Array[WriterCommitMessage](rddWithNonEmptyPartitions.partitions.length)
+    val totalNumRowsAccumulator = new LongAccumulator()
+
+    logInfo(s"Start processing data source write support: $batchWrite. " +
       s"The input RDD has ${messages.length} partitions.")
 
     try {
       sparkContext.runJob(
-        rdd,
+        rddWithNonEmptyPartitions,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
           DataWritingSparkTask.run(writerFactory, context, iter, useCommitCoordinator),
-        rdd.partitions.indices,
-        (index, message: WriterCommitMessage) => {
-          messages(index) = message
-          writeSupport.onDataWriterCommit(message)
+        rddWithNonEmptyPartitions.partitions.indices,
+        (index, result: DataWritingSparkTaskResult) => {
+          val commitMessage = result.writerCommitMessage
+          messages(index) = commitMessage
+          totalNumRowsAccumulator.add(result.numRows)
+          batchWrite.onDataWriterCommit(commitMessage)
         }
       )
 
-      logInfo(s"Data source write support $writeSupport is committing.")
-      writeSupport.commit(messages)
-      logInfo(s"Data source write support $writeSupport committed.")
+      logInfo(s"Data source write support $batchWrite is committing.")
+      batchWrite.commit(messages)
+      logInfo(s"Data source write support $batchWrite committed.")
+      commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
       case cause: Throwable =>
-        logError(s"Data source write support $writeSupport is aborting.")
+        logError(s"Data source write support $batchWrite is aborting.")
         try {
-          writeSupport.abort(messages)
+          batchWrite.abort(messages)
         } catch {
           case t: Throwable =>
-            logError(s"Data source write support $writeSupport failed to abort.")
+            logError(s"Data source write support $batchWrite failed to abort.")
             cause.addSuppressed(t)
             throw new SparkException("Writing job failed.", cause)
         }
-        logError(s"Data source write support $writeSupport aborted.")
+        logError(s"Data source write support $batchWrite aborted.")
         cause match {
           // Only wrap non fatal exceptions.
           case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
@@ -102,7 +240,7 @@ object DataWritingSparkTask extends Logging {
       writerFactory: DataWriterFactory,
       context: TaskContext,
       iter: Iterator[InternalRow],
-      useCommitCoordinator: Boolean): WriterCommitMessage = {
+      useCommitCoordinator: Boolean): DataWritingSparkTaskResult = {
     val stageId = context.stageId()
     val stageAttempt = context.stageAttemptNumber()
     val partId = context.partitionId()
@@ -110,9 +248,12 @@ object DataWritingSparkTask extends Logging {
     val attemptId = context.attemptNumber()
     val dataWriter = writerFactory.createWriter(partId, taskId)
 
+    var count = 0L
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       while (iter.hasNext) {
+        // Count is here.
+        count += 1
         dataWriter.write(iter.next())
       }
 
@@ -139,7 +280,7 @@ object DataWritingSparkTask extends Logging {
       logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId" +
         s"stage $stageId.$stageAttempt)")
 
-      msg
+      DataWritingSparkTaskResult(count, msg)
 
     })(catchBlock = {
       // If there is an error, abort this writer
@@ -151,3 +292,12 @@ object DataWritingSparkTask extends Logging {
     })
   }
 }
+
+private[v2] case class DataWritingSparkTaskResult(
+                                                   numRows: Long,
+                                                   writerCommitMessage: WriterCommitMessage)
+
+/**
+ * Sink progress information collected after commit.
+ */
+private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)

@@ -173,8 +173,8 @@ class LinearSVC @Since("2.2.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, regParam, maxIter, fitIntercept, tol, standardization, threshold,
-      aggregationDepth)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
+      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -248,7 +248,7 @@ class LinearSVC @Since("2.2.0") (
         scaledObjectiveHistory += state.adjustedValue
       }
 
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesStd.destroy()
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
         instr.logError(msg)

@@ -192,6 +192,7 @@ class SparkSession(object):
     """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
+    _activeSession = None
 
     @ignore_unicode_prefix
     def __init__(self, sparkContext, jsparkSession=None):
@@ -233,7 +234,9 @@ class SparkSession(object):
         if SparkSession._instantiatedSession is None \
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
+            SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
+            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
     def _repr_html_(self):
         return """
@@ -254,6 +257,29 @@ class SparkSession(object):
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
+
+    @classmethod
+    @since(3.0)
+    def getActiveSession(cls):
+        """
+        Returns the active SparkSession for the current thread, returned by the builder.
+        >>> s = SparkSession.getActiveSession()
+        >>> l = [('Alice', 1)]
+        >>> rdd = s.sparkContext.parallelize(l)
+        >>> df = s.createDataFrame(rdd, ['name', 'age'])
+        >>> df.select("age").collect()
+        [Row(age=1)]
+        """
+        from pyspark import SparkContext
+        sc = SparkContext._active_spark_context
+        if sc is None:
+            return None
+        else:
+            if sc._jvm.SparkSession.getActiveSession().isDefined():
+                SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+                return SparkSession._activeSession
+            else:
+                return None
 
     @property
     @since(2.0)
@@ -530,8 +556,10 @@ class SparkSession(object):
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
         # Create Arrow record batches
+        safecheck = self._wrapped._conf.arrowSafeTypeConversion()
+        col_by_name = True  # col by name only applies to StructType columns, can't happen here
         batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)],
-                                 timezone)
+                                 timezone, safecheck, col_by_name)
                    for pdf_slice in pdf_slices]
 
         # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
@@ -671,6 +699,8 @@ class SparkSession(object):
             ...
         Py4JJavaError: ...
         """
+        SparkSession._activeSession = self
+        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
@@ -826,7 +856,9 @@ class SparkSession(object):
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
+        self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
+        SparkSession._activeSession = None
 
     @since(2.0)
     def __enter__(self):

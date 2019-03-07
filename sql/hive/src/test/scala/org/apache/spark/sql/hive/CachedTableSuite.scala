@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
@@ -97,24 +96,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("DROP nonexistant table") {
-    sql("DROP TABLE IF EXISTS nonexistantTable")
+  test("DROP nonexistent table") {
+    sql("DROP TABLE IF EXISTS nonexistentTable")
   }
 
-  test("uncache of nonexistant tables") {
-    val expectedErrorMsg = "Table or view not found: nonexistantTable"
+  test("uncache of nonexistent tables") {
+    val expectedErrorMsg = "Table or view not found: nonexistentTable"
     // make sure table doesn't exist
-    var e = intercept[AnalysisException](spark.table("nonexistantTable")).getMessage
+    var e = intercept[AnalysisException](spark.table("nonexistentTable")).getMessage
     assert(e.contains(expectedErrorMsg))
     e = intercept[AnalysisException] {
-      spark.catalog.uncacheTable("nonexistantTable")
+      spark.catalog.uncacheTable("nonexistentTable")
     }.getMessage
     assert(e.contains(expectedErrorMsg))
     e = intercept[AnalysisException] {
-      sql("UNCACHE TABLE nonexistantTable")
+      sql("UNCACHE TABLE nonexistentTable")
     }.getMessage
     assert(e.contains(expectedErrorMsg))
-    sql("UNCACHE TABLE IF EXISTS nonexistantTable")
+    sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 
   test("no error on uncache of non-cached table") {
@@ -124,7 +123,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       // no error will be reported in the following three ways to uncache a table.
       spark.catalog.uncacheTable(tableName)
       sql("UNCACHE TABLE newTable")
-      sparkSession.table(tableName).unpersist()
+      sparkSession.table(tableName).unpersist(blocking = true)
     }
   }
 

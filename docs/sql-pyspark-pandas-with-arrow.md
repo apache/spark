@@ -127,8 +127,9 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 ### Supported SQL Types
 
-Currently, all Spark SQL data types are supported by Arrow-based conversion except `BinaryType`, `MapType`,
-`ArrayType` of `TimestampType`, and nested `StructType`.
+Currently, all Spark SQL data types are supported by Arrow-based conversion except `MapType`,
+`ArrayType` of `TimestampType`, and nested `StructType`. `BinaryType` is supported only when
+installed PyArrow is equal to or higher than 0.10.0.
 
 ### Setting Arrow Batch Size
 

@@ -20,18 +20,18 @@ package org.apache.spark.sql.sources.v2.writer;
 import java.io.Serializable;
 
 import org.apache.spark.TaskContext;
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 
 /**
- * A factory of {@link DataWriter} returned by {@link BatchWriteSupport#createBatchWriterFactory()},
+ * A factory of {@link DataWriter} returned by {@link BatchWrite#createBatchWriterFactory()},
  * which is responsible for creating and initializing the actual data writer at executor side.
  *
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
  * will be created on executors and do the actual writing. So this interface must be
  * serializable and {@link DataWriter} doesn't need to be.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface DataWriterFactory extends Serializable {
 
   /**

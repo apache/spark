@@ -18,8 +18,10 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.util.List;
 
+import org.apache.spark.sql.internal.SQLConf;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -120,5 +122,21 @@ public class JavaUDFSuite implements Serializable {
     spark.udf().register("returnOne", () -> 1, DataTypes.IntegerType);
     Row result = spark.sql("SELECT returnOne()").head();
     Assert.assertEquals(1, result.getInt(0));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udf7Test() {
+    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_EANBLED().key());
+    try {
+      spark.conf().set(SQLConf.DATETIME_JAVA8API_EANBLED().key(), "true");
+      spark.udf().register(
+          "plusDay",
+          (java.time.LocalDate ld) -> ld.plusDays(1), DataTypes.DateType);
+      Row result = spark.sql("SELECT plusDay(DATE '2019-02-26')").head();
+      Assert.assertEquals(LocalDate.parse("2019-02-27"), result.get(0));
+    } finally {
+      spark.conf().set(SQLConf.DATETIME_JAVA8API_EANBLED().key(), originConf);
+    }
   }
 }

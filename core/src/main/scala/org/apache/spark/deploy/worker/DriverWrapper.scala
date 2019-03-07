@@ -23,7 +23,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._
 
@@ -43,7 +43,7 @@ object DriverWrapper extends Logging {
       case workerUrl :: userJar :: mainClass :: extraArgs =>
         val conf = new SparkConf()
         val host: String = Utils.localHostName()
-        val port: Int = sys.props.getOrElse("spark.driver.port", "0").toInt
+        val port: Int = sys.props.getOrElse(config.DRIVER_PORT.key, "0").toInt
         val rpcEnv = RpcEnv.create("Driver", host, port, conf, new SecurityManager(conf))
         logInfo(s"Driver address: ${rpcEnv.address}")
         rpcEnv.setupEndpoint("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl))
@@ -51,7 +51,7 @@ object DriverWrapper extends Logging {
         val currentLoader = Thread.currentThread.getContextClassLoader
         val userJarUrl = new File(userJar).toURI().toURL()
         val loader =
-          if (sys.props.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
+          if (sys.props.getOrElse(config.DRIVER_USER_CLASS_PATH_FIRST.key, "false").toBoolean) {
             new ChildFirstURLClassLoader(Array(userJarUrl), currentLoader)
           } else {
             new MutableURLClassLoader(Array(userJarUrl), currentLoader)

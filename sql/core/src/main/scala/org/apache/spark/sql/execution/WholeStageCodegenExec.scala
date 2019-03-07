@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.Writer
 import java.util.Locale
 import java.util.function.Supplier
 
@@ -86,7 +87,7 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     s"""
-       |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString(SQLConf.get.maxToStringFields)}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -142,7 +143,7 @@ trait CodegenSupport extends SparkPlan {
    * Note that `outputVars` and `row` can't both be null.
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
-    val inputVars =
+    val inputVarsCandidate =
       if (outputVars != null) {
         assert(outputVars.length == output.length)
         // outputVars will be used to generate the code for UnsafeRow, so we should copy them
@@ -155,6 +156,11 @@ trait CodegenSupport extends SparkPlan {
           BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
       }
+
+    val inputVars = inputVarsCandidate match {
+      case stream: Stream[ExprCode] => stream.force
+      case other => other
+    }
 
     val rowVar = prepareRowVar(ctx, row, outputVars)
 
@@ -184,7 +190,7 @@ trait CodegenSupport extends SparkPlan {
       parent.doConsume(ctx, inputVars, rowVar)
     }
     s"""
-       |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString(SQLConf.get.maxToStringFields)}")}
        |$evaluated
        |$consumeFunc
      """.stripMargin
@@ -285,6 +291,18 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
+   * Returns source code to evaluate the variables for non-deterministic expressions, and clear the
+   * code of evaluated variables, to prevent them to be evaluated twice.
+   */
+  protected def evaluateNondeterministicVariables(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      expressions: Seq[NamedExpression]): String = {
+    val nondeterministicAttrs = expressions.filterNot(_.deterministic).map(_.toAttribute)
+    evaluateRequiredVariables(attributes, variables, AttributeSet(nondeterministicAttrs))
+  }
+
+  /**
    * The subset of inputSet those should be evaluated before this plan.
    *
    * We will use this to insert some code to access those columns that are actually used by current
@@ -347,6 +365,15 @@ trait CodegenSupport extends SparkPlan {
   def needStopCheck: Boolean = parent.needStopCheck
 
   /**
+   * Helper default should stop check code.
+   */
+  def shouldStopCheckCode: String = if (needStopCheck) {
+    "if (shouldStop()) return;"
+  } else {
+    "// shouldStop check is eliminated"
+  }
+
+  /**
    * A sequence of checks which evaluate to true if the downstream Limit operators have not received
    * enough records and reached the limit. If current node is a data producing node, it can leverage
    * this information to stop producing data and complete the data flow earlier. Common data
@@ -402,6 +429,53 @@ trait BlockingOperatorWithCodegen extends CodegenSupport {
   override def limitNotReachedChecks: Seq[String] = Nil
 }
 
+/**
+ * Leaf codegen node reading from a single RDD.
+ */
+trait InputRDDCodegen extends CodegenSupport {
+
+  def inputRDD: RDD[InternalRow]
+
+  // If the input can be InternalRows, an UnsafeProjection needs to be created.
+  protected val createUnsafeProjection: Boolean
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    inputRDD :: Nil
+  }
+
+  override def doProduce(ctx: CodegenContext): String = {
+    // Inline mutable state since an InputRDDCodegen is used once in a task for WholeStageCodegen
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
+      forceInline = true)
+    val row = ctx.freshName("row")
+
+    val outputVars = if (createUnsafeProjection) {
+      // creating the vars will make the parent consume add an unsafe projection.
+      ctx.INPUT_ROW = row
+      ctx.currentVars = null
+      output.zipWithIndex.map { case (a, i) =>
+        BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+      }
+    } else {
+      null
+    }
+
+    val updateNumOutputRowsMetrics = if (metrics.contains("numOutputRows")) {
+      val numOutputRows = metricTerm(ctx, "numOutputRows")
+      s"$numOutputRows.add(1);"
+    } else {
+      ""
+    }
+    s"""
+       | while ($limitNotReachedCond $input.hasNext()) {
+       |   InternalRow $row = (InternalRow) $input.next();
+       |   ${updateNumOutputRowsMetrics}
+       |   ${consume(ctx, outputVars, if (createUnsafeProjection) null else row).trim}
+       |   ${shouldStopCheckCode}
+       | }
+     """.stripMargin
+  }
+}
 
 /**
  * InputAdapter is used to hide a SparkPlan from a subtree that supports codegen.
@@ -409,7 +483,7 @@ trait BlockingOperatorWithCodegen extends CodegenSupport {
  * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
  * that consumes an RDD iterator of InternalRow.
  */
-case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -425,33 +499,27 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     child.doExecuteBroadcast()
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    child.execute() :: Nil
-  }
+  override def inputRDD: RDD[InternalRow] = child.execute()
 
-  override def doProduce(ctx: CodegenContext): String = {
-    // Right now, InputAdapter is only used when there is one input RDD.
-    // Inline mutable state since an InputAdapter is used once in a task for WholeStageCodegen
-    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
-      forceInline = true)
-    val row = ctx.freshName("row")
-    s"""
-       | while ($limitNotReachedCond $input.hasNext()) {
-       |   InternalRow $row = (InternalRow) $input.next();
-       |   ${consume(ctx, null, row).trim}
-       |   if (shouldStop()) return;
-       | }
-     """.stripMargin
-  }
+  // InputAdapter does not need UnsafeProjection.
+  protected val createUnsafeProjection: Boolean = false
 
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, "")
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix = "",
+      addSuffix = false,
+      maxFields)
   }
 
   override def needCopyResult: Boolean = false
@@ -723,11 +791,19 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, s"*($codegenStageId) ")
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      s"*($codegenStageId) ",
+      false,
+      maxFields)
   }
 
   override def needStopCheck: Boolean = true

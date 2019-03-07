@@ -22,7 +22,7 @@ import AppStatusSource.getCounter
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.Status.APP_STATUS_METRICS_ENABLED
 import org.apache.spark.metrics.source.Source
 
 private [spark] class JobDuration(val value: AtomicLong) extends Gauge[Long] {
@@ -71,15 +71,8 @@ private[spark] object AppStatusSource {
   }
 
   def createSource(conf: SparkConf): Option[AppStatusSource] = {
-    Option(conf.get(AppStatusSource.APP_STATUS_METRICS_ENABLED))
+    Option(conf.get(APP_STATUS_METRICS_ENABLED))
       .filter(identity)
       .map { _ => new AppStatusSource() }
   }
-
-  val APP_STATUS_METRICS_ENABLED =
-    ConfigBuilder("spark.app.status.metrics.enabled")
-      .doc("Whether Dropwizard/Codahale metrics " +
-        "will be reported for the status of the running spark app.")
-      .booleanConf
-      .createWithDefault(false)
 }

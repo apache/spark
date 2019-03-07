@@ -17,45 +17,19 @@
 package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.{EnvVarBuilder, VolumeBuilder, VolumeMountBuilder}
-import org.mockito.Mockito
-import org.scalatest._
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
+import org.apache.spark.util.SparkConfWithEnv
 
-class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
+class LocalDirsFeatureStepSuite extends SparkFunSuite {
   private val defaultLocalDir = "/var/data/default-local-dir"
-  private var sparkConf: SparkConf = _
-  private var kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf] = _
-
-  before {
-    val realSparkConf = new SparkConf(false)
-    sparkConf = Mockito.spy(realSparkConf)
-    kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesDriverSpecificConf(
-        None,
-        "app-name",
-        "main",
-        Seq.empty),
-      "resource",
-      "app-id",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Seq.empty[String],
-      hadoopConfSpec = None)
-  }
 
   test("Resolve to default local dir if neither env nor configuration are set") {
-    Mockito.doReturn(null).when(sparkConf).get("spark.local.dir")
-    Mockito.doReturn(null).when(sparkConf).getenv("SPARK_LOCAL_DIRS")
-    val stepUnderTest = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
+    val stepUnderTest = new LocalDirsFeatureStep(KubernetesTestConf.createDriverConf(),
+      defaultLocalDir)
     val configuredPod = stepUnderTest.configurePod(SparkPod.initialPod())
     assert(configuredPod.pod.getSpec.getVolumes.size === 1)
     assert(configuredPod.pod.getSpec.getVolumes.get(0) ===
@@ -79,8 +53,9 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Use configured local dirs split on comma if provided.") {
-    Mockito.doReturn("/var/data/my-local-dir-1,/var/data/my-local-dir-2")
-      .when(sparkConf).getenv("SPARK_LOCAL_DIRS")
+    val sparkConf = new SparkConfWithEnv(Map(
+      "SPARK_LOCAL_DIRS" -> "/var/data/my-local-dir-1,/var/data/my-local-dir-2"))
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
     val stepUnderTest = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
     val configuredPod = stepUnderTest.configurePod(SparkPod.initialPod())
     assert(configuredPod.pod.getSpec.getVolumes.size === 2)
@@ -116,9 +91,8 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Use tmpfs to back default local dir") {
-    Mockito.doReturn(null).when(sparkConf).get("spark.local.dir")
-    Mockito.doReturn(null).when(sparkConf).getenv("SPARK_LOCAL_DIRS")
-    Mockito.doReturn(true).when(sparkConf).get(KUBERNETES_LOCAL_DIRS_TMPFS)
+    val sparkConf = new SparkConf(false).set(KUBERNETES_LOCAL_DIRS_TMPFS, true)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
     val stepUnderTest = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
     val configuredPod = stepUnderTest.configurePod(SparkPod.initialPod())
     assert(configuredPod.pod.getSpec.getVolumes.size === 1)

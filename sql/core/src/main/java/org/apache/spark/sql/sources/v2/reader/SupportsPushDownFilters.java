@@ -17,18 +17,21 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.Filter;
 
 /**
- * A mix-in interface for {@link ScanConfigBuilder}. Data sources can implement this interface to
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down filters to the data source and reduce the size of the data to be read.
  */
-@InterfaceStability.Evolving
-public interface SupportsPushDownFilters extends ScanConfigBuilder {
+@Evolving
+public interface SupportsPushDownFilters extends ScanBuilder {
 
   /**
    * Pushes down filters, and returns filters that need to be evaluated after scanning.
+   * <p>
+   * Rows should be returned from the data source if and only if all of the filters match. That is,
+   * filters must be interpreted as ANDed together.
    */
   Filter[] pushFilters(Filter[] filters);
 

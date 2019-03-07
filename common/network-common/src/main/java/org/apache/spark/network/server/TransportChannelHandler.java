@@ -21,6 +21,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import org.apache.spark.network.TransportContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,18 +58,21 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
   private final boolean closeIdleConnections;
+  private final TransportContext transportContext;
 
   public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
       long requestTimeoutMs,
-      boolean closeIdleConnections) {
+      boolean closeIdleConnections,
+      TransportContext transportContext) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
     this.closeIdleConnections = closeIdleConnections;
+    this.transportContext = transportContext;
   }
 
   public TransportClient getClient() {
@@ -174,6 +178,18 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   public TransportResponseHandler getResponseHandler() {
     return responseHandler;
+  }
+
+  @Override
+  public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+    transportContext.getRegisteredConnections().inc();
+    super.channelRegistered(ctx);
+  }
+
+  @Override
+  public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+    transportContext.getRegisteredConnections().dec();
+    super.channelUnregistered(ctx);
   }
 
 }

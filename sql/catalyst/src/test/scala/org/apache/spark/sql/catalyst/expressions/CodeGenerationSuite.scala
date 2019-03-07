@@ -251,7 +251,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       UTF8String.fromString("c"))
     assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getInt(1) === 3)
 
-    val fromUnsafe = FromUnsafeProjection(schema)
+    val fromUnsafe = SafeProjection.create(schema)
     val internalRow2 = fromUnsafe(unsafeRow)
     assert(internalRow === internalRow2)
 
@@ -338,7 +338,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("should not apply common subexpression elimination on conditional expressions") {
     val row = InternalRow(null)
     val bound = BoundReference(0, IntegerType, true)
-    val assertNotNull = AssertNotNull(bound, Nil)
+    val assertNotNull = AssertNotNull(bound)
     val expr = If(IsNull(bound), Literal(1), Add(assertNotNull, assertNotNull))
     val projection = GenerateUnsafeProjection.generate(
       Seq(expr), subexpressionEliminationEnabled = true)
@@ -424,7 +424,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx1.inlinedMutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
     // When the number of primitive type mutable states is over the threshold, others are
     // allocated into an array
-    assert(ctx1.arrayCompactedMutableStates.get(CodeGenerator.JAVA_INT).get.arrayNames.size == 1)
+    assert(ctx1.arrayCompactedMutableStates(CodeGenerator.JAVA_INT).arrayNames.size == 1)
     assert(ctx1.mutableStateInitCode.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
 
     val ctx2 = new CodegenContext
@@ -434,7 +434,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     // When the number of non-primitive type mutable states is over the threshold, others are
     // allocated into a new array
     assert(ctx2.inlinedMutableStates.isEmpty)
-    assert(ctx2.arrayCompactedMutableStates.get("InternalRow[]").get.arrayNames.size == 2)
+    assert(ctx2.arrayCompactedMutableStates("InternalRow[]").arrayNames.size == 2)
     assert(ctx2.arrayCompactedMutableStates("InternalRow[]").getCurrentIndex == 10)
     assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }

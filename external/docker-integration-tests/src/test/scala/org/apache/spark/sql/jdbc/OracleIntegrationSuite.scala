@@ -154,7 +154,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // A value with fractions from DECIMAL(3, 2) is correct:
     assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
     // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999l)) == 0)
+    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
   }
 
 

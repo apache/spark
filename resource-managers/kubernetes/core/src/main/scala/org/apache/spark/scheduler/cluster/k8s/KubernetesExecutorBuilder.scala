@@ -16,79 +16,37 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.Constants._
+import java.io.File
+
+import io.fabric8.kubernetes.client.KubernetesClient
+
+import org.apache.spark.SecurityManager
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 
-private[spark] class KubernetesExecutorBuilder(
-    provideBasicStep: (KubernetesConf [KubernetesExecutorSpecificConf])
-      => BasicExecutorFeatureStep =
-      new BasicExecutorFeatureStep(_),
-    provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
-      => MountSecretsFeatureStep =
-      new MountSecretsFeatureStep(_),
-    provideEnvSecretsStep:
-      (KubernetesConf[_ <: KubernetesRoleSpecificConf] => EnvSecretsFeatureStep) =
-      new EnvSecretsFeatureStep(_),
-    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
-      => LocalDirsFeatureStep =
-      new LocalDirsFeatureStep(_),
-    provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => MountVolumesFeatureStep) =
-    new MountVolumesFeatureStep(_),
-    provideHadoopConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-        => HadoopConfExecutorFeatureStep) =
-    new HadoopConfExecutorFeatureStep(_),
-    provideKerberosConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-        => KerberosConfExecutorFeatureStep) =
-    new KerberosConfExecutorFeatureStep(_),
-    provideHadoopSparkUserStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-        => HadoopSparkUserExecutorFeatureStep) =
-    new HadoopSparkUserExecutorFeatureStep(_)) {
+private[spark] class KubernetesExecutorBuilder {
 
   def buildFromFeatures(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
-    val sparkConf = kubernetesConf.sparkConf
-    val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
-    val maybeDTSecretName = sparkConf.getOption(KERBEROS_DT_SECRET_NAME)
-    val maybeDTDataItem = sparkConf.getOption(KERBEROS_DT_SECRET_KEY)
+      conf: KubernetesExecutorConf,
+      secMgr: SecurityManager,
+      client: KubernetesClient): SparkPod = {
+    val initialPod = conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+      .map { file =>
+        KubernetesUtils.loadPodFromTemplate(
+          client,
+          new File(file),
+          conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+      }
+      .getOrElse(SparkPod.initialPod())
 
-    val baseFeatures = Seq(provideBasicStep(kubernetesConf), provideLocalDirsStep(kubernetesConf))
-    val secretFeature = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
-      Seq(provideSecretsStep(kubernetesConf))
-    } else Nil
-    val secretEnvFeature = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
-      Seq(provideEnvSecretsStep(kubernetesConf))
-    } else Nil
-    val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
-      Seq(provideVolumesStep(kubernetesConf))
-    } else Nil
+    val features = Seq(
+      new BasicExecutorFeatureStep(conf, secMgr),
+      new MountSecretsFeatureStep(conf),
+      new EnvSecretsFeatureStep(conf),
+      new LocalDirsFeatureStep(conf),
+      new MountVolumesFeatureStep(conf))
 
-    val maybeHadoopConfFeatureSteps = maybeHadoopConfigMap.map { _ =>
-      val maybeKerberosStep =
-        if (maybeDTSecretName.isDefined && maybeDTDataItem.isDefined) {
-          provideKerberosConfStep(kubernetesConf)
-        } else {
-          provideHadoopSparkUserStep(kubernetesConf)
-        }
-      Seq(provideHadoopConfStep(kubernetesConf)) :+
-        maybeKerberosStep
-    }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
-
-    val allFeatures: Seq[KubernetesFeatureConfigStep] =
-      baseFeatures ++
-      secretFeature ++
-      secretEnvFeature ++
-      volumesFeature ++
-      maybeHadoopConfFeatureSteps
-
-    var executorPod = SparkPod.initialPod()
-    for (feature <- allFeatures) {
-      executorPod = feature.configurePod(executorPod)
-    }
-    executorPod
+    features.foldLeft(initialPod) { case (pod, feature) => feature.configurePod(pod) }
   }
+
 }

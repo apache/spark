@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 
@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions._
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 object Window {
 
   /**
@@ -214,15 +214,6 @@ object Window {
     spec.rangeBetween(start, end)
   }
 
-  /**
-   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
-   * @since 2.3.0
-   */
-  @deprecated("Use the version with Long parameter types", "2.4.0")
-  def rangeBetween(start: Column, end: Column): WindowSpec = {
-    spec.rangeBetween(start, end)
-  }
-
   private[sql] def spec: WindowSpec = {
     new WindowSpec(Seq.empty, Seq.empty, UnspecifiedFrame)
   }
@@ -243,5 +234,5 @@ object Window {
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 class Window private()  // So we can see Window in JavaDoc.

@@ -12,7 +12,7 @@ redirect_from: "building-with-maven.html"
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.5.4 and Java 8.
+Building Spark using Maven requires Maven 3.6.0 and Java 8.
 Note that support for Java 7 was removed as of Spark 2.2.0.
 
 ### Setting up Maven's Memory Usage
@@ -96,9 +96,9 @@ It's possible to build Spark submodules using the `mvn -pl` option.
 
 For instance, you can build the Spark Streaming module using:
 
-    ./build/mvn -pl :spark-streaming_2.11 clean install
+    ./build/mvn -pl :spark-streaming_{{site.SCALA_BINARY_VERSION}} clean install
 
-where `spark-streaming_2.11` is the `artifactId` as defined in `streaming/pom.xml` file.
+where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 ## Continuous Compilation
 
@@ -137,6 +137,14 @@ can be set to control the SBT build. For example:
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
 prompt.
+
+### Setting up SBT's Memory Usage
+Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
+
+    -Xmx2g
+    -XX:ReservedCodeCacheSize=512m
+
+For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](http://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 
 ## Speeding up Compilation
 
@@ -230,7 +238,7 @@ Once installed, the `docker` service needs to be started, if not already running
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests
-    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_{{site.SCALA_BINARY_VERSION}}
 
 or
 
@@ -238,17 +246,17 @@ or
 
 ## Change Scala Version
 
-To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.12):
+To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.11):
 
-    ./dev/change-scala-version.sh 2.12
+    ./dev/change-scala-version.sh 2.11
 
-For Maven, please enable the profile (e.g. 2.12):
+For Maven, please enable the profile (e.g. 2.11):
 
-    ./build/mvn -Pscala-2.12 compile
+    ./build/mvn -Pscala-2.11 compile
 
-For SBT, specify a complete scala version using (e.g. 2.12.6):
+For SBT, specify a complete scala version using (e.g. 2.11.12):
 
-    ./build/sbt -Dscala.version=2.12.6
+    ./build/sbt -Dscala.version=2.11.12
 
 Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
 

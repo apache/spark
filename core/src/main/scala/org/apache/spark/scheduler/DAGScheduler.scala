@@ -38,6 +38,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
@@ -186,7 +187,7 @@ private[spark] class DAGScheduler(
   private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
 
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
-  private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
+  private val disallowStageRetryForTest = sc.getConf.get(TEST_NO_STAGE_RETRY)
 
   /**
    * Whether to unregister all the outputs on the host in condition that we receive a FetchFailure,
@@ -265,7 +266,7 @@ private[spark] class DAGScheduler(
       // (taskId, stageId, stageAttemptId, accumUpdates)
       accumUpdates: Array[(Long, Int, Int, Seq[AccumulableInfo])],
       blockManagerId: BlockManagerId,
-      // executor metrics indexed by MetricGetter.values
+      // executor metrics indexed by ExecutorMetricType.values
       executorUpdates: ExecutorMetrics): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       Some(executorUpdates)))
@@ -692,6 +693,11 @@ private[spark] class DAGScheduler(
 
     val jobId = nextJobId.getAndIncrement()
     if (partitions.size == 0) {
+      val time = clock.getTimeMillis()
+      listenerBus.post(
+        SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
+      listenerBus.post(
+        SparkListenerJobEnd(jobId, time, JobSucceeded))
       // Return immediately if the job is running 0 tasks
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
@@ -1161,6 +1167,10 @@ private[spark] class DAGScheduler(
         partitions = stage.rdd.partitions
       }
 
+      if (taskBinaryBytes.length > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024) {
+        logWarning(s"Broadcasting large task binary with size " +
+          s"${Utils.bytesToString(taskBinaryBytes.length)}")
+      }
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.
@@ -1170,9 +1180,11 @@ private[spark] class DAGScheduler(
 
         // Abort execution
         return
-      case NonFatal(e) =>
+      case e: Throwable =>
         abortStage(stage, s"Task serialization failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
+
+        // Abort execution
         return
     }
 
@@ -1296,6 +1308,27 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * Check [[SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL]] in job properties to see if we should
+   * interrupt running tasks. Returns `false` if the property value is not a boolean value
+   */
+  private def shouldInterruptTaskThread(job: ActiveJob): Boolean = {
+    if (job.properties == null) {
+      false
+    } else {
+      val shouldInterruptThread =
+        job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+      try {
+        shouldInterruptThread.toBoolean
+      } catch {
+        case e: IllegalArgumentException =>
+          logWarning(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} in Job ${job.jobId} " +
+            s"is invalid: $shouldInterruptThread. Using 'false' instead", e)
+          false
+      }
+    }
+  }
+
+  /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
@@ -1364,6 +1397,21 @@ private[spark] class DAGScheduler(
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
+                    try {
+                      // killAllTaskAttempts will fail if a SchedulerBackend does not implement
+                      // killTask.
+                      logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
+                        "or zombie tasks for this job")
+                      // ResultStage is only used by this job. It's safe to kill speculative or
+                      // zombie tasks in this stage.
+                      taskScheduler.killAllTaskAttempts(
+                        stageId,
+                        shouldInterruptTaskThread(job),
+                        reason = "Stage finished")
+                    } catch {
+                      case e: UnsupportedOperationException =>
+                        logWarning(s"Could not cancel tasks for stage $stageId", e)
+                    }
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
                   }
@@ -1373,7 +1421,7 @@ private[spark] class DAGScheduler(
                   try {
                     job.listener.taskSucceeded(rt.outputId, event.result)
                   } catch {
-                    case e: Exception =>
+                    case e: Throwable if !Utils.isFatalError(e) =>
                       // TODO: Perhaps we want to mark the resultStage as failed?
                       job.listener.jobFailed(new SparkDriverExecutionException(e))
                   }
@@ -1890,10 +1938,6 @@ private[spark] class DAGScheduler(
     val error = new SparkException(failureReason, exception.getOrElse(null))
     var ableToCancelStages = true
 
-    val shouldInterruptThread =
-      if (job.properties == null) false
-      else job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false").toBoolean
-
     // Cancel all independent, running stages.
     val stages = jobIdToStageIds(job.jobId)
     if (stages.isEmpty) {
@@ -1913,12 +1957,12 @@ private[spark] class DAGScheduler(
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
-              taskScheduler.cancelTasks(stageId, shouldInterruptThread)
+              taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job))
               markStageAsFinished(stage, Some(failureReason))
             } catch {
               case e: UnsupportedOperationException =>
-                logInfo(s"Could not cancel tasks for stage $stageId", e)
-              ableToCancelStages = false
+                logWarning(s"Could not cancel tasks for stage $stageId", e)
+                ableToCancelStages = false
             }
           }
         }

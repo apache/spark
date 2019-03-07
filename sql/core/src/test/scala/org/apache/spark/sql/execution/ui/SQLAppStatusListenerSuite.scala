@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Status._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -38,7 +39,6 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.status.config._
 import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 import org.apache.spark.util.kvstore.InMemoryStore
 
@@ -140,7 +140,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
         // TODO: this is brittle. There is no requirement that the actual string needs to start
         // with the accumulator value.
         assert(actual.contains(id))
-        val v = actual.get(id).get.trim
+        val v = actual(id).trim
         assert(v.startsWith(value.toString), s"Wrong value for accumulator $id")
       }
     }
@@ -384,6 +384,36 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     assertJobs(statusStore.execution(executionId), failed = Seq(0))
   }
 
+  test("onJobStart happens after onExecutionEnd shouldn't overwrite kvstore") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 0
+    val df = createTestDataFrame
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Seq(createStageInfo(0, 0)),
+      createProperties(executionId)))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 0)))
+    listener.onJobEnd(SparkListenerJobEnd(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      JobFailed(new RuntimeException("Oops"))))
+
+    assert(listener.noLiveData())
+    assert(statusStore.execution(executionId).get.completionTime.nonEmpty)
+  }
+
   test("handle one execution with multiple jobs") {
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get
@@ -603,7 +633,7 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
+      .set(config.TASK_MAX_FAILURES, 1) // Don't retry the tasks to run this test quickly
       .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
       .set(ASYNC_TRACKING_ENABLED, false)
     withSpark(new SparkContext(conf)) { sc =>

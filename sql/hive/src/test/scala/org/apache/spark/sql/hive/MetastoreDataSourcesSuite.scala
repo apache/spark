@@ -908,7 +908,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }
       assert(e.getMessage.contains(
         "The format of the existing table default.appendOrcToParquet is `ParquetFileFormat`. " +
-          "It doesn't match the specified format `OrcFileFormat`"))
+          "It doesn't match the specified format"))
     }
 
     withTable("appendParquetToJson") {

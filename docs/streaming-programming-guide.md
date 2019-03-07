@@ -385,11 +385,12 @@ Similar to Spark, Spark Streaming is available through Maven Central. To write y
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-streaming_{{site.SCALA_BINARY_VERSION}}</artifactId>
         <version>{{site.SPARK_VERSION}}</version>
+        <scope>provided</scope>
     </dependency>
 </div>
 <div data-lang="SBT" markdown="1">
 
-	libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}"
+	libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}" % "provided"
 </div>
 </div>
 
@@ -733,7 +734,7 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
 out of these sources, Kafka and Kinesis are available in the Python API.
 
-This category of sources require interfacing with external non-Spark libraries, some of them with
+This category of sources requires interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka). Hence, to minimize issues related to version conflicts
 of dependencies, the functionality to create DStreams from these sources has been moved to separate
 libraries that can be [linked](#linking) to explicitly when necessary.

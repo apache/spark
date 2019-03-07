@@ -17,25 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.UUID
-
-import org.apache.spark.{HashPartitioner, SparkEnv}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 
 /**
  * Physical plan for coalescing a continuous processing plan.
  *
  * Currently, only coalesces to a single partition are supported. `numPartitions` must be 1.
  */
-case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends SparkPlan {
+case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
-
-  override def children: Seq[SparkPlan] = child :: Nil
 
   override def outputPartitioning: Partitioning = SinglePartition
 

@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ShuffleClient}
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}
 import org.apache.spark.util.ThreadUtils
 
 private[spark]
@@ -104,11 +104,17 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           data match {
             case f: FileSegmentManagedBuffer =>
               result.success(f)
+            case e: EncryptedManagedBuffer =>
+              result.success(e)
             case _ =>
-              val ret = ByteBuffer.allocate(data.size.toInt)
-              ret.put(data.nioByteBuffer())
-              ret.flip()
-              result.success(new NioManagedBuffer(ret))
+              try {
+                val ret = ByteBuffer.allocate(data.size.toInt)
+                ret.put(data.nioByteBuffer())
+                ret.flip()
+                result.success(new NioManagedBuffer(ret))
+              } catch {
+                case e: Throwable => result.failure(e)
+              }
           }
         }
       }, tempFileManager)

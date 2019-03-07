@@ -146,7 +146,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         </ul>
       </div>
 
-    UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent, Some(5000))
+    UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent)
   }
 
   private def executionsTable(
@@ -158,21 +158,14 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean): Seq[Node] = {
 
-    // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
-      UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
+    val parameterOtherTable = request.getParameterMap().asScala.map { case (name, vals) =>
+      name + "=" + vals(0)
     }
-    val parameterOtherTable = allParameters.filterNot(_._1.startsWith(executionTag))
-      .map(para => para._1 + "=" + para._2(0))
 
-    val parameterExecutionPage = UIUtils.stripXSS(request.getParameter(s"$executionTag.page"))
-    val parameterExecutionSortColumn = UIUtils.stripXSS(request
-      .getParameter(s"$executionTag.sort"))
-    val parameterExecutionSortDesc = UIUtils.stripXSS(request.getParameter(s"$executionTag.desc"))
-    val parameterExecutionPageSize = UIUtils.stripXSS(request
-      .getParameter(s"$executionTag.pageSize"))
-    val parameterExecutionPrevPageSize = UIUtils.stripXSS(request
-      .getParameter(s"$executionTag.prevPageSize"))
+    val parameterExecutionPage = request.getParameter(s"$executionTag.page")
+    val parameterExecutionSortColumn = request.getParameter(s"$executionTag.sort")
+    val parameterExecutionSortDesc = request.getParameter(s"$executionTag.desc")
+    val parameterExecutionPageSize = request.getParameter(s"$executionTag.pageSize")
 
     val executionPage = Option(parameterExecutionPage).map(_.toInt).getOrElse(1)
     val executionSortColumn = Option(parameterExecutionSortColumn).map { sortColumn =>
@@ -183,16 +176,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       executionSortColumn == "ID"
     )
     val executionPageSize = Option(parameterExecutionPageSize).map(_.toInt).getOrElse(100)
-    val executionPrevPageSize = Option(parameterExecutionPrevPageSize).map(_.toInt)
-      .getOrElse(executionPageSize)
 
-    // If the user has changed to a larger page size, then go to page 1 in order to avoid
-    // IndexOutOfBoundsException.
-    val page: Int = if (executionPageSize <= executionPrevPageSize) {
-      executionPage
-    } else {
-      1
-    }
     val tableHeaderId = executionTag // "running", "completed" or "failed"
 
     try {
@@ -211,7 +195,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         desc = executionSortDesc,
         showRunningJobs,
         showSucceededJobs,
-        showFailedJobs).table(page)
+        showFailedJobs).table(executionPage)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
         <div class="alert alert-error">
@@ -261,8 +245,6 @@ private[ui] class ExecutionPagedTable(
   override def tableCssClass: String =
     "table table-bordered table-condensed table-striped " +
       "table-head-clickable table-cell-width-limited"
-
-  override def prevPageSizeFormField: String = s"$executionTag.prevPageSize"
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")

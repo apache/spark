@@ -67,6 +67,7 @@ private[spark] class EventLoggingListener(
   private val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
   private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
+  private val shouldAllowECLogs = sparkConf.get(EVENT_LOG_ALLOW_EC)
   private val shouldLogStageExecutorMetrics = sparkConf.get(EVENT_LOG_STAGE_EXECUTOR_METRICS)
   private val testing = sparkConf.get(EVENT_LOG_TESTING)
   private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
@@ -119,7 +120,11 @@ private[spark] class EventLoggingListener(
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         new FileOutputStream(uri.getPath)
       } else {
-        hadoopDataStream = Some(fileSystem.create(path))
+        hadoopDataStream = Some(if (shouldAllowECLogs) {
+          fileSystem.create(path)
+        } else {
+          SparkHadoopUtil.createNonECFile(fileSystem, path)
+        })
         hadoopDataStream.get
       }
 
@@ -377,17 +382,13 @@ private[spark] object EventLoggingListener extends Logging {
       appId: String,
       appAttemptId: Option[String],
       compressionCodecName: Option[String] = None): String = {
-    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId)
+    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + Utils.sanitizeDirName(appId)
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
-      base + "_" + sanitize(appAttemptId.get) + codec
+      base + "_" + Utils.sanitizeDirName(appAttemptId.get) + codec
     } else {
       base + codec
     }
-  }
-
-  private def sanitize(str: String): String = {
-    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
   /**
@@ -401,7 +402,7 @@ private[spark] object EventLoggingListener extends Logging {
       val codec = codecName(log).map { c =>
         codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
       }
-      codec.map(_.compressedInputStream(in)).getOrElse(in)
+      codec.map(_.compressedContinuousInputStream(in)).getOrElse(in)
     } catch {
       case e: Throwable =>
         in.close()

@@ -34,15 +34,11 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
-  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
-    if (nullable && input.isNullAt(ordinal)) {
-      null
-    } else {
-      accessor(input, ordinal)
-    }
+    accessor(input, ordinal)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -89,5 +85,14 @@ object BindReferences extends Logging {
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+  }
+
+  /**
+   * A helper function to bind given expressions to an input schema.
+   */
+  def bindReferences[A <: Expression](
+      expressions: Seq[A],
+      input: AttributeSeq): Seq[A] = {
+    expressions.map(BindReferences.bindReference(_, input))
   }
 }

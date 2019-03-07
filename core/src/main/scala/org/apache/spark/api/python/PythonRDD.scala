@@ -39,6 +39,7 @@ import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.SocketAuthHelper
@@ -429,6 +430,12 @@ private[spark] object PythonRDD extends Logging {
    */
   private[spark] def serveToStream(
       threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
+    serveToStream(threadName, authHelper)(writeFunc)
+  }
+
+  private[spark] def serveToStream(
+      threadName: String, authHelper: SocketAuthHelper)(writeFunc: OutputStream => Unit)
+    : Array[Any] = {
     val (port, secret) = PythonServer.setupOneConnectionServer(authHelper, threadName) { s =>
       val out = new BufferedOutputStream(s.getOutputStream())
       Utils.tryWithSafeFinally {
@@ -604,7 +611,7 @@ private[spark] class PythonAccumulatorV2(
 
   Utils.checkHost(serverHost)
 
-  val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
+  val bufferSize = SparkEnv.get.conf.get(BUFFER_SIZE)
 
   /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
@@ -660,6 +667,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     with Logging {
 
   private var encryptionServer: PythonServer[Unit] = null
+  private var decryptionServer: PythonServer[Unit] = null
 
   /**
    * Read data from disks, then copy it to `out`
@@ -708,15 +716,35 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
       override def handleConnection(sock: Socket): Unit = {
         val env = SparkEnv.get
         val in = sock.getInputStream()
-        val dir = new File(Utils.getLocalDir(env.conf))
-        val file = File.createTempFile("broadcast", "", dir)
-        path = file.getAbsolutePath
-        val out = env.serializerManager.wrapForEncryption(new FileOutputStream(path))
+        val abspath = new File(path).getAbsolutePath
+        val out = env.serializerManager.wrapForEncryption(new FileOutputStream(abspath))
         DechunkedInputStream.dechunkAndCopyToOutput(in, out)
       }
     }
     Array(encryptionServer.port, encryptionServer.secret)
   }
+
+  def setupDecryptionServer(): Array[Any] = {
+    decryptionServer = new PythonServer[Unit]("broadcast-decrypt-server-for-driver") {
+      override def handleConnection(sock: Socket): Unit = {
+        val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()))
+        Utils.tryWithSafeFinally {
+          val in = SparkEnv.get.serializerManager.wrapForEncryption(new FileInputStream(path))
+          Utils.tryWithSafeFinally {
+            Utils.copyStream(in, out, false)
+          } {
+            in.close()
+          }
+          out.flush()
+        } {
+          JavaUtils.closeQuietly(out)
+        }
+      }
+    }
+    Array(decryptionServer.port, decryptionServer.secret)
+  }
+
+  def waitTillBroadcastDataSent(): Unit = decryptionServer.getResult()
 
   def waitTillDataReceived(): Unit = encryptionServer.getResult()
 }

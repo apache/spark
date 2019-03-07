@@ -197,7 +197,7 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code"$this\n$other"
   }
 
-  override def verboseString: String = toString
+  override def verboseString(maxFields: Int): String = toString
 }
 
 object Block {
@@ -224,7 +224,7 @@ object Block {
       } else {
         args.foreach {
           case _: ExprValue | _: Inline | _: Block =>
-          case _: Int | _: Long | _: Float | _: Double | _: String =>
+          case _: Boolean | _: Int | _: Long | _: Float | _: Double | _: String =>
           case other => throw new IllegalArgumentException(
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }

@@ -21,7 +21,7 @@ import java.io._
 import java.net.URL
 import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
-import java.util.{TimeZone, UUID}
+import java.util.{Locale, TimeZone, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -35,6 +35,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
+import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -135,33 +136,12 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("test NULL avro type") {
-    withTempPath { dir =>
-      val fields =
-        Seq(new Field("null", Schema.create(Type.NULL), "doc", null)).asJava
-      val schema = Schema.createRecord("name", "docs", "namespace", false)
-      schema.setFields(fields)
-      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
-      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
-      dataFileWriter.create(schema, new File(s"$dir.avro"))
-      val avroRec = new GenericData.Record(schema)
-      avroRec.put("null", null)
-      dataFileWriter.append(avroRec)
-      dataFileWriter.flush()
-      dataFileWriter.close()
-
-      intercept[IncompatibleSchemaException] {
-        spark.read.format("avro").load(s"$dir.avro")
-      }
-    }
-  }
-
   test("union(int, long) is read as long") {
     withTempPath { dir =>
       val avroSchema: Schema = {
         val union =
           Schema.createUnion(List(Schema.create(Type.INT), Schema.create(Type.LONG)).asJava)
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -189,7 +169,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroSchema: Schema = {
         val union =
           Schema.createUnion(List(Schema.create(Type.FLOAT), Schema.create(Type.DOUBLE)).asJava)
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -221,7 +201,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
             Schema.create(Type.NULL)
           ).asJava
         )
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -247,7 +227,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("Union of a single type") {
     withTempPath { dir =>
       val UnionOfOne = Schema.createUnion(List(Schema.create(Type.INT)).asJava)
-      val fields = Seq(new Field("field1", UnionOfOne, "doc", null)).asJava
+      val fields = Seq(new Field("field1", UnionOfOne, "doc", null.asInstanceOf[AnyVal])).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
 
@@ -274,10 +254,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val complexUnionType = Schema.createUnion(
         List(Schema.create(Type.INT), Schema.create(Type.STRING), fixedSchema, enumSchema).asJava)
       val fields = Seq(
-        new Field("field1", complexUnionType, "doc", null),
-        new Field("field2", complexUnionType, "doc", null),
-        new Field("field3", complexUnionType, "doc", null),
-        new Field("field4", complexUnionType, "doc", null)
+        new Field("field1", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field2", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field3", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field4", complexUnionType, "doc", null.asInstanceOf[AnyVal])
       ).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
@@ -508,7 +488,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val union2 = spark.read.format("avro").load(testAvro).select("union_float_double").collect()
     assert(
       union2
-        .map(x => new java.lang.Double(x(0).toString))
+        .map(x => java.lang.Double.valueOf(x(0).toString))
         .exists(p => Math.abs(p - Math.PI) < 0.001))
 
     val fixed = spark.read.format("avro").load(testAvro).select("fixed3").collect()
@@ -903,6 +883,32 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("error handling for unsupported Interval data types") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      var msg = intercept[AnalysisException] {
+        sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
+      }.getMessage
+      assert(msg.contains("Cannot save interval data type into external storage."))
+
+      msg = intercept[AnalysisException] {
+        spark.udf.register("testType", () => new IntervalData())
+        sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
+      }.getMessage
+      assert(msg.toLowerCase(Locale.ROOT)
+        .contains(s"avro data source does not support calendarinterval data type."))
+    }
+  }
+
+  test("support Null data types") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      val df = sql("select null")
+      df.write.format("avro").mode("overwrite").save(tempDir)
+      checkAnswer(spark.read.format("avro").load(tempDir), df)
+    }
+  }
+
   test("throw exception if unable to write with user provided Avro schema") {
     val input: Seq[(DataType, Schema.Type)] = Seq(
       (NullType, NULL),
@@ -941,7 +947,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroArrayType = resolveNullable(Schema.createArray(avroType), nullable)
       val avroMapType = resolveNullable(Schema.createMap(avroType), nullable)
       val name = "foo"
-      val avroField = new Field(name, avroType, "", null)
+      val avroField = new Field(name, avroType, "", null.asInstanceOf[AnyVal])
       val recordSchema = Schema.createRecord("name", "doc", "space", true, Seq(avroField).asJava)
       val avroRecordType = resolveNullable(recordSchema, nullable)
 

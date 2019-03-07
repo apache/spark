@@ -45,7 +45,7 @@ There are several useful things to note about this architecture:
 
 # Cluster Manager Types
 
-The system currently supports three cluster managers:
+The system currently supports several cluster managers:
 
 * [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
   easy to set up a cluster.

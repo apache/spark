@@ -36,6 +36,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.internal.io._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -394,7 +395,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is
    * greater than `p`) would trigger sparse representation of registers, which may reduce the
@@ -436,7 +437,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -456,7 +457,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -473,7 +474,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -1011,7 +1012,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       codec: Class[_ <: CompressionCodec]): Unit = self.withScope {
     saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass,
-      new JobConf(self.context.hadoopConfiguration), Some(codec))
+      new JobConf(self.context.hadoopConfiguration), Option(codec))
   }
 
   /**
@@ -1051,7 +1052,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
-    val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
+    val speculationEnabled = self.conf.get(SPECULATION_ENABLED)
     val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
     if (speculationEnabled && outputCommitterClass.contains("Direct")) {
       val warningMessage =

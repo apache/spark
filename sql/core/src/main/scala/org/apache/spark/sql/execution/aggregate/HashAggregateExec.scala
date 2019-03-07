@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import java.util.concurrent.TimeUnit._
+
 import org.apache.spark.TaskContext
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
@@ -61,8 +66,9 @@ case class HashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"),
-    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
+    "avgHashProbe" ->
+      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -132,7 +138,7 @@ case class HashAggregateExec(
           aggregationIterator
         }
       }
-      aggTime += (System.nanoTime() - beforeAgg) / 1000000
+      aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
       res
     }
   }
@@ -198,15 +204,13 @@ case class HashAggregateExec(
     val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = bufVars
-      val aggResults = functions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
-      }
+      val aggResults = bindReferences(
+        functions.map(_.evaluateExpression),
+        aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, aggregateAttributes).genCode(ctx)
-      }
+      val resultVars = bindReferences(resultExpressions, aggregateAttributes).map(_.genCode(ctx))
       (resultVars, s"""
         |$evaluateAggResults
         |${evaluateVariables(resultVars)}
@@ -239,7 +243,7 @@ case class HashAggregateExec(
        |   $initAgg = true;
        |   long $beforeAgg = System.nanoTime();
        |   $doAggFuncName();
-       |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
+       |   $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
        |
        |   // output the result
        |   ${genResult.trim}
@@ -263,7 +267,7 @@ case class HashAggregateExec(
       }
     }
     ctx.currentVars = bufVars ++ input
-    val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttrs))
+    val boundUpdateExpr = bindReferences(updateExpr, inputAttrs)
     val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
     val effectiveCodes = subExprs.codes.mkString("\n")
     val aggVals = ctx.withSubExprEliminationExprs(subExprs.states) {
@@ -362,7 +366,7 @@ case class HashAggregateExec(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Update average hashmap probe
-    avgHashProbe.set(hashMap.getAverageProbesPerLookup())
+    avgHashProbe.set(hashMap.getAvgHashProbeBucketListIterations)
 
     if (sorter == null) {
       // not spilled
@@ -455,20 +459,23 @@ case class HashAggregateExec(
       val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
-      val aggResults = declFunctions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
-      }
+      val aggResults = bindReferences(
+        declFunctions.map(_.evaluateExpression),
+        aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
-      }
+      val resultVars = bindReferences[Expression](
+        resultExpressions,
+        inputAttrs).map(_.genCode(ctx))
+      val evaluateNondeterministicResults =
+        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
       s"""
        $evaluateKeyVars
        $evaluateBufferVars
        $evaluateAggResults
+       $evaluateNondeterministicResults
        ${consume(ctx, resultVars)}
        """
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
@@ -493,9 +500,9 @@ case class HashAggregateExec(
 
       ctx.currentVars = keyVars ++ resultBufferVars
       val inputAttrs = resultExpressions.map(_.toAttribute)
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
-      }
+      val resultVars = bindReferences[Expression](
+        resultExpressions,
+        inputAttrs).map(_.genCode(ctx))
       s"""
        $evaluateKeyVars
        $evaluateResultBufferVars
@@ -505,10 +512,15 @@ case class HashAggregateExec(
       // generate result based on grouping key
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
-      val eval = resultExpressions.map{ e =>
-        BindReferences.bindReference(e, groupingAttributes).genCode(ctx)
-      }
-      consume(ctx, eval)
+      val resultVars = bindReferences[Expression](
+        resultExpressions,
+        groupingAttributes).map(_.genCode(ctx))
+      val evaluateNondeterministicResults =
+        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
+      s"""
+       $evaluateNondeterministicResults
+       ${consume(ctx, resultVars)}
+       """
     }
     ctx.addNewFunction(funcName,
       s"""
@@ -717,7 +729,7 @@ case class HashAggregateExec(
        $initAgg = true;
        long $beforeAgg = System.nanoTime();
        $doAggFuncName();
-       $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
+       $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
      }
 
      // output the result
@@ -729,10 +741,11 @@ case class HashAggregateExec(
   private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
-      ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+      ctx, bindReferences[Expression](groupingExpressions, child.output))
     val fastRowKeys = ctx.generateExpressions(
-      groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+      bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
+    val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
 
@@ -746,13 +759,6 @@ case class HashAggregateExec(
       }
     }
 
-    // generate hash code for key
-    // SPARK-24076: HashAggregate uses the same hash algorithm on the same expressions
-    // as ShuffleExchange, it may lead to bad hash conflict when shuffle.partitions=8192*n,
-    // pick a different seed to avoid this conflict
-    val hashExpr = Murmur3Hash(groupingExpressions, 48)
-    val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
-
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
       val countTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "fallbackCounter")
@@ -762,15 +768,17 @@ case class HashAggregateExec(
       ("true", "true", "", "")
     }
 
+    val oomeClassName = classOf[SparkOutOfMemoryError].getName
+
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
          |${unsafeRowKeyCode.code}
-         |${hashEval.code}
+         |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
          |  $unsafeRowBuffer =
-         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
+         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
          |}
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
@@ -784,10 +792,10 @@ case class HashAggregateExec(
          |  // the hash map had be spilled, it should have enough memory now,
          |  // try to allocate buffer again.
          |  $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-         |    $unsafeRowKeys, ${hashEval.value});
+         |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new OutOfMemoryError("No enough memory for aggregation");
+         |    throw new $oomeClassName("No enough memory for aggregation");
          |  }
          |}
        """.stripMargin
@@ -822,7 +830,7 @@ case class HashAggregateExec(
 
     val updateRowInRegularHashMap: String = {
       ctx.INPUT_ROW = unsafeRowBuffer
-      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+      val boundUpdateExpr = bindReferences(updateExpr, inputAttr)
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
       val effectiveCodes = subExprs.codes.mkString("\n")
       val unsafeRowBufferEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
@@ -844,33 +852,47 @@ case class HashAggregateExec(
 
     val updateRowInHashMap: String = {
       if (isFastHashMapEnabled) {
-        ctx.INPUT_ROW = fastRowBuffer
-        val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
-        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-        val effectiveCodes = subExprs.codes.mkString("\n")
-        val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
-          boundUpdateExpr.map(_.genCode(ctx))
-        }
-        val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
-          val dt = updateExpr(i).dataType
-          CodeGenerator.updateColumn(
-            fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorizedHashMapEnabled)
-        }
+        if (isVectorizedHashMapEnabled) {
+          ctx.INPUT_ROW = fastRowBuffer
+          val boundUpdateExpr = bindReferences(updateExpr, inputAttr)
+          val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+          val effectiveCodes = subExprs.codes.mkString("\n")
+          val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
+            boundUpdateExpr.map(_.genCode(ctx))
+          }
+          val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
+            val dt = updateExpr(i).dataType
+            CodeGenerator.updateColumn(
+              fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorized = true)
+          }
 
-        // If fast hash map is on, we first generate code to update row in fast hash map, if the
-        // previous loop up hit fast hash map. Otherwise, update row in regular hash map.
-        s"""
-           |if ($fastRowBuffer != null) {
-           |  // common sub-expressions
-           |  $effectiveCodes
-           |  // evaluate aggregate function
-           |  ${evaluateVariables(fastRowEvals)}
-           |  // update fast row
-           |  ${updateFastRow.mkString("\n").trim}
-           |} else {
-           |  $updateRowInRegularHashMap
-           |}
-       """.stripMargin
+          // If vectorized fast hash map is on, we first generate code to update row
+          // in vectorized fast hash map, if the previous loop up hit vectorized fast hash map.
+          // Otherwise, update row in regular hash map.
+          s"""
+             |if ($fastRowBuffer != null) {
+             |  // common sub-expressions
+             |  $effectiveCodes
+             |  // evaluate aggregate function
+             |  ${evaluateVariables(fastRowEvals)}
+             |  // update fast row
+             |  ${updateFastRow.mkString("\n").trim}
+             |} else {
+             |  $updateRowInRegularHashMap
+             |}
+          """.stripMargin
+        } else {
+          // If row-based hash map is on and the previous loop up hit fast hash map,
+          // we reuse regular hash buffer to update row of fast hash map.
+          // Otherwise, update row in regular hash map.
+          s"""
+             |// Updates the proper row buffer
+             |if ($fastRowBuffer != null) {
+             |  $unsafeRowBuffer = $fastRowBuffer;
+             |}
+             |$updateRowInRegularHashMap
+          """.stripMargin
+        }
       } else {
         updateRowInRegularHashMap
       }
@@ -905,18 +927,18 @@ case class HashAggregateExec(
      """
   }
 
-  override def verboseString: String = toString(verbose = true)
+  override def verboseString(maxFields: Int): String = toString(verbose = true, maxFields)
 
-  override def simpleString: String = toString(verbose = false)
+  override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)
 
-  private def toString(verbose: Boolean): String = {
+  private def toString(verbose: Boolean, maxFields: Int): String = {
     val allAggregateExpressions = aggregateExpressions
 
     testFallbackStartsAt match {
       case None =>
-        val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
-        val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
-        val outputString = Utils.truncatedString(output, "[", ", ", "]")
+        val keyString = truncatedString(groupingExpressions, "[", ", ", "]", maxFields)
+        val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
+        val outputString = truncatedString(output, "[", ", ", "]", maxFields)
         if (verbose) {
           s"HashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
         } else {

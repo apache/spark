@@ -89,12 +89,12 @@ private class LongLongTupleConverter extends Converter[(Object, Object), (Long, 
   }
 
   override def getInputType(typeFactory: TypeFactory): JavaType = {
-    val objectType = typeFactory.uncheckedSimpleType(classOf[Object])
-    typeFactory.constructSimpleType(classOf[(_, _)], classOf[(_, _)], Array(objectType, objectType))
+    val objectType = typeFactory.constructType(classOf[Object])
+    typeFactory.constructSimpleType(classOf[(_, _)], Array(objectType, objectType))
   }
 
   override def getOutputType(typeFactory: TypeFactory): JavaType = {
-    val longType = typeFactory.uncheckedSimpleType(classOf[Long])
-    typeFactory.constructSimpleType(classOf[(_, _)], classOf[(_, _)], Array(longType, longType))
+    val longType = typeFactory.constructType(classOf[Long])
+    typeFactory.constructSimpleType(classOf[(_, _)], Array(longType, longType))
   }
 }

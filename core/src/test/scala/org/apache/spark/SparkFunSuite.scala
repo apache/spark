@@ -23,7 +23,8 @@ import java.io.File
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.AccumulatorContext
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.util.{AccumulatorContext, Utils}
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
@@ -59,7 +60,7 @@ abstract class SparkFunSuite
   protected val enableAutoThreadAudit = true
 
   protected override def beforeAll(): Unit = {
-    System.setProperty("spark.testing", "true")
+    System.setProperty(IS_TESTING.key, "true")
     if (enableAutoThreadAudit) {
       doThreadPreAudit()
     }
@@ -106,4 +107,14 @@ abstract class SparkFunSuite
     }
   }
 
+  /**
+   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
+   * returns.
+   */
+  protected def withTempDir(f: File => Unit): Unit = {
+    val dir = Utils.createTempDir()
+    try f(dir) finally {
+      Utils.deleteRecursively(dir)
+    }
+  }
 }

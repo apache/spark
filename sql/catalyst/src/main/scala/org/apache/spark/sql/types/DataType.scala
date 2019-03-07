@@ -26,7 +26,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 abstract class DataType extends AbstractDataType {
   /**
    * Enables matching against DataType for expressions:
@@ -111,7 +111,7 @@ abstract class DataType extends AbstractDataType {
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object DataType {
 
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
@@ -180,7 +180,7 @@ object DataType {
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      Utils.classForName(udtClass).getConstructor().newInstance().asInstanceOf[UserDefinedType[_]]
 
     // Python UDT
     case JSortedObject(

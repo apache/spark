@@ -16,14 +16,23 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.io.File
+import java.security.SecureRandom
+
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
+import io.fabric8.kubernetes.client.KubernetesClient
+import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
-private[spark] object KubernetesUtils {
+private[spark] object KubernetesUtils extends Logging {
+
+  private val systemClock = new SystemClock()
+  private lazy val RNG = new SecureRandom()
 
   /**
    * Extract and parse Spark configuration properties with a given name prefix and
@@ -62,24 +71,45 @@ private[spark] object KubernetesUtils {
     opt2.foreach { _ => require(opt1.isEmpty, errMessage) }
   }
 
-  /**
-   * For the given collection of file URIs, resolves them as follows:
-   * - File URIs with scheme local:// resolve to just the path of the URI.
-   * - Otherwise, the URIs are returned as-is.
-   */
-  def resolveFileUrisAndPath(fileUris: Iterable[String]): Iterable[String] = {
-    fileUris.map { uri =>
-      resolveFileUri(uri)
+  def loadPodFromTemplate(
+      kubernetesClient: KubernetesClient,
+      templateFile: File,
+      containerName: Option[String]): SparkPod = {
+    try {
+      val pod = kubernetesClient.pods().load(templateFile).get()
+      selectSparkContainer(pod, containerName)
+    } catch {
+      case e: Exception =>
+        logError(
+          s"Encountered exception while attempting to load initial pod spec from file", e)
+        throw new SparkException("Could not load pod from template file.", e)
     }
   }
 
-  def resolveFileUri(uri: String): String = {
-    val fileUri = Utils.resolveURI(uri)
-    val fileScheme = Option(fileUri.getScheme).getOrElse("file")
-    fileScheme match {
-      case "local" => fileUri.getPath
-      case _ => uri
-    }
+  def selectSparkContainer(pod: Pod, containerName: Option[String]): SparkPod = {
+    def selectNamedContainer(
+      containers: List[Container], name: String): Option[(Container, List[Container])] =
+      containers.partition(_.getName == name) match {
+        case (sparkContainer :: Nil, rest) => Some((sparkContainer, rest))
+        case _ =>
+          logWarning(
+            s"specified container ${name} not found on pod template, " +
+              s"falling back to taking the first container")
+          Option.empty
+      }
+    val containers = pod.getSpec.getContainers.asScala.toList
+    containerName
+      .flatMap(selectNamedContainer(containers, _))
+      .orElse(containers.headOption.map((_, containers.tail)))
+      .map {
+        case (sparkContainer: Container, rest: List[Container]) => SparkPod(
+          new PodBuilder(pod)
+            .editSpec()
+            .withContainers(rest.asJava)
+            .endSpec()
+            .build(),
+          sparkContainer)
+      }.getOrElse(SparkPod(pod, new ContainerBuilder().build()))
   }
 
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)
@@ -157,7 +187,26 @@ private[spark] object KubernetesUtils {
       }.getOrElse(Seq(("container state", "N/A")))
   }
 
-  def formatTime(time: Time): String = {
-    if (time != null) time.getTime else "N/A"
+  def formatTime(time: String): String = {
+    if (time != null) time else "N/A"
   }
+
+  /**
+   * Generates a unique ID to be used as part of identifiers. The returned ID is a hex string
+   * of a 64-bit value containing the 40 LSBs from the current time + 24 random bits from a
+   * cryptographically strong RNG. (40 bits gives about 30 years worth of "unique" timestamps.)
+   *
+   * This avoids using a UUID for uniqueness (too long), and relying solely on the current time
+   * (not unique enough).
+   */
+  def uniqueID(clock: Clock = systemClock): String = {
+    val random = new Array[Byte](3)
+    synchronized {
+      RNG.nextBytes(random)
+    }
+
+    val time = java.lang.Long.toHexString(clock.getTimeMillis() & 0xFFFFFFFFFFL)
+    Hex.encodeHexString(random) + time
+  }
+
 }

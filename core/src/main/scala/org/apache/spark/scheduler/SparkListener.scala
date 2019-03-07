@@ -175,7 +175,7 @@ case class SparkListenerExecutorMetricsUpdate(
  * @param execId executor id
  * @param stageId stage id
  * @param stageAttemptId stage attempt
- * @param executorMetrics executor level metrics, indexed by MetricGetter.values
+ * @param executorMetrics executor level metrics, indexed by ExecutorMetricType.values
  */
 @DeveloperApi
 case class SparkListenerStageExecutorMetrics(
@@ -192,7 +192,8 @@ case class SparkListenerApplicationStart(
     time: Long,
     sparkUser: String,
     appAttemptId: Option[String],
-    driverLogs: Option[Map[String, String]] = None) extends SparkListenerEvent
+    driverLogs: Option[Map[String, String]] = None,
+    driverAttributes: Option[Map[String, String]] = None) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent

@@ -252,8 +252,6 @@ _window_functions = {
 
 # Wraps deprecated functions (keys) with the messages (values).
 _functions_deprecated = {
-    'toDegrees': 'Deprecated in 2.1, use degrees instead.',
-    'toRadians': 'Deprecated in 2.1, use radians instead.',
 }
 
 for _name, _doc in _functions.items():
@@ -273,15 +271,6 @@ for _name, _message in _functions_deprecated.items():
 for _name, _doc in _functions_2_4.items():
     globals()[_name] = since(2.4)(_create_function(_name, _doc))
 del _name, _doc
-
-
-@since(1.3)
-def approxCountDistinct(col, rsd=None):
-    """
-    .. note:: Deprecated in 2.1, use :func:`approx_count_distinct` instead.
-    """
-    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", DeprecationWarning)
-    return approx_count_distinct(col, rsd)
 
 
 @since(2.1)
@@ -809,7 +798,7 @@ def factorial(col):
 # ---------------  Window functions ------------------------
 
 @since(1.4)
-def lag(col, count=1, default=None):
+def lag(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows before the current row, and
     `defaultValue` if there is less than `offset` rows before the current row. For example,
@@ -818,15 +807,15 @@ def lag(col, count=1, default=None):
     This is equivalent to the LAG function in SQL.
 
     :param col: name of column or expression
-    :param count: number of row to extend
+    :param offset: number of row to extend
     :param default: default value
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.lag(_to_java_column(col), count, default))
+    return Column(sc._jvm.functions.lag(_to_java_column(col), offset, default))
 
 
 @since(1.4)
-def lead(col, count=1, default=None):
+def lead(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows after the current row, and
     `defaultValue` if there is less than `offset` rows after the current row. For example,
@@ -835,11 +824,11 @@ def lead(col, count=1, default=None):
     This is equivalent to the LEAD function in SQL.
 
     :param col: name of column or expression
-    :param count: number of row to extend
+    :param offset: number of row to extend
     :param default: default value
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.lead(_to_java_column(col), count, default))
+    return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
 @since(1.4)
@@ -885,7 +874,7 @@ def date_format(date, format):
     format given by the second argument.
 
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-    pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
+    pattern letters of the Java class `java.time.format.DateTimeFormatter` can be used.
 
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
@@ -1105,7 +1094,7 @@ def to_date(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to
-    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted (equivalent to ``col.cast("date")``).
 
@@ -1130,7 +1119,7 @@ def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to
-    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted (equivalent to ``col.cast("timestamp")``).
 
@@ -2335,30 +2324,81 @@ def to_json(col, options={}):
 
 @ignore_unicode_prefix
 @since(2.4)
-def schema_of_json(col, options={}):
+def schema_of_json(json, options={}):
     """
-    Parses a column containing a JSON string and infers its schema in DDL format.
+    Parses a JSON string and infers its schema in DDL format.
 
-    :param col: string column in json format
+    :param json: a JSON string or a string literal containing a JSON string.
     :param options: options to control parsing. accepts the same options as the JSON datasource
 
     .. versionchanged:: 3.0
        It accepts `options` parameter to control schema inferring.
 
-    >>> from pyspark.sql.types import *
-    >>> data = [(1, '{"a": 1}')]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(schema_of_json(df.value).alias("json")).collect()
-    [Row(json=u'struct<a:bigint>')]
+    >>> df = spark.range(1)
     >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
-    >>> schema = schema_of_json(lit('{a: 1}'), {'allowUnquotedFieldNames':'true'})
+    >>> schema = schema_of_json('{a: 1}', {'allowUnquotedFieldNames':'true'})
     >>> df.select(schema.alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
     """
+    if isinstance(json, basestring):
+        col = _create_column_from_literal(json)
+    elif isinstance(json, Column):
+        col = _to_java_column(json)
+    else:
+        raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_json(_to_java_column(col), options)
+    jc = sc._jvm.functions.schema_of_json(col, options)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(3.0)
+def schema_of_csv(csv, options={}):
+    """
+    Parses a CSV string and infers its schema in DDL format.
+
+    :param col: a CSV string or a string literal containing a CSV string.
+    :param options: options to control parsing. accepts the same options as the CSV datasource
+
+    >>> df = spark.range(1)
+    >>> df.select(schema_of_csv(lit('1|a'), {'sep':'|'}).alias("csv")).collect()
+    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    >>> df.select(schema_of_csv('1|a', {'sep':'|'}).alias("csv")).collect()
+    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    """
+    if isinstance(csv, basestring):
+        col = _create_column_from_literal(csv)
+    elif isinstance(csv, Column):
+        col = _to_java_column(csv)
+    else:
+        raise TypeError("schema argument should be a column or string")
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.schema_of_csv(col, options)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(3.0)
+def to_csv(col, options={}):
+    """
+    Converts a column containing a :class:`StructType` into a CSV string.
+    Throws an exception, in the case of an unsupported type.
+
+    :param col: name of column containing a struct.
+    :param options: options to control converting. accepts the same options as the CSV datasource.
+
+    >>> from pyspark.sql import Row
+    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_csv(df.value).alias("csv")).collect()
+    [Row(csv=u'2,Alice')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.to_csv(_to_java_column(col), options)
     return Column(jc)
 
 
@@ -2536,7 +2576,7 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
-@since(2.4)
+@since(3.0)
 def map_entries(col):
     """
     Collection function: Returns an unordered array of all entries in the given map.
@@ -2616,11 +2656,11 @@ def map_concat(*cols):
     >>> from pyspark.sql.functions import map_concat
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c', 1, 'd') as map2")
     >>> df.select(map_concat("map1", "map2").alias("map3")).show(truncate=False)
-    +--------------------------------+
-    |map3                            |
-    +--------------------------------+
-    |[1 -> a, 2 -> b, 3 -> c, 1 -> d]|
-    +--------------------------------+
+    +------------------------+
+    |map3                    |
+    +------------------------+
+    |[1 -> d, 2 -> b, 3 -> c]|
+    +------------------------+
     """
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
@@ -2662,13 +2702,13 @@ def from_csv(col, schema, options={}):
     :param schema: a string with schema in DDL format to use when parsing the CSV column.
     :param options: options to control parsing. accepts the same options as the CSV datasource
 
-    >>> data = [(1, '1')]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_csv(df.value, "a INT").alias("csv")).collect()
-    [Row(csv=Row(a=1))]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_csv(df.value, lit("a INT")).alias("csv")).collect()
-    [Row(csv=Row(a=1))]
+    >>> data = [("1,2,3",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> df.select(from_csv(df.value, "a INT, b INT, c INT").alias("csv")).collect()
+    [Row(csv=Row(a=1, b=2, c=3))]
+    >>> value = data[0][0]
+    >>> df.select(from_csv(df.value, schema_of_csv(value)).alias("csv")).collect()
+    [Row(csv=Row(_c0=1, _c1=2, _c2=3))]
     """
 
     sc = SparkContext._active_spark_context
@@ -2802,8 +2842,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+       If the return type is :class:`StructType`, the returned value should be a `pandas.DataFrame`.
 
-       :class:`MapType`, :class:`StructType` are currently not supported as output types.
+       :class:`MapType`, nested :class:`StructType` are currently not supported as output types.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
@@ -2828,6 +2869,15 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +----------+--------------+------------+
        |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
+       >>> @pandas_udf("first string, last string")  # doctest: +SKIP
+       ... def split_expand(n):
+       ...     return n.str.split(expand=True)
+       >>> df.select(split_expand("name")).show()  # doctest: +SKIP
+       +------------------+
+       |split_expand(name)|
+       +------------------+
+       |       [John, Doe]|
+       +------------------+
 
        .. note:: The length of `pandas.Series` within a scalar UDF is not that of the whole input
            column, but is the length of an internal batch used for each call to the function.
@@ -2942,8 +2992,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|        6.0|
        +---+-----------+
 
-       This example shows using grouped aggregated UDFs as window functions. Note that only
-       unbounded window frame is supported at the moment:
+       This example shows using grouped aggregated UDFs as window functions.
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> from pyspark.sql import Window
@@ -2953,19 +3002,23 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
-       >>> w = Window \\
-       ...     .partitionBy('id') \\
-       ...     .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> w = (Window.partitionBy('id')
+       ...            .orderBy('v')
+       ...            .rowsBetween(-1, 0))
        >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
        +---+----+------+
        | id|   v|mean_v|
        +---+----+------+
-       |  1| 1.0|   1.5|
+       |  1| 1.0|   1.0|
        |  1| 2.0|   1.5|
-       |  2| 3.0|   6.0|
-       |  2| 5.0|   6.0|
-       |  2|10.0|   6.0|
+       |  2| 3.0|   3.0|
+       |  2| 5.0|   4.0|
+       |  2|10.0|   7.5|
        +---+----+------+
+
+       .. note:: For performance reasons, the input series to window functions are not copied.
+            Therefore, mutating the input series is not allowed and will cause incorrect results.
+            For the same reason, users should also not rely on the index of the input series.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 

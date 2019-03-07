@@ -29,7 +29,7 @@ import warnings
 
 from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import ArrowStreamSerializer, BatchedSerializer, PickleSerializer, \
+from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -118,25 +118,6 @@ class DataFrame(object):
         """
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
-
-    @since(1.3)
-    def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-
-        >>> df.registerTempTable("people")
-        >>> df2 = spark.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-
-        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
-        self._jdf.createOrReplaceTempView(name)
 
     @since(2.0)
     def createTempView(self, name):
@@ -276,7 +257,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        *(1) Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -504,10 +485,12 @@ class DataFrame(object):
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
+        allowed_types = (basestring, list, float, int)
         for p in parameters:
-            if not isinstance(p, str):
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    "all parameters should be str, got {0} of type {1}".format(p, type(p)))
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)))
 
         jdf = self._jdf.hint(name, self._jseq(parameters))
         return DataFrame(jdf, self.sql_ctx)
@@ -750,6 +733,11 @@ class DataFrame(object):
 
         At least one partition-by expression must be specified.
         When no explicit sort order is specified, "ascending nulls first" is assumed.
+
+        Note that due to performance reasons this method uses sampling to estimate the ranges.
+        Hence, the output may not be consistent, since sampling can return different values.
+        The sample size can be controlled by the config
+        `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
 
         >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
         2
@@ -1470,10 +1458,7 @@ class DataFrame(object):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
-
-        .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
-        warnings.warn("Deprecated in 2.0, use union instead.", DeprecationWarning)
         return self.union(other)
 
     @since(2.3)
@@ -1834,7 +1819,7 @@ class DataFrame(object):
 
         This method implements a variation of the Greenwald-Khanna
         algorithm (with some speed optimizations). The algorithm was first
-        present in [[http://dx.doi.org/10.1145/375663.375670
+        present in [[https://doi.org/10.1145/375663.375670
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
@@ -1956,7 +1941,7 @@ class DataFrame(object):
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
-        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        "https://doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
@@ -2061,6 +2046,31 @@ class DataFrame(object):
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(3.0)
+    def transform(self, func):
+        """Returns a new class:`DataFrame`. Concise syntax for chaining custom transformations.
+
+        :param func: a function that takes and returns a class:`DataFrame`.
+
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        >>> def sort_columns_asc(input_df):
+        ...     return input_df.select(*sorted(input_df.columns))
+        >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
+        +-----+---+
+        |float|int|
+        +-----+---+
+        |    1|  1|
+        |    2|  2|
+        +-----+---+
+        """
+        result = func(self)
+        assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
+                                              "should have been DataFrame." % type(result)
+        return result
+
     @since(1.3)
     def toPandas(self):
         """
@@ -2122,14 +2132,13 @@ class DataFrame(object):
             # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.types import _check_dataframe_convert_date, \
+                    from pyspark.sql.types import _arrow_table_to_pandas, \
                         _check_dataframe_localize_timestamps
                     import pyarrow
                     batches = self._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
-                        pdf = table.to_pandas()
-                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        pdf = _arrow_table_to_pandas(table, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
@@ -2183,7 +2192,14 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(sock_info, ArrowStreamSerializer()))
+
+        # Collect list of un-ordered batches where last element is a list of correct order indices
+        results = list(_load_from_socket(sock_info, ArrowCollectSerializer()))
+        batches = results[:-1]
+        batch_order = results[-1]
+
+        # Re-order the batch list using the correct order
+        return [batches[i] for i in batch_order]
 
     ##########################################################################################
     # Pandas compatibility

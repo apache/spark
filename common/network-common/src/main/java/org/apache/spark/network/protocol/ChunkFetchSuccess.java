@@ -39,7 +39,7 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
   }
 
   @Override
-  public Type type() { return Type.ChunkFetchSuccess; }
+  public Message.Type type() { return Type.ChunkFetchSuccess; }
 
   @Override
   public int encodedLength() {
