@@ -88,7 +88,7 @@ WHERE  (a1, a2) <= ANY (SELECT b1,
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-ANY/SOME predicate does not support '<=' operation when multiple columns are specified as its operands.;
+ANY/SOME predicate does not support '<=' operation when multiple columns are specified in operands.;
 
 
 -- !query 7
@@ -101,7 +101,7 @@ WHERE  (a1, a2) != ANY (SELECT b1,
 struct<>
 -- !query 7 output
 org.apache.spark.sql.AnalysisException
-ANY/SOME predicate does not support '!=' operation when multiple columns are specified as its operands.;
+ANY/SOME predicate does not support '!=' operation when multiple columns are specified in operands.;
 
 
 -- !query 8
