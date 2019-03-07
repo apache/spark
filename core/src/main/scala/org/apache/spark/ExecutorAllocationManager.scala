@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
@@ -145,13 +144,6 @@ private[spark] class ExecutorAllocationManager(
 
   // All known executors
   private val executorIds = new mutable.HashSet[String]
-
-  // Max number of removed executors to track
-  // Assumes the late events for the executor will be correctly handled before the removal
-  // of executorId from this queue when it's full.
-  private val MAXIMUM_NUM_REMOVED_EXECUTORS = 10000
-  // Tracking all known executors that have been removed
-  private val removedExecutorIds = new LinkedBlockingQueue[String](MAXIMUM_NUM_REMOVED_EXECUTORS)
 
   // A timestamp of when an addition should be triggered, or NOT_SET if it is not set
   // This is set when pending tasks are added but not scheduled yet
@@ -574,13 +566,6 @@ private[spark] class ExecutorAllocationManager(
     if (executorIds.contains(executorId)) {
       executorIds.remove(executorId)
       removeTimes.remove(executorId)
-      if (!removedExecutorIds.offer(executorId)) {
-        logWarning(s"The queue is full for tracking removed executors, will trim old " +
-          s"executor ids and offer again")
-        val trimSize = math.max(1, removedExecutorIds.size() / 10)
-        (0 to trimSize).foreach(removedExecutorIds.poll())
-        removedExecutorIds.offer(executorId)
-      }
       logInfo(s"Existing executor $executorId has been removed (new total is ${executorIds.size})")
       if (executorsPendingToRemove.contains(executorId)) {
         executorsPendingToRemove.remove(executorId)
@@ -748,7 +733,7 @@ private[spark] class ExecutorAllocationManager(
         // Above cases are possible because these events are posted in different threads.
         // (see SPARK-4951 SPARK-26927)
         if (!allocationManager.executorIds.contains(executorId) &&
-          !allocationManager.removedExecutorIds.contains(executorId)) {
+          client.getExecutorIds().contains(executorId)) {
           allocationManager.onExecutorAdded(executorId)
         }
 
