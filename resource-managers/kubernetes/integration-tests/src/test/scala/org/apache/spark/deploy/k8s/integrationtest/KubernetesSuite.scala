@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// scalastyle:off println
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
@@ -474,3 +475,4 @@ private[spark] object KubernetesSuite {
   val POD_RUNNING_TIMEOUT = PatienceConfiguration.Timeout(Span(5, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(1, Seconds))
 }
+// scalastyle:on println
