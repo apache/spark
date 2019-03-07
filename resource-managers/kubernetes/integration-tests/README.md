@@ -11,7 +11,7 @@ is subject to change. Note that currently the integration tests only run with Ja
 The simplest way to run the integration tests is to install and run Minikube, then run the following from this
 directory:
 
-    dev/dev-run-integration-tests.sh
+    dev/dev-run-integration-tests.sh --spark-tgz [spark_release_build]
 
 The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
