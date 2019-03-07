@@ -106,8 +106,8 @@ class KubernetesSuite extends SparkFunSuite
     val possible_spark_dirs = List(
       // If someone specified the tgz for the tests look at the extraction dir
       System.getProperty(CONFIG_KEY_UNPACK_DIR),
-      // If otherwise use my working dir + 3 up
-      new File(Paths.get(System.getProperty("user.dir")).toFile, ("../" * 3)).getAbsolutePath()
+      // Try the spark test home
+      sys.props("spark.test.home")
     )
     val sparkDirProp = possible_spark_dirs.filter(x =>
       new File(Paths.get(x).toFile, "bin/spark-submit").exists).headOption.getOrElse(null)
