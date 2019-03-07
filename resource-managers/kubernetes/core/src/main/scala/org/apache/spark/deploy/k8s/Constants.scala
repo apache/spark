@@ -69,6 +69,7 @@ private[spark] object Constants {
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
   val ENV_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY"
   val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
+  val ENV_APP_NAME = "SPARK_APP_NAME"
 
   // Bootstrapping dependencies with the init-container
   val INIT_CONTAINER_DOWNLOAD_JARS_VOLUME_NAME = "download-jars-volume"
