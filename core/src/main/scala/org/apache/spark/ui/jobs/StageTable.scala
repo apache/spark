@@ -433,13 +433,13 @@ private[ui] class StageDataSource(
     }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
 
-    val inputRead = stageData.inputBytes
+    val inputRead = stageData.metrics.inputMetrics.bytesRead
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
-    val outputWrite = stageData.outputBytes
+    val outputWrite = stageData.metrics.outputMetrics.bytesWritten
     val outputWriteWithUnit = if (outputWrite > 0) Utils.bytesToString(outputWrite) else ""
-    val shuffleRead = stageData.shuffleReadBytes
+    val shuffleRead = stageData.metrics.shuffleReadMetrics.bytesRead
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
-    val shuffleWrite = stageData.shuffleWriteBytes
+    val shuffleWrite = stageData.metrics.shuffleWriteMetrics.recordsWritten
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
 
 
