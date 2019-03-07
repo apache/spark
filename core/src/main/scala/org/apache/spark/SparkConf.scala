@@ -115,9 +115,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     set("spark.master", master)
   }
 
-  /** Set a name for your application. Shown in the Spark web UI. */
+  /** Set a name for your application. Shown in the Spark web UI.
+    * For spark on kubernetes,Unify the three variables' name :
+    *     pod name prefix in kubernetes / spark.app.name in spark ui  /  spark-app-name in pod's annotations
+    * */
   def setAppName(name: String): SparkConf = {
-    set("spark.app.name", name)
+    val submitName = Option(System.getenv("SPARK_APP_NAME"))
+    set("spark.app.name", submitName.getOrElse(name))
   }
 
   /** Set JAR files to distribute to the cluster. */
