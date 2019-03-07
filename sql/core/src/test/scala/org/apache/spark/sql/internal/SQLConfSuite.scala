@@ -20,7 +20,6 @@ package org.apache.spark.sql.internal
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -308,6 +307,13 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(newDisplayValue === "lzo")
 
     SQLConf.unregister(fallback)
+  }
+
+  test("SPARK-24783: spark.sql.shuffle.partitions=0 should throw exception ") {
+    val e = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 0)
+    }
+    assert(e.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
 }
