@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -176,7 +177,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    option(DataSourceOptions.PATH_KEY, path).load(Seq.empty: _*)
+    option("path", path).load(Seq.empty: _*)
   }
 
   /**
@@ -208,18 +209,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         source = provider, conf = sparkSession.sessionState.conf)
       val pathsOption = {
         val objectMapper = new ObjectMapper()
-        DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
+        "path" -> objectMapper.writeValueAsString(paths.toArray)
       }
-      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "true"
+      // TODO: remove this option.
+      val checkFilesExistsOption = "check_files_exist" -> "true"
       val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption + checkFilesExistsOption
-      val dsOptions = new DataSourceOptions(finalOptions.asJava)
+      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
         case _ => provider.getTable(dsOptions)
       }
       table match {
         case _: SupportsBatchRead =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
 
         case _ => loadV1Source(paths: _*)
       }

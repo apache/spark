@@ -31,10 +31,11 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsStreamingWrite}
+import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
@@ -46,7 +47,7 @@ class MemorySinkV2 extends SupportsStreamingWrite with MemorySinkBase with Loggi
 
   override def schema(): StructType = StructType(Nil)
 
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var needTruncate: Boolean = false
       private var inputSchema: StructType = _

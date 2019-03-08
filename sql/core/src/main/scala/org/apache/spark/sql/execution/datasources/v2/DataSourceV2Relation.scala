@@ -25,6 +25,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Statistics => V2Statistics, _}
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A logical plan representing a data source v2 table.
@@ -36,7 +37,7 @@ import org.apache.spark.sql.sources.v2.writer._
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
-    options: Map[String, String])
+    options: CaseInsensitiveStringMap)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
@@ -48,7 +49,7 @@ case class DataSourceV2Relation(
   }
 
   def newScanBuilder(): ScanBuilder = {
-    table.asBatchReadable.newScanBuilder(options.toDataSourceOptions)
+    table.asBatchReadable.newScanBuilder(options)
   }
 
   override def computeStats(): Statistics = {
@@ -96,7 +97,7 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
-  def create(table: Table, options: Map[String, String]): DataSourceV2Relation = {
+  def create(table: Table, options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     val output = table.schema().toAttributes
     DataSourceV2Relation(table, output, options)
   }

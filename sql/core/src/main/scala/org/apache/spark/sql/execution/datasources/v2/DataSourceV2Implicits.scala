@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchRead, SupportsBatchWrite, Table}
+import org.apache.spark.sql.sources.v2.{SupportsBatchRead, SupportsBatchWrite, Table}
 
 object DataSourceV2Implicits {
   implicit class TableHelper(table: Table) {
@@ -41,9 +39,5 @@ object DataSourceV2Implicits {
           throw new AnalysisException(s"Table does not support batch writes: ${table.name}")
       }
     }
-  }
-
-  implicit class OptionsHelper(options: Map[String, String]) {
-    def toDataSourceOptions: DataSourceOptions = new DataSourceOptions(options.asJava)
   }
 }

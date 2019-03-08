@@ -22,23 +22,27 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsBatchRead, SupportsBatchWrite, Table}
+import org.apache.spark.sql.sources.v2.{SupportsBatchRead, SupportsBatchWrite, Table}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 abstract class FileTable(
     sparkSession: SparkSession,
-    options: DataSourceOptions,
+    options: CaseInsensitiveStringMap,
+    paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
   extends Table with SupportsBatchRead with SupportsBatchWrite {
+
   lazy val fileIndex: PartitioningAwareFileIndex = {
-    val filePaths = options.paths()
-    val hadoopConf =
-      sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
-    val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(filePaths, hadoopConf,
-      checkEmptyGlobPath = true, checkFilesExist = options.checkFilesExist())
+    val scalaMap = options.asScala.toMap
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(scalaMap)
+    // This is an internal config so must be present.
+    val checkFilesExist = options.get("check_files_exist").toBoolean
+    val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
+      checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-    new InMemoryFileIndex(sparkSession, rootPathsSpecified,
-      options.asMap().asScala.toMap, userSpecifiedSchema, fileStatusCache)
+    new InMemoryFileIndex(
+      sparkSession, rootPathsSpecified, scalaMap, userSpecifiedSchema, fileStatusCache)
   }
 
   lazy val dataSchema: StructType = userSpecifiedSchema.orElse {

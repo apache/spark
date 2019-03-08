@@ -25,6 +25,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  *  A source that generates increment long values with timestamps. Each generated row has two
@@ -43,14 +44,14 @@ import org.apache.spark.sql.types._
 class RateStreamProvider extends TableProvider with DataSourceRegister {
   import RateStreamProvider._
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     val rowsPerSecond = options.getLong(ROWS_PER_SECOND, 1)
     if (rowsPerSecond <= 0) {
       throw new IllegalArgumentException(
         s"Invalid value '$rowsPerSecond'. The option 'rowsPerSecond' must be positive")
     }
 
-    val rampUpTimeSeconds = Option(options.get(RAMP_UP_TIME).orElse(null))
+    val rampUpTimeSeconds = Option(options.get(RAMP_UP_TIME))
       .map(JavaUtils.timeStringAsSec)
       .getOrElse(0L)
     if (rampUpTimeSeconds < 0) {
@@ -83,7 +84,7 @@ class RateStreamTable(
 
   override def schema(): StructType = RateStreamProvider.SCHEMA
 
-  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new ScanBuilder {
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
     override def build(): Scan = new Scan {
       override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
@@ -93,7 +94,7 @@ class RateStreamTable(
       }
 
       override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-        new RateStreamContinuousStream(rowsPerSecond, numPartitions, options)
+        new RateStreamContinuousStream(rowsPerSecond, numPartitions)
       }
     }
   }

@@ -38,6 +38,7 @@ import org.apache.spark.sql.sources.v2.writer.WriteBuilder
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * The provider class for all Kafka readers and writers. It is designed such that it throws
@@ -103,8 +104,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       failOnDataLoss(caseInsensitiveParams))
   }
 
-  override def getTable(options: DataSourceOptions): KafkaTable = {
-    new KafkaTable(strategy(options.asMap().asScala.toMap))
+  override def getTable(options: CaseInsensitiveStringMap): KafkaTable = {
+    new KafkaTable(strategy(options.asScala.toMap))
   }
 
   /**
@@ -358,11 +359,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     override def schema(): StructType = KafkaOffsetReader.kafkaSchema
 
-    override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new ScanBuilder {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
       override def build(): Scan = new KafkaScan(options)
     }
 
-    override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
+    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
       new WriteBuilder {
         private var inputSchema: StructType = _
 
@@ -375,20 +376,20 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           import scala.collection.JavaConverters._
 
           assert(inputSchema != null)
-          val topic = Option(options.get(TOPIC_OPTION_KEY).orElse(null)).map(_.trim)
-          val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
+          val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
+          val producerParams = kafkaParamsForProducer(options.asScala.toMap)
           new KafkaStreamingWrite(topic, producerParams, inputSchema)
         }
       }
     }
   }
 
-  class KafkaScan(options: DataSourceOptions) extends Scan {
+  class KafkaScan(options: CaseInsensitiveStringMap) extends Scan {
 
     override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-      val parameters = options.asMap().asScala.toMap
+      val parameters = options.asScala.toMap
       validateStreamOptions(parameters)
       // Each running query should use its own group id. Otherwise, the query may be only assigned
       // partial data since Kafka will assign partitions to multiple consumers having the same group
@@ -417,7 +418,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-      val parameters = options.asMap().asScala.toMap
+      val parameters = options.asScala.toMap
       validateStreamOptions(parameters)
       // Each running query should use its own group id. Otherwise, the query may be only assigned
       // partial data since Kafka will assign partitions to multiple consumers having the same group
