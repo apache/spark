@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import import org.apache.spark.internal.config.Worker
+import org.apache.spark.internal.config.Worker
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 

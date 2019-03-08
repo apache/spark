@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -33,7 +34,7 @@ import org.apache.spark.util.Utils
 private[spark] class BasicExecutorFeatureStep(
     kubernetesConf: KubernetesExecutorConf,
     secMgr: SecurityManager)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
   private val executorContainerImage = kubernetesConf
@@ -189,7 +190,7 @@ private[spark] class BasicExecutorFeatureStep(
     }.getOrElse(executorContainer)
     val containerWithLifecycle = kubernetesConf.workerDecomissioning match {
       case true =>
-        logger.info("Adding decommission script to lifecycle")
+        logInfo("Adding decommission script to lifecycle")
         new ContainerBuilder(executorContainer).editOrNewLifecycle()
           .withNewPreStop()
             .withNewExec()
@@ -200,7 +201,7 @@ private[spark] class BasicExecutorFeatureStep(
           .endLifecycle()
           .build()
       case false =>
-        logger.info("Decommissioning not enabled, skipping shutdown script")
+        logInfo("Decommissioning not enabled, skipping shutdown script")
         containerWithLimitCores
     }
     val ownerReference = kubernetesConf.driverPod.map { pod =>
