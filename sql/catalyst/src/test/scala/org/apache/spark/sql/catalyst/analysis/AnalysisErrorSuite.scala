@@ -621,6 +621,6 @@ class AnalysisErrorSuite extends AnalysisTest {
       AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), GreaterThan), a)
     assertAnalysisError(error_plan,
       "ANY/SOME predicate does not support '>' operation when " +
-        "multiple columns are specified as its operands." :: Nil)
+        "multiple columns are specified in operands." :: Nil)
   }
 }
