@@ -32,8 +32,8 @@ import org.apache.spark.sql.types._
 /**
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
  *
- * Due to limitation of ORC `SearchArgument` builder, we had to end up with a pretty weird double-
- * checking pattern when converting `And`/`Or`/`Not` filters.
+ * Due to limitation of ORC `SearchArgument` builder, we had to implement separate checking and
+ * conversion code paths to make sure we only convert predicates that are known to be convertible.
  *
  * An ORC `SearchArgument` must be built in one pass using a single builder.  For example, you can't
  * build `a = 1` and `b = 2` first, and then combine them into `a = 1 AND b = 2`.  This is quite
@@ -42,18 +42,18 @@ import org.apache.spark.sql.types._
  *
  * The annoying part is that, `SearchArgument` builder methods like `startAnd()`, `startOr()`, and
  * `startNot()` mutate internal state of the builder instance.  This forces us to translate all
- * convertible filters with a single builder instance. However, before actually converting a filter,
- * we've no idea whether it can be recognized by ORC or not. Thus, when an inconvertible filter is
- * found, we may already end up with a builder whose internal state is inconsistent.
+ * convertible filters with a single builder instance. However, if we try to translate a filter
+ * before checking whether it can be converted or not, we may end up with a builder whose internal
+ * state is inconsistent in the case of an inconvertible filter.
  *
  * For example, to convert an `And` filter with builder `b`, we call `b.startAnd()` first, and then
  * try to convert its children.  Say we convert `left` child successfully, but find that `right`
  * child is inconvertible.  Alas, `b.startAnd()` call can't be rolled back, and `b` is inconsistent
  * now.
  *
- * The workaround employed here is that, for `And`/`Or`/`Not`, we first try to convert their
- * children with brand new builders, and only do the actual conversion with the right builder
- * instance when the children are proven to be convertible.
+ * The workaround employed here is that, for `And`/`Or`/`Not`, we explicitly check if the children
+ * are convertible, and only do the actual conversion when the children are proven to be
+ * convertible.
  *
  * P.S.: Hive seems to use `SearchArgument` together with `ExprNodeGenericFuncDesc` only.  Usage of
  * builder methods mentioned above can only be found in test code, where all tested filters are
@@ -310,6 +310,30 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 }
 
+/**
+ * This case class represents a position in a `Filter` tree, paired with information about
+ * whether `AND` predicates can be partially pushed down. It is used as a key in the
+ * memoization map for `OrcConvertibilityChecker`.
+ *
+ * Because of the way this class is used, there are a few subtleties in its implementation
+ * and behaviour:
+ * - The default generated `hashCode` and `equals` methods have linear complexity in the size of
+ *   the `expression` Filter. This is because they end up recursing over the whole `Filter` tree
+ *   in order to check for equality, in order to return true for `Filter`s with different
+ *   identities but the same actual contents. As a result, using this class as a key in a HashMap
+ *   with the default generated methods would end up having a complexity that's linear in the
+ *   size of the `expression`, instead of constnant. This means that using it as a key in the
+ *   memoization map for `OrcConvertibilityChecker` would make the whole convertibility checking
+ *   take time quadratic in the size of the tree instead of linear.
+ * - For this reason, we override `hashCode` and `equals` to only check the identity of the
+ *   `expression` and not the full expression object.
+ * - Hashing based on the identity of the expression results in correct behaviour because we
+ *   are indeed only interested in memoizing the results for exact locations in the `Filter`
+ *   tree. If there are expressions that are exactly the same but at different locations, we
+ *   would treat them as different objects and simply compute the results for them twice.
+ * - Since implementing `equals` and `hashCode` in the presence of subclasses is trickier,
+ *   this class is sealed to guarantee that we don't need to be concerned with subclassing.
+ */
 private sealed case class FilterWithConjunctPushdown(
   expression: Filter,
   canPartialPushDownConjuncts: Boolean
@@ -332,14 +356,33 @@ private sealed case class FilterWithConjunctPushdown(
 
 /**
  * Helper class for efficiently checking whether a `Filter` and its children can be converted to
- * ORC `SearchArgument`s.
+ * ORC `SearchArgument`s. The `isConvertible` method has a constant amortized complexity for
+ * checking whether a node from a Filter expression is convertible to an ORC `SearchArgument`.
+ * The additional memory is O(N) in the size of the whole `Filter` being checked due to the use
+ * of a hash map that possibly has an entry for each subnode in the filter.
  *
- * @param dataTypeMap
+ * @param dataTypeMap a map from the attribute name to its data type.
  */
 private class OrcConvertibilityChecker(dataTypeMap: Map[String, DataType]) {
 
   private val convertibilityCache = new mutable.HashMap[FilterWithConjunctPushdown, Boolean]
 
+  /**
+   * Checks if a given expression from a Filter is convertible.
+   *
+   * The result for a given (expression, canPartialPushDownConjuncts) pair within a Filter
+   * will never change, so we memoize the results in the `convertibilityCache`. This means
+   * that the overall complexity for checking all nodes in a `Filter` is:
+   * - a total of one pass across the whole Filter tree is made when nodes are checked for
+   *   convertibility for the first time.
+   * - when checked for a second, etc. time, the result has already been memoized in the cache
+   *   and thus the check has a constant time.
+   *
+   * @param expression the input filter predicates.
+   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
+   *                                    down safely. Pushing ONLY one side of AND down is safe to
+   *                                    do at the top level or none of its ancestors is NOT and OR.
+   */
   def isConvertible(expression: Filter, canPartialPushDownConjuncts: Boolean): Boolean = {
     val node = FilterWithConjunctPushdown(expression, canPartialPushDownConjuncts)
     convertibilityCache.getOrElseUpdate(node, isConvertibleImpl(node))
@@ -348,8 +391,6 @@ private class OrcConvertibilityChecker(dataTypeMap: Map[String, DataType]) {
   /**
    * This method duplicates the logic from `OrcFilters.createBuilder` that is related to checking
    * if a given part of the filter is actually convertible to an ORC `SearchArgument`.
-   * @param node
-   * @return
    */
   private def isConvertibleImpl(node: FilterWithConjunctPushdown): Boolean = {
     import org.apache.spark.sql.sources._
