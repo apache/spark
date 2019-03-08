@@ -17,7 +17,7 @@
 
 package org.apache.spark.security
 
-import java.io._
+import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream, OutputStream}
 import java.net.Socket
 import java.nio.charset.StandardCharsets.UTF_8
 

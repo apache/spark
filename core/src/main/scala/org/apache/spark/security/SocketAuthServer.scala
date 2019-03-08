@@ -17,7 +17,7 @@
 
 package org.apache.spark.security
 
-import java.net._
+import java.net.{InetAddress, ServerSocket, Socket}
 
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
@@ -26,7 +26,7 @@ import scala.util.Try
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.util._
+import org.apache.spark.util.ThreadUtils
 
 
 /**
