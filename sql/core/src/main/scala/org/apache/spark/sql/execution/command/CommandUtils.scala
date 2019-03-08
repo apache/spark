@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -168,7 +168,7 @@ object CommandUtils extends Logging {
   private[sql] def computeColumnStats(
       sparkSession: SparkSession,
       relation: LogicalPlan,
-      columns: Seq[Attribute]): (Long, Map[Attribute, ColumnStat]) = {
+      columns: Seq[Attribute]): (Long, Map[String, CatalogColumnStat]) = {
     val conf = sparkSession.sessionState.conf
 
     // Collect statistics per column.
@@ -195,8 +195,8 @@ object CommandUtils extends Logging {
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
       // according to `statExprs`, the stats struct always have 7 fields.
-      (attr, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
-        attributePercentiles.get(attr)))
+      (attr.name, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
+        attributePercentiles.get(attr)).toCatalogColumnStat(attr.name, attr.dataType))
     }.toMap
     (rowCount, columnStats)
   }
