@@ -36,6 +36,7 @@ if __name__ == "__main__":
     rdd = sc.parallelize(range(10))
     rdd.collect()
     print("Waiting to give nodes time to finish.")
-    time.sleep(50)
+    time.sleep(120)
+    print("Stopping spark")
     spark.stop()
     sys.exit(0)
