@@ -59,15 +59,18 @@ private[spark] trait ExecutorAllocationClient {
    * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
    *                                 after these executors have been killed
    * @param countFailures if there are tasks running on the executors when they are killed, whether
-    *                     to count those failures toward task failure limits
+   *                      to count those failures toward task failure limits
    * @param force whether to force kill busy executors, default false
+   * @param blacklistingOnTaskCompletion whether the executors are being killed due to
+   *                                     blacklisting triggered by the task completion event
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
   def killExecutors(
     executorIds: Seq[String],
     adjustTargetNumExecutors: Boolean,
     countFailures: Boolean,
-    force: Boolean = false): Seq[String]
+    force: Boolean = false,
+    blacklistingOnTaskCompletion: Boolean = false): Seq[String]
 
   /**
    * Request that the cluster manager kill every executor on the specified host.

@@ -146,12 +146,15 @@ private[scheduler] class BlacklistTracker (
     nextExpiryTime = math.min(execMinExpiry, nodeMinExpiry)
   }
 
-  private def killExecutor(exec: String, msg: String): Unit = {
+  private def killExecutor(
+      exec: String,
+      msg: String,
+      blacklistingOnTaskCompletion: Boolean = false): Unit = {
     allocationClient match {
       case Some(a) =>
         logInfo(msg)
         a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
-          force = true)
+          force = true, blacklistingOnTaskCompletion = blacklistingOnTaskCompletion)
       case None =>
         logInfo(s"Not attempting to kill blacklisted executor id $exec " +
           s"since allocation client is not defined.")
@@ -161,7 +164,8 @@ private[scheduler] class BlacklistTracker (
   private def killBlacklistedExecutor(exec: String): Unit = {
     if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
       killExecutor(exec,
-        s"Killing blacklisted executor id $exec since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
+        s"Killing blacklisted executor id $exec since ${config.BLACKLIST_KILL_ENABLED.key}" +
+          s" is set.", blacklistingOnTaskCompletion = true)
     }
   }
 

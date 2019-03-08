@@ -1382,7 +1382,8 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
       executorIds: Seq[String],
       adjustTargetNumExecutors: Boolean,
       countFailures: Boolean,
-      force: Boolean): Seq[String] = executorIds
+      force: Boolean,
+      blacklistingOnTaskCompletion: Boolean): Seq[String] = executorIds
 
   override def start(): Unit = sb.start()
 
