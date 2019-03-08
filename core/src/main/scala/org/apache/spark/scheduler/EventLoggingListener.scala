@@ -94,7 +94,7 @@ private[spark] class EventLoggingListener(
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
-  // map of (stageId, stageAttempt), to peak executor metrics for the stage
+  // map of (stageId, stageAttempt) to executor metric peaks per executor/driver for the stage
   private val liveStageExecutorMetrics = Map.empty[(Int, Int), Map[String, ExecutorMetrics]]
 
   /**
@@ -176,13 +176,11 @@ private[spark] class EventLoggingListener(
   override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
     logEvent(event)
     if (shouldLogStageExecutorMetrics) {
-      val k1 = (event.stageId, event.stageAttemptId)
-      liveStageExecutorMetrics.foreach { case (k2, peakExecutorMetrics) =>
-        if (k1 == k2) {
-          val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
-            event.taskInfo.executorId, new ExecutorMetrics())
-          peakMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
-        }
+      val stageKey = (event.stageId, event.stageAttemptId)
+      liveStageExecutorMetrics.get(stageKey).map { metricsPerExecutor =>
+        val metrics = metricsPerExecutor.getOrElseUpdate(
+          event.taskInfo.executorId, new ExecutorMetrics())
+        metrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
       }
     }
   }
@@ -280,16 +278,16 @@ private[spark] class EventLoggingListener(
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     if (shouldLogStageExecutorMetrics) {
-      event.executorUpdates.foreach { case (k1, peakUpdates) =>
-        liveStageExecutorMetrics.foreach { case (k2, peakExecutorMetrics) =>
-          // If the update came from the driver, the key k1 will be the dummy key (-1, -1),
+      event.executorUpdates.foreach { case (stageKey1, peaks) =>
+        liveStageExecutorMetrics.foreach { case (stageKey2, metricsPerExecutor) =>
+          // If the update came from the driver, stageKey1 will be the dummy key (-1, -1),
           // so record those peaks for all active stages.
           // Otherwise, record the peaks for the matching stage.
-          val k0 = (-1, -1)
-          if (k1 == k0 || k1 == k2) {
-            val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
+          val driverStageKey = (-1, -1)
+          if (stageKey1 == driverStageKey || stageKey1 == stageKey2) {
+            val metrics = metricsPerExecutor.getOrElseUpdate(
               event.execId, new ExecutorMetrics())
-            peakMetrics.compareAndUpdatePeakValues(peakUpdates)
+            metrics.compareAndUpdatePeakValues(peaks)
           }
         }
       }

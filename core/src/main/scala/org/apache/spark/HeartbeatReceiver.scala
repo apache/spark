@@ -39,9 +39,11 @@ import org.apache.spark.util._
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])], // taskId -> accumulator updates
+    // taskId -> accumulator updates
+    accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
     blockManagerId: BlockManagerId,
-    executorUpdates: Map[(Int, Int), ExecutorMetrics]) // executor level updates
+    // (stageId, stageAttemptId) -> executor metric peaks
+    executorUpdates: Map[(Int, Int), ExecutorMetrics])
 
 /**
  * An event that SparkContext uses to notify HeartbeatReceiver that SparkContext.taskScheduler is
