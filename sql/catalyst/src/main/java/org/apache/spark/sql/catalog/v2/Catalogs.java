@@ -49,7 +49,7 @@ public class Catalogs {
   public static CatalogPlugin load(String name, SQLConf conf) throws SparkException {
     String pluginClassName = conf.getConfString("spark.sql.catalog." + name, null);
     if (pluginClassName == null) {
-      throw new SparkException(String.format(
+      throw new CatalogNotFoundException(String.format(
           "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined", name, name));
     }
 

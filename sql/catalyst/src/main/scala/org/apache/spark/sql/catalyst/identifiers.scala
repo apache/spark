@@ -105,3 +105,15 @@ case class FunctionIdentifier(funcName: String, database: Option[String])
 object FunctionIdentifier {
   def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
 }
+
+/**
+ * Catalog identifier.
+
+ * @param space Namespace in the catalog
+ * @param name Object name
+ */
+case class CatalogIdentifier(space: CatalogIdentifier.Namespace, name: String)
+
+object CatalogIdentifier {
+  type Namespace = Seq[String]
+}
