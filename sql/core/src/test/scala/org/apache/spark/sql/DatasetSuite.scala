@@ -480,9 +480,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e3.contains("Invalid join type in joinWith: " + LeftAnti.sql))
 
     val e4 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "semi")
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "anti")
     }.getMessage
-    assert(e4.contains("Invalid join type in joinWith: " + LeftSemi.sql))
+    assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
   }
 
   test("groupBy function, keys") {
