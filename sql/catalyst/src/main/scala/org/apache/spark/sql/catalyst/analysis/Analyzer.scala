@@ -110,7 +110,7 @@ class Analyzer(
   }
 
   object CatalogRef {
-    def unapply(parts: Seq[String]): Option[(Option[String], CatalogIdentifier)] =
+    def unapply(parts: Seq[String]): Option[(Option[CatalogPlugin], CatalogIdentifier)] =
       lookupCatalog match {
         case None =>
           None
@@ -118,9 +118,9 @@ class Analyzer(
           parts match {
             case Seq(name) =>
               Some((None, CatalogIdentifier(Nil, name)))
-            case Seq(catalog, tail@_*) =>
+            case Seq(catalogName, tail@_*) =>
               try {
-                lookupCatalogFunc(catalog)
+                val catalog = lookupCatalogFunc(catalogName)
                 Some((Some(catalog), CatalogIdentifier(tail.init, tail.last)))
               } catch {
                 case e: CatalogNotFoundException =>

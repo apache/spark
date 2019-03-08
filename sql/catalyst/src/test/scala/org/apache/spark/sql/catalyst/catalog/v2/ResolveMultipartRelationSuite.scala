@@ -28,20 +28,28 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private case class TestUnresolvedMultipartRelation(parts: Seq[String])
     extends LeafNode with NamedRelation {
+
   override def name: String = "TestUnresolvedMultipartRelation"
+
   override def output: Seq[Attribute] = Nil
+
   override lazy val resolved = false
 }
 
-private case class TestMultipartRelation(catalog: Option[String], ident: CatalogIdentifier)
+private case class TestMultipartRelation(catalog: Option[CatalogPlugin], ident: CatalogIdentifier)
     extends LeafNode with NamedRelation {
+
   override def name: String = "TestMultipartRelation"
+
   override def output: Seq[Attribute] = Nil
+
   override lazy val resolved = true
 }
 
 private case class TestMultipartAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
+
     case TestUnresolvedMultipartRelation(analyzer.CatalogRef(catalog, ident)) =>
       TestMultipartRelation(catalog, ident)
   }
@@ -57,9 +65,7 @@ class ResolveMultipartRelationSuite extends AnalysisTest {
 
   private val analyzer = makeAnalyzer(caseSensitive = false)
 
-  private val catalogs = Map(
-    "prod" -> new TestCatalogPlugin("prod"),
-    "test" -> new TestCatalogPlugin("test"))
+  private val catalogs = Seq("prod", "test").map(name => name -> new TestCatalogPlugin(name)).toMap
 
   private def lookupCatalog(catalog: String): CatalogPlugin =
     catalogs.getOrElse(catalog, throw new CatalogNotFoundException("Not found"))
@@ -74,7 +80,7 @@ class ResolveMultipartRelationSuite extends AnalysisTest {
 
   override protected def getAnalyzer(caseSensitive: Boolean) = analyzer
 
-  private def checkMultipartResolution(sqlText: String, catalog: Option[String],
+  private def checkMultipartResolution(sqlText: String, catalog: Option[CatalogPlugin],
       space: Seq[String], name: String): Unit =
     checkAnalysis(TestUnresolvedMultipartRelation(parseMultiPartIdentifier(sqlText)),
       TestMultipartRelation(catalog, CatalogIdentifier(space, name)))
@@ -82,11 +88,11 @@ class ResolveMultipartRelationSuite extends AnalysisTest {
   test("multipart identifier") {
     checkMultipartResolution("tbl", None, Nil, "tbl")
     checkMultipartResolution("db.tbl", None, Seq("db"), "tbl")
-    checkMultipartResolution("prod.func", Some("prod"), Nil, "func")
+    checkMultipartResolution("prod.func", catalogs.get("prod"), Nil, "func")
     checkMultipartResolution("ns1.ns2.tbl", None, Seq("ns1", "ns2"), "tbl")
-    checkMultipartResolution("prod.db.tbl", Some("prod"), Seq("db"), "tbl")
-    checkMultipartResolution("test.db.tbl", Some("test"), Seq("db"), "tbl")
+    checkMultipartResolution("prod.db.tbl", catalogs.get("prod"), Seq("db"), "tbl")
+    checkMultipartResolution("test.db.tbl", catalogs.get("test"), Seq("db"), "tbl")
     checkMultipartResolution("test.ns1.ns2.ns3.tbl",
-      Some("test"), Seq("ns1", "ns2", "ns3"), "tbl")
+      catalogs.get("test"), Seq("ns1", "ns2", "ns3"), "tbl")
   }
 }
