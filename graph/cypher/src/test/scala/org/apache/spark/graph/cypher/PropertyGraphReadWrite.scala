@@ -25,21 +25,41 @@ class PropertyGraphReadWrite extends SparkFunSuite with SharedCypherContext with
 
   private def basePath: String = s"file://${Paths.get(tempDir.getRoot.getAbsolutePath)}"
 
-  private lazy val nodeData: DataFrame = spark.createDataFrame(Seq(id(0) -> "Alice", id(1) -> "Bob")).toDF("id", "name")
-  private lazy val relationshipData: DataFrame = spark.createDataFrame(Seq(Tuple3(id(0), id(0), id(1)))).toDF("id", "source", "target")
-  private lazy val nodeDataFrame: NodeFrame = NodeFrame(df = nodeData, idColumn = "id", labels = Set("Person"))
-  private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame(relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS")
+  private lazy val nodeData: DataFrame = spark.createDataFrame(Seq(
+    0 -> "Alice",
+    1 -> "Bob"
+  )).toDF("id", "name")
+
+  private lazy val relationshipData: DataFrame = spark.createDataFrame(Seq(
+    Tuple3(0, 0, 1)
+  )).toDF("id", "source", "target")
+
+  private lazy val nodeDataFrame: NodeFrame = NodeFrame(
+    df = nodeData, idColumn = "id", labels = Set("Person")
+  )
+
+  private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame(
+    relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS"
+  )
 
   test("write a graph with orc") {
-    cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame)).write.orc(basePath)
-    cypherSession.read.orc(basePath).cypher("MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2").df.show()
+    val graph = cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
+    graph.write.orc(basePath)
+
+    val readGraph = cypherSession.read.orc(basePath)
+    readGraph.cypher(
+      "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2"
+    ).df.show()
   }
 
   test("write a graph with parquet") {
-    cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame)).write.parquet(basePath)
-    cypherSession.read.parquet(basePath).cypher("MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2").df.show()
-  }
+    val graph = cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
+    graph.write.parquet(basePath)
 
-  private def id(l: Long): Array[Byte] = BigInt(l).toByteArray
+    val readGraph = cypherSession.read.parquet(basePath)
+    readGraph.cypher(
+      "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2"
+    ).df.show()
+  }
 
 }
