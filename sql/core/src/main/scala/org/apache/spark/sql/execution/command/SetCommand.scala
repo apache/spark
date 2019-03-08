@@ -161,13 +161,10 @@ object SetCommand {
  *   reset;
  * }}}
  */
-case class ResetCommand() extends RunnableCommand with Logging {
+case class ResetCommand() extends RunnableCommand with IgnoreCachedData with Logging {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sessionState.conf.clear()
     Seq.empty[Row]
   }
-
-  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): ResetCommand = ResetCommand()
 }
