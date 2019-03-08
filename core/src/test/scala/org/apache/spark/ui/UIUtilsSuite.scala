@@ -123,7 +123,7 @@ class UIUtilsSuite extends SparkFunSuite {
     val encoded1 = "%252F"
     val decoded1 = "/"
     val encoded2 = "%253Cdriver%253E"
-    val decoded2 = "<driver>"
+    val decoded2 = "driver"
 
     assert(decoded1 === decodeURLParameter(encoded1))
     assert(decoded2 === decodeURLParameter(encoded2))
