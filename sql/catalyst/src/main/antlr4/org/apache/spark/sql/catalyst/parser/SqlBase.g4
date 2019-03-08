@@ -477,10 +477,10 @@ joinType
     : INNER?
     | CROSS
     | LEFT OUTER?
-    | LEFT SEMI
+    | LEFT? SEMI
     | RIGHT OUTER?
     | FULL OUTER?
-    | LEFT ANTI
+    | LEFT? ANTI
     ;
 
 joinCriteria

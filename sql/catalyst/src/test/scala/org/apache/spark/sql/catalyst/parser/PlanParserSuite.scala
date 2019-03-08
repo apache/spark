@@ -370,16 +370,15 @@ class PlanParserSuite extends AnalysisTest {
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
     test("left semi join", LeftSemi, testExistence)
+    test("semi join", LeftSemi, testExistence)
     test("left anti join", LeftAnti, testExistence)
+    test("anti join", LeftAnti, testExistence)
 
     // Test natural cross join
     intercept("select * from a natural cross join b")
 
     // Test natural join with a condition
     intercept("select * from a natural join b on a.id = b.id")
-
-    // Test anti join
-    intercept("select * from a anti join b on a.id = b.id")
 
     // Test multiple consecutive joins
     assertEqual(
