@@ -120,7 +120,6 @@ object StringUtils extends Logging {
         }
         length += sLen
       }
-      return !atLimit
     }
 
     /**
