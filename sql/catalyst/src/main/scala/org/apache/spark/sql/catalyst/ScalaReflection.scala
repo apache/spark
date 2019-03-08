@@ -394,8 +394,8 @@ object ScalaReflection extends ScalaReflection {
           createSerializerForMapObjects(input, dt,
             serializerFor(_, elementType, newPath, seenTypeSet))
 
-         case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
-                    FloatType | DoubleType) =>
+        case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
+                   FloatType | DoubleType) =>
           val cls = input.dataType.asInstanceOf[ObjectType].cls
           if (cls.isArray && cls.getComponentType.isPrimitive) {
             createSerializerForPrimitiveArray(input, dt)
