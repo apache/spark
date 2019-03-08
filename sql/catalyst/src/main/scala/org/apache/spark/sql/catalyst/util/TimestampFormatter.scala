@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.util
 import java.text.ParseException
 import java.time._
 import java.time.format.DateTimeParseException
-import java.time.temporal.ChronoField.{INSTANT_SECONDS, MICRO_OF_SECOND}
+import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeUnit.SECONDS
 
 sealed trait TimestampFormatter extends Serializable {
   /**
@@ -54,10 +54,10 @@ class Iso8601TimestampFormatter(
     val parsedZoneId = parsed.query(TemporalQueries.zone())
     val zoneId = if (parsedZoneId == null) timeZone.toZoneId else parsedZoneId
     val zonedDateTime = toZonedDateTime(parsed, zoneId)
-    val epochSeconds = zonedDateTime.getLong(INSTANT_SECONDS)
+    val epochSeconds = zonedDateTime.toEpochSecond
     val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
-    Math.addExact(TimeUnit.SECONDS.toMicros(epochSeconds), microsOfSecond)
+    Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
   }
 
   override def format(us: Long): String = {
