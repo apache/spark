@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Strings
@@ -34,7 +35,7 @@ import org.apache.spark.internal.Logging
  * default behavior, since YARN's class self-initializes the first time it's called, and
  * future calls all use the initial configuration.
  */
-private[yarn] class SparkRackResolver {
+private[spark] class SparkRackResolver {
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
@@ -45,6 +46,14 @@ private[yarn] class SparkRackResolver {
     RackResolver.resolve(conf, hostName).getNetworkLocation()
   }
 
+  /**
+   * Added in SPARK-27038.
+   * This should be changed to `RackResolver.resolve(conf, hostNames)`
+   * in hadoop releases with YARN-9332.
+   */
+  def resolve(conf: Configuration, hostNames: List[String]): List[Node] = {
+    SparkRackResolver.resolve(conf, hostNames)
+  }
 }
 
 /**
@@ -52,6 +61,7 @@ private[yarn] class SparkRackResolver {
  * It will cache the rack for individual hosts to avoid
  * repeatedly performing the same expensive lookup.
  *
+ * Its logic refers [[org.apache.hadoop.yarn.util.RackResolver]] and enhanced.
  * This will be unnecessary in hadoop releases with YARN-9332.
  * With that, we could just directly use [[org.apache.hadoop.yarn.util.RackResolver]].
  * In the meantime, this is a re-implementation for spark's use.
@@ -59,10 +69,8 @@ private[yarn] class SparkRackResolver {
 object SparkRackResolver extends Logging {
   private var dnsToSwitchMapping: DNSToSwitchMapping = _
   private var initCalled = false
-  // advisory count of arguments for rack script, less than this will get a warning
-  private val ADVISORY_MINIMUM_NUMBER_SCRIPT_ARGS = 10000
 
-  def init(conf: Configuration): Unit = {
+  private def init(conf: Configuration): Unit = {
     if (!initCalled) {
       initCalled = true
       val dnsToSwitchMappingClass =
@@ -71,12 +79,9 @@ object SparkRackResolver extends Logging {
       if (classOf[ScriptBasedMapping].isAssignableFrom(dnsToSwitchMappingClass)) {
         val numArgs = conf.getInt(CommonConfigurationKeysPublic.NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_KEY,
           CommonConfigurationKeysPublic.NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_DEFAULT)
-        if (numArgs < ADVISORY_MINIMUM_NUMBER_SCRIPT_ARGS) {
-          logWarning(s"Increasing the value of" +
-            s" ${CommonConfigurationKeysPublic.NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_KEY} could reduce" +
-            s" the time of rack resolving when submits a stage with a mass of tasks." +
-            s" Current number is $numArgs")
-        }
+        logInfo(s"Setting spark.hadoop.net.topology.script.number.args with a higher value " +
+          s"may reduce the time of rack resolving when submits a stage with a mass of tasks. " +
+          s"Current number is $numArgs")
       }
       try {
         val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
@@ -92,7 +97,7 @@ object SparkRackResolver extends Logging {
     }
   }
 
-  def resolveRacks(conf: Configuration, hostNames: List[String]): List[Node] = {
+  def resolve(conf: Configuration, hostNames: List[String]): List[Node] = {
     init(conf)
     val nodes = new ArrayBuffer[Node]
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala

@@ -19,7 +19,6 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.net.NetworkTopology
 import org.apache.hadoop.yarn.util.RackResolver
-import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.SparkRackResolver
@@ -29,13 +28,10 @@ import org.apache.spark.util.Utils
 
 private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
 
-  // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
-  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
-    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
-  }
+  private[spark] val resolver = new SparkRackResolver
 
   // Add a on-off switch to save time for rack resolving
-  private val skipRackResolving = sc.conf.getTimeAsMs(
+  val skipRackResolving: Boolean = sc.conf.getTimeAsMs(
     "spark.locality.wait.rack", sc.conf.get(LOCALITY_WAIT).toString) == 0
 
   // By default, rack is unknown
@@ -44,7 +40,7 @@ private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(s
       Option(NetworkTopology.DEFAULT_RACK)
     } else {
       val host = Utils.parseHostPort(hostPort)._1
-      Option(RackResolver.resolve(sc.hadoopConfiguration, host).getNetworkLocation)
+      Option(resolver.resolve(sc.hadoopConfiguration, host))
     }
   }
 
@@ -60,7 +56,7 @@ private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(s
     if (skipRackResolving) {
       hosts.map(_ => Option(NetworkTopology.DEFAULT_RACK))
     } else {
-      SparkRackResolver.resolveRacks(sc.hadoopConfiguration, hosts).map { node =>
+      resolver.resolve(sc.hadoopConfiguration, hosts).map { node =>
         Option(node.getNetworkLocation)
       }
     }
