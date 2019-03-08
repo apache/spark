@@ -52,7 +52,7 @@ private[spark] class SparkRackResolver {
    * in hadoop releases with YARN-9332.
    */
   def resolve(conf: Configuration, hostNames: List[String]): List[Node] = {
-    SparkRackResolver.resolve(conf, hostNames)
+    SparkRackResolver.coreResolve(conf, hostNames)
   }
 }
 
@@ -97,7 +97,7 @@ object SparkRackResolver extends Logging {
     }
   }
 
-  def resolve(conf: Configuration, hostNames: List[String]): List[Node] = {
+  def coreResolve(conf: Configuration, hostNames: List[String]): List[Node] = {
     init(conf)
     val nodes = new ArrayBuffer[Node]
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala

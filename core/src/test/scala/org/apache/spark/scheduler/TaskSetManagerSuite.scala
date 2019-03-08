@@ -128,7 +128,6 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   val finishedManagers = new ArrayBuffer[TaskSetManager]
   val taskSetsFailed = new ArrayBuffer[String]
   val speculativeTasks = new ArrayBuffer[Int]
-  var slowRackResolve = false
 
   val executors = new mutable.HashMap[String, String]
 
@@ -1658,7 +1657,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     sched = new FakeTaskScheduler(sc,
       ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
-    sched.slowRackResolve = true
     val locations = new ArrayBuffer[Seq[TaskLocation]]()
     for (i <- 0 to 99) {
       locations += Seq(TaskLocation("host" + i))
@@ -1669,7 +1667,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     var total = 0
     for (i <- 0 until 20) {
       val numTaskInRack = manager.getPendingTasksForRack("rack" + i).length
-      assert(numTaskInRack === 5)
+      assert(numTaskInRack === 5) // check rack assignment is still done correctly
       total += numTaskInRack
     }
     assert(sched.skipRackResolving === false)
@@ -1685,7 +1683,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     sched = new FakeTaskScheduler(sc,
       ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
-    sched.slowRackResolve = true
     val locations = new ArrayBuffer[Seq[TaskLocation]]()
     for (i <- 0 to 99) {
       locations += Seq(TaskLocation("host" + i))
