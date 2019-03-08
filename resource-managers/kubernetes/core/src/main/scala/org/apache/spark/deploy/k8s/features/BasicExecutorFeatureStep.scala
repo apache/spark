@@ -228,6 +228,6 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
-    SparkPod(executorPod, containerWithLimitCores)
+    SparkPod(executorPod, containerWithLifeCycle)
   }
 }
