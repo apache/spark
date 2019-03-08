@@ -219,7 +219,8 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   def getLeastGroupHash(key: String): Option[PartitionGroup] =
     groupHash
       .get(key)
-      .flatMap(group => if (group.isEmpty) None else Some(group.minBy(_.numPartitions)))
+      .filter(_.nonEmpty)
+      .map(_.minBy(_.numPartitions))
 
   def addPartToPGroup(part: Partition, pgroup: PartitionGroup): Boolean = {
     if (!initialHash.contains(part)) {
