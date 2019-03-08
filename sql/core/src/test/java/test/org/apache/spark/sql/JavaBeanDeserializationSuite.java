@@ -47,25 +47,28 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
   static {
     ARRAY_RECORDS.add(
-      new ArrayRecord(1, Arrays.asList(new Interval(111, 211), new Interval(121, 221)))
+      new ArrayRecord(1, Arrays.asList(new Interval(111, 211), new Interval(121, 221)),
+              new int[] { 11, 12, 13, 14 })
     );
     ARRAY_RECORDS.add(
-      new ArrayRecord(2, Arrays.asList(new Interval(112, 212), new Interval(122, 222)))
+      new ArrayRecord(2, Arrays.asList(new Interval(112, 212), new Interval(122, 222)),
+              new int[] { 21, 22, 23, 24 })
     );
     ARRAY_RECORDS.add(
-      new ArrayRecord(3, Arrays.asList(new Interval(113, 213), new Interval(123, 223)))
+      new ArrayRecord(3, Arrays.asList(new Interval(113, 213), new Interval(123, 223)),
+              new int[] { 31, 32, 33, 34 })
     );
   }
 
   @Test
   public void testBeanWithArrayFieldDeserialization() {
-
     Encoder<ArrayRecord> encoder = Encoders.bean(ArrayRecord.class);
 
     Dataset<ArrayRecord> dataset = spark
       .read()
       .format("json")
-      .schema("id int, intervals array<struct<startTime: bigint, endTime: bigint>>")
+      .schema("id int, intervals array<struct<startTime: bigint, endTime: bigint>>, " +
+          "ints array<int>")
       .load("src/test/resources/test-data/with-array-fields.json")
       .as(encoder);
 
@@ -223,12 +226,14 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     private int id;
     private List<Interval> intervals;
+    private int[] ints;
 
     public ArrayRecord() { }
 
-    ArrayRecord(int id, List<Interval> intervals) {
+    ArrayRecord(int id, List<Interval> intervals, int[] ints) {
       this.id = id;
       this.intervals = intervals;
+      this.ints = ints;
     }
 
     public int getId() {
@@ -247,21 +252,31 @@ public class JavaBeanDeserializationSuite implements Serializable {
       this.intervals = intervals;
     }
 
+    public int[] getInts() {
+      return ints;
+    }
+
+    public void setInts(int[] ints) {
+      this.ints = ints;
+    }
+
     @Override
     public int hashCode() {
-      return id ^ Objects.hashCode(intervals);
+      return id ^ Objects.hashCode(intervals) ^ Objects.hashCode(ints);
     }
 
     @Override
     public boolean equals(Object obj) {
       if (!(obj instanceof ArrayRecord)) return false;
       ArrayRecord other = (ArrayRecord) obj;
-      return (other.id == this.id) && Objects.equals(other.intervals, this.intervals);
+      return (other.id == this.id) && Objects.equals(other.intervals, this.intervals) &&
+              Arrays.equals(other.ints, ints);
     }
 
     @Override
     public String toString() {
-      return String.format("{ id: %d, intervals: %s }", id, intervals);
+      return String.format("{ id: %d, intervals: %s, ints: %s }", id, intervals,
+              Arrays.toString(ints));
     }
   }
 
