@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.ManualClock
 
 class DriverServiceFeatureStepSuite extends SparkFunSuite {
@@ -42,7 +43,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     val sparkConf = new SparkConf(false)
       .set(DRIVER_PORT, 9000)
       .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
-      .set(UI_PORT_NAME, "4040")
+      .set(UI_PORT, 4080)
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       labels = DRIVER_LABELS)
@@ -57,7 +58,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     verifyService(
       9000,
       8080,
-      4040,
+      4080,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
       driverService)
   }
@@ -87,7 +88,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     verifyService(
       DEFAULT_DRIVER_PORT,
       DEFAULT_BLOCKMANAGER_PORT,
-      DEFAULT_UI_PORT,
+      UI_PORT.defaultValue.get,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
       resolvedService)
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()

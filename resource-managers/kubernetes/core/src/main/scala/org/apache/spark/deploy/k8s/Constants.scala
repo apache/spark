@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s
 
-import org.apache.spark.internal.config.UI._
-
 private[spark] object Constants {
 
   // Labels
@@ -47,7 +45,6 @@ private[spark] object Constants {
   // Default and fixed ports
   val DEFAULT_DRIVER_PORT = 7078
   val DEFAULT_BLOCKMANAGER_PORT = 7079
-  val DEFAULT_UI_PORT = UI_PORT.defaultValue.get
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
   val UI_PORT_NAME = "spark-ui"
