@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.util
 import java.text.ParseException
 import java.time._
 import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoField.{INSTANT_SECONDS, MICRO_OF_SECOND}
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
-
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import java.util.concurrent.TimeUnit
 
 sealed trait TimestampFormatter extends Serializable {
   /**
@@ -49,16 +49,16 @@ class Iso8601TimestampFormatter(
   @transient
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
-  private def toInstant(s: String): Instant = {
-    val temporalAccessor = formatter.parse(s)
-    if (temporalAccessor.query(TemporalQueries.offset()) == null) {
-      toInstantWithZoneId(temporalAccessor, timeZone.toZoneId)
-    } else {
-      Instant.from(temporalAccessor)
-    }
-  }
+  override def parse(s: String): Long = {
+    val parsed = formatter.parse(s)
+    val parsedZoneId = parsed.query(TemporalQueries.zone())
+    val zoneId = if (parsedZoneId == null) timeZone.toZoneId else parsedZoneId
+    val zonedDateTime = toZonedDateTime(parsed, zoneId)
+    val epochSeconds = zonedDateTime.getLong(INSTANT_SECONDS)
+    val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
-  override def parse(s: String): Long = instantToMicros(toInstant(s))
+    Math.addExact(TimeUnit.SECONDS.toMicros(epochSeconds), microsOfSecond)
+  }
 
   override def format(us: Long): String = {
     val instant = DateTimeUtils.microsToInstant(us)
