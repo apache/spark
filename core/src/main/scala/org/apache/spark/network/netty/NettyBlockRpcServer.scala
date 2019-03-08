@@ -59,7 +59,8 @@ class NettyBlockRpcServer(
         val blocksNum = openBlocks.blockIds.length
         val blocks = for (i <- (0 until blocksNum).view)
           yield blockManager.getBlockData(BlockId.apply(openBlocks.blockIds(i)))
-        val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
+        val streamId = streamManager.registerStream(appId, blocks.iterator.asJava,
+          client.getChannel)
         logTrace(s"Registered streamId $streamId with $blocksNum buffers")
         responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
 
