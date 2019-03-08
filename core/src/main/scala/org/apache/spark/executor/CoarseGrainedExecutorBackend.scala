@@ -58,8 +58,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   override def onStart() {
-    logInfo("Registering SIGPWR handler.")
-    SignalUtils.register("SIGPWR")(decommissionSelf)
+    logInfo("Registering PWR handler.")
+    SignalUtils.register("PWR")(decommissionSelf)
 
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>

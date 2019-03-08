@@ -63,12 +63,12 @@ private[deploy] class Worker(
   Utils.checkHost(host)
   assert (port > 0)
 
-  // If worker decommissioning is enabled register a handler on SIGPWR to shutdown.
+  // If worker decommissioning is enabled register a handler on PWR to shutdown.
   if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
-    logInfo("Registering SIGPWR handler.")
-    SignalUtils.register("SIGPWR")(decommissionSelf)
+    logInfo("Registering PWR handler.")
+    SignalUtils.register("PWR")(decommissionSelf)
   } else {
-    logInfo("Worker decommissioning not enabled, skipping SIGPWR")
+    logInfo("Worker decommissioning not enabled, skipping PWR")
   }
 
   // A scheduled executor used to send messages at the specified time.
