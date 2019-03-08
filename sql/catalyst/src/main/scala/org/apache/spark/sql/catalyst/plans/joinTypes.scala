@@ -27,8 +27,8 @@ object JoinType {
     case "outer" | "full" | "fullouter" => FullOuter
     case "leftouter" | "left" => LeftOuter
     case "rightouter" | "right" => RightOuter
-    case "leftsemi" | "left_semi" | "semi" => LeftSemi
-    case "leftanti" | "left_anti" | "anti" => LeftAnti
+    case "leftsemi" | "semi" => LeftSemi
+    case "leftanti" | "anti" => LeftAnti
     case "cross" => Cross
     case _ =>
       val supported = Seq(
