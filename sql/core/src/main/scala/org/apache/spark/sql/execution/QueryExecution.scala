@@ -196,7 +196,6 @@ class QueryExecution(
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
       val append = (s: String) => {
         writer.write(s)
-        true
       }
       try {
         writePlans(append, maxFields)
