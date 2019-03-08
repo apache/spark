@@ -1283,13 +1283,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
-       (Intercept) -0.2516986
+       (Intercept) -0.2521953
        data.V3      0.0000000
        data.V4      .
        data.V5      .
        data.V6      .
      */
-    val interceptR = -0.2516986
+    val interceptR = -0.2521953
     val coefficientsR = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptR relTol 1E-5)
