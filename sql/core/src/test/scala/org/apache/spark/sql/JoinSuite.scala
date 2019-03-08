@@ -109,7 +109,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           classOf[BroadcastNestedLoopJoinExec]),
         ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
           classOf[BroadcastNestedLoopJoinExec]),
-        ("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData ANTI JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
         ("SELECT * FROM testData LEFT ANTI JOIN testData2", classOf[BroadcastNestedLoopJoinExec])
       ).foreach(assertJoin)
     }

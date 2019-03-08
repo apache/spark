@@ -374,7 +374,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     withTempView("antiData") {
       anti.createOrReplaceTempView("antiData")
       val df = spark.sql(
-        "SELECT * FROM testData2 LEFT ANTI JOIN antiData ON testData2.a = antiData.a")
+        "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map("number of output rows" -> 4L))))
       )
