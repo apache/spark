@@ -100,7 +100,7 @@ object StringUtils extends Logging {
    * the string.
    */
   class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-    private val strings = new ArrayBuffer[String]
+    protected val strings = new ArrayBuffer[String]
     protected var length: Int = 0
 
     def atLimit: Boolean = length >= maxLength
@@ -110,7 +110,7 @@ object StringUtils extends Logging {
      * appended strings once in the toString method.  Returns true if the string still
      * has room for further appends before it hits its max limit.
      */
-    def append(s: String): Boolean = {
+    def append(s: String): Unit = {
       if (s != null) {
         val sLen = s.length
         if (!atLimit) {
@@ -128,26 +128,33 @@ object StringUtils extends Logging {
      * returns concatenated string.
      */
     override def toString: String = {
-      val result = new java.lang.StringBuilder(length)
+      val finalLength = if (atLimit) maxLength else length
+      val result = new java.lang.StringBuilder(finalLength)
       strings.foreach(result.append)
       result.toString
     }
   }
 
-  /** Whether we have warned about plan string truncation yet. */
-  private val planSizeWarningPrinted = new AtomicBoolean(false)
-
-  /** A string concatenator for plan strings.  Uses length from a configured value, and
-   *  prints a warning the first time a plan is truncated. */
-  class PlanStringConcat extends StringConcat(SQLConf.get.maxPlanStringLength) {
+  /**
+   * A string concatenator for plan strings.  Uses length from a configured value, and
+   *  prints a warning the first time a plan is truncated.
+   */
+  class PlanStringConcat extends StringConcat(Math.max(0, SQLConf.get.maxPlanStringLength - 30)) {
     override def toString: String = {
-      if (atLimit && planSizeWarningPrinted.compareAndSet(false, true)) {
+      if (atLimit) {
         logWarning(
           "Truncated the string representation of a plan since it was too long. The " +
             s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
             "can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
+        val truncateMsg = s"... ${length - maxLength} more characters"
+        val result = new java.lang.StringBuilder(maxLength + truncateMsg.length)
+        strings.foreach(result.append)
+        result.append(truncateMsg)
+        result.toString
       }
-      super.toString
+      else {
+        super.toString
+      }
     }
   }
 }

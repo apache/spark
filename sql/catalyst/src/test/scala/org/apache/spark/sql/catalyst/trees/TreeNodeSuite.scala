@@ -604,7 +604,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       }
 
       val planString = ds.treeString
-      assert(planString.length === SQLConf.get.maxPlanStringLength)
+	    logWarning("Plan string: " + planString)
+      assert(planString.endsWith(" more characters"))
+	    assert(planString.length <= SQLConf.get.maxPlanStringLength)
     }
   }
 }

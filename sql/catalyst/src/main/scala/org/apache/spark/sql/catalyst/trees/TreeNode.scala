@@ -487,7 +487,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   def treeString(
-      append: String => Boolean,
+      append: String => Unit,
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int): Unit = {
@@ -554,7 +554,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      append: String => Boolean,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,

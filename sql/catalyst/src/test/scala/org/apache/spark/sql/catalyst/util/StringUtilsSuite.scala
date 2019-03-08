@@ -68,9 +68,14 @@ class StringUtilsSuite extends SparkFunSuite {
   }
 
   test("string concatenation return value") {
-    assert(new StringConcat(7).append("under") == true)
-    assert(new StringConcat(7).append("underover") == false)
-    assert(new StringConcat(7).append("underov") == false)
+    def checkLimit(s: String): Boolean = {
+      val sc = new StringConcat(7)
+      sc.append(s)
+      sc.atLimit
+    }
+    assert(checkLimit("under"))
+    assert(checkLimit("underover") == false)
+    assert(checkLimit("underov") == false)
   }
 
   test("string concatenation append after limit") {
