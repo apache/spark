@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import import org.apache.spark.internal.config.Worker
+
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
   import DecommissionSuite._
@@ -26,10 +28,13 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     println("***TESTING decommissioning***")
     // scalastyle:on println
     sparkAppConf
-      .set("spark.worker.decommission.enabled", "true")
+      .set(Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.container.image", pyImage)
 
+    // scalastyle:off println
+    println("***Running app***")
+    // scalastyle:on println
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
       mainClass = "",

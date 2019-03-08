@@ -250,7 +250,7 @@ private[deploy] class Master(
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else {
-        // If a worker attempts to decomission that isn't registered ignore it.
+        // If a worker attempts to decommission that isn't registered ignore it.
         idToWorker.get(id).foreach(decommissionWorker)
       }
 
@@ -808,7 +808,7 @@ private[deploy] class Master(
       logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
       worker.setState(WorkerState.DECOMMISSIONED)
       for (exec <- worker.executors.values) {
-        logInfo("Telling app of decomission executors")
+        logInfo("Telling app of decommission executors")
         exec.application.driver.send(ExecutorUpdated(
           exec.id, ExecutorState.DECOMMISSIONED,
           Some("worker decommissioned"), None, workerLost = false))

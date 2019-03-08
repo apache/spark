@@ -30,7 +30,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.WORKER_DECOMMISSION_ENABLED.key, "true")
+      .set(config.Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
 
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
@@ -69,6 +69,6 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
       val result = ThreadUtils.awaitResult(postDecomAsyncCount, 1.seconds)
     }
     assert(postDecomAsyncCount.isCompleted === false,
-      "After exec decomission new task could not launch")
+      "After exec decommission new task could not launch")
   }
 }

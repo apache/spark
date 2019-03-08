@@ -90,7 +90,7 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
     extends CoarseGrainedClusterMessage
 
-  case class DecomissionExecutor(executorId: String)  extends CoarseGrainedClusterMessage
+  case class DecommissionExecutor(executorId: String)  extends CoarseGrainedClusterMessage
 
   case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage

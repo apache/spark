@@ -249,7 +249,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
-      case DecomissionExecutor(executorId) =>
+      case DecommissionExecutor(executorId) =>
         logInfo(s"Decommissioning executor ${executorId}")
         decommissionExecutor(executorId)
         context.reply(true)
@@ -530,7 +530,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
     // Only log the failure since we don't care about the result.
-    driverEndpoint.ask[Boolean](DecomissionExecutor(executorId)).onFailure { case t =>
+    driverEndpoint.ask[Boolean](DecommissionExecutor(executorId)).onFailure { case t =>
       logError(t.getMessage, t)
     }(ThreadUtils.sameThread)
   }

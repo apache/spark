@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.internal.config
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
@@ -35,7 +36,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SignalUtils, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -49,6 +50,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   private[this] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
+  @volatile private var decommissioned = false
   @volatile var driver: Option[RpcEndpointRef] = None
 
   // If this CoarseGrainedExecutorBackend is changed to support multiple threads, then this may need
@@ -56,6 +58,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   override def onStart() {
+    logInfo("Registering SIGPWR handler.")
+    SignalUtils.register("SIGPWR")(decommissionSelf)
+
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
@@ -99,6 +104,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case LaunchTask(data) =>
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
+      } else if (decommissioned) {
+        logWarning("Asked to launch a task while decommissioned. Not launching.")
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
@@ -176,6 +183,20 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
 
     System.exit(code)
+  }
+
+  private def decommissionSelf(): Boolean = {
+    logDebug("Decommissioning self")
+    decommissioned = true
+    // Tell master we are are decommissioned so it stops trying to schedule us
+    if (driver.nonEmpty) {
+      driver.get.send(DecommissionExecutor(executorId))
+    }
+    if (executor != null) {
+      executor.decommission()
+    }
+    // Return true since we are handling a signal
+    true
   }
 }
 

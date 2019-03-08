@@ -64,11 +64,11 @@ private[deploy] class Worker(
   assert (port > 0)
 
   // If worker decommissioning is enabled register a handler on SIGPWR to shutdown.
-  if (conf.get(Worker.WORKER_DECOMMISSION_ENABLED)) {
+  if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
     logInfo("Registering SIGPWR handler.")
     SignalUtils.register("SIGPWR")(decommissionSelf)
   } else {
-    logInfo("Worker decomissioning not enabled, skipping SIGPWR")
+    logInfo("Worker decommissioning not enabled, skipping SIGPWR")
   }
 
   // A scheduled executor used to send messages at the specified time.
@@ -712,7 +712,7 @@ private[deploy] class Worker(
   }
 
   private[deploy] def decommissionSelf(): Boolean = {
-    if (conf.get(config.WORKER_DECOMMISSION_ENABLED)) {
+    if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
       logDebug("Decommissioning self")
       decommissioned = true
       // TODO: Send decommission notification to executors & shuffle service.
