@@ -29,12 +29,16 @@ import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 trait DateTimeFormatterHelper {
   protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
-    val localTime = if (temporalAccessor.query(TemporalQueries.localTime) == null) {
+    // Parsed input might not have time related part. In that case, time component is set to zeros.
+    val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
+    val localTime = if (parsedLocalTime == null) {
+      // Sets hours, minutes, seconds and nanos of second to zeros
       LocalTime.ofNanoOfDay(0)
     } else {
-      LocalTime.from(temporalAccessor)
+      parsedLocalTime
     }
-    val localDate = LocalDate.from(temporalAccessor)
+    // Parsed input must have date component. At least, year must present in temporalAccessor.
+    val localDate = temporalAccessor.query(TemporalQueries.localDate)
     val localDateTime = LocalDateTime.of(localDate, localTime)
     val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
     Instant.from(zonedDateTime)
