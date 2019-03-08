@@ -619,7 +619,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         .filter { case (k, v) => k.startsWith("spark.")}
         .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
       val sparkConf = new SparkConf
-      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
+      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false))
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     }
   }
@@ -835,11 +835,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.isDynamicAllocationEnabled(
       conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set(DYN_ALLOCATION_ENABLED, true)) === true)
+      conf.set(DYN_ALLOCATION_ENABLED, true)))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === true)
+      conf.set("spark.executor.instances", "1")))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "0")) === true)
+      conf.set("spark.executor.instances", "0")))
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }
@@ -1014,6 +1014,58 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(redactedConf("spark.regular.property") === "regular_value")
     assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
 
+  }
+
+  test("redact sensitive information in command line args") {
+    val sparkConf = new SparkConf
+
+    // Set some secret keys
+    val secretKeysWithSameValue = Seq(
+      "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.my.password",
+      "spark.my.sECreT")
+    val cmdArgsForSecretWithSameValue = secretKeysWithSameValue.map(s => s"-D$s=sensitive_value")
+
+    val secretKeys = secretKeysWithSameValue ++ Seq("spark.your.password")
+    val cmdArgsForSecret = cmdArgsForSecretWithSameValue ++ Seq(
+      // Have '=' twice
+      "-Dspark.your.password=sensitive=sensitive2"
+    )
+
+    val ignoredArgs = Seq(
+      // starts with -D but no assignment
+      "-Ddummy",
+      // secret value contained not starting with -D (we don't care about this case for now)
+      "spark.my.password=sensitive_value",
+      // edge case: not started with -D, but matched pattern after first '-'
+      "--Dspark.my.password=sensitive_value")
+
+    val cmdArgs = cmdArgsForSecret ++ ignoredArgs ++ Seq(
+      // Set a non-secret key
+      "-Dspark.regular.property=regular_value",
+      // Set a property with a regular key but secret in the value
+      "-Dspark.sensitive.property=has_secret_in_value")
+
+    // Redact sensitive information
+    val redactedCmdArgs = Utils.redactCommandLineArgs(sparkConf, cmdArgs)
+
+    // These arguments should be left as they were:
+    // 1) argument without -D option is not applied
+    // 2) -D option without key-value assignment is not applied
+    assert(ignoredArgs.forall(redactedCmdArgs.contains))
+
+    val redactedCmdArgMap = redactedCmdArgs.filterNot(ignoredArgs.contains).map { cmd =>
+      val keyValue = cmd.substring("-D".length).split("=")
+      keyValue(0) -> keyValue.tail.mkString("=")
+    }.toMap
+
+    // Assert that secret information got redacted while the regular property remained the same
+    secretKeys.foreach { key =>
+      assert(redactedCmdArgMap(key) === Utils.REDACTION_REPLACEMENT_TEXT)
+    }
+
+    assert(redactedCmdArgMap("spark.regular.property") === "regular_value")
+    assert(redactedCmdArgMap("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
   }
 
   test("tryWithSafeFinally") {

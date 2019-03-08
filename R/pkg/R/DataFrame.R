@@ -950,7 +950,7 @@ setMethod("write.parquet",
 #'
 #' Save the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
-#' Each row becomes a new line in the output file.
+#' Each row becomes a new line in the output file. The text files will be encoded as UTF-8.
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
@@ -1491,6 +1491,29 @@ setMethod("summarize",
 dapplyInternal <- function(x, func, schema) {
   if (is.character(schema)) {
     schema <- structType(schema)
+  }
+
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  if (arrowEnabled) {
+    requireNamespace1 <- requireNamespace
+    if (!requireNamespace1("arrow", quietly = TRUE)) {
+      stop("'arrow' package should be installed.")
+    }
+    # Currenty Arrow optimization does not support raw for now.
+    # Also, it does not support explicit float type set by users.
+    if (inherits(schema, "structType")) {
+      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
+        stop("Arrow optimization with dapply do not support FloatType yet.")
+      }
+      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "BinaryType"))) {
+        stop("Arrow optimization with dapply do not support BinaryType yet.")
+      }
+    } else if (is.null(schema)) {
+      stop(paste0("Arrow optimization does not support 'dapplyCollect' yet. Please disable ",
+                  "Arrow optimization or use 'collect' and 'dapply' APIs instead."))
+    } else {
+      stop("'schema' should be DDL-formatted string or structType.")
+    }
   }
 
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],

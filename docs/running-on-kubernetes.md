@@ -990,6 +990,34 @@ See the [configuration page](configuration.html) for information on Spark config
   Specify whether executor pods should be deleted in case of failure or normal termination.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.submission.connectionTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Connection timeout in milliseconds for the kubernetes client to use for starting the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.submission.requestTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Request timeout in milliseconds for the kubernetes client to use for starting the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Connection timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.requestTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Request timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
+  </td>
+</tr>
 </table>
 
 #### Pod template properties

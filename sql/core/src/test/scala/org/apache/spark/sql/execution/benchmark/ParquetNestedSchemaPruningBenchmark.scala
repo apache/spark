@@ -15,15 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.writer.streaming;
+package org.apache.spark.sql.execution.benchmark
 
-import org.apache.spark.annotation.Unstable;
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
-import org.apache.spark.sql.streaming.OutputMode;
-
-// TODO: remove it when we have `SupportsTruncate`
-@Unstable
-public interface SupportsOutputMode extends WriteBuilder {
-
-  WriteBuilder outputMode(OutputMode mode);
+/**
+ * Synthetic benchmark for nested schema pruning performance for Parquet datasource.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/ParquetNestedSchemaPruningBenchmark-results.txt".
+ * }}}
+ */
+object ParquetNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
+    override val dataSourceName: String = "parquet"
+    override val benchmarkName: String = "Nested Schema Pruning Benchmark For Parquet"
 }

@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.sql.execution.benchmark
 
-import java.util.concurrent.atomic.AtomicBoolean
-
-private[spark] class SimpleExtensionService extends SchedulerExtensionService {
-
-  /** started flag; set in the `start()` call, stopped in `stop()`. */
-  val started = new AtomicBoolean(false)
-
-  override def start(binding: SchedulerExtensionServiceBinding): Unit = {
-    started.set(true)
-  }
-
-  override def stop(): Unit = {
-    started.set(false)
-  }
+/**
+ * Synthetic benchmark for nested schema pruning performance for ORC V2 datasource.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/OrcV2NestedSchemaPruningBenchmark-results.txt".
+ * }}}
+ */
+object OrcV2NestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
+  override val dataSourceName: String = "orc"
+  override val benchmarkName: String = "Nested Schema Pruning Benchmark For ORC v2"
 }

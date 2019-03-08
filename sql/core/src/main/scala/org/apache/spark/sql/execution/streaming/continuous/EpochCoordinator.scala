@@ -123,6 +123,9 @@ private[continuous] class EpochCoordinator(
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
 
+  private val epochBacklogQueueSize =
+    session.sqlContext.conf.continuousStreamingEpochBacklogQueueSize
+
   private var queryWritesStopped: Boolean = false
 
   private var numReaderPartitions: Int = _
@@ -212,6 +215,7 @@ private[continuous] class EpochCoordinator(
       if (!partitionCommits.isDefinedAt((epoch, partitionId))) {
         partitionCommits.put((epoch, partitionId), message)
         resolveCommitsAtEpoch(epoch)
+        checkProcessingQueueBoundaries()
       }
 
     case ReportPartitionOffset(partitionId, epoch, offset) =>
@@ -223,6 +227,22 @@ private[continuous] class EpochCoordinator(
         query.addOffset(epoch, stream, thisEpochOffsets.toSeq)
         resolveCommitsAtEpoch(epoch)
       }
+      checkProcessingQueueBoundaries()
+  }
+
+  private def checkProcessingQueueBoundaries() = {
+    if (partitionOffsets.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the partition offset queue has " +
+        "exceeded its maximum"))
+    }
+    if (partitionCommits.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the partition commit queue has " +
+        "exceeded its maximum"))
+    }
+    if (epochsWaitingToBeCommitted.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the epoch queue has " +
+        "exceeded its maximum"))
+    }
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

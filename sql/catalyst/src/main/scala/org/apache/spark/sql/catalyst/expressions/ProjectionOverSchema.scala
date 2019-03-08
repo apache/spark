@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
@@ -26,7 +25,7 @@ import org.apache.spark.sql.types._
  * are adjusted to fit the schema. All other expressions are left as-is. This
  * class is motivated by columnar nested schema pruning.
  */
-private[execution] case class ProjectionOverSchema(schema: StructType) {
+case class ProjectionOverSchema(schema: StructType) {
   private val fieldNames = schema.fieldNames.toSet
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)

@@ -27,6 +27,7 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
@@ -34,7 +35,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWrite, SupportsOutputMode}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -362,15 +363,13 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
-      new WriteBuilder with SupportsOutputMode {
+      new WriteBuilder {
         private var inputSchema: StructType = _
 
         override def withInputDataSchema(schema: StructType): WriteBuilder = {
           this.inputSchema = schema
           this
         }
-
-        override def outputMode(mode: OutputMode): WriteBuilder = this
 
         override def buildForStreaming(): StreamingWrite = {
           import scala.collection.JavaConverters._
@@ -525,7 +524,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-      .setAuthenticationConfigIfNeeded()
       .build()
 
   def kafkaParamsForExecutors(
@@ -547,7 +545,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-      .setAuthenticationConfigIfNeeded()
       .build()
 
   /**
@@ -582,7 +579,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     KafkaConfigUpdater("executor", specifiedKafkaParams)
       .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
       .set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serClassName)
-      .setAuthenticationConfigIfNeeded()
       .build()
   }
 

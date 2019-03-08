@@ -2842,8 +2842,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+       If the return type is :class:`StructType`, the returned value should be a `pandas.DataFrame`.
 
-       :class:`MapType`, :class:`StructType` are currently not supported as output types.
+       :class:`MapType`, nested :class:`StructType` are currently not supported as output types.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
@@ -2868,6 +2869,15 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +----------+--------------+------------+
        |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
+       >>> @pandas_udf("first string, last string")  # doctest: +SKIP
+       ... def split_expand(n):
+       ...     return n.str.split(expand=True)
+       >>> df.select(split_expand("name")).show()  # doctest: +SKIP
+       +------------------+
+       |split_expand(name)|
+       +------------------+
+       |       [John, Doe]|
+       +------------------+
 
        .. note:: The length of `pandas.Series` within a scalar UDF is not that of the whole input
            column, but is the length of an internal batch used for each call to the function.

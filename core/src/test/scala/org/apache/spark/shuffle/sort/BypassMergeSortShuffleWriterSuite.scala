@@ -115,7 +115,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
       new Answer[File] {
         override def answer(invocation: InvocationOnMock): File = {
-          blockIdToFileMap.get(invocation.getArguments.head.asInstanceOf[BlockId]).get
+          blockIdToFileMap(invocation.getArguments.head.asInstanceOf[BlockId])
         }
     })
   }

@@ -171,6 +171,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val OPTIMIZER_INSET_SWITCH_THRESHOLD =
+    buildConf("spark.sql.optimizer.inSetSwitchThreshold")
+      .internal()
+      .doc("Configures the max set size in InSet for which Spark will generate code with " +
+        "switch statements. This is applicable only to bytes, shorts, ints, dates.")
+      .intConf
+      .checkValue(threshold => threshold >= 0 && threshold <= 600, "The max set size " +
+        "for using switch statements in InSet must be non-negative and less than or equal to 600")
+      .createWithDefault(400)
+
   val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -313,6 +323,12 @@ object SQLConf {
       "aliases) which might negatively impact overall runtime.")
     .booleanConf
     .createWithDefault(true)
+
+  val ANSI_SQL_PARSER =
+    buildConf("spark.sql.parser.ansi.enabled")
+      .doc("When true, tries to conform to ANSI SQL syntax.")
+      .booleanConf
+      .createWithDefault(false)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
@@ -1430,6 +1446,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE =
+    buildConf("spark.sql.streaming.continuous.epochBacklogQueueSize")
+      .doc("The max number of entries to be stored in queue to wait for late epochs. " +
+        "If this parameter is exceeded by the size of the queue, stream will stop with an error.")
+      .intConf
+      .createWithDefault(10000)
+
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
     .internal()
@@ -1519,6 +1542,15 @@ object SQLConf {
         "satisfying a query. This optimization allows columnar file format readers to avoid " +
         "reading unnecessary nested column data. Currently Parquet is the only data source that " +
         "implements this optimization.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from object serialization operator which are unnecessary in " +
+        "satisfying a query. This optimization allows object serializers to avoid " +
+        "executing unnecessary nested expressions.")
       .booleanConf
       .createWithDefault(false)
 
@@ -1667,6 +1699,14 @@ object SQLConf {
         "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
+
+  val DATETIME_JAVA8API_EANBLED = buildConf("spark.sql.datetime.java8API.enabled")
+    .doc("If the configuration property is set to true, java.time.Instant and " +
+      "java.time.LocalDate classes of Java 8 API are used as external types for " +
+      "Catalyst's TimestampType and DateType. If it is set to false, java.sql.Timestamp " +
+      "and java.sql.Date are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -1694,6 +1734,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
+
+  def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
   def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
 
@@ -1840,6 +1882,8 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def ansiParserEnabled: Boolean = getConf(ANSI_SQL_PARSER)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
@@ -1851,6 +1895,8 @@ class SQLConf extends Serializable with Logging {
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
+  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_EANBLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -2041,6 +2087,9 @@ class SQLConf extends Serializable with Logging {
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
+  def continuousStreamingEpochBacklogQueueSize: Int =
+    getConf(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE)
+
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
   def continuousStreamingExecutorPollIntervalMs: Long =
@@ -2068,6 +2117,9 @@ class SQLConf extends Serializable with Logging {
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def serializerNestedSchemaPruningEnabled: Boolean =
+    getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 

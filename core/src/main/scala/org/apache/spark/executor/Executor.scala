@@ -38,6 +38,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
+import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
@@ -117,6 +118,7 @@ private[spark] class Executor(
   if (!isLocal) {
     env.blockManager.initialize(conf.getAppId)
     env.metricsSystem.registerSource(executorSource)
+    env.metricsSystem.registerSource(new JVMCPUSource())
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   }
 

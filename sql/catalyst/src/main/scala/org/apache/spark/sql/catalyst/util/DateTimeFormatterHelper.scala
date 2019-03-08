@@ -62,10 +62,12 @@ private object DateTimeFormatterHelper {
     .maximumSize(128)
     .build[(String, Locale), DateTimeFormatter]()
 
-  def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    new DateTimeFormatterBuilder()
-      .parseCaseInsensitive()
-      .appendPattern(pattern)
+  def createBuilder(): DateTimeFormatterBuilder = {
+    new DateTimeFormatterBuilder().parseCaseInsensitive()
+  }
+
+  def toFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
+    builder
       .parseDefaulting(ChronoField.ERA, 1)
       .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
       .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
@@ -74,5 +76,21 @@ private object DateTimeFormatterHelper {
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
       .withResolverStyle(ResolverStyle.STRICT)
+  }
+
+  def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+    val builder = createBuilder().appendPattern(pattern)
+    toFormatter(builder, locale)
+  }
+
+  lazy val fractionFormatter: DateTimeFormatter = {
+    val builder = createBuilder()
+      .append(DateTimeFormatter.ISO_LOCAL_DATE)
+      .appendLiteral(' ')
+      .appendValue(ChronoField.HOUR_OF_DAY, 2).appendLiteral(':')
+      .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
+      .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
+      .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
+    toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 }

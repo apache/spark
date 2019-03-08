@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.{Statistics => V2Statistics, _}
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.sources.v2.writer._
 
@@ -56,7 +56,7 @@ case class DataSourceV2Relation(
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
-        Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
@@ -89,7 +89,7 @@ case class StreamingDataSourceV2Relation(
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -99,5 +99,22 @@ object DataSourceV2Relation {
   def create(table: Table, options: Map[String, String]): DataSourceV2Relation = {
     val output = table.schema().toAttributes
     DataSourceV2Relation(table, output, options)
+  }
+
+  /**
+   * This is used to transform data source v2 statistics to logical.Statistics.
+   */
+  def transformV2Stats(
+      v2Statistics: V2Statistics,
+      defaultRowCount: Option[BigInt],
+      defaultSizeInBytes: Long): Statistics = {
+    val numRows: Option[BigInt] = if (v2Statistics.numRows().isPresent) {
+      Some(v2Statistics.numRows().getAsLong)
+    } else {
+      defaultRowCount
+    }
+    Statistics(
+      sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
+      rowCount = numRows)
   }
 }
