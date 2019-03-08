@@ -495,8 +495,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
 
-    // Only one block should be returned which has corruption after maxBytesInFlight/3 because the
-    // other block will detect corruption on first fetch, and then get added to the queue again for
+    // We'll get back the block which has corruption after maxBytesInFlight/3 because the other
+    // block will detect corruption on first fetch, and then get added to the queue again for
     // a retry
     val (id, st) = iterator.next()
     assert(id === shuffleBlockId2)
@@ -507,7 +507,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     }
 
     // Following will succeed as it reads part of the stream which is not corrupt. This will read
-    // maxBytesInFlight/3 bytes from first stream and remaining from the second stream
+    // maxBytesInFlight/3 bytes from the portion copied into memory, and remaining from the
+    // underlying stream
     new DataInputStream(st).readFully(
       new Array[Byte](streamNotCorruptTill), 0, streamNotCorruptTill)
 

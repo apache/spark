@@ -584,7 +584,9 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[storage] def throwFetchFailedException(
-      blockId: BlockId, address: BlockManagerId, e: Throwable) = {
+      blockId: BlockId,
+      address: BlockManagerId,
+      e: Throwable) = {
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
         throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, e)
@@ -605,7 +607,7 @@ private class BufferReleasingInputStream(
     private val iterator: ShuffleBlockFetcherIterator,
     private val blockId: BlockId,
     private val address: BlockManagerId,
-    private val streamCompressedOrEncrypted: Boolean)
+    private val detectCorruption: Boolean)
   extends InputStream {
   private[this] var closed = false
 
@@ -613,7 +615,7 @@ private class BufferReleasingInputStream(
     try {
       delegate.read()
     } catch {
-      case e: IOException if streamCompressedOrEncrypted =>
+      case e: IOException if detectCorruption =>
         IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }
@@ -635,7 +637,7 @@ private class BufferReleasingInputStream(
     try {
       delegate.skip(n)
     } catch {
-      case e: IOException if streamCompressedOrEncrypted =>
+      case e: IOException if detectCorruption =>
         IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }
@@ -647,7 +649,7 @@ private class BufferReleasingInputStream(
     try {
       delegate.read(b)
     } catch {
-      case e: IOException if streamCompressedOrEncrypted =>
+      case e: IOException if detectCorruption =>
         IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }
@@ -657,7 +659,7 @@ private class BufferReleasingInputStream(
     try {
       delegate.read(b, off, len)
     } catch {
-      case e: IOException if streamCompressedOrEncrypted =>
+      case e: IOException if detectCorruption =>
         IOUtils.closeQuietly(this)
         iterator.throwFetchFailedException(blockId, address, e)
     }

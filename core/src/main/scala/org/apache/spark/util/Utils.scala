@@ -347,7 +347,7 @@ private[spark] object Utils extends Logging {
   def copyStreamUpTo(in: InputStream, maxSize: Long): (Boolean, InputStream) = {
     var count = 0L
     val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
-    val streamCopied = tryWithSafeFinally {
+    val fullyCopied = tryWithSafeFinally {
       val bufSize = Math.min(8192L, maxSize)
       val buf = new Array[Byte](bufSize.toInt)
       var n = 0
@@ -368,10 +368,10 @@ private[spark] object Utils extends Logging {
         out.close()
       }
     }
-    if (streamCopied) {
-      (streamCopied, out.toChunkedByteBuffer.toInputStream(dispose = true))
+    if (fullyCopied) {
+      (fullyCopied, out.toChunkedByteBuffer.toInputStream(dispose = true))
     } else {
-      (streamCopied, new SequenceInputStream(
+      (fullyCopied, new SequenceInputStream(
         out.toChunkedByteBuffer.toInputStream(dispose = true), in))
     }
   }

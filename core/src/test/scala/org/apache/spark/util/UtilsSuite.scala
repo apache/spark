@@ -220,7 +220,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     val limit = 1000
     // testing for inputLength less than, equal to and greater than limit
-    List(998, 999, 1000, 1001, 1002).foreach { inputLength =>
+    (limit - 2 to limit + 2).foreach { inputLength =>
       val in = new ByteArrayInputStream(bytes.take(inputLength))
       val (fullyCopied: Boolean, mergedStream: InputStream) = Utils.copyStreamUpTo(in, limit)
       try {
