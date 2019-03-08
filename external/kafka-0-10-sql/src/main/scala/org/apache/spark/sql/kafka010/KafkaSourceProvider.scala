@@ -27,6 +27,7 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
@@ -34,7 +35,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWrite, SupportsOutputMode}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -362,15 +363,13 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
-      new WriteBuilder with SupportsOutputMode {
+      new WriteBuilder {
         private var inputSchema: StructType = _
 
         override def withInputDataSchema(schema: StructType): WriteBuilder = {
           this.inputSchema = schema
           this
         }
-
-        override def outputMode(mode: OutputMode): WriteBuilder = this
 
         override def buildForStreaming(): StreamingWrite = {
           import scala.collection.JavaConverters._

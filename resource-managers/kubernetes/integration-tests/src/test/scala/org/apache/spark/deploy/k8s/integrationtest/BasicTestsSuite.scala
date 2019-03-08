@@ -52,6 +52,9 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("Run SparkPi with an argument.", k8sTestTag) {
+    // This additional configuration with snappy is for SPARK-26995
+    sparkAppConf
+      .set("spark.io.compression.codec", "snappy")
     runSparkPiAndVerifyCompletion(appArgs = Array("5"))
   }
 

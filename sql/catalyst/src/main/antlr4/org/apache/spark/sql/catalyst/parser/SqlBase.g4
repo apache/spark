@@ -78,11 +78,11 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
-    | CREATE DATABASE (IF NOT EXISTS)? identifier
+    | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
-    | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
-    | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
+    | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitionColumnNames=identifierList) |
@@ -163,9 +163,10 @@ statement
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
+    | (DESC | DESCRIBE) QUERY? queryToDesc                             #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE tableIdentifier
@@ -255,6 +256,10 @@ query
     : ctes? queryNoWith
     ;
 
+queryToDesc
+    : queryTerm queryOrganization
+    ;
+
 insertInto
     : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?                              #insertOverwriteTable
     | INSERT INTO TABLE? tableIdentifier partitionSpec?                                                     #insertIntoTable
@@ -272,6 +277,11 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
+    ;
+
+database
+    : DATABASE
+    | SCHEMA
     ;
 
 describeFuncName
@@ -750,7 +760,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// NOTE: You must follow a rule below when you add a new ANTLR taken in this file:
+// NOTE: You must follow a rule below when you add a new ANTLR token in this file:
 //  - All the ANTLR tokens = UNION(`ansiReserved`, `ansiNonReserved`) = UNION(`defaultReserved`, `nonReserved`)
 //
 // Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
@@ -780,7 +790,7 @@ ansiNonReserved
     | INPUTFORMAT | INSERT | INTERVAL | ITEMS | KEYS | LAST | LATERAL | LAZY | LIKE | LIMIT | LINES | LIST | LOAD
     | LOCAL | LOCATION | LOCK | LOCKS | LOGICAL | MACRO | MAP | MSCK | NO | NULLS | OF | OPTION | OPTIONS | OUT
     | OUTPUTFORMAT | OVER | OVERWRITE | PARTITION | PARTITIONED | PARTITIONS | PERCENT | PERCENTLIT | PIVOT | PRECEDING
-    | PRINCIPALS | PURGE | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFRESH | RENAME | REPAIR | REPLACE
+    | PRINCIPALS | PURGE | QUERY | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFRESH | RENAME | REPAIR | REPLACE
     | RESET | RESTRICT | REVOKE | RLIKE | ROLE | ROLES | ROLLBACK | ROLLUP | ROW | ROWS | SCHEMA | SEPARATED | SERDE
     | SERDEPROPERTIES | SET | SETS | SHOW | SKEWED | SORT | SORTED | START | STATISTICS | STORED | STRATIFY | STRUCT
     | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY | TERMINATED | TOUCH | TRANSACTION | TRANSACTIONS | TRANSFORM
@@ -805,7 +815,7 @@ nonReserved
     | LATERAL | LAZY | LEADING | LIKE | LIMIT | LINES | LIST | LOAD | LOCAL | LOCATION | LOCK | LOCKS | LOGICAL | MACRO
     | MAP | MSCK | NO | NOT | NULL | NULLS | OF | ONLY | OPTION | OPTIONS | OR | ORDER | OUT | OUTER | OUTPUTFORMAT
     | OVER | OVERLAPS | OVERWRITE | PARTITION | PARTITIONED | PARTITIONS | PERCENTLIT | PIVOT | POSITION | PRECEDING
-    | PRIMARY | PRINCIPALS | PURGE | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFERENCES | REFRESH
+    | PRIMARY | PRINCIPALS | PURGE | QUERY | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFERENCES | REFRESH
     | RENAME | REPAIR | REPLACE | RESET | RESTRICT | REVOKE | RLIKE | ROLE | ROLES | ROLLBACK | ROLLUP | ROW | ROWS
     | SELECT | SEPARATED | SERDE | SERDEPROPERTIES | SESSION_USER | SET | SETS | SHOW | SKEWED | SOME | SORT | SORTED
     | START | STATISTICS | STORED | STRATIFY | STRUCT | TABLE | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY
@@ -883,6 +893,7 @@ WITH: 'WITH';
 VALUES: 'VALUES';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
+QUERY: 'QUERY';
 DIRECTORY: 'DIRECTORY';
 VIEW: 'VIEW';
 REPLACE: 'REPLACE';
@@ -1014,7 +1025,8 @@ SORTED: 'SORTED';
 PURGE: 'PURGE';
 INPUTFORMAT: 'INPUTFORMAT';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
-DATABASE: 'DATABASE' | 'SCHEMA';
+SCHEMA: 'SCHEMA';
+DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';

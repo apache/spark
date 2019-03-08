@@ -15,29 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.execution.benchmark
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-
-class KafkaSecurityHelperSuite extends SparkFunSuite with KafkaDelegationTokenTest {
-  test("isTokenAvailable without token should return false") {
-    assert(!KafkaSecurityHelper.isTokenAvailable())
-  }
-
-  test("isTokenAvailable with token should return true") {
-    addTokenToUGI()
-
-    assert(KafkaSecurityHelper.isTokenAvailable())
-  }
-
-  test("getTokenJaasParams with token should return scram module") {
-    addTokenToUGI()
-
-    val jaasParams = KafkaSecurityHelper.getTokenJaasParams(new SparkConf())
-
-    assert(jaasParams.contains("ScramLoginModule required"))
-    assert(jaasParams.contains("tokenauth=true"))
-    assert(jaasParams.contains(tokenId))
-    assert(jaasParams.contains(tokenPassword))
-  }
+/**
+ * Synthetic benchmark for nested schema pruning performance for ORC V2 datasource.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/OrcV2NestedSchemaPruningBenchmark-results.txt".
+ * }}}
+ */
+object OrcV2NestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
+  override val dataSourceName: String = "orc"
+  override val benchmarkName: String = "Nested Schema Pruning Benchmark For ORC v2"
 }

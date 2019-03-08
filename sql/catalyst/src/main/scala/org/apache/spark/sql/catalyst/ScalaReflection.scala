@@ -21,10 +21,11 @@ import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
+import org.apache.spark.sql.catalyst.SerializerBuildHelper._
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -136,7 +137,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def deserializerForType(tpe: `Type`): Expression = {
     val clsName = getClassNameFromType(tpe)
-    val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
+    val walkedTypePath = new WalkedTypePath().recordRoot(clsName)
     val Schema(dataType, nullable) = schemaFor(tpe)
 
     // Assumes we are deserializing the first column of a row.
@@ -156,14 +157,14 @@ object ScalaReflection extends ScalaReflection {
   private def deserializerFor(
       tpe: `Type`,
       path: Expression,
-      walkedTypePath: Seq[String]): Expression = cleanUpReflectionObjects {
+      walkedTypePath: WalkedTypePath): Expression = cleanUpReflectionObjects {
     tpe.dealias match {
       case t if !dataTypeFor(t).isInstanceOf[ObjectType] => path
 
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         val className = getClassNameFromType(optType)
-        val newTypePath = s"""- option value class: "$className"""" +: walkedTypePath
+        val newTypePath = walkedTypePath.recordOption(className)
         WrapOption(deserializerFor(optType, path, newTypePath), dataTypeFor(optType))
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
@@ -194,6 +195,9 @@ object ScalaReflection extends ScalaReflection {
         createDeserializerForTypesSupportValueOf(path,
           classOf[java.lang.Boolean])
 
+      case t if t <:< localTypeOf[java.time.LocalDate] =>
+        createDeserializerForLocalDate(path)
+
       case t if t <:< localTypeOf[java.sql.Date] =>
         createDeserializerForSqlDate(path)
 
@@ -222,7 +226,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
-        val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
+        val newTypePath = walkedTypePath.recordArray(className)
 
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
@@ -257,7 +261,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
-        val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
+        val newTypePath = walkedTypePath.recordArray(className)
 
         val mapFunction: Expression => Expression = element => {
           deserializerForWithNullSafetyAndUpcast(
@@ -283,8 +287,7 @@ object ScalaReflection extends ScalaReflection {
         val classNameForKey = getClassNameFromType(keyType)
         val classNameForValue = getClassNameFromType(valueType)
 
-        val newTypePath = (s"""- map key class: "${classNameForKey}"""" +
-          s""", value class: "${classNameForValue}"""") +: walkedTypePath
+        val newTypePath = walkedTypePath.recordMap(classNameForKey, classNameForValue)
 
         UnresolvedCatalystToExternalMap(
           path,
@@ -319,28 +322,24 @@ object ScalaReflection extends ScalaReflection {
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
           val Schema(dataType, nullable) = schemaFor(fieldType)
           val clsName = getClassNameFromType(fieldType)
-          val newTypePath = (s"""- field (class: "$clsName", """ +
-              s"""name: "$fieldName")""") +: walkedTypePath
+          val newTypePath = walkedTypePath.recordField(clsName, fieldName)
 
           // For tuples, we based grab the inner fields by ordinal instead of name.
-          deserializerForWithNullSafety(
-            path,
-            dataType,
+          val newPath = if (cls.getName startsWith "scala.Tuple") {
+            deserializerFor(
+              fieldType,
+              addToPathOrdinal(path, i, dataType, newTypePath),
+              newTypePath)
+          } else {
+            deserializerFor(
+              fieldType,
+              addToPath(path, fieldName, dataType, newTypePath),
+              newTypePath)
+          }
+          expressionWithNullSafety(
+            newPath,
             nullable = nullable,
-            newTypePath,
-            (expr, typePath) => {
-              if (cls.getName startsWith "scala.Tuple") {
-                deserializerFor(
-                  fieldType,
-                  addToPathOrdinal(expr, i, dataType, typePath),
-                  newTypePath)
-              } else {
-                deserializerFor(
-                  fieldType,
-                  addToPath(expr, fieldName, dataType, typePath),
-                  newTypePath)
-              }
-            })
+            newTypePath)
         }
 
         val newInstance = NewInstance(cls, arguments, ObjectType(cls), propagateNull = false)
@@ -368,7 +367,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def serializerForType(tpe: `Type`): Expression = ScalaReflection.cleanUpReflectionObjects {
     val clsName = getClassNameFromType(tpe)
-    val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
+    val walkedTypePath = new WalkedTypePath().recordRoot(clsName)
 
     // The input object to `ExpressionEncoder` is located at first column of an row.
     val isPrimitive = tpe.typeSymbol.asClass.isPrimitive
@@ -384,38 +383,28 @@ object ScalaReflection extends ScalaReflection {
   private def serializerFor(
       inputObject: Expression,
       tpe: `Type`,
-      walkedTypePath: Seq[String],
+      walkedTypePath: WalkedTypePath,
       seenTypeSet: Set[`Type`] = Set.empty): Expression = cleanUpReflectionObjects {
 
     def toCatalystArray(input: Expression, elementType: `Type`): Expression = {
       dataTypeFor(elementType) match {
         case dt: ObjectType =>
           val clsName = getClassNameFromType(elementType)
-          val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
-          MapObjects(serializerFor(_, elementType, newPath, seenTypeSet), input, dt)
+          val newPath = walkedTypePath.recordArray(clsName)
+          createSerializerForMapObjects(input, dt,
+            serializerFor(_, elementType, newPath, seenTypeSet))
 
-         case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
-                    FloatType | DoubleType) =>
+        case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
+                   FloatType | DoubleType) =>
           val cls = input.dataType.asInstanceOf[ObjectType].cls
           if (cls.isArray && cls.getComponentType.isPrimitive) {
-            StaticInvoke(
-              classOf[UnsafeArrayData],
-              ArrayType(dt, false),
-              "fromPrimitiveArray",
-              input :: Nil,
-              returnNullable = false)
+            createSerializerForPrimitiveArray(input, dt)
           } else {
-            NewInstance(
-              classOf[GenericArrayData],
-              input :: Nil,
-              dataType = ArrayType(dt, schemaFor(elementType).nullable))
+            createSerializerForGenericArray(input, dt, nullable = schemaFor(elementType).nullable)
           }
 
         case dt =>
-          NewInstance(
-            classOf[GenericArrayData],
-            input :: Nil,
-            dataType = ArrayType(dt, schemaFor(elementType).nullable))
+          createSerializerForGenericArray(input, dt, nullable = schemaFor(elementType).nullable)
       }
     }
 
@@ -425,7 +414,7 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         val className = getClassNameFromType(optType)
-        val newPath = s"""- option value class: "$className"""" +: walkedTypePath
+        val newPath = walkedTypePath.recordOption(className)
         val unwrapped = UnwrapOption(dataTypeFor(optType), inputObject)
         serializerFor(unwrapped, optType, newPath, seenTypeSet)
 
@@ -444,17 +433,20 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val keyClsName = getClassNameFromType(keyType)
         val valueClsName = getClassNameFromType(valueType)
-        val keyPath = s"""- map key class: "$keyClsName"""" +: walkedTypePath
-        val valuePath = s"""- map value class: "$valueClsName"""" +: walkedTypePath
+        val keyPath = walkedTypePath.recordKeyForMap(keyClsName)
+        val valuePath = walkedTypePath.recordValueForMap(valueClsName)
 
-        ExternalMapToCatalyst(
+        createSerializerForMap(
           inputObject,
-          dataTypeFor(keyType),
-          serializerFor(_, keyType, keyPath, seenTypeSet),
-          keyNullable = !keyType.typeSymbol.asClass.isPrimitive,
-          dataTypeFor(valueType),
-          serializerFor(_, valueType, valuePath, seenTypeSet),
-          valueNullable = !valueType.typeSymbol.asClass.isPrimitive)
+          MapElementInformation(
+            dataTypeFor(keyType),
+            nullable = !keyType.typeSymbol.asClass.isPrimitive,
+            serializerFor(_, keyType, keyPath, seenTypeSet)),
+          MapElementInformation(
+            dataTypeFor(valueType),
+            nullable = !valueType.typeSymbol.asClass.isPrimitive,
+            serializerFor(_, valueType, valuePath, seenTypeSet))
+        )
 
       case t if t <:< localTypeOf[scala.collection.Set[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
@@ -469,102 +461,47 @@ object ScalaReflection extends ScalaReflection {
 
         toCatalystArray(newInput, elementType)
 
-      case t if t <:< localTypeOf[String] =>
-        StaticInvoke(
-          classOf[UTF8String],
-          StringType,
-          "fromString",
-          inputObject :: Nil,
-          returnNullable = false)
+      case t if t <:< localTypeOf[String] => createSerializerForString(inputObject)
 
-      case t if t <:< localTypeOf[java.time.Instant] =>
-        StaticInvoke(
-          DateTimeUtils.getClass,
-          TimestampType,
-          "instantToMicros",
-          inputObject :: Nil,
-          returnNullable = false)
+      case t if t <:< localTypeOf[java.time.Instant] => createSerializerForJavaInstant(inputObject)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
-        StaticInvoke(
-          DateTimeUtils.getClass,
-          TimestampType,
-          "fromJavaTimestamp",
-          inputObject :: Nil,
-          returnNullable = false)
+        createSerializerForSqlTimestamp(inputObject)
 
-      case t if t <:< localTypeOf[java.sql.Date] =>
-        StaticInvoke(
-          DateTimeUtils.getClass,
-          DateType,
-          "fromJavaDate",
-          inputObject :: Nil,
-          returnNullable = false)
+      case t if t <:< localTypeOf[java.time.LocalDate] =>
+        createSerializerForJavaLocalDate(inputObject)
 
-      case t if t <:< localTypeOf[BigDecimal] =>
-        StaticInvoke(
-          Decimal.getClass,
-          DecimalType.SYSTEM_DEFAULT,
-          "apply",
-          inputObject :: Nil,
-          returnNullable = false)
+      case t if t <:< localTypeOf[java.sql.Date] => createSerializerForSqlDate(inputObject)
+
+      case t if t <:< localTypeOf[BigDecimal] => createSerializerForScalaBigDecimal(inputObject)
 
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
-        StaticInvoke(
-          Decimal.getClass,
-          DecimalType.SYSTEM_DEFAULT,
-          "apply",
-          inputObject :: Nil,
-          returnNullable = false)
+        createSerializerForJavaBigDecimal(inputObject)
 
       case t if t <:< localTypeOf[java.math.BigInteger] =>
-        StaticInvoke(
-          Decimal.getClass,
-          DecimalType.BigIntDecimal,
-          "apply",
-          inputObject :: Nil,
-          returnNullable = false)
+        createSerializerForJavaBigInteger(inputObject)
 
-      case t if t <:< localTypeOf[scala.math.BigInt] =>
-        StaticInvoke(
-          Decimal.getClass,
-          DecimalType.BigIntDecimal,
-          "apply",
-          inputObject :: Nil,
-          returnNullable = false)
+      case t if t <:< localTypeOf[scala.math.BigInt] => createSerializerForScalaBigInt(inputObject)
 
-      case t if t <:< localTypeOf[java.lang.Integer] =>
-        Invoke(inputObject, "intValue", IntegerType)
-      case t if t <:< localTypeOf[java.lang.Long] =>
-        Invoke(inputObject, "longValue", LongType)
-      case t if t <:< localTypeOf[java.lang.Double] =>
-        Invoke(inputObject, "doubleValue", DoubleType)
-      case t if t <:< localTypeOf[java.lang.Float] =>
-        Invoke(inputObject, "floatValue", FloatType)
-      case t if t <:< localTypeOf[java.lang.Short] =>
-        Invoke(inputObject, "shortValue", ShortType)
-      case t if t <:< localTypeOf[java.lang.Byte] =>
-        Invoke(inputObject, "byteValue", ByteType)
-      case t if t <:< localTypeOf[java.lang.Boolean] =>
-        Invoke(inputObject, "booleanValue", BooleanType)
+      case t if t <:< localTypeOf[java.lang.Integer] => createSerializerForInteger(inputObject)
+      case t if t <:< localTypeOf[java.lang.Long] => createSerializerForLong(inputObject)
+      case t if t <:< localTypeOf[java.lang.Double] => createSerializerForDouble(inputObject)
+      case t if t <:< localTypeOf[java.lang.Float] => createSerializerForFloat(inputObject)
+      case t if t <:< localTypeOf[java.lang.Short] => createSerializerForShort(inputObject)
+      case t if t <:< localTypeOf[java.lang.Byte] => createSerializerForByte(inputObject)
+      case t if t <:< localTypeOf[java.lang.Boolean] => createSerializerForBoolean(inputObject)
 
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t)
           .getAnnotation(classOf[SQLUserDefinedType]).udt().getConstructor().newInstance()
-        val obj = NewInstance(
-          udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
-          Nil,
-          dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
-        Invoke(obj, "serialize", udt, inputObject :: Nil)
+        val udtClass = udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()
+        createSerializerForUserDefinedType(inputObject, udt, udtClass)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
         val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
           newInstance().asInstanceOf[UserDefinedType[_]]
-        val obj = NewInstance(
-          udt.getClass,
-          Nil,
-          dataType = ObjectType(udt.getClass))
-        Invoke(obj, "serialize", udt, inputObject :: Nil)
+        val udtClass = udt.getClass
+        createSerializerForUserDefinedType(inputObject, udt, udtClass)
 
       case t if definedByConstructorParams(t) =>
         if (seenTypeSet.contains(t)) {
@@ -573,10 +510,10 @@ object ScalaReflection extends ScalaReflection {
         }
 
         val params = getConstructorParameters(t)
-        val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
+        val fields = params.map { case (fieldName, fieldType) =>
           if (javaKeywords.contains(fieldName)) {
             throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
-              "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
+              "cannot be used as field name\n" + walkedTypePath)
           }
 
           // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
@@ -586,16 +523,14 @@ object ScalaReflection extends ScalaReflection {
           val fieldValue = Invoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
             returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
           val clsName = getClassNameFromType(fieldType)
-          val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
-          expressions.Literal(fieldName) ::
-          serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t) :: Nil
-        })
-        val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
-        expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
+          val newPath = walkedTypePath.recordField(clsName, fieldName)
+          (fieldName, serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t))
+        }
+        createSerializerForObject(inputObject, fields)
 
-      case other =>
+      case _ =>
         throw new UnsupportedOperationException(
-          s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
+          s"No Encoder found for $tpe\n" + walkedTypePath)
     }
   }
 
@@ -704,6 +639,7 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.time.Instant] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
+      case t if t <:< localTypeOf[java.time.LocalDate] => Schema(DateType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Date] => Schema(DateType, nullable = true)
       case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.math.BigDecimal] =>

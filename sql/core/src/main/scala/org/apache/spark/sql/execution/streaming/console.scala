@@ -21,9 +21,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWrite, SupportsOutputMode}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.sources.v2.writer.{SupportsTruncate, WriteBuilder}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.types.StructType
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
@@ -64,7 +63,7 @@ object ConsoleTable extends Table with SupportsStreamingWrite {
   override def schema(): StructType = StructType(Nil)
 
   override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
-    new WriteBuilder with SupportsOutputMode {
+    new WriteBuilder with SupportsTruncate {
       private var inputSchema: StructType = _
 
       override def withInputDataSchema(schema: StructType): WriteBuilder = {
@@ -72,7 +71,8 @@ object ConsoleTable extends Table with SupportsStreamingWrite {
         this
       }
 
-      override def outputMode(mode: OutputMode): WriteBuilder = this
+      // Do nothing for truncate. Console sink is special that it just prints all the records.
+      override def truncate(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
         assert(inputSchema != null)

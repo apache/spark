@@ -23,11 +23,12 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -238,6 +239,52 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       case TypeCheckResult.TypeCheckFailure(msg) =>
         assert(msg.contains("function in does not support ordering on type map"))
       case _ => fail("In should not work on map type")
+    }
+  }
+
+  test("switch statements in InSet for bytes, shorts, ints, dates") {
+    val byteValues = Set[Any](1.toByte, 2.toByte, Byte.MinValue, Byte.MaxValue)
+    val shortValues = Set[Any](-10.toShort, 20.toShort, Short.MinValue, Short.MaxValue)
+    val intValues = Set[Any](20, -100, 30, Int.MinValue, Int.MaxValue)
+    val dateValues = Set[Any](
+      CatalystTypeConverters.convertToCatalyst(Date.valueOf("2017-01-01")),
+      CatalystTypeConverters.convertToCatalyst(Date.valueOf("1950-01-02")))
+
+    def check(presentValue: Expression, absentValue: Expression, values: Set[Any]): Unit = {
+      require(presentValue.dataType == absentValue.dataType)
+
+      val nullLiteral = Literal(null, presentValue.dataType)
+
+      checkEvaluation(InSet(nullLiteral, values), expected = null)
+      checkEvaluation(InSet(nullLiteral, values + null), expected = null)
+      checkEvaluation(InSet(presentValue, values), expected = true)
+      checkEvaluation(InSet(presentValue, values + null), expected = true)
+      checkEvaluation(InSet(absentValue, values), expected = false)
+      checkEvaluation(InSet(absentValue, values + null), expected = null)
+    }
+
+    def checkAllTypes(): Unit = {
+      check(presentValue = Literal(2.toByte), absentValue = Literal(3.toByte), byteValues)
+      check(presentValue = Literal(Byte.MinValue), absentValue = Literal(5.toByte), byteValues)
+      check(presentValue = Literal(20.toShort), absentValue = Literal(-14.toShort), shortValues)
+      check(presentValue = Literal(Short.MaxValue), absentValue = Literal(30.toShort), shortValues)
+      check(presentValue = Literal(20), absentValue = Literal(-14), intValues)
+      check(presentValue = Literal(Int.MinValue), absentValue = Literal(2), intValues)
+      check(
+        presentValue = Literal(Date.valueOf("2017-01-01")),
+        absentValue = Literal(Date.valueOf("2017-01-02")),
+        dateValues)
+      check(
+        presentValue = Literal(Date.valueOf("1950-01-02")),
+        absentValue = Literal(Date.valueOf("2017-10-02")),
+        dateValues)
+    }
+
+    withSQLConf(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "0") {
+      checkAllTypes()
+    }
+    withSQLConf(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "20") {
+      checkAllTypes()
     }
   }
 

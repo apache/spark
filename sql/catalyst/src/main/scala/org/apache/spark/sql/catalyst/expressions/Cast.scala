@@ -21,7 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, WalkedTypePath}
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -233,7 +233,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
   private lazy val dateFormatter = DateFormatter()
-  private lazy val timestampFormatter = TimestampFormatter(timeZone)
+  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(timeZone)
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -1378,7 +1378,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
  * Cast the child expression to the target data type, but will throw error if the cast might
  * truncate, e.g. long -> int, timestamp -> data.
  */
-case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String])
+case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
 }
