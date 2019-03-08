@@ -664,18 +664,16 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
       lambda = 0))
       coefficients
-      $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
                           s0
-      (Intercept)  2.7355261
-      data.V3     -0.5734389
-      data.V4      0.8911736
-      data.V5     -0.3878645
-      data.V6     -0.8060570
-
+      (Intercept)  2.7114519
+      data.V3     -0.5667801
+      data.V4      0.8818754
+      data.V5     -0.3882505
+      data.V6     -0.7891183
      */
-    val coefficientsR = Vectors.dense(-0.5734389, 0.8911736, -0.3878645, -0.8060570)
-    val interceptR = 2.7355261
+    val coefficientsR = Vectors.dense(-0.5667801, 0.8818754, -0.3882505, -0.7891183)
+    val interceptR = 2.7114519
 
     assert(model1.intercept ~== interceptR relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR relTol 1E-3)
@@ -810,13 +808,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       5 x 1 sparse Matrix of class "dgCMatrix"
                           s0
       (Intercept)  .
-      data.V3     -0.3448461
-      data.V4      1.2776453
-      data.V5     -0.3539178
-      data.V6     -0.7469384
+      data.V3     -0.3451301
+      data.V4      1.2721785
+      data.V5     -0.3537743
+      data.V6     -0.7315618
 
      */
-    val coefficientsR = Vectors.dense(-0.3448461, 1.2776453, -0.3539178, -0.7469384)
+    val coefficientsR = Vectors.dense(-0.3451301, 1.2721785, -0.3537743, -0.7315618)
 
     assert(model1.intercept ~== 0.0 relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR relTol 1E-2)
@@ -877,15 +875,15 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
-      (Intercept) -0.06775980
+      (Intercept) -0.07157076
       data.V3      .
       data.V4      .
-      data.V5     -0.03933146
-      data.V6     -0.03047580
+      data.V5     -0.04058143
+      data.V6     -0.02322760
 
      */
-    val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.03933146, -0.03047580)
-    val interceptRStd = -0.06775980
+    val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.04058143, -0.02322760)
+    val interceptRStd = -0.07157076
 
     assert(model1.intercept ~== interceptRStd relTol 1E-2)
     assert(model1.coefficients ~= coefficientsRStd absTol 2E-2)
@@ -904,15 +902,15 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
                           s0
-      (Intercept)  0.3544768
+      (Intercept)  0.3602029
       data.V3      .
       data.V4      .
-      data.V5     -0.1626191
+      data.V5     -0.1635707
       data.V6      .
 
      */
-    val coefficientsR = Vectors.dense(0.0, 0.0, -0.1626191, 0.0)
-    val interceptR = 0.3544768
+    val coefficientsR = Vectors.dense(0.0, 0.0, -0.1635707, 0.0)
+    val interceptR = 0.3602029
 
     assert(model2.intercept ~== interceptR relTol 1E-2)
     assert(model2.coefficients ~== coefficientsR absTol 1E-3)
@@ -945,8 +943,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       (Intercept)  .
       data.V3      .
       data.V4      .
-      data.V5     -0.04967635
-      data.V6     -0.04757757
+      data.V5     -0.05164150
+      data.V6     -0.04079129
 
       coefficients
       5 x 1 sparse Matrix of class "dgCMatrix"
@@ -954,13 +952,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       (Intercept)  .
       data.V3      .
       data.V4      .
-      data.V5     -0.08433195
+      data.V5     -0.08408014
       data.V6      .
 
      */
-    val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.04967635, -0.04757757)
+    val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.05164150, -0.04079129)
 
-    val coefficientsR = Vectors.dense(0.0, 0.0, -0.08433195, 0.0)
+    val coefficientsR = Vectors.dense(0.0, 0.0, -0.08408014, 0.0)
 
     assert(model1.intercept ~== 0.0 absTol 1E-3)
     assert(model1.coefficients ~= coefficientsRStd absTol 1E-3)
@@ -992,26 +990,26 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       coefficientsStd
       5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
-      (Intercept)  0.12707703
-      data.V3     -0.06980967
-      data.V4      0.10803933
-      data.V5     -0.04800404
-      data.V6     -0.10165096
+      (Intercept)  0.12943705
+      data.V3     -0.06979418
+      data.V4      0.10691465
+      data.V5     -0.04835674
+      data.V6     -0.09939108
 
       coefficients
       5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
-      (Intercept)  0.46613016
-      data.V3     -0.04944529
-      data.V4      0.02326772
-      data.V5     -0.11362772
-      data.V6     -0.06312848
+      (Intercept)  0.47553535
+      data.V3     -0.05058465
+      data.V4      0.02296823
+      data.V5     -0.11368284
+      data.V6     -0.06309008
 
      */
-    val coefficientsRStd = Vectors.dense(-0.06980967, 0.10803933, -0.04800404, -0.10165096)
-    val interceptRStd = 0.12707703
-    val coefficientsR = Vectors.dense(-0.04944529, 0.02326772, -0.11362772, -0.06312848)
-    val interceptR = 0.46613016
+    val coefficientsRStd = Vectors.dense(-0.06979418, 0.10691465, -0.04835674, -0.09939108)
+    val interceptRStd = 0.12943705
+    val coefficientsR = Vectors.dense(-0.05058465, 0.02296823, -0.11368284, -0.06309008)
+    val interceptR = 0.47553535
 
     assert(model1.intercept ~== interceptRStd relTol 1E-3)
     assert(model1.coefficients ~= coefficientsRStd relTol 1E-3)
@@ -1078,23 +1076,23 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
       (Intercept)  .
-      data.V3     -0.06000152
-      data.V4      0.12598737
-      data.V5     -0.04669009
-      data.V6     -0.09941025
+      data.V3     -0.05998915
+      data.V4      0.12541885
+      data.V5     -0.04697872
+      data.V6     -0.09713973
 
       coefficients
       5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
       (Intercept)  .
-      data.V3     -0.005482255
-      data.V4      0.048106338
-      data.V5     -0.093411640
-      data.V6     -0.054149798
+      data.V3     -0.005927466
+      data.V4      0.048313659
+      data.V5     -0.092956052
+      data.V6     -0.053974895
 
      */
-    val coefficientsRStd = Vectors.dense(-0.06000152, 0.12598737, -0.04669009, -0.09941025)
-    val coefficientsR = Vectors.dense(-0.005482255, 0.048106338, -0.093411640, -0.054149798)
+    val coefficientsRStd = Vectors.dense(-0.05998915, 0.12541885, -0.04697872, -0.09713973)
+    val coefficientsR = Vectors.dense(-0.005927466, 0.048313659, -0.092956052, -0.053974895)
 
     assert(model1.intercept ~== 0.0 absTol 1E-3)
     assert(model1.coefficients ~= coefficientsRStd relTol 1E-2)
@@ -1155,31 +1153,31 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       coefficientsStd
       5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
-      (Intercept)  0.49991996
-      data.V3     -0.04131110
+      (Intercept)  0.51344133
+      data.V3     -0.04395595
       data.V4      .
-      data.V5     -0.08585233
-      data.V6     -0.15875400
+      data.V5     -0.08699271
+      data.V6     -0.15249200
 
       coefficients
       5 x 1 sparse Matrix of class "dgCMatrix"
                           s0
-      (Intercept)  0.5024256
+      (Intercept)  0.50936159
       data.V3      .
       data.V4      .
-      data.V5     -0.1846038
-      data.V6     -0.0559614
+      data.V5     -0.18569346
+      data.V6     -0.05625862
 
      */
-    val coefficientsRStd = Vectors.dense(-0.04131110, 0.0, -0.08585233, -0.15875400)
-    val interceptRStd = 0.49991996
-    val coefficientsR = Vectors.dense(0.0, 0.0, -0.1846038, -0.0559614)
-    val interceptR = 0.5024256
+    val coefficientsRStd = Vectors.dense(-0.04395595, 0.0, -0.08699271, -0.15249200)
+    val interceptRStd = 0.51344133
+    val coefficientsR = Vectors.dense(0.0, 0.0, -0.18569346, -0.05625862)
+    val interceptR = 0.50936159
 
     assert(model1.intercept ~== interceptRStd relTol 6E-2)
     assert(model1.coefficients ~== coefficientsRStd absTol 5E-3)
     assert(model2.intercept ~== interceptR relTol 6E-3)
-    assert(model2.coefficients ~= coefficientsR absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR absTol 0.05)
   }
 
   test("binary logistic regression without intercept with ElasticNet regularization") {
