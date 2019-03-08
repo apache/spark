@@ -301,6 +301,7 @@ package object config {
       .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
         "hashing Block files into.")
       .intConf
+      .checkValue(_ > 0, "The number of subdirectories must be positive.")
       .createWithDefault(64)
 
   private[spark] val BLOCK_FAILURES_BEFORE_LOCATION_REFRESH =
