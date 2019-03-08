@@ -122,9 +122,7 @@ def _test():
         .appName("sql.avro.functions tests")\
         .getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.avro.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
