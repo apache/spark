@@ -93,3 +93,6 @@ case class ClearCacheCommand() extends RunnableCommand {
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
   override def makeCopy(newArgs: Array[AnyRef]): ClearCacheCommand = ClearCacheCommand()
 }
+
+/** Mark that the command can be skipped from cache lookup */
+trait IgnoreCachedData {}

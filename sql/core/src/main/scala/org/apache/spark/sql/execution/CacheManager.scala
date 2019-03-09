@@ -245,8 +245,8 @@ class CacheManager extends Logging {
       // However, we also want to keep the hint info after cache lookup. Here we skip the hint
       // node, so that the returned caching plan won't replace the hint node and drop the hint info
       // from the original plan.
-      case hint: ResolvedHint => hint
       case command: IgnoreCachedData => command
+      case hint: ResolvedHint => hint
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))

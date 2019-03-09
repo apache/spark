@@ -198,6 +198,3 @@ case class StreamingExplainCommand(
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 }
-
-/** Mark that the command can be skipped from cache lookup */
-trait IgnoreCachedData {}
