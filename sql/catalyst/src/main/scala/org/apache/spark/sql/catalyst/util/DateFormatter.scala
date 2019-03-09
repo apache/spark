@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{Instant, ZonedDateTime, ZoneId}
+import java.time.{Instant, ZonedDateTime, ZoneOffset}
 import java.time.temporal.TemporalAccessor
 import java.util.Locale
 import java.util.concurrent.TimeUnit.SECONDS
@@ -33,7 +33,7 @@ class Iso8601DateFormatter(
 
   @transient
   private lazy val formatter = getOrCreateFormatter(pattern, locale)
-  private val UTC = ZoneId.of("UTC")
+  private val UTC = ZoneOffset.UTC
 
   private def zonedDateTimeToDays(zonedDateTime: ZonedDateTime): Int = {
     val seconds = zonedDateTime.toEpochSecond
