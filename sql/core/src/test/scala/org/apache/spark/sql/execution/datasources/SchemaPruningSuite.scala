@@ -31,10 +31,10 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
 abstract class SchemaPruningSuite
-    extends QueryTest
-    with FileBasedDataSourceTest
-    with SchemaPruningTest
-    with SharedSQLContext {
+  extends QueryTest
+  with FileBasedDataSourceTest
+  with SchemaPruningTest
+  with SharedSQLContext {
   case class FullName(first: String, middle: String, last: String)
   case class Company(name: String, address: String)
   case class Employer(id: Int, company: Company)
