@@ -191,7 +191,7 @@ class CacheManager extends Logging {
     val cachedDataCopy = readLock {
       cachedData.asScala.clone()
     }
-    val needToRecache = cachedDataCopy.filter(cd => condition(cd))
+    val needToRecache = cachedDataCopy.filter(condition)
     needToRecache.map { cd =>
       writeLock {
         // Remove the cache entry before we create a new one, so that we can have a different
