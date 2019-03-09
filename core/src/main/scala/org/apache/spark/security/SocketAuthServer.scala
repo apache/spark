@@ -30,8 +30,8 @@ import org.apache.spark.util.ThreadUtils
 
 
 /**
- * Creates a server in the JVM to communicate with external processes (e.g., Python and R) for handling
- * one batch of data, with authentication and error handling.
+ * Creates a server in the JVM to communicate with external processes (e.g., Python and R) for
+ * handling one batch of data, with authentication and error handling.
  */
 private[spark] abstract class SocketAuthServer[T](
     authHelper: SocketAuthHelper,
