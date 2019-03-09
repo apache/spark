@@ -584,6 +584,7 @@ object SQLConf {
   }
 
   val HIVE_CASE_SENSITIVE_INFERENCE = buildConf("spark.sql.hive.caseSensitiveInferenceMode")
+    .internal()
     .doc("Sets the action to take when a case-sensitive schema cannot be read from a Hive " +
       "table's properties. Although Spark SQL itself is not case-sensitive, Hive compatible file " +
       "formats such as Parquet are. Spark SQL must use a case-preserving schema when querying " +
@@ -596,7 +597,7 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
-    .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
+    .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
