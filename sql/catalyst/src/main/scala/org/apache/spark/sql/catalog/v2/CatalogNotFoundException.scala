@@ -14,13 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalog.v2;
+package org.apache.spark.sql.catalog.v2
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.SparkException
+import org.apache.spark.annotation.Experimental
 
 @Experimental
-public class CatalogNotFoundException extends RuntimeException {
-  public CatalogNotFoundException(String message) {
-    super(message);
-  }
+class CatalogNotFoundException(message: String, cause: Throwable)
+  extends SparkException(message, cause) {
+
+  def this(message: String) = this(message, null)
 }
