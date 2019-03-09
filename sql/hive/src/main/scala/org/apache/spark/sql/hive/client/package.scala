@@ -40,7 +40,7 @@ package object client {
         "org.apache.calcite:calcite-avatica:1.3.0-incubating"),
       exclusions = Seq("org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    case object v1_0 extends HiveVersion("1.0.0",
+    case object v1_0 extends HiveVersion("1.0.1",
       exclusions = Seq("eigenbase:eigenbase-properties",
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "net.hydromatic:linq4j",
@@ -49,7 +49,7 @@ package object client {
     // The curator dependency was added to the exclusions here because it seems to confuse the ivy
     // library. org.apache.curator:curator is a pom dependency but ivy tries to find the jar for it,
     // and fails.
-    case object v1_1 extends HiveVersion("1.1.0",
+    case object v1_1 extends HiveVersion("1.1.1",
       exclusions = Seq("eigenbase:eigenbase-properties",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm",
