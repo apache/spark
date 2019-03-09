@@ -49,24 +49,15 @@ class Iso8601TimestampFormatter(
   @transient
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
-  private def zonedDateTimeToMicros(zonedDateTime: ZonedDateTime): Long = {
+  override def parse(s: String): Long = {
+    val parsed = formatter.parse(s)
+    val parsedZoneId = parsed.query(TemporalQueries.zone())
+    val zoneId = if (parsedZoneId == null) timeZone.toZoneId else parsedZoneId
+    val zonedDateTime = toZonedDateTime(parsed, zoneId)
     val epochSeconds = zonedDateTime.toEpochSecond
     val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
     Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
-  }
-
-  private def parsedToMicros(parsed: TemporalAccessor): Long = {
-    val parsedZoneId = parsed.query(TemporalQueries.zone())
-    val zoneId = if (parsedZoneId == null) timeZone.toZoneId else parsedZoneId
-    val zonedDateTime = toZonedDateTime(parsed, zoneId)
-
-    zonedDateTimeToMicros(zonedDateTime)
-  }
-
-  override def parse(s: String): Long = {
-    val parsed = formatter.parse(s)
-    parsedToMicros(parsed)
   }
 
   override def format(us: Long): String = {
