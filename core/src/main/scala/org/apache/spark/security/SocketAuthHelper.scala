@@ -118,8 +118,8 @@ private[spark] class SocketAuthHelper(conf: SparkConf) {
 
 private[spark] object SocketAuthHelper {
   def serveToStream(
-      threadName: String, authHelper: SocketAuthHelper)(writeFunc: OutputStream => Unit)
-    : Array[Any] = {
+      threadName: String,
+      authHelper: SocketAuthHelper)(writeFunc: OutputStream => Unit): Array[Any] = {
     val (port, secret) = SocketAuthServer.setupOneConnectionServer(authHelper, threadName) { s =>
       val out = new BufferedOutputStream(s.getOutputStream())
       Utils.tryWithSafeFinally {

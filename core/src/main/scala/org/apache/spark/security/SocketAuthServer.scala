@@ -30,8 +30,8 @@ import org.apache.spark.util.ThreadUtils
 
 
 /**
- * Creates a server in the jvm to communicate with python for handling one batch of data, with
- * authentication and error handling.
+ * Creates a server in the JVM to communicate with external processes (e.g., Python and R) for handling
+ * one batch of data, with authentication and error handling.
  */
 private[spark] abstract class SocketAuthServer[T](
     authHelper: SocketAuthHelper,
@@ -48,7 +48,7 @@ private[spark] abstract class SocketAuthServer[T](
 
   /**
    * Handle a connection which has already been authenticated.  Any error from this function
-   * will clean up this connection and the entire server, and get propogated to [[getResult]].
+   * will clean up this connection and the entire server, and get propagated to [[getResult]].
    */
   def handleConnection(sock: Socket): T
 
