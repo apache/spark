@@ -23,8 +23,6 @@ import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.UI._
-import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[spark] class DriverServiceFeatureStep(
@@ -56,7 +54,7 @@ private[spark] class DriverServiceFeatureStep(
     config.DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
   private val driverBlockManagerPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
-  private val  driverUIPort = kubernetesConf.get(UI_PORT)
+  private val  driverUIPort = kubernetesConf.get(config.UI.UI_PORT)
 
   override def configurePod(pod: SparkPod): SparkPod = pod
 
