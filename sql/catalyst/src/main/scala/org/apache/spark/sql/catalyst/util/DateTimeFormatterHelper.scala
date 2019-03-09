@@ -28,17 +28,17 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 trait DateTimeFormatterHelper {
+  // Sets hours, minutes, seconds and nanos of second to zeros
+  lazy val zeroLocalTime = LocalTime.ofNanoOfDay(0)
+
+  // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
+  // if they does not exist in the parsed object.
   protected def toZonedDateTime(
       temporalAccessor: TemporalAccessor,
       zoneId: ZoneId): ZonedDateTime = {
     // Parsed input might not have time related part. In that case, time component is set to zeros.
     val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
-    val localTime = if (parsedLocalTime == null) {
-      // Sets hours, minutes, seconds and nanos of second to zeros
-      LocalTime.ofNanoOfDay(0)
-    } else {
-      parsedLocalTime
-    }
+    val localTime = if (parsedLocalTime == null) zeroLocalTime else parsedLocalTime
     // Parsed input must have date component. At least, year must present in temporalAccessor.
     val localDate = temporalAccessor.query(TemporalQueries.localDate)
 
