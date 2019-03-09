@@ -722,4 +722,16 @@ class ExpressionParserSuite extends PlanTest {
       }
     }
   }
+
+  test("current date/timestamp braceless expressions") {
+    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+      assertEqual("current_date", CurrentDate())
+      assertEqual("current_timestamp", CurrentTimestamp())
+    }
+
+    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+      assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
+      assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
+    }
+  }
 }
