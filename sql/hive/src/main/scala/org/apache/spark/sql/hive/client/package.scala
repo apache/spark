@@ -29,11 +29,10 @@ package object client {
     case object v12 extends HiveVersion("0.12.0")
     case object v13 extends HiveVersion("0.13.1")
 
-    // Hive 0.14 depends on calcite 0.9.2-incubating-SNAPSHOT which does not exist in
-    // maven central anymore, so override those with a version that exists.
+    // Do not need Calcite because we disabled hive.cbo.enable.
     //
-    // The other excluded dependencies are also nowhere to be found, so exclude them explicitly. If
-    // they're needed by the metastore client, users will have to dig them out of somewhere and use
+    // org.pentaho:pentaho-aggdesigner-algorithm is nowhere to be found, so exclude it explicitly.
+    // If it's needed by the metastore client, users will have to dig them out of somewhere and use
     // configuration to point Spark at the correct jars.
     case object v14 extends HiveVersion("0.14.0",
       exclusions = Seq("org.apache.calcite:calcite-core",
