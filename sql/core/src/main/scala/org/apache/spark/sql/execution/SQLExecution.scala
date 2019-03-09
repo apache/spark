@@ -21,9 +21,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
+
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object SQLExecution {
@@ -73,12 +75,15 @@ object SQLExecution {
       // streaming queries would give us call site like "run at <unknown>:0"
       val callSite = sc.getCallSite()
 
-      val desc = Option(sparkSession.sparkContext
-        .getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)) match {
-        case value : Some[String] =>
-          Utils.redact(sparkSession.sessionState.conf
-            .stringRedactionPattern, value.get)
-        case _ => callSite.shortForm
+      var desc = Option(sparkSession.sparkContext
+        .getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)).get
+
+      val truncateLength = sparkSession.sqlContext.conf.maxSqlForEventLength
+      desc = if (desc == null || truncateLength == 0) {
+        callSite.shortForm
+      } else {
+        Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, desc)
+          .substring(0, Math.min(truncateLength, desc.length))
       }
 
       withSQLConfPropagated(sparkSession) {
