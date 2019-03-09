@@ -20,4 +20,4 @@ package org.apache.spark.sql.catalyst.plans.logical
 /**
  * A [[LogicalPlan]] operator that does not use the cached results stored in CacheManager
  */
-trait IgnoreCachedData {}
+trait IgnoreCachedData extends LogicalPlan {}
