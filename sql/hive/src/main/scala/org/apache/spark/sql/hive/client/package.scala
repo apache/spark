@@ -31,8 +31,8 @@ package object client {
 
     // Do not need Calcite because we disabled hive.cbo.enable.
     //
-    // org.pentaho:pentaho-aggdesigner-algorithm is nowhere to be found, so exclude it explicitly.
-    // If it's needed by the metastore client, users will have to dig them out of somewhere and use
+    // The other excluded dependencies are nowhere to be found, so exclude them explicitly. If
+    // they're needed by the metastore client, users will have to dig them out of somewhere and use
     // configuration to point Spark at the correct jars.
     case object v14 extends HiveVersion("0.14.0",
       exclusions = Seq("org.apache.calcite:calcite-core",
