@@ -1709,14 +1709,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DATETIME_JAVA8API_EANBLED = buildConf("spark.sql.datetime.java8API.enabled")
-    .doc("If the configuration property is set to true, java.time.Instant and " +
-      "java.time.LocalDate classes of Java 8 API are used as external types for " +
-      "Catalyst's TimestampType and DateType. If it is set to false, java.sql.Timestamp " +
-      "and java.sql.Date are used for the same purpose.")
-    .booleanConf
-    .createWithDefault(false)
-
   val SQL_EVENT_TRUNCATE_LENGTH = buildConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
       "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
