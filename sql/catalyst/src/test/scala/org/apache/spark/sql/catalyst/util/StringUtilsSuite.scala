@@ -73,14 +73,15 @@ class StringUtilsSuite extends SparkFunSuite {
       sc.append(s)
       sc.atLimit
     }
-    assert(checkLimit("under"))
-    assert(checkLimit("underover") == false)
-    assert(checkLimit("underov") == false)
+    assert(checkLimit("under") == false)
+    assert(checkLimit("1234567"))
+    assert(checkLimit("1234567890"))
   }
 
   test("string concatenation append after limit") {
     val concat = new StringConcat(7)
-    concat.append("underover")
-    assert(concat.append("extra") == false)
+    concat.append("under")
+    concat.append("extra")
+    assert(concat.toString === "underex")
   }
 }
