@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.io.IOException
-
 import com.fasterxml.jackson.databind.ObjectMapper
 
 import org.apache.spark.sql.SparkSession
@@ -43,14 +41,9 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
     val objectMapper = new ObjectMapper()
-    Option(map.get("path")).map { pathStr =>
-      try {
-        val paths = objectMapper.readValue(pathStr, classOf[Array[String]])
-        paths.toSeq
-      } catch {
-        case _: IOException => Seq(pathStr)
-      }
-    }.getOrElse {
+    Option(map.get("paths")).map { pathStr =>
+      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+    }.orElse(Option(map.get("path")).map(Seq(_))).getOrElse {
       throw new IllegalArgumentException("'path' must be given when reading files.")
     }
   }

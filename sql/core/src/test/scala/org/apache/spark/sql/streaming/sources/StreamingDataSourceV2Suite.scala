@@ -308,7 +308,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
           eventually(timeout(streamingTimeout)) {
             // Write options should not be set.
             assert(!LastWriteOptions.options.containsKey(readOptionName))
-            assert(LastReadOptions.options.get(readOptionName) == "true")
+            assert(LastReadOptions.options.getBoolean(readOptionName, false))
           }
         }
       }
@@ -319,7 +319,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
           eventually(timeout(streamingTimeout)) {
             // Read options should not be set.
             assert(!LastReadOptions.options.containsKey(writeOptionName))
-            assert(LastWriteOptions.options.get(writeOptionName) == "true")
+            assert(LastWriteOptions.options.getBoolean(writeOptionName, false))
           }
         }
       }

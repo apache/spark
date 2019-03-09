@@ -261,7 +261,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, session.sessionState.conf)
-      // TODO: remove this option.
+      // TODO SPARK-27113: remove this option.
       val checkFilesExistsOption = "check_files_exist" -> "false"
       val options = sessionOptions ++ extraOptions + checkFilesExistsOption
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)

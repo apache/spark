@@ -207,13 +207,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = {
+      val pathsOption = if (paths.isEmpty) {
+        None
+      } else {
         val objectMapper = new ObjectMapper()
-        "path" -> objectMapper.writeValueAsString(paths.toArray)
+        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
-      // TODO: remove this option.
-      val checkFilesExistsOption = "check_files_exist" -> "true"
-      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption + checkFilesExistsOption
+      // TODO SPARK-27113: remove this option.
+      val checkFilesExistsOpt = "check_files_exist" -> "true"
+      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption + checkFilesExistsOpt
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
