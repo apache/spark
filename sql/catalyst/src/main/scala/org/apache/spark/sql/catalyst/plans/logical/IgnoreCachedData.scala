@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 /**
- * Any logical plan instance can have this trait so that
- * it can be skipped for cache lookup operation
+ * A [[LogicalPlan]] operator that does not use the cached results stored in CacheManager
  */
 trait IgnoreCachedData {}
