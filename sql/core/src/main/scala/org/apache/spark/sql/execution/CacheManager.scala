@@ -239,13 +239,14 @@ class CacheManager extends Logging {
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
+      case command: IgnoreCachedData => command
       // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
       // canonicalizing plans, so that plans which are same except hint can hit the same cache.
       // However, we also want to keep the hint info after cache lookup. Here we skip the hint
       // node, so that the returned caching plan won't replace the hint node and drop the hint info
       // from the original plan.
-      case command: IgnoreCachedData => command
       case hint: ResolvedHint => hint
+
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))
