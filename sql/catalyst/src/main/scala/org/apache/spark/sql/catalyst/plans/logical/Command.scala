@@ -28,3 +28,6 @@ trait Command extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
 }
+
+/** Mark that the command can be skipped from cache lookup */
+trait IgnoreCachedData {}
