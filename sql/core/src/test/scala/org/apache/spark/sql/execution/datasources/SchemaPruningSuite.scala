@@ -86,6 +86,23 @@ abstract class SchemaPruningSuite
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
 
+  testSchemaPruning("select a single complex field") {
+    val query = sql("select name.middle from contacts")
+    checkScan(query, "struct<name:struct<middle:string>>")
+    checkAnswer(query.orderBy("id"), Row("X.") :: Row("Y.") :: Row(null) :: Row(null) :: Nil)
+  }
+
+  testSchemaPruning("select a single complex field and its parent struct") {
+    val query = sql("select name.middle, name from contacts")
+    checkScan(query, "struct<name:struct<first:string,middle:string,last:string>>")
+    checkAnswer(query.orderBy("id"),
+      Row("X.", Row("Jane", "X.", "Doe")) ::
+      Row("Y.", Row("John", "Y.", "Doe")) ::
+      Row(null, Row("Janet", null, "Jones")) ::
+      Row(null, Row("Jim", null, "Jones")) ::
+      Nil)
+  }
+
   testSchemaPruning("select a single complex field array and its parent struct array") {
     val query = sql("select friends.middle, friends from contacts where p=1")
     checkScan(query,
@@ -107,12 +124,44 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  testSchemaPruning("select a single complex field and the partition column") {
+    val query = sql("select name.middle, p from contacts")
+    checkScan(query, "struct<name:struct<middle:string>>")
+    checkAnswer(query.orderBy("id"),
+      Row("X.", 1) :: Row("Y.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
+  }
+
   ignore("partial schema intersection - select missing subfield") {
     val query = sql("select name.middle, address from contacts where p=2")
     checkScan(query, "struct<name:struct<middle:string>,address:string>")
     checkAnswer(query.orderBy("id"),
       Row(null, "567 Maple Drive") ::
       Row(null, "6242 Ash Street") :: Nil)
+  }
+
+  testSchemaPruning("no unnecessary schema pruning") {
+    val query =
+      sql("select id, name.last, name.middle, name.first, relatives[''].last, " +
+        "relatives[''].middle, relatives[''].first, friends[0].last, friends[0].middle, " +
+        "friends[0].first, pets, address from contacts where p=2")
+    // We've selected every field in the schema. Therefore, no schema pruning should be performed.
+    // We check this by asserting that the scanned schema of the query is identical to the schema
+    // of the contacts relation, even though the fields are selected in different orders.
+    checkScan(query,
+      "struct<id:int,name:struct<first:string,middle:string,last:string>,address:string,pets:int," +
+      "friends:array<struct<first:string,middle:string,last:string>>," +
+      "relatives:map<string,struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query.orderBy("id"),
+      Row(2, "Jones", null, "Janet", null, null, null, null, null, null, null, "567 Maple Drive") ::
+      Row(3, "Jones", null, "Jim", null, null, null, null, null, null, null, "6242 Ash Street") ::
+      Nil)
+  }
+
+  testSchemaPruning("empty schema intersection") {
+    val query = sql("select name.middle from contacts where p=2")
+    checkScan(query, "struct<name:struct<middle:string>>")
+    checkAnswer(query.orderBy("id"),
+      Row(null) :: Row(null) :: Nil)
   }
 
   testSchemaPruning("select a single complex field and in where clause") {
@@ -142,6 +191,13 @@ abstract class SchemaPruningSuite
       "where employer is not null and p = 1")
     checkScan(query, "struct<employer:struct<company:struct<name:string,address:string>>>")
     checkAnswer(query, Row(Row("abc", "123 Business Street")) :: Row(null) :: Nil)
+  }
+
+  testSchemaPruning("select a single complex field and is null expression in project") {
+    val query = sql("select name.first, address is not null from contacts")
+    checkScan(query, "struct<name:struct<first:string>,address:string>")
+    checkAnswer(query.orderBy("id"),
+      Row("Jane", true) :: Row("John", true) :: Row("Janet", true) :: Row("Jim", true) :: Nil)
   }
 
   testSchemaPruning("select a single complex field array and in clause") {
@@ -221,27 +277,43 @@ abstract class SchemaPruningSuite
     }
   }
 
-  protected def withContacts(testThunk: => Unit) {
+  private def withContacts(testThunk: => Unit) {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
       makeDataSourceFile(contacts, new File(path + "/contacts/p=1"))
       makeDataSourceFile(briefContacts, new File(path + "/contacts/p=2"))
 
-      spark.read.format(dataSourceName).load(path + "/contacts").createOrReplaceTempView("contacts")
+      // Providing user specified schema. Inferred schema from different data sources might
+      // be different.
+      val schema = "`id` INT,`name` STRUCT<`first`: STRING, `middle`: STRING, `last`: STRING>, " +
+        "`address` STRING,`pets` INT,`friends` ARRAY<STRUCT<`first`: STRING, `middle`: STRING, " +
+        "`last`: STRING>>,`relatives` MAP<STRING, STRUCT<`first`: STRING, `middle`: STRING, " +
+        "`last`: STRING>>,`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, " +
+        "`address`: STRING>>,`p` INT"
+      spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
+        .createOrReplaceTempView("contacts")
 
       testThunk
     }
   }
 
-  protected def withContactsWithDataPartitionColumn(testThunk: => Unit) {
+  private def withContactsWithDataPartitionColumn(testThunk: => Unit) {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
       makeDataSourceFile(contactsWithDataPartitionColumn, new File(path + "/contacts/p=1"))
       makeDataSourceFile(briefContactsWithDataPartitionColumn, new File(path + "/contacts/p=2"))
 
-      spark.read.format(dataSourceName).load(path + "/contacts").createOrReplaceTempView("contacts")
+      // Providing user specified schema. Inferred schema from different data sources might
+      // be different.
+      val schema = "`id` INT,`name` STRUCT<`first`: STRING, `middle`: STRING, `last`: STRING>, " +
+        "`address` STRING,`pets` INT,`friends` ARRAY<STRUCT<`first`: STRING, `middle`: STRING, " +
+        "`last`: STRING>>,`relatives` MAP<STRING, STRUCT<`first`: STRING, `middle`: STRING, " +
+        "`last`: STRING>>,`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, " +
+        "`address`: STRING>>,`p` INT"
+      spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
+        .createOrReplaceTempView("contacts")
 
       testThunk
     }
