@@ -16,19 +16,29 @@
  */
 
 package org.apache.spark.rdd
+
 import scala.collection.immutable
 
-import org.apache.spark.{DebugFilesystem, SparkConf, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
+/**
+ * Benchmark for CoalescedRDD.
+ * Measures rdd.coalesce performance under various combinations of
+ * coalesced partitions and preferred hosts
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar>
+ *   2. build/sbt "core/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      Results will be written to "benchmarks/CoalescedRDD-results.txt".
+ * }}}
+ * */
 object CoalescedRDDBenchmark extends BenchmarkBase {
-
   val seed = 0x1337
-  var conf = new SparkConf(false)
-  val sc = new SparkContext(
-    "local[4]",
-    "test",
-    conf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
+  val sc = new SparkContext(master = "local[4]", appName = "test")
 
   private def coalescedRDD(numIters: Int): Unit = {
     val numBlocks = 100000

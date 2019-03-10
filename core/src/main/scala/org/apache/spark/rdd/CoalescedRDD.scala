@@ -58,7 +58,7 @@ private[spark] case class CoalescedRDDPartition(
       val parentPreferredLocations = rdd.context.getPreferredLocs(rdd, p.index).map(_.host)
       preferredLocation.exists(parentPreferredLocations.contains)
     }
-    if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
+    if (parents.isEmpty) 0.0 else loc.toDouble / parents.size.toDouble
   }
 }
 
@@ -91,7 +91,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
     pc.coalesce(maxPartitions, prev).zipWithIndex.map {
       case (pg, i) =>
         val ids = pg.partitions.map(_.index).toArray
-        new CoalescedRDDPartition(i, prev, ids, pg.prefLoc)
+        CoalescedRDDPartition(i, prev, ids, pg.prefLoc)
     }
   }
 
@@ -116,7 +116,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
   /**
    * Returns the preferred machine for the partition. If split is of type CoalescedRDDPartition,
    * then the preferred machine will be one which most parent splits prefer too.
-   * @param partition
+   * @param partition the partition for which to retrieve the preferred machine, if exists
    * @return the machine most preferred by split
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -157,6 +157,11 @@ private[spark] class CoalescedRDD[T: ClassTag](
 private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   extends PartitionCoalescer {
 
+  implicit val partitionGroupOrdering: Ordering[PartitionGroup] =
+    (o1: PartitionGroup, o2: PartitionGroup) =>
+      java.lang.Integer.compare(o1.numPartitions, o2.numPartitions)
+
+
   val rnd = new scala.util.Random(7919) // keep this class deterministic
 
   // each element of groupArr represents one coalesced partition
@@ -175,7 +180,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
   }
 
-  class PartitionLocations(prev: RDD[_]) {
+  private class PartitionLocations(prev: RDD[_]) {
 
     // contains all the partitions from the previous RDD that don't have preferred locations
     val partsWithoutLocs = ArrayBuffer[Partition]()
@@ -217,10 +222,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
    * @return Option of [[PartitionGroup]] that has least elements for key
    */
   def getLeastGroupHash(key: String): Option[PartitionGroup] =
-    groupHash
-      .get(key)
-      .filter(_.nonEmpty)
-      .map(_.minBy(_.numPartitions))
+    groupHash.get(key).filter(_.nonEmpty).map(_.min)
 
   def addPartToPGroup(part: Partition, pgroup: PartitionGroup): Boolean = {
     if (!initialHash.contains(part)) {
@@ -235,12 +237,12 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
    * is assigned a preferredLocation. This uses coupon collector to estimate how many
    * preferredLocations it must rotate through until it has seen most of the preferred
    * locations (2 * n log(n))
-   * @param targetLen
+   * @param targetLen The number of desired partition groups
    */
   def setupGroups(targetLen: Int, partitionLocs: PartitionLocations) {
     // deal with empty case, just create targetLen partition groups with no preferred location
     if (partitionLocs.partsWithLocs.isEmpty) {
-      (1 to targetLen).foreach(x => groupArr += new PartitionGroup())
+      (1 to targetLen).foreach(groupArr += new PartitionGroup())
       return
     }
 
@@ -297,7 +299,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     val slack = (balanceSlack * prev.partitions.length).toInt
     // least loaded pref locs
     val pref = currPrefLocs(p, prev).flatMap(getLeastGroupHash)
-    val prefPart = if (pref.isEmpty) None else Some(pref.minBy(_.numPartitions))
+    val prefPart = if (pref.isEmpty) None else Some(pref.min)
     val r1 = rnd.nextInt(groupArr.size)
     val r2 = rnd.nextInt(groupArr.size)
     val minPowerOfTwo = {
@@ -349,7 +351,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       val partIter = partitionLocs.partsWithLocs.iterator
       groupArr.filter(pg => pg.numPartitions == 0).foreach { pg =>
         while (partIter.hasNext && pg.numPartitions == 0) {
-          var (nxt_replica, nxt_part) = partIter.next()
+          var (_, nxt_part) = partIter.next()
           if (!initialHash.contains(nxt_part)) {
             pg.partitions += nxt_part
             initialHash += nxt_part
