@@ -210,7 +210,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     }
     if (is.null(names)) {
       names <- lapply(1:length(firstRow), function(x) {
-        paste("_", as.character(x), sep = "")
+        paste0("_", as.character(x))
       })
     }
 
@@ -219,7 +219,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     names <- lapply(names, function(n) {
       nn <- gsub("[.]", "_", n)
       if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, " as column name"))
+        warning(paste("Use", nn, "instead of", n, "as column name"))
       }
       nn
     })
