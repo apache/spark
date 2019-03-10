@@ -783,7 +783,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.0.3</version>
+        <version>3.0.5</version>
         <scope>test</scope>
       </dependency>
       <dependency>
