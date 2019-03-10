@@ -211,6 +211,30 @@ private[spark] class AppStatusListener(
           update(rdd, now)
         }
       }
+      // Remove all RDD partitions that reference the removed executor
+      liveRDDs.values.foreach { rdd =>
+        rdd.getPartitions.values
+          .filter(_.executors.contains(event.executorId))
+          .foreach { partition =>
+            if (partition.executors.length == 1) {
+              rdd.removePartition(partition.blockName)
+              rdd.memoryUsed = addDeltaToValue(rdd.memoryUsed, partition.memoryUsed * -1)
+              rdd.diskUsed = addDeltaToValue(rdd.diskUsed, partition.diskUsed * -1)
+            } else {
+              rdd.memoryUsed = addDeltaToValue(rdd.memoryUsed,
+                (partition.memoryUsed / partition.executors.length) * -1)
+              rdd.diskUsed = addDeltaToValue(rdd.diskUsed,
+                (partition.diskUsed / partition.executors.length) * -1)
+              partition.update(partition.executors
+                .filter(!_.equals(event.executorId)), rdd.storageLevel,
+                addDeltaToValue(partition.memoryUsed,
+                  (partition.memoryUsed / partition.executors.length) * -1),
+                addDeltaToValue(partition.diskUsed,
+                  (partition.diskUsed / partition.executors.length) * -1))
+            }
+          }
+        update(rdd, now)
+      }
       if (isExecutorActiveForLiveStages(exec)) {
         // the executor was running for a currently active stage, so save it for now in
         // deadExecutors, and remove when there are no active stages overlapping with the

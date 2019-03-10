@@ -90,22 +90,20 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
+      val readDataSchema = getReadDataSchema(readSchema, partitionSchema, isCaseSensitive)
       val orcRecordReader = new OrcInputFormat[OrcStruct]
         .createRecordReader(fileSplit, taskAttemptContext)
+      val deserializer = new OrcDeserializer(dataSchema, readDataSchema, requestedColIds)
+      val fileReader = new PartitionReader[InternalRow] {
+        override def next(): Boolean = orcRecordReader.nextKeyValue()
 
-      val fullSchema = requiredDataSchema.toAttributes ++ partitionSchema.toAttributes
-      val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-      val deserializer = new OrcDeserializer(dataSchema, requiredDataSchema, requestedColIds)
+        override def get(): InternalRow = deserializer.deserialize(orcRecordReader.getCurrentValue)
 
-      val projection = if (partitionSchema.length == 0) {
-        (value: OrcStruct) => unsafeProjection(deserializer.deserialize(value))
-      } else {
-        val joinedRow = new JoinedRow()
-        (value: OrcStruct) =>
-          unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues))
+        override def close(): Unit = orcRecordReader.close()
       }
-      new PartitionRecordReaderWithProject(orcRecordReader, projection)
+
+      new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
+        partitionSchema, file.partitionValues)
     }
   }
 
@@ -151,19 +149,6 @@ case class OrcPartitionReaderFactory(
         file.partitionValues)
       new PartitionRecordReader(batchReader)
     }
-  }
-
-  /**
-   * Returns a new StructType that is a copy of the original StructType, removing any items that
-   * also appear in other StructType. The order is preserved from the original StructType.
-   */
-  private def subtractSchema(original: StructType, other: StructType): StructType = {
-    val otherNameSet = other.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
-    val fields = original.fields.filterNot { field =>
-      otherNameSet.contains(PartitioningUtils.getColName(field, isCaseSensitive))
-    }
-
-    StructType(fields)
   }
 
 }

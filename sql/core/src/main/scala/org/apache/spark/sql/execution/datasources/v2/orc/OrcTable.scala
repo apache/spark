@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcUtils
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.sources.v2.DataSourceOptions
@@ -29,9 +28,9 @@ import org.apache.spark.sql.types.StructType
 case class OrcTable(
     name: String,
     sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex,
+    options: DataSourceOptions,
     userSpecifiedSchema: Option[StructType])
-  extends FileTable(sparkSession, fileIndex, userSpecifiedSchema) {
+  extends FileTable(sparkSession, options, userSpecifiedSchema) {
   override def newScanBuilder(options: DataSourceOptions): OrcScanBuilder =
     new OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 

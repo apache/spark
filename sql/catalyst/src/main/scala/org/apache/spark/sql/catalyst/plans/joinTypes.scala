@@ -114,3 +114,10 @@ object LeftExistence {
     case _ => None
   }
 }
+
+object LeftSemiOrAnti {
+  def unapply(joinType: JoinType): Option[JoinType] = joinType match {
+    case LeftSemi | LeftAnti => Some(joinType)
+    case _ => None
+  }
+}

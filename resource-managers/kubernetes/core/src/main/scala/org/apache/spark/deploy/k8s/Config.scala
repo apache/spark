@@ -86,6 +86,30 @@ private[spark] object Config extends Logging {
   val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
 
+  val SUBMISSION_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.submission.requestTimeout")
+      .doc("request timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val SUBMISSION_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.submission.connectionTimeout")
+      .doc("connection timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.driver.requestTimeout")
+      .doc("request timeout to be used in milliseconds for driver to request executors")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.driver.connectionTimeout")
+      .doc("connection timeout to be used in milliseconds for driver to request executors")
+      .intConf
+      .createWithDefault(10000)
+
   val KUBERNETES_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")
       .doc("Service account that is used when running the driver pod. The driver pod uses " +

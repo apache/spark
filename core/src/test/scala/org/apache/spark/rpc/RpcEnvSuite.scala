@@ -305,7 +305,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     eventually(timeout(5 seconds), interval(10 millis)) {
       // Calling `self` in `onStart` is fine
-      assert(callSelfSuccessfully === true)
+      assert(callSelfSuccessfully)
     }
   }
 
@@ -326,7 +326,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     eventually(timeout(5 seconds), interval(10 millis)) {
       // Calling `self` in `receive` is fine
-      assert(callSelfSuccessfully === true)
+      assert(callSelfSuccessfully)
     }
   }
 

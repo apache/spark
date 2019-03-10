@@ -260,9 +260,6 @@ net.sf.supercsv:super-csv
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory
 org.apache.arrow:arrow-vector
-org.apache.calcite:calcite-avatica
-org.apache.calcite:calcite-core
-org.apache.calcite:calcite-linq4j
 org.apache.commons:commons-crypto
 org.apache.commons:commons-lang3
 org.apache.hadoop:hadoop-annotations
@@ -485,6 +482,15 @@ org.glassfish.jersey.core:jersey-client
 org.glassfish.jersey.core:jersey-common
 org.glassfish.jersey.core:jersey-server
 org.glassfish.jersey.media:jersey-media-jaxb
+
+
+Eclipse Distribution License (EDL) 1.0
+--------------------------------------
+
+org.glassfish.jaxb:jaxb-runtime
+jakarta.xml.bind:jakarta.xml.bind-api
+com.sun.istack:istack-commons-runtime
+jakarta.activation:jakarta.activation-api
 
 
 Mozilla Public License (MPL) 1.1

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
@@ -739,7 +740,7 @@ case class AlterTableRecoverPartitionsCommand(
     // do this in parallel.
     val batchSize = 100
     partitionSpecsAndLocs.toIterator.grouped(batchSize).foreach { batch =>
-      val now = System.currentTimeMillis() / 1000
+      val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
         val params = partitionStats.get(location.toString).map {
           case PartitionStatistics(numFiles, totalSize) =>
