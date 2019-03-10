@@ -242,7 +242,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   def setupGroups(targetLen: Int, partitionLocs: PartitionLocations) {
     // deal with empty case, just create targetLen partition groups with no preferred location
     if (partitionLocs.partsWithLocs.isEmpty) {
-      (1 to targetLen).foreach(groupArr += new PartitionGroup())
+      (1 to targetLen).foreach(_ => groupArr += new PartitionGroup())
       return
     }
 
