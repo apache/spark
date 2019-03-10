@@ -26,7 +26,7 @@ ERRORS=$(echo -e "q\n" \
         -Pkubernetes \
         -Pyarn \
         -Phive \
-        -Phive-thriftserver \
+        -Phive-thriftserver2 \
         -Pspark-ganglia-lgpl \
         -Pdocker-integration-tests \
 	-Pkubernetes-integration-tests \

@@ -28,7 +28,6 @@ import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.UTF8String;
 
-
 /**
  * A column vector class wrapping Hive's ColumnVector. Because Spark ColumnarBatch only accepts
  * Spark's vectorized.ColumnVector, this column vector is used to adapt Hive ColumnVector with

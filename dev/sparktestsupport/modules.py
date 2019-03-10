@@ -154,19 +154,18 @@ repl = Module(
     ],
 )
 
-
-hive_thriftserver = Module(
-    name="hive-thriftserver",
+hive_thriftserver2 = Module(
+    name="hive-thriftserver2",
     dependencies=[hive],
     source_file_regexes=[
-        "sql/hive-thriftserver",
+        "sql/hive-thriftserver2",
         "sbin/start-thriftserver.sh",
     ],
     build_profile_flags=[
-        "-Phive-thriftserver",
+        "-Phive-thriftserver2",
     ],
     sbt_test_goals=[
-        "hive-thriftserver/test",
+        "hive-thriftserver2/test",
     ]
 )
 

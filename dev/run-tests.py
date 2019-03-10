@@ -112,7 +112,7 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
+    ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver2',
      'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
     modules_to_test = set()
@@ -274,6 +274,7 @@ def get_hadoop_profiles(hadoop_version):
 
     sbt_maven_hadoop_profiles = {
         "hadoop2.7": ["-Phadoop-2.7"],
+        "hadoop3.1": ["-Phadoop-3.1"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
