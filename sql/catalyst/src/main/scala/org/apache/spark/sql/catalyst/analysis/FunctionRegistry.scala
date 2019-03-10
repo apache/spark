@@ -507,13 +507,12 @@ object FunctionRegistry {
 
     // bitwise
     expression[BitwiseAnd]("&"),
-    expression[BitwiseNot]("~"),
-    expression[BitwiseOr]("|"),
-    expression[BitwiseXor]("^"),
-
     expression[BitwiseAnd]("bitand"),
+    expression[BitwiseNot]("~"),
     expression[BitwiseNot]("bitnot"),
+    expression[BitwiseOr]("|"),
     expression[BitwiseOr]("bitor"),
+    expression[BitwiseXor]("^"),
     expression[BitwiseXor]("bitxor"),
 
     // json
