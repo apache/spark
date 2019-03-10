@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{Instant, ZonedDateTime, ZoneOffset}
-import java.time.temporal.TemporalAccessor
+import java.time.{Instant, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit.SECONDS
 
