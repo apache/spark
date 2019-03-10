@@ -666,7 +666,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val keyArrayData = ctx.freshName("keyArrayData")
     val valueArrayData = ctx.freshName("valueArrayData")
 
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
+    val baseOffset = "Platform.BYTE_ARRAY_OFFSET"
     val keySize = dataType.keyType.defaultSize
     val valueSize = dataType.valueType.defaultSize
     val kByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $keySize)"
@@ -696,8 +696,8 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
        |  final byte[] $data = new byte[(int)$byteArraySize];
        |  UnsafeMapData $unsafeMapData = new UnsafeMapData();
        |  Platform.putLong($data, $baseOffset, $keySectionSize);
-       |  Platform.putLong($data, ${baseOffset + 8}, $numEntries);
-       |  Platform.putLong($data, ${baseOffset + 8} + $keySectionSize, $numEntries);
+       |  Platform.putLong($data, $baseOffset + 8, $numEntries);
+       |  Platform.putLong($data, $baseOffset + 8 + $keySectionSize, $numEntries);
        |  $unsafeMapData.pointTo($data, $baseOffset, (int)$byteArraySize);
        |  ArrayData $keyArrayData = $unsafeMapData.keyArray();
        |  ArrayData $valueArrayData = $unsafeMapData.valueArray();
