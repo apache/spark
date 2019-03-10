@@ -121,7 +121,6 @@ def _test():
         .master("local[4]")\
         .appName("sql.avro.functions tests")\
         .getOrCreate()
-    sc = spark.sparkContext
     globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.avro.functions, globs=globs,
