@@ -260,9 +260,6 @@ net.sf.supercsv:super-csv
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory
 org.apache.arrow:arrow-vector
-org.apache.calcite:calcite-avatica
-org.apache.calcite:calcite-core
-org.apache.calcite:calcite-linq4j
 org.apache.commons:commons-crypto
 org.apache.commons:commons-lang3
 org.apache.hadoop:hadoop-annotations
