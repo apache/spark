@@ -713,15 +713,10 @@ object CollapseProject extends Rule[LogicalPlan] {
         val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
         l.copy(child = p2.copy(projectList = newProjectList))
       }
-    case p1 @ Project(_, s @ Sample(_, _, _, _, p2: Project)) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
-        p1
-      } else {
-        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
-        s.copy(child = p2.copy(projectList = newProjectList))
-      }
     case Project(list, r @ Repartition(_, _, p: Project)) if list.forall(_.deterministic) =>
       r.copy(child = p.copy(projectList = buildCleanedProjectList(list, p.projectList)))
+    case Project(list, s @ Sample(_, _, _, _, p2: Project)) if list.forall(_.deterministic) =>
+      s.copy(child = p2.copy(projectList = buildCleanedProjectList(list, p2.projectList)))
   }
 
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
