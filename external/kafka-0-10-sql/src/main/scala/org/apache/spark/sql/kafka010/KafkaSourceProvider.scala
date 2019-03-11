@@ -20,8 +20,6 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.{Locale, UUID}
 
-import scala.collection.JavaConverters._
-
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
@@ -104,7 +102,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   override def getTable(options: DataSourceOptions): KafkaTable = {
-    new KafkaTable(strategy(options.asMap().asScala.toMap))
+    new KafkaTable(strategy(options.asMap().toMap))
   }
 
   /**
@@ -372,11 +370,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         }
 
         override def buildForStreaming(): StreamingWrite = {
-          import scala.collection.JavaConverters._
-
           assert(inputSchema != null)
           val topic = Option(options.get(TOPIC_OPTION_KEY).orElse(null)).map(_.trim)
-          val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
+          val producerParams = kafkaParamsForProducer(options.asMap.toMap)
           new KafkaStreamingWrite(topic, producerParams, inputSchema)
         }
       }
@@ -388,7 +384,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-      val parameters = options.asMap().asScala.toMap
+      val parameters = options.asMap().toMap
       validateStreamOptions(parameters)
       // Each running query should use its own group id. Otherwise, the query may be only assigned
       // partial data since Kafka will assign partitions to multiple consumers having the same group
@@ -417,7 +413,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-      val parameters = options.asMap().asScala.toMap
+      val parameters = options.asMap().toMap
       validateStreamOptions(parameters)
       // Each running query should use its own group id. Otherwise, the query may be only assigned
       // partial data since Kafka will assign partitions to multiple consumers having the same group

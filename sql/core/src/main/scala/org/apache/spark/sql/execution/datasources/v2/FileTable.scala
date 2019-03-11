@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
@@ -33,12 +31,12 @@ abstract class FileTable(
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val filePaths = options.paths()
     val hadoopConf =
-      sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
+      sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().toMap)
     val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(filePaths, hadoopConf,
       checkEmptyGlobPath = true, checkFilesExist = options.checkFilesExist())
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
     new InMemoryFileIndex(sparkSession, rootPathsSpecified,
-      options.asMap().asScala.toMap, userSpecifiedSchema, fileStatusCache)
+      options.asMap().toMap, userSpecifiedSchema, fileStatusCache)
   }
 
   lazy val dataSchema: StructType = userSpecifiedSchema.orElse {

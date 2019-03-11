@@ -104,4 +104,9 @@ class DataSourceOptionsSuite extends SparkFunSuite {
 
     assert(options.paths().toSeq == Seq("c", "d\"e"))
   }
+
+  test("asMap") {
+    val map = new DataSourceOptions(Map("fooBar" -> "x").asJava).asMap
+    assert(map.get("fooBar").get == "x")
+  }
 }

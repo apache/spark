@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2.orc
 
-import scala.collection.JavaConverters._
-
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.sql.SparkSession
@@ -37,7 +35,7 @@ case class OrcScanBuilder(
     dataSchema: StructType,
     options: DataSourceOptions) extends FileScanBuilder(schema) {
   lazy val hadoopConf =
-    sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
+    sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().toMap)
 
   override def build(): Scan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readSchema)

@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 /**
  * Builds a map in which keys are case insensitive. Input map can be accessed for cases where
  * case-sensitive information is required. The primary constructor is marked private to avoid
@@ -53,5 +55,8 @@ object CaseInsensitiveMap {
     case caseSensitiveMap: CaseInsensitiveMap[T] => caseSensitiveMap
     case _ => new CaseInsensitiveMap(params)
   }
+
+  def apply(params: java.util.Map[String, String]): CaseInsensitiveMap[String] =
+    new CaseInsensitiveMap(params.asScala.toMap)
 }
 

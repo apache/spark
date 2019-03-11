@@ -27,6 +27,8 @@ import java.util.stream.Stream;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap;
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap$;
 
 /**
  * An immutable string-to-string map in which keys are case-insensitive. This is used to represent
@@ -92,8 +94,8 @@ public class DataSourceOptions {
     }
   }
 
-  public Map<String, String> asMap() {
-    return new HashMap<>(keyLowerCasedMap);
+  public CaseInsensitiveMap<String> asMap() {
+    return CaseInsensitiveMap$.MODULE$.apply(keyLowerCasedMap);
   }
 
   /**

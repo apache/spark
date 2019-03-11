@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.io.IOException
 import java.util.UUID
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
@@ -64,7 +62,7 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
     val pathName = options.paths().head
     val path = new Path(pathName)
     val sparkSession = SparkSession.active
-    val optionsAsScala = options.asMap().asScala.toMap
+    val optionsAsScala = options.asMap().toMap
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
