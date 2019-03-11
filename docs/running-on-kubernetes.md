@@ -702,7 +702,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Add the label specified by <code>LabelName</code> to the executor pods.
     For example, <code>spark.kubernetes.executor.label.something=true</code>.
-    Note that Spark also adds its own labels to the driver pod
+    Note that Spark also adds its own labels to the executor pod
     for bookkeeping purposes.
   </td>
 </tr>
