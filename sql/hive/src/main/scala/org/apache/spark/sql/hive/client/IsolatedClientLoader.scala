@@ -210,25 +210,26 @@ private[hive] class IsolatedClientLoader(
   private[hive] val classLoader: MutableURLClassLoader = {
     val isolatedClassLoader =
       if (isolationOn) {
-        val rootClassLoader: ClassLoader =
-          if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-            // In Java 9, the boot classloader can see few JDK classes. The intended parent
-            // classloader for delegation is now the platform classloader.
-            // See http://java9.wtf/class-loading/
-            val platformCL =
+        if (allJars.isEmpty) {
+          // See HiveUtils; this is the Java 9+ + builtin mode scenario
+          baseClassLoader
+        } else {
+          val rootClassLoader: ClassLoader =
+            if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+              // In Java 9, the boot classloader can see few JDK classes. The intended parent
+              // classloader for delegation is now the platform classloader.
+              // See http://java9.wtf/class-loading/
+              val platformCL =
               classOf[ClassLoader].getMethod("getPlatformClassLoader").
                 invoke(null).asInstanceOf[ClassLoader]
-            // Check to make sure that the root classloader does not know about Hive.
-            assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
-            platformCL
-          } else {
-            // The boot classloader is represented by null (the instance itself isn't accessible)
-            // and before Java 9 can see all JDK classes
-            null
-          }
-        if (allJars.isEmpty) {
-          rootClassLoader
-        } else {
+              // Check to make sure that the root classloader does not know about Hive.
+              assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+              platformCL
+            } else {
+              // The boot classloader is represented by null (the instance itself isn't accessible)
+              // and before Java 9 can see all JDK classes
+              null
+            }
           new URLClassLoader(allJars, rootClassLoader) {
             override def loadClass(name: String, resolve: Boolean): Class[_] = {
               val loaded = findLoadedClass(name)
