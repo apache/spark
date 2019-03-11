@@ -134,9 +134,42 @@ object ResolveHints {
    * This must be executed after all the other hint rules are executed.
    */
   object RemoveAllHints extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case h: UnresolvedHint => h.child
+
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val ignoredHintLogger = new IgnoredHintLogger()
+      plan resolveOperatorsUp {
+        case h: UnresolvedHint =>
+          // Logs the unused plan hint before we remove it
+          ignoredHintLogger.log(h)
+          h.child
+      }
+    }
+
+    private class IgnoredHintLogger {
+
+      private val logLevel = SQLConf.get.planHintIgnoreLogLevel
+
+      def log(h: UnresolvedHint): Unit = {
+        val message = {
+          val paramInfo = if (h.parameters.nonEmpty) {
+            s" params=${h.parameters.mkString(",")}"
+          } else {
+            ""
+          }
+          s"""
+             |=== Ignored Plan Hint: name=${h.name}$paramInfo ===
+             |${h.child.treeString}
+           """.stripMargin
+        }
+        logLevel match {
+          case "TRACE" => logTrace(message)
+          case "DEBUG" => logDebug(message)
+          case "INFO" => logInfo(message)
+          case "WARN" => logWarning(message)
+          case "ERROR" => logError(message)
+          case _ => logTrace(message)
+        }
+      }
     }
   }
-
 }

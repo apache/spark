@@ -17,12 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.log4j.{AppenderSkeleton, Level, Logger}
+import org.apache.log4j.spi.LoggingEvent
+
+import org.apache.spark.sql.catalyst.analysis.ResolveHints.RemoveAllHints
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
@@ -154,5 +159,48 @@ class ResolveHintsSuite extends AnalysisTest {
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
       Seq(errMsgRepa))
+  }
+
+  private def withLogLevel(logLevel: String)(f: => Unit): String = {
+    val builder = new StringBuilder()
+    val logAppender = new AppenderSkeleton() {
+      override def append(loggingEvent: LoggingEvent): Unit = {
+        builder.append(loggingEvent.getRenderedMessage)
+      }
+      override def close(): Unit = {}
+      override def requiresLayout(): Boolean = false
+    }
+    val logger = Logger.getLogger(RemoveAllHints.getClass.getName.dropRight(1))
+    val restoreLevel = logger.getLevel
+    logger.setLevel(Level.toLevel(logLevel))
+    logger.addAppender(logAppender)
+    try f finally {
+      logger.setLevel(restoreLevel)
+      logger.removeAppender(logAppender)
+    }
+    builder.toString
+  }
+
+  test("ignored hints should be logged") {
+    withSQLConf(SQLConf.PLAN_HINT_IGNORE_LOG_LEVEL.key -> "info") {
+      val expectedMsg = "=== Ignored Plan Hint: name=unknown_hint params=1,3 ==="
+      Seq("trace", "debug", "info").foreach { logLevel =>
+        val logMsg = withLogLevel(logLevel) {
+          checkAnalysis(
+            UnresolvedHint("unknown_hint", Seq(1, 3), testRelation),
+            testRelation)
+        }
+        assert(logMsg.contains(expectedMsg))
+      }
+
+      Seq("warn", "error").foreach { logLevel =>
+        val logMsg = withLogLevel(logLevel) {
+          checkAnalysis(
+            UnresolvedHint("unknown_hint", Seq(1, 2), testRelation),
+            testRelation)
+        }
+        assert(!logMsg.contains(expectedMsg))
+      }
+    }
   }
 }

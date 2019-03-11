@@ -201,6 +201,19 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val PLAN_HINT_IGNORE_LOG_LEVEL =
+    buildConf("spark.sql.planHintIgnoreLog.level")
+      .internal()
+      .doc("Configures the log level for logging the plan hint ignored in the analyzer. " +
+        "The value can be 'trace', 'debug', 'info', 'warn', or 'error'. " +
+        "The default log level is 'trace'.")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
+        "Invalid value for 'spark.sql.optimizer.planChangeLog.level'. Valid values are " +
+          "'trace', 'debug', 'info', 'warn' and 'error'.")
+      .createWithDefault("trace")
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -1787,6 +1800,8 @@ class SQLConf extends Serializable with Logging {
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
+
+  def planHintIgnoreLogLevel: String = getConf(PLAN_HINT_IGNORE_LOG_LEVEL)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
