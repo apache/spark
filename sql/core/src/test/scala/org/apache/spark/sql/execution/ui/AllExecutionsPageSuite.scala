@@ -83,9 +83,9 @@ class AllExecutionsPageSuite extends SharedSQLContext {
   }
 
   /**
-    * Render a stage page started with the given conf and return the HTML.
-    * This also runs a dummy execution page to populate the page with useful content.
-    */
+   * Render a stage page started with the given conf and return the HTML.
+   * This also runs a dummy execution page to populate the page with useful content.
+   */
   private def renderSQLPage(
     request: HttpServletRequest,
     tab: SQLTab,
