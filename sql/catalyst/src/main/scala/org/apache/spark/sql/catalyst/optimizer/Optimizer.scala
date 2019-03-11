@@ -699,6 +699,34 @@ object CollapseProject extends Rule[LogicalPlan] {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       }
+    case p1 @ Project(_, g @ GlobalLimit(_, l @ LocalLimit(_, p2: Project))) =>
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+        p1
+      } else {
+        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+        g.copy(child = l.copy(child = p2.copy(projectList = newProjectList)))
+      }
+    case p1 @ Project(_, l @ LocalLimit(_, p2: Project)) =>
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+        p1
+      } else {
+        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+        l.copy(child = p2.copy(projectList = newProjectList))
+      }
+    case p1 @ Project(_, r @ Repartition(_, _, p2: Project)) =>
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+        p1
+      } else {
+        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+        r.copy(child = p2.copy(projectList = newProjectList))
+      }
+    case p1 @ Project(_, s @ Sample(_, _, _, _, p2: Project)) =>
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+        p1
+      } else {
+        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+        s.copy(child = p2.copy(projectList = newProjectList))
+      }
   }
 
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
