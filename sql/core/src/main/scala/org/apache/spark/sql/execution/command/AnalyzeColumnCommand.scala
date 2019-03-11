@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -39,28 +40,27 @@ case class AnalyzeColumnCommand(
     require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
       "mutually exclusive. Only one of them should be specified.")
     val sessionState = sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
-    if (tableMeta.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+
+    tableIdent.database match {
+      case None =>
+        sessionState.catalog.getTempView(tableIdent.identifier) match {
+          case Some(tempView) =>
+            val cacheManager = sparkSession.sharedState.cacheManager
+            cacheManager.lookupCachedData(tempView) match {
+              case Some(cachedData) =>
+                val columnsToAnalyze = getColumnsToAnalyze(
+                  tableIdent, cachedData.plan, columnNames, allColumns)
+                cacheManager.analyzeColumn(sparkSession, tableIdent.identifier, columnsToAnalyze)
+              case _ =>
+                throw new NoSuchTableException(
+                  db = sessionState.catalog.getCurrentDatabase, table = tableIdent.identifier)
+            }
+          case _ =>
+            analyzeColumnInCatalog(sparkSession)
+        }
+      case _ =>
+        analyzeColumnInCatalog(sparkSession)
     }
-    val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
-    val relation = sparkSession.table(tableIdent).logicalPlan
-    val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
-
-    // Compute stats for the computed list of columns.
-    val (rowCount, newColStats) =
-      CommandUtils.computeColumnStats(sparkSession, relation, columnsToAnalyze)
-
-    // We also update table-level stats in order to keep them consistent with column-level stats.
-    val statistics = CatalogStatistics(
-      sizeInBytes = sizeInBytes,
-      rowCount = Some(rowCount),
-      // Newly computed column stats should override the existing ones.
-      colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColStats)
-
-    sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
 
     Seq.empty[Row]
   }
@@ -87,6 +87,37 @@ case class AnalyzeColumnCommand(
       }
     }
     columnsToAnalyze
+  }
+
+  private def analyzeColumnInCatalog(sparkSession: SparkSession): Unit = {
+    val sessionState = sparkSession.sessionState
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+    }
+    val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+    val relation = sparkSession.table(tableIdent).logicalPlan
+    val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
+
+    // Compute stats for the computed list of columns.
+    val (rowCount, newColStats) =
+      CommandUtils.computeColumnStats(sparkSession, relation, columnsToAnalyze)
+
+    val newColCatalogStats = newColStats.map {
+      case (attr, columnStat) =>
+        attr.name -> columnStat.toCatalogColumnStat(attr.name, attr.dataType)
+    }
+
+    // We also update table-level stats in order to keep them consistent with column-level stats.
+    val statistics = CatalogStatistics(
+      sizeInBytes = sizeInBytes,
+      rowCount = Some(rowCount),
+      // Newly computed column stats should override the existing ones.
+      colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColCatalogStats)
+
+    sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
   }
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */

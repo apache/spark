@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
@@ -468,6 +469,36 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
         assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
       }
+    }
+  }
+
+  test("analyzes column statistics in cached query") {
+    withTempView("cachedTempView", "tempView") {
+      spark.sql(
+        """CACHE TABLE cachedTempView AS
+          |  SELECT c0, avg(c1) AS v1, avg(c2) AS v2
+          |  FROM (SELECT id % 3 AS c0, id % 5 AS c1, 2 AS c2 FROM range(1, 30))
+          |  GROUP BY c0
+        """.stripMargin)
+
+      // Analyzes one column in the cached logical plan
+      spark.sql("ANALYZE TABLE cachedTempView COMPUTE STATISTICS FOR COLUMNS v1".stripMargin)
+      val queryStats1 = spark.table("cachedTempView").queryExecution
+        .optimizedPlan.stats.attributeStats
+      assert(queryStats1.map(_._1.name).toSet === Set("v1"))
+
+      // Analyzes two more columns
+      spark.sql("ANALYZE TABLE cachedTempView COMPUTE STATISTICS FOR COLUMNS c0, v2")
+      val queryStats2 = spark.table("cachedTempView").queryExecution
+        .optimizedPlan.stats.attributeStats
+      assert(queryStats2.map(_._1.name).toSet === Set("c0", "v1", "v2"))
+
+      // Analyzes in a temporary table
+      spark.sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
+      val errMsg = intercept[NoSuchTableException] {
+        spark.sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg.contains("Table or view 'tempView' not found in database 'default'"))
     }
   }
 }
