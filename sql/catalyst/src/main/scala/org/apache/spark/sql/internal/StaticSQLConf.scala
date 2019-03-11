@@ -100,7 +100,7 @@ object StaticSQLConf {
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +
-      "Function1[SparkSessionExtension, Unit] used to configure Spark Session extensions. The " +
+      "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
       "classes must have a no-args constructor. If multiple extensions are specified, they are " +
       "applied in the specified order. For the case of rules and planner strategies, they are " +
       "applied in the specified order. For the case of parsers, the last parser is used and each " +

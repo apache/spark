@@ -123,7 +123,7 @@ class UserDefinedFunction(object):
         elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
-                    to_arrow_schema(self._returnType_placeholder)
+                    to_arrow_type(self._returnType_placeholder)
                 except TypeError:
                     raise NotImplementedError(
                         "Invalid returnType with grouped map Pandas UDFs: "
@@ -133,6 +133,9 @@ class UserDefinedFunction(object):
                                 "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
+                # StructType is not yet allowed as a return type, explicitly check here to fail fast
+                if isinstance(self._returnType_placeholder, StructType):
+                    raise TypeError
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
                 raise NotImplementedError(
