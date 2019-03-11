@@ -1636,6 +1636,11 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
+          <!-- exclude in favor of 3.2 from Datanucleus -->
+          <exclusion>
+            <groupId>javax.jdo</groupId>
+            <artifactId>jdo-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1868,16 +1873,26 @@
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-api-jdo</artifactId>
         <version>${datanucleus-core.version}</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-rdbms</artifactId>
         <version>${datanucleus-core.version}</version>
+        <scope>runtime</scope>
+      </dependency>
+      <!-- promote this from provided; yes it's versioned like javax.jdo not datanucleus -->
+      <dependency>
+        <groupId>org.datanucleus</groupId>
+        <artifactId>javax.jdo</artifactId>
+        <version>3.2.0-m11</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>

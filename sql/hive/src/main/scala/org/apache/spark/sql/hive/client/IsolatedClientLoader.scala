@@ -188,7 +188,7 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("scala.") ||
     (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
     name.startsWith("java.") ||
-    name.startsWith("javax.") ||
+    name.startsWith("javax.sql.") ||
     sharedPrefixes.exists(name.startsWith)
   }
 
