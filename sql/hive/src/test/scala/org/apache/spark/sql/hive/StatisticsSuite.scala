@@ -110,6 +110,41 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("Hive serde table with incorrect statistics") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        val dataSize = tempDir.listFiles.filter(!_.getName.endsWith(".crc")).map(_.length).sum
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        // Before SPARK-19678, sizeInBytes should be equal to dataSize.
+        // After SPARK-19678, sizeInBytes should be equal to DEFAULT_SIZE_IN_BYTES.
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+
+        spark.sql("REFRESH TABLE t1")
+        // After SPARK-19678 and enable ENABLE_FALL_BACK_TO_HDFS_FOR_STATS,
+        // sizeInBytes should be equal to dataSize.
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === dataSize)
+        }
+      }
+    }
+  }
+
   test("analyze Hive serde tables") {
     def queryTotalSize(tableName: String): BigInt =
       spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes

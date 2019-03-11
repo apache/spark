@@ -22,7 +22,6 @@ import java.util.Arrays
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.config._
 
 private[spark] object RUtils {
@@ -108,5 +107,7 @@ private[spark] object RUtils {
     }
   }
 
-  def getEncryptionEnabled(sc: JavaSparkContext): Boolean = PythonUtils.getEncryptionEnabled(sc)
+  def isEncryptionEnabled(sc: JavaSparkContext): Boolean = {
+    sc.conf.get(org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED)
+  }
 }

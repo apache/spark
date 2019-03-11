@@ -452,7 +452,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val z = ctx.freshName("z")
     val calculateHeader = "UnsafeArrayData.calculateHeaderPortionInBytes"
 
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
+    val baseOffset = "Platform.BYTE_ARRAY_OFFSET"
     val wordSize = UnsafeRow.WORD_SIZE
     val structSizeAsLong = s"${structSize}L"
 
