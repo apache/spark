@@ -32,18 +32,17 @@ class Iso8601DateFormatter(
 
   @transient
   private lazy val formatter = getOrCreateFormatter(pattern, locale)
-  private val UTC = ZoneOffset.UTC
 
   override def parse(s: String): Int = {
     val parsed = formatter.parse(s)
-    val zonedDateTime = toZonedDateTime(parsed, UTC)
+    val zonedDateTime = toZonedDateTime(parsed, ZoneOffset.UTC)
     val seconds = zonedDateTime.toEpochSecond
     SECONDS.toDays(seconds).toInt
   }
 
   override def format(days: Int): String = {
     val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)
-    formatter.withZone(UTC).format(instant)
+    formatter.withZone(ZoneOffset.UTC).format(instant)
   }
 }
 
