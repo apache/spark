@@ -80,7 +80,11 @@ object ExpressionEncoder {
    * name/positional binding is preserved.
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
-    // TODO: check if encoders length is more than 22 and throw exception for it.
+    if (encoders.length > 22) {
+      throw new UnsupportedOperationException("Due to Scala's limited support of tuple, " +
+        "tuple with more than 22 elements are not supported.")
+    }
+
     encoders.foreach(_.assertUnresolved())
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
