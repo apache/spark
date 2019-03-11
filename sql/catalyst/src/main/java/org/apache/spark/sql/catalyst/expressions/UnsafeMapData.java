@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeHelper;
 
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
@@ -101,25 +102,14 @@ public final class UnsafeMapData extends MapData {
     return values;
   }
 
-  public void writeToMemory(Object target, long targetOffset) {
-    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
-  }
-
   public void writeTo(ByteBuffer buffer) {
-    assert(buffer.hasArray());
-    byte[] target = buffer.array();
-    int offset = buffer.arrayOffset();
-    int pos = buffer.position();
-    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
-    buffer.position(pos + sizeInBytes);
+    UnsafeHelper.writeTo(buffer, baseObject, baseOffset, sizeInBytes);
   }
 
   @Override
   public UnsafeMapData copy() {
     UnsafeMapData mapCopy = new UnsafeMapData();
-    final byte[] mapDataCopy = new byte[sizeInBytes];
-    Platform.copyMemory(
-      baseObject, baseOffset, mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    final byte[] mapDataCopy = UnsafeHelper.copyToMemory(baseObject, baseOffset, sizeInBytes);
     mapCopy.pointTo(mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return mapCopy;
   }

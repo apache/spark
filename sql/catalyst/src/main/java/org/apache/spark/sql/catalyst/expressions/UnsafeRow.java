@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import java.io.*;
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -34,6 +33,7 @@ import com.esotericsoftware.kryo.io.Output;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeHelper;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
@@ -397,20 +397,15 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.createUnsafe(getLong(ordinal), precision, scale);
     } else {
-      byte[] bytes = getBinary(ordinal);
-      BigInteger bigInteger = new BigInteger(bytes);
-      BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-      return Decimal.apply(javaDecimal, precision, scale);
+      return SqlTypesUnsafeHelper.getDecimalExceedingLong(getBinary(ordinal), precision, scale,
+          false);
     }
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
-    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+    return UnsafeHelper.getUTF8String(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
@@ -418,18 +413,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      final long offsetAndSize = getLong(ordinal);
-      final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) offsetAndSize;
-      final byte[] bytes = new byte[size];
-      Platform.copyMemory(
-        baseObject,
-        baseOffset + offset,
-        bytes,
-        Platform.BYTE_ARRAY_OFFSET,
-        size
-      );
-      return bytes;
+      return UnsafeHelper.getBinary(getLong(ordinal), baseObject, baseOffset);
     }
   }
 
@@ -438,11 +422,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      final long offsetAndSize = getLong(ordinal);
-      final int offset = (int) (offsetAndSize >> 32);
-      final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
-      final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-      return new CalendarInterval(months, microseconds);
+      return UnsafeHelper.getInterval(getLong(ordinal), baseObject, baseOffset);
     }
   }
 
@@ -451,12 +431,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      final long offsetAndSize = getLong(ordinal);
-      final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) offsetAndSize;
-      final UnsafeRow row = new UnsafeRow(numFields);
-      row.pointTo(baseObject, baseOffset + offset, size);
-      return row;
+      return SqlTypesUnsafeHelper.getStruct(getLong(ordinal), baseObject, baseOffset, numFields);
     }
   }
 
@@ -465,12 +440,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      final long offsetAndSize = getLong(ordinal);
-      final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) offsetAndSize;
-      final UnsafeArrayData array = new UnsafeArrayData();
-      array.pointTo(baseObject, baseOffset + offset, size);
-      return array;
+      return SqlTypesUnsafeHelper.getArray(getLong(ordinal), baseObject, baseOffset);
     }
   }
 
@@ -479,12 +449,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      final long offsetAndSize = getLong(ordinal);
-      final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) offsetAndSize;
-      final UnsafeMapData map = new UnsafeMapData();
-      map.pointTo(baseObject, baseOffset + offset, size);
-      return map;
+      return SqlTypesUnsafeHelper.getMap(getLong(ordinal), baseObject, baseOffset);
     }
   }
 
@@ -495,14 +460,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   @Override
   public UnsafeRow copy() {
     UnsafeRow rowCopy = new UnsafeRow(numFields);
-    final byte[] rowDataCopy = new byte[sizeInBytes];
-    Platform.copyMemory(
-      baseObject,
-      baseOffset,
-      rowDataCopy,
-      Platform.BYTE_ARRAY_OFFSET,
-      sizeInBytes
-    );
+    final byte[] rowDataCopy = UnsafeHelper.copyToMemory(baseObject, baseOffset, sizeInBytes);
     rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return rowCopy;
   }
@@ -632,8 +590,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   public void writeFieldTo(int ordinal, ByteBuffer buffer) {
     final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
+    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = UnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
 
     buffer.putInt(size);
     int pos = buffer.position();

@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeHelper;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
@@ -227,74 +226,45 @@ public final class UnsafeArrayData extends ArrayData {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.apply(getLong(ordinal), precision, scale);
     } else {
-      final byte[] bytes = getBinary(ordinal);
-      final BigInteger bigInteger = new BigInteger(bytes);
-      final BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-      return Decimal.apply(new scala.math.BigDecimal(javaDecimal), precision, scale);
+      return SqlTypesUnsafeHelper.getDecimalExceedingLong(getBinary(ordinal), precision, scale,
+          true);
     }
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
-    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+    return UnsafeHelper.getUTF8String(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
-    final byte[] bytes = new byte[size];
-    Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
-    return bytes;
+    return UnsafeHelper.getBinary(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
-    final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-    return new CalendarInterval(months, microseconds);
+    return UnsafeHelper.getInterval(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
   public UnsafeRow getStruct(int ordinal, int numFields) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
-    final UnsafeRow row = new UnsafeRow(numFields);
-    row.pointTo(baseObject, baseOffset + offset, size);
-    return row;
+    return SqlTypesUnsafeHelper.getStruct(getLong(ordinal), baseObject, baseOffset, numFields);
   }
 
   @Override
   public UnsafeArrayData getArray(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
-    final UnsafeArrayData array = new UnsafeArrayData();
-    array.pointTo(baseObject, baseOffset + offset, size);
-    return array;
+    return SqlTypesUnsafeHelper.getArray(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
   public UnsafeMapData getMap(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
-    final UnsafeMapData map = new UnsafeMapData();
-    map.pointTo(baseObject, baseOffset + offset, size);
-    return map;
+    return SqlTypesUnsafeHelper.getMap(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
@@ -363,25 +333,14 @@ public final class UnsafeArrayData extends ArrayData {
     return false;
   }
 
-  public void writeToMemory(Object target, long targetOffset) {
-    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
-  }
-
   public void writeTo(ByteBuffer buffer) {
-    assert(buffer.hasArray());
-    byte[] target = buffer.array();
-    int offset = buffer.arrayOffset();
-    int pos = buffer.position();
-    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
-    buffer.position(pos + sizeInBytes);
+    UnsafeHelper.writeTo(buffer, baseObject, baseOffset, sizeInBytes);
   }
 
   @Override
   public UnsafeArrayData copy() {
     UnsafeArrayData arrayCopy = new UnsafeArrayData();
-    final byte[] arrayDataCopy = new byte[sizeInBytes];
-    Platform.copyMemory(
-      baseObject, baseOffset, arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    final byte[] arrayDataCopy = UnsafeHelper.copyToMemory(baseObject, baseOffset, sizeInBytes);
     arrayCopy.pointTo(arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return arrayCopy;
   }

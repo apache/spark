@@ -32,6 +32,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeHelper;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
@@ -168,16 +169,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * bytes in this string.
    */
   public void writeToMemory(Object target, long targetOffset) {
-    Platform.copyMemory(base, offset, target, targetOffset, numBytes);
+    UnsafeHelper.writeToMemory(base, offset, target, targetOffset, numBytes);
   }
 
   public void writeTo(ByteBuffer buffer) {
-    assert(buffer.hasArray());
-    byte[] target = buffer.array();
-    int offset = buffer.arrayOffset();
-    int pos = buffer.position();
-    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
-    buffer.position(pos + numBytes);
+    UnsafeHelper.writeTo(buffer, base, offset, numBytes);
   }
 
   /**
