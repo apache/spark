@@ -406,14 +406,7 @@ public final class UnsafeArrayData extends ArrayData {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
-    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
-    }
-
-    final long[] data = new long[(int)totalSizeInLongs];
-
-    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
+    final long[] data = initializeUnderlyingArray(length, totalSizeInLongs);
     if (arr != null) {
       Platform.copyMemory(arr, offset, data,
         Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
@@ -425,28 +418,32 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   public static UnsafeArrayData createFreshArray(int length, int elementSize) {
-    final long headerInBytes = calculateHeaderPortionInBytes(length);
-    final long valueRegionInBytes = (long)elementSize * length;
-    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
-    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
-    }
-
-    final long[] data = new long[(int)totalSizeInLongs];
-
-    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
-
+    final long totalSizeInLongs = getTotalSize(elementSize, length);
+    final long[] data = initializeUnderlyingArray(length, totalSizeInLongs);
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
     return result;
   }
 
-  public static boolean shouldUseGenericArrayData(int elementSize, long length) {
+  private static long[] initializeUnderlyingArray(int length, long totalSizeInLongs) {
+    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+          "it's too big.");
+    }
+
+    final long[] data = new long[(int)totalSizeInLongs];
+    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
+    return data;
+  }
+
+  private static long getTotalSize(int elementSize, long length) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = elementSize * length;
-    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
-    return totalSizeInLongs > Integer.MAX_VALUE / 8;
+    return (headerInBytes + valueRegionInBytes + 7) / 8;
+  }
+
+  public static boolean shouldUseGenericArrayData(int elementSize, long length) {
+    return getTotalSize(elementSize, length) > Integer.MAX_VALUE / 8;
   }
 
   public static UnsafeArrayData fromPrimitiveArray(boolean[] arr) {
