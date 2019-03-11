@@ -1708,13 +1708,6 @@ object SQLConf {
       "and java.sql.Date are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
-
-  val SQL_EVENT_TRUNCATE_LENGTH = buildConf("spark.sql.event.truncate.length")
-    .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
-      "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
-    .intConf
-    .checkValue(_ >= 0, "Must be set greater or equal to zero")
-    .createWithDefault(Int.MaxValue)
 }
 
 /**
@@ -2157,9 +2150,6 @@ class SQLConf extends Serializable with Logging {
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
-
-  def maxSqlForEventLength: Int =
-    getConf(SQLConf.SQL_EVENT_TRUNCATE_LENGTH)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
 
 object SQLExecution {
@@ -76,7 +77,7 @@ object SQLExecution {
       var desc = Option(sparkSession.sparkContext
         .getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)).get
 
-      val truncateLength = sparkSession.sqlContext.conf.maxSqlForEventLength
+      val truncateLength = sparkSession.sparkContext.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
       desc = if (desc == null || truncateLength == 0) {
         callSite.shortForm
       } else {
