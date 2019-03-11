@@ -240,7 +240,7 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public byte[] getBinary(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    return UnsafeHelper.getBinary(getLong(ordinal), baseObject, baseOffset);
+    return SqlTypesUnsafeHelper.getBinary(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override

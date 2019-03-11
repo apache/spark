@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.UnsafeHelper;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -29,9 +28,17 @@ import java.math.BigInteger;
 public final class SqlTypesUnsafeHelper {
   private SqlTypesUnsafeHelper() {}
 
+  public static byte[] getBinary(long offsetAndSize, Object baseObject, long baseOffset) {
+    final int offset = getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = getSizeFromOffsetAndSize(offsetAndSize);
+    final byte[] bytes = new byte[size];
+    Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
+    return bytes;
+  }
+
   public static UTF8String getUTF8String(long offsetAndSize, Object baseObject, long baseOffset) {
-    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
-    final int size = UnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
+    final int offset = getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = getSizeFromOffsetAndSize(offsetAndSize);
     return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
@@ -39,7 +46,7 @@ public final class SqlTypesUnsafeHelper {
       long offsetAndSize,
       Object baseObject,
       long baseOffset) {
-    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
+    final int offset = getOffsetFromOffsetAndSize(offsetAndSize);
     final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, microseconds);
@@ -64,26 +71,34 @@ public final class SqlTypesUnsafeHelper {
       Object baseObject,
       long baseOffset,
       int numFields) {
-    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
-    final int size = UnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
+    final int offset = getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = getSizeFromOffsetAndSize(offsetAndSize);
     final UnsafeRow row = new UnsafeRow(numFields);
     row.pointTo(baseObject, baseOffset + offset, size);
     return row;
   }
 
   public static UnsafeArrayData getArray(long offsetAndSize, Object baseObject, long baseOffset) {
-    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
-    final int size = UnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
+    final int offset = getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = getSizeFromOffsetAndSize(offsetAndSize);
     final UnsafeArrayData array = new UnsafeArrayData();
     array.pointTo(baseObject, baseOffset + offset, size);
     return array;
   }
 
   public static UnsafeMapData getMap(long offsetAndSize, Object baseObject, long baseOffset) {
-    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
-    final int size = UnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
+    final int offset = getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = getSizeFromOffsetAndSize(offsetAndSize);
     final UnsafeMapData map = new UnsafeMapData();
     map.pointTo(baseObject, baseOffset + offset, size);
     return map;
+  }
+
+  public static int getOffsetFromOffsetAndSize(long offsetAndSize) {
+    return (int) (offsetAndSize >> 32);
+  }
+
+  public static int getSizeFromOffsetAndSize(long offsetAndSize) {
+    return (int) offsetAndSize;
   }
 }

@@ -413,7 +413,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      return UnsafeHelper.getBinary(getLong(ordinal), baseObject, baseOffset);
+      return SqlTypesUnsafeHelper.getBinary(getLong(ordinal), baseObject, baseOffset);
     }
   }
 
@@ -590,8 +590,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   public void writeFieldTo(int ordinal, ByteBuffer buffer) {
     final long offsetAndSize = getLong(ordinal);
-    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
-    final int size = UnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
+    final int offset = SqlTypesUnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = SqlTypesUnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
 
     buffer.putInt(size);
     int pos = buffer.position();

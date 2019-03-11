@@ -22,14 +22,6 @@ import java.nio.ByteBuffer;
 public final class UnsafeHelper {
   private UnsafeHelper() {}
 
-  public static byte[] getBinary(long offsetAndSize, Object baseObject, long baseOffset) {
-    final int offset = getOffsetFromOffsetAndSize(offsetAndSize);
-    final int size = getSizeFromOffsetAndSize(offsetAndSize);
-    final byte[] bytes = new byte[size];
-    Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
-    return bytes;
-  }
-
   public static void writeTo(
       ByteBuffer buffer,
       Object baseObject,
@@ -58,13 +50,5 @@ public final class UnsafeHelper {
     Platform.copyMemory(baseObject, baseOffset, arrayDataCopy, Platform.BYTE_ARRAY_OFFSET,
         sizeInBytes);
     return arrayDataCopy;
-  }
-
-  public static int getOffsetFromOffsetAndSize(long offsetAndSize) {
-    return (int) (offsetAndSize >> 32);
-  }
-
-  public static int getSizeFromOffsetAndSize(long offsetAndSize) {
-    return (int) offsetAndSize;
   }
 }
