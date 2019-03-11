@@ -339,12 +339,19 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Copy all data from an InputStream to an OutputStream upto maxSize and
-   * close the input stream if all data is read.
-   * @return A tuple of boolean, which is whether the stream was fully copied, and an InputStream,
-   *         which is a combined stream of read data and any remaining data
+   * Copy the first `maxSize` bytes of data from the InputStream to an in-memory
+   * buffer, primarily to check for corruption.
+   *
+   * This returns a new InputStream which contains the same data as the original input stream.
+   * It may be entirely on in-memory buffer, or it may be a combination of in-memory data, and then
+   * continue to read from the original stream. The only real use of this is if the original input
+   * stream will potentially detect corruption while the data is being read (eg. from compression).
+   * This allows for an eager check of corruption in the first maxSize bytes of data.
+   *
+   * @return An InputStream which includes all data from the original stream (combining buffered
+   *         data and remaining data in the original stream)
    */
-  def copyStreamUpTo(in: InputStream, maxSize: Long): (Boolean, InputStream) = {
+  def copyStreamUpTo(in: InputStream, maxSize: Long): InputStream = {
     var count = 0L
     val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
     val fullyCopied = tryWithSafeFinally {
@@ -369,10 +376,9 @@ private[spark] object Utils extends Logging {
       }
     }
     if (fullyCopied) {
-      (fullyCopied, out.toChunkedByteBuffer.toInputStream(dispose = true))
+      out.toChunkedByteBuffer.toInputStream(dispose = true)
     } else {
-      (fullyCopied, new SequenceInputStream(
-        out.toChunkedByteBuffer.toInputStream(dispose = true), in))
+      new SequenceInputStream( out.toChunkedByteBuffer.toInputStream(dispose = true), in)
     }
   }
 

@@ -466,28 +466,22 @@ final class ShuffleBlockFetcherIterator(
               buf.release()
               throwFetchFailedException(blockId, address, e)
           }
-          var isStreamCopied: Boolean = false
           try {
             input = streamWrapper(blockId, in)
-            // Only copy the stream if it's wrapped by compression or encryption upto a size of
-            // maxBytesInFlight/3. If stream is longer, then corruption will be caught while reading
-            // the stream.
+            // If the stream is compressed or wrapped, then we optionally decompress/unwrap the
+            // first maxBytesInFlight/3 bytes into memory, to check for corruption in that portion
+            // of the data. But even if 'detectCorruptUseExtraMemory' configuration is off, or if
+            // the corruption is later, we'll still detect the corruption later in the stream.
             streamCompressedOrEncrypted = !input.eq(in)
             if (streamCompressedOrEncrypted && detectCorruptUseExtraMemory) {
-              isStreamCopied = true
-              // Decompress the block upto maxBytesInFlight/3 at once to detect any corruption which
-              // could increase the memory usage and potentially increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              val (fullyCopied: Boolean, mergedStream: InputStream) = Utils.copyStreamUpTo(
-                input, maxBytesInFlight / 3)
-              isStreamCopied = fullyCopied
-              input = mergedStream
+              input = Utils.copyStreamUpTo(input, maxBytesInFlight / 3)
             }
           } catch {
             case e: IOException =>
               buf.release()
               if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                || corruptedBlocks.contains(blockId)) {
+                  || corruptedBlocks.contains(blockId)) {
                 throwFetchFailedException(blockId, address, e)
               } else {
                 logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
@@ -497,7 +491,9 @@ final class ShuffleBlockFetcherIterator(
               }
           } finally {
             // TODO: release the buf here to free memory earlier
-            if (isStreamCopied) {
+            if (input == null) {
+              // Close the underlying stream if there was an issue in wrapping the stream using
+              // streamWrapper
               in.close()
             }
           }

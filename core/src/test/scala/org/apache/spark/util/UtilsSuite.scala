@@ -222,19 +222,20 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     // testing for inputLength less than, equal to and greater than limit
     (limit - 2 to limit + 2).foreach { inputLength =>
       val in = new ByteArrayInputStream(bytes.take(inputLength))
-      val (fullyCopied: Boolean, mergedStream: InputStream) = Utils.copyStreamUpTo(in, limit)
+      val mergedStream = Utils.copyStreamUpTo(in, limit)
       try {
         // Get a handle on the buffered data, to make sure memory gets freed once we read past the
         // end of it. Need to use reflection to get handle on inner structures for this check
         val byteBufferInputStream = if (mergedStream.isInstanceOf[ChunkedByteBufferInputStream]) {
+          assert(inputLength < limit)
           mergedStream.asInstanceOf[ChunkedByteBufferInputStream]
         } else {
+          assert(inputLength >= limit)
           val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
           val fieldValue = getFieldValue(sequenceStream, "in")
           assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
           fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
         }
-        assert(fullyCopied === (inputLength < limit))
         (0 until inputLength).foreach { idx =>
           assert(bytes(idx) === mergedStream.read().asInstanceOf[Byte])
           if (idx == limit) {
