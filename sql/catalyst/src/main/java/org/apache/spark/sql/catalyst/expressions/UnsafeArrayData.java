@@ -53,8 +53,6 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 
 public final class UnsafeArrayData extends ArrayData {
-  private static final SpecializedGettersReader reader = new SpecializedGettersReader(true, true);
-
   public static int calculateHeaderPortionInBytes(int numFields) {
     return (int)calculateHeaderPortionInBytes((long)numFields);
   }
@@ -138,7 +136,7 @@ public final class UnsafeArrayData extends ArrayData {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    return reader.read(this, ordinal, dataType);
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override

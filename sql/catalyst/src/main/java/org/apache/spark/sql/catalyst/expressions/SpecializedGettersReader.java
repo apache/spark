@@ -19,55 +19,71 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.types.*;
 
-public class SpecializedGettersReader {
-  private final boolean handleNull;
-  private final boolean handleUserDefinedType;
+public final class SpecializedGettersReader {
+  private SpecializedGettersReader() {}
 
-  public SpecializedGettersReader(boolean handleNull, boolean handleUserDefinedType) {
-    this.handleNull = handleNull;
-    this.handleUserDefinedType = handleUserDefinedType;
-  }
-
-  public Object read(SpecializedGetters obj, int ordinal, DataType dataType) {
+  public static Object read(
+      SpecializedGetters obj,
+      int ordinal,
+      DataType dataType,
+      boolean handleNull,
+      boolean handleUserDefinedType) {
     if (handleNull && (obj.isNullAt(ordinal) || dataType instanceof NullType)) {
       return null;
-    } else if (dataType instanceof BooleanType) {
+    }
+    if (dataType instanceof BooleanType) {
       return obj.getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
+    }
+    if (dataType instanceof ByteType) {
       return obj.getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
+    }
+    if (dataType instanceof ShortType) {
       return obj.getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
+    }
+    if (dataType instanceof IntegerType) {
       return obj.getInt(ordinal);
-    } else if (dataType instanceof LongType) {
+    }
+    if (dataType instanceof LongType) {
       return obj.getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
+    }
+    if (dataType instanceof FloatType) {
       return obj.getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
+    }
+    if (dataType instanceof DoubleType) {
       return obj.getDouble(ordinal);
-    } else if (dataType instanceof DecimalType) {
+    }
+    if (dataType instanceof DecimalType) {
       DecimalType dt = (DecimalType) dataType;
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
-    } else if (dataType instanceof DateType) {
-      return obj.getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return obj.getLong(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return obj.getBinary(ordinal);
-    } else if (dataType instanceof StringType) {
-      return obj.getUTF8String(ordinal);
-    } else if (dataType instanceof CalendarIntervalType) {
-      return obj.getInterval(ordinal);
-    } else if (dataType instanceof StructType) {
-      return obj.getStruct(ordinal, ((StructType) dataType).size());
-    } else if (dataType instanceof ArrayType) {
-      return obj.getArray(ordinal);
-    } else if (dataType instanceof MapType) {
-      return obj.getMap(ordinal);
-    } else if (handleUserDefinedType && dataType instanceof UserDefinedType) {
-      return obj.get(ordinal, ((UserDefinedType)dataType).sqlType());
-    } else {
-      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
+    if (dataType instanceof DateType) {
+      return obj.getInt(ordinal);
+    }
+    if (dataType instanceof TimestampType) {
+      return obj.getLong(ordinal);
+    }
+    if (dataType instanceof BinaryType) {
+      return obj.getBinary(ordinal);
+    }
+    if (dataType instanceof StringType) {
+      return obj.getUTF8String(ordinal);
+    }
+    if (dataType instanceof CalendarIntervalType) {
+      return obj.getInterval(ordinal);
+    }
+    if (dataType instanceof StructType) {
+      return obj.getStruct(ordinal, ((StructType) dataType).size());
+    }
+    if (dataType instanceof ArrayType) {
+      return obj.getArray(ordinal);
+    }
+    if (dataType instanceof MapType) {
+      return obj.getMap(ordinal);
+    }
+    if (handleUserDefinedType && dataType instanceof UserDefinedType) {
+      return obj.get(ordinal, ((UserDefinedType)dataType).sqlType());
+    }
+
+    throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
   }
 }

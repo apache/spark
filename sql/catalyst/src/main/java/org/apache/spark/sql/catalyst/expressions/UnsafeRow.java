@@ -63,8 +63,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   public static final int WORD_SIZE = 8;
 
-  private static final SpecializedGettersReader reader = new SpecializedGettersReader(true, true);
-
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
   //////////////////////////////////////////////////////////////////////////////
@@ -301,7 +299,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    return reader.read(this, ordinal, dataType);
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override

@@ -30,9 +30,6 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 @Evolving
 public final class ColumnarArray extends ArrayData {
-  private static final SpecializedGettersReader reader = new SpecializedGettersReader(
-      false, false);
-
   // The data for this array. This array contains elements from
   // data[offset] to data[offset + length).
   private final ColumnVector data;
@@ -178,7 +175,7 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    return reader.read(this, ordinal, dataType);
+    return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
   }
 
   @Override
