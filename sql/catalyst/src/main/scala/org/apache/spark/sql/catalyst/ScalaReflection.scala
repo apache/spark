@@ -66,7 +66,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def dataTypeFor[T : TypeTag]: DataType = dataTypeFor(localTypeOf[T])
 
-  private def dataTypeFor(tpe: `Type`): DataType = cleanUpReflectionObjects {
+  def dataTypeFor(tpe: `Type`): DataType = cleanUpReflectionObjects {
     tpe.dealias match {
       case t if t <:< definitions.NullTpe => NullType
       case t if t <:< definitions.IntTpe => IntegerType
@@ -99,7 +99,7 @@ object ScalaReflection extends ScalaReflection {
    * Special handling is performed for primitive types to map them back to their raw
    * JVM form instead of the Scala Array that handles auto boxing.
    */
-  private def arrayClassFor(tpe: `Type`): ObjectType = cleanUpReflectionObjects {
+  def arrayClassFor(tpe: `Type`): ObjectType = cleanUpReflectionObjects {
     val cls = tpe.dealias match {
       case t if t <:< definitions.IntTpe => classOf[Array[Int]]
       case t if t <:< definitions.LongTpe => classOf[Array[Long]]
@@ -143,213 +143,8 @@ object ScalaReflection extends ScalaReflection {
     // Assumes we are deserializing the first column of a row.
     deserializerForWithNullSafetyAndUpcast(GetColumnByOrdinal(0, dataType), dataType,
       nullable = nullable, walkedTypePath,
-      (casted, typePath) => deserializerFor(tpe, casted, typePath))
-  }
-
-  /**
-   * Returns an expression that can be used to deserialize an input expression to an object of type
-   * `T` with a compatible schema.
-   *
-   * @param tpe The `Type` of deserialized object.
-   * @param path The expression which can be used to extract serialized value.
-   * @param walkedTypePath The paths from top to bottom to access current field when deserializing.
-   */
-  private def deserializerFor(
-      tpe: `Type`,
-      path: Expression,
-      walkedTypePath: WalkedTypePath): Expression = cleanUpReflectionObjects {
-    tpe.dealias match {
-      case t if !dataTypeFor(t).isInstanceOf[ObjectType] => path
-
-      case t if t <:< localTypeOf[Option[_]] =>
-        val TypeRef(_, _, Seq(optType)) = t
-        val className = getClassNameFromType(optType)
-        val newTypePath = walkedTypePath.recordOption(className)
-        WrapOption(deserializerFor(optType, path, newTypePath), dataTypeFor(optType))
-
-      case t if t <:< localTypeOf[java.lang.Integer] =>
-        createDeserializerForTypesSupportValueOf(path,
-          classOf[java.lang.Integer])
-
-      case t if t <:< localTypeOf[java.lang.Long] =>
-        createDeserializerForTypesSupportValueOf(path,
-          classOf[java.lang.Long])
-
-      case t if t <:< localTypeOf[java.lang.Double] =>
-        createDeserializerForTypesSupportValueOf(path,
-          classOf[java.lang.Double])
-
-      case t if t <:< localTypeOf[java.lang.Float] =>
-        createDeserializerForTypesSupportValueOf(path,
-          classOf[java.lang.Float])
-
-      case t if t <:< localTypeOf[java.lang.Short] =>
-        createDeserializerForTypesSupportValueOf(path,
-          classOf[java.lang.Short])
-
-      case t if t <:< localTypeOf[java.lang.Byte] =>
-        createDeserializerForTypesSupportValueOf(path,
-          classOf[java.lang.Byte])
-
-      case t if t <:< localTypeOf[java.lang.Boolean] =>
-        createDeserializerForTypesSupportValueOf(path,
-          classOf[java.lang.Boolean])
-
-      case t if t <:< localTypeOf[java.time.LocalDate] =>
-        createDeserializerForLocalDate(path)
-
-      case t if t <:< localTypeOf[java.sql.Date] =>
-        createDeserializerForSqlDate(path)
-
-      case t if t <:< localTypeOf[java.time.Instant] =>
-        createDeserializerForInstant(path)
-
-      case t if t <:< localTypeOf[java.sql.Timestamp] =>
-        createDeserializerForSqlTimestamp(path)
-
-      case t if t <:< localTypeOf[java.lang.String] =>
-        createDeserializerForString(path, returnNullable = false)
-
-      case t if t <:< localTypeOf[java.math.BigDecimal] =>
-        createDeserializerForJavaBigDecimal(path, returnNullable = false)
-
-      case t if t <:< localTypeOf[BigDecimal] =>
-        createDeserializerForScalaBigDecimal(path, returnNullable = false)
-
-      case t if t <:< localTypeOf[java.math.BigInteger] =>
-        createDeserializerForJavaBigInteger(path, returnNullable = false)
-
-      case t if t <:< localTypeOf[scala.math.BigInt] =>
-        createDeserializerForScalaBigInt(path)
-
-      case t if t <:< localTypeOf[Array[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, elementNullable) = schemaFor(elementType)
-        val className = getClassNameFromType(elementType)
-        val newTypePath = walkedTypePath.recordArray(className)
-
-        val mapFunction: Expression => Expression = element => {
-          // upcast the array element to the data type the encoder expected.
-          deserializerForWithNullSafetyAndUpcast(
-            element,
-            dataType,
-            nullable = elementNullable,
-            newTypePath,
-            (casted, typePath) => deserializerFor(elementType, casted, typePath))
-        }
-
-        val arrayData = UnresolvedMapObjects(mapFunction, path)
-        val arrayCls = arrayClassFor(elementType)
-
-        val methodName = elementType match {
-          case t if t <:< definitions.IntTpe => "toIntArray"
-          case t if t <:< definitions.LongTpe => "toLongArray"
-          case t if t <:< definitions.DoubleTpe => "toDoubleArray"
-          case t if t <:< definitions.FloatTpe => "toFloatArray"
-          case t if t <:< definitions.ShortTpe => "toShortArray"
-          case t if t <:< definitions.ByteTpe => "toByteArray"
-          case t if t <:< definitions.BooleanTpe => "toBooleanArray"
-          // non-primitive
-          case _ => "array"
-        }
-        Invoke(arrayData, methodName, arrayCls, returnNullable = false)
-
-      // We serialize a `Set` to Catalyst array. When we deserialize a Catalyst array
-      // to a `Set`, if there are duplicated elements, the elements will be de-duplicated.
-      case t if t <:< localTypeOf[Seq[_]] ||
-          t <:< localTypeOf[scala.collection.Set[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, elementNullable) = schemaFor(elementType)
-        val className = getClassNameFromType(elementType)
-        val newTypePath = walkedTypePath.recordArray(className)
-
-        val mapFunction: Expression => Expression = element => {
-          deserializerForWithNullSafetyAndUpcast(
-            element,
-            dataType,
-            nullable = elementNullable,
-            newTypePath,
-            (casted, typePath) => deserializerFor(elementType, casted, typePath))
-        }
-
-        val companion = t.dealias.typeSymbol.companion.typeSignature
-        val cls = companion.member(TermName("newBuilder")) match {
-          case NoSymbol if t <:< localTypeOf[Seq[_]] => classOf[Seq[_]]
-          case NoSymbol if t <:< localTypeOf[scala.collection.Set[_]] =>
-            classOf[scala.collection.Set[_]]
-          case _ => mirror.runtimeClass(t.typeSymbol.asClass)
-        }
-        UnresolvedMapObjects(mapFunction, path, Some(cls))
-
-      case t if t <:< localTypeOf[Map[_, _]] =>
-        val TypeRef(_, _, Seq(keyType, valueType)) = t
-
-        val classNameForKey = getClassNameFromType(keyType)
-        val classNameForValue = getClassNameFromType(valueType)
-
-        val newTypePath = walkedTypePath.recordMap(classNameForKey, classNameForValue)
-
-        UnresolvedCatalystToExternalMap(
-          path,
-          p => deserializerFor(keyType, p, newTypePath),
-          p => deserializerFor(valueType, p, newTypePath),
-          mirror.runtimeClass(t.typeSymbol.asClass)
-        )
-
-      case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
-        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().
-          getConstructor().newInstance()
-        val obj = NewInstance(
-          udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
-          Nil,
-          dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
-        Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
-
-      case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
-          newInstance().asInstanceOf[UserDefinedType[_]]
-        val obj = NewInstance(
-          udt.getClass,
-          Nil,
-          dataType = ObjectType(udt.getClass))
-        Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
-
-      case t if definedByConstructorParams(t) =>
-        val params = getConstructorParameters(t)
-
-        val cls = getClassFromType(tpe)
-
-        val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
-          val Schema(dataType, nullable) = schemaFor(fieldType)
-          val clsName = getClassNameFromType(fieldType)
-          val newTypePath = walkedTypePath.recordField(clsName, fieldName)
-
-          // For tuples, we based grab the inner fields by ordinal instead of name.
-          val newPath = if (cls.getName startsWith "scala.Tuple") {
-            deserializerFor(
-              fieldType,
-              addToPathOrdinal(path, i, dataType, newTypePath),
-              newTypePath)
-          } else {
-            deserializerFor(
-              fieldType,
-              addToPath(path, fieldName, dataType, newTypePath),
-              newTypePath)
-          }
-          expressionWithNullSafety(
-            newPath,
-            nullable = nullable,
-            newTypePath)
-        }
-
-        val newInstance = NewInstance(cls, arguments, ObjectType(cls), propagateNull = false)
-
-        expressions.If(
-          IsNull(path),
-          expressions.Literal.create(null, ObjectType(cls)),
-          newInstance
-        )
-    }
+      (casted, typePath) =>
+        TypeInference.deserializerFor(ScalaInference(tpe), casted, typePath))
   }
 
   /**
