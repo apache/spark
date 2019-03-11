@@ -28,9 +28,6 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 trait DateTimeFormatterHelper {
-  // Sets hours, minutes, seconds and nanos of second to zeros
-  lazy val zeroLocalTime = LocalTime.ofNanoOfDay(0)
-
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
   protected def toZonedDateTime(
@@ -66,6 +63,8 @@ private object DateTimeFormatterHelper {
   val cache = CacheBuilder.newBuilder()
     .maximumSize(128)
     .build[(String, Locale), DateTimeFormatter]()
+  // Sets hours, minutes, seconds and nanos of second to zeros
+  val zeroLocalTime = LocalTime.ofNanoOfDay(0)
 
   def createBuilder(): DateTimeFormatterBuilder = {
     new DateTimeFormatterBuilder().parseCaseInsensitive()
