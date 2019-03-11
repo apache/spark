@@ -170,21 +170,14 @@ private[spark] object PythonRDD extends Logging {
       val in = new DataInputStream(s.getInputStream)
       Utils.tryWithSafeFinally {
         val iter = rdd.toLocalIterator
-        var stop = false
-        while (!stop) {
-          stop = !iter.hasNext
-          if (!stop) {
-            out.writeInt(1)
-            out.flush()
-            stop = in.readInt() == 0
-            if (!stop) {
-              writeObjectToStream(iter.next(), out)
-              out.flush()
-            }
-          } else {
-            out.writeInt(0)
-            out.flush()
-          }
+
+        // Send data while request to stop is nonzero and iter has next
+        while (in.readInt() != 0 && iter.hasNext) {
+
+          // Write the next object and signal end of data for this iteration
+          writeObjectToStream(iter.next(), out)
+          out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+          out.flush()
         }
       } {
         out.close()

@@ -41,7 +41,7 @@ else:
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, AutoBatchedSerializer, read_int, write_int
+    PickleSerializer, pack_long, AutoBatchedSerializer, write_int
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -152,44 +152,39 @@ def _load_from_socket(sock_info, serializer):
     return serializer.load_stream(sockfile)
 
 
-class _PyLocalIterator(object):
+class _PyLocalIterable(object):
 
     def __init__(self, sock_info, serializer):
         (self.sockfile, self.sock) = _create_local_socket(sock_info)
-        self.read_iter = serializer.load_stream(self.sockfile)
+        self.serializer = serializer
 
     def __iter__(self):
-        return self
+        while True:
+            try:
+                # Request data from Java, if no more then connection is closed
+                write_int(1, self.sockfile)
+                self.sockfile.flush()
 
-    def __next__(self):
-        has_next = read_int(self.sockfile)
-        if has_next == 0:
-            raise StopIteration
-        # Request more data from Java, then read from stream
-        write_int(1, self.sockfile)
-        self.sockfile.flush()
-        return next(self.read_iter)
+                # Read one item from Java, if using BatchedSerializer batches have multiple items
+                for item in self.serializer.load_stream(self.sockfile):
+                    yield item
+            except Exception:  # TODO: more specific error, ConnectionError / socket.error
+                break
 
     def __del__(self):
         try:
-            # Tell Java to stop sending data
-            has_next = read_int(self.sockfile)
-            if has_next != 0:
-                write_int(0, self.sockfile)
-                self.sockfile.flush()
+            # Tell Java to stop sending data and close connection
+            write_int(0, self.sockfile)
+            self.sockfile.flush()
         except Exception:
             pass
         finally:
             try:
-                # Attempt to close the socket
+                # Attempt to close the socket, ignore any errors
                 self.sockfile.close()
                 self.sock.close()
             except Exception:
                 pass
-
-    def next(self):
-        """For python2 compatibility."""
-        return self.__next__()
 
 
 def ignore_unicode_prefix(f):
@@ -2431,7 +2426,7 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        return _PyLocalIterator(sock_info, self._jrdd_deserializer)
+        return iter(_PyLocalIterable(sock_info, self._jrdd_deserializer))
 
     def barrier(self):
         """
