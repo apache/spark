@@ -35,7 +35,7 @@ trait DateTimeFormatterHelper {
       zoneId: ZoneId): ZonedDateTime = {
     // Parsed input might not have time related part. In that case, time component is set to zeros.
     val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
-    val localTime = if (parsedLocalTime == null) zeroLocalTime else parsedLocalTime
+    val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
     // Parsed input must have date component. At least, year must present in temporalAccessor.
     val localDate = temporalAccessor.query(TemporalQueries.localDate)
 
@@ -63,8 +63,6 @@ private object DateTimeFormatterHelper {
   val cache = CacheBuilder.newBuilder()
     .maximumSize(128)
     .build[(String, Locale), DateTimeFormatter]()
-  // Sets hours, minutes, seconds and nanos of second to zeros
-  val zeroLocalTime = LocalTime.ofNanoOfDay(0)
 
   def createBuilder(): DateTimeFormatterBuilder = {
     new DateTimeFormatterBuilder().parseCaseInsensitive()
