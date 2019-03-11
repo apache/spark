@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.immutable.IndexedSeq
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -47,7 +46,7 @@ case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
 class CacheManager extends Logging {
 
   @transient
-  private val cachedData = new java.util.LinkedList[CachedData]
+  private var cachedData = IndexedSeq[CachedData]()
 
   @transient
   private val cacheLock = new ReentrantReadWriteLock
@@ -72,12 +71,12 @@ class CacheManager extends Logging {
 
   /** Clears all cached tables. */
   def clearCache(): Unit = writeLock {
-    cachedData.asScala.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
-    cachedData.clear()
+    cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
+    cachedData = IndexedSeq[CachedData]()
   }
 
   /** Checks if the cache is empty. */
-  def isEmpty: Boolean = readLock {
+  def isEmpty: Boolean = {
     cachedData.isEmpty
   }
 
@@ -105,7 +104,7 @@ class CacheManager extends Logging {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
         } else {
-          cachedData.add(CachedData(planToCache, inMemoryRelation))
+          cachedData = CachedData(planToCache, inMemoryRelation) +: cachedData
         }
       }
     }
@@ -144,13 +143,10 @@ class CacheManager extends Logging {
       } else {
         _.sameResult(plan)
       }
-    val cachedDataCopy = readLock {
-      cachedData.asScala.clone()
-    }
-    val plansToUncache = cachedDataCopy.filter(cd => shouldRemove(cd.plan))
+    val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
     plansToUncache.foreach { cd =>
       writeLock {
-        cachedData.remove(cd)
+        cachedData = cachedData.filter(_ != cd)
       }
       cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
     }
@@ -188,15 +184,12 @@ class CacheManager extends Logging {
   private def recacheByCondition(
       spark: SparkSession,
       condition: CachedData => Boolean): Unit = {
-    val cachedDataCopy = readLock {
-      cachedData.asScala.clone()
-    }
-    val needToRecache = cachedDataCopy.filter(condition)
+    val needToRecache = cachedData.filter(condition)
     needToRecache.map { cd =>
       writeLock {
         // Remove the cache entry before we create a new one, so that we can have a different
         // physical plan.
-        cachedData.remove(cd)
+        cachedData = cachedData.filter(_ != cd)
       }
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val plan = spark.sessionState.executePlan(cd.plan).executedPlan
@@ -208,20 +201,20 @@ class CacheManager extends Logging {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
           logWarning("While recaching, data was already added to cache.")
         } else {
-          cachedData.add(recomputedPlan)
+          cachedData = recomputedPlan +: cachedData
         }
       }
     }
   }
 
   /** Optionally returns cached data for the given [[Dataset]] */
-  def lookupCachedData(query: Dataset[_]): Option[CachedData] = readLock {
+  def lookupCachedData(query: Dataset[_]): Option[CachedData] = {
     lookupCachedData(query.logicalPlan)
   }
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
-  def lookupCachedData(plan: LogicalPlan): Option[CachedData] = readLock {
-    cachedData.asScala.find(cd => plan.sameResult(cd.plan))
+  def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
+    cachedData.find(cd => plan.sameResult(cd.plan))
   }
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
