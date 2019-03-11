@@ -370,6 +370,15 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
+  test("tuple with more than 22 elements") {
+    val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]]).toSeq
+
+    val exc = intercept[UnsupportedOperationException] {
+      ExpressionEncoder.tuple(encoders)
+    }
+    exc.getMessage.contains("tuple with more than 22 elements are not supported")
+  }
+
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
