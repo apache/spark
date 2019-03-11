@@ -111,9 +111,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
-  // YSPARK-1163: This lock is explicitly added here to keep the changes introduced by SPARK-19757
+  // SPARK-27112: This lock is explicitly added here to keep the changes introduced by SPARK-19757
   // and at the same time, reverting the code which held the lock to CoarseGrainedSchedulerBackend
-  // so as to fix the deadlock issue exposed in YSPARK-1163
+  // so as to fix the deadlock issue exposed in SPARK-27112
   private val makeOffersLock: Object = new Object
 
   class DriverEndpoint extends ThreadSafeRpcEndpoint with Logging {
@@ -646,7 +646,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
 
     var response: Future[Seq[String]] = null
-    val idleExecutorIds = executorIds.filter { id => !scheduler.isExecutorBusy(id) }
+    val idleExecutorIds = executorIds.filter { id => force || !scheduler.isExecutorBusy(id) }
     if (!blacklistingOnTaskCompletion) {
       /**
        * The flag blacklistingOnTaskCompletion ensures that this code path is not followed by
@@ -695,7 +695,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // force kill it (SPARK-9552)
     val executorsToKill = knownExecutors
       .filter { id => !executorsPendingToRemove.contains(id) }
-      .filter { id => force }
     executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
 
     logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")

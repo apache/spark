@@ -1128,19 +1128,19 @@ class ExecutorAllocationManagerSuite
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
     assert(numExecutorsTarget(manager) === 1)
-    verify(mockAllocationClient, never).killExecutors(any(), any(), any(), any())
+    verify(mockAllocationClient, never).killExecutors(any(), any(), any(), any(), any())
 
     // now we cross the idle timeout for executor-1, so we kill it.  the really important
     // thing here is that we do *not* ask the executor allocation client to adjust the target
     // number of executors down
-    when(mockAllocationClient.killExecutors(Seq("executor-1"), false, false, false))
+    when(mockAllocationClient.killExecutors(Seq("executor-1"), false, false, false, false))
       .thenReturn(Seq("executor-1"))
     clock.advance(3000)
     schedule(manager)
     assert(maxNumExecutorsNeeded(manager) === 1)
     assert(numExecutorsTarget(manager) === 1)
     // here's the important verify -- we did kill the executors, but did not adjust the target count
-    verify(mockAllocationClient).killExecutors(Seq("executor-1"), false, false, false)
+    verify(mockAllocationClient).killExecutors(Seq("executor-1"), false, false, false, false)
   }
 
   test("SPARK-26758 check executor target number after idle time out ") {
