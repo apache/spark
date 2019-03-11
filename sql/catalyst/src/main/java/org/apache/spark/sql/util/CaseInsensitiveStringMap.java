@@ -119,7 +119,16 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
    */
   public boolean getBoolean(String key, boolean defaultValue) {
     String value = get(key);
-    return value == null ? defaultValue : Boolean.parseBoolean(value);
+    // We can't use `Boolean.parseBoolean` here, as it returns false for invalid strings.
+    if (value == null) {
+      return defaultValue;
+    } else if (value.equalsIgnoreCase("true")) {
+      return true;
+    } else if (value.equalsIgnoreCase("false")) {
+      return false;
+    } else {
+      throw new IllegalArgumentException(value + " is not a boolean string.");
+    }
   }
 
   /**
