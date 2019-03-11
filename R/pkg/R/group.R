@@ -231,22 +231,11 @@ gapplyInternal <- function(x, func, schema) {
   }
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
   if (arrowEnabled) {
-    requireNamespace1 <- requireNamespace
-    if (!requireNamespace1("arrow", quietly = TRUE)) {
-      stop("'arrow' package should be installed.")
-    }
-    # Currenty Arrow optimization does not support raw for now.
-    # Also, it does not support explicit float type set by users.
     if (inherits(schema, "structType")) {
-      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
-        stop("Arrow optimization with gapply do not support FloatType yet.")
-      }
-      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "BinaryType"))) {
-        stop("Arrow optimization with gapply do not support BinaryType yet.")
-      }
+      checkSchemaInArrow(schema)
     } else if (is.null(schema)) {
-      stop(paste0("Arrow optimization does not support gapplyCollect yet. Please use ",
-                  "'collect' and 'gapply' APIs instead."))
+      stop(paste0("Arrow optimization does not support 'gapplyCollect' yet. Please disable ",
+                  "Arrow optimization or use 'collect' and 'gapply' APIs instead."))
     } else {
       stop("'schema' should be DDL-formatted string or structType.")
     }
