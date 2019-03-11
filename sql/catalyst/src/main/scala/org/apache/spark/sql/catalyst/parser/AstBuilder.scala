@@ -1212,7 +1212,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  override def visitCurrentDatetime(ctx: CurrentDatetimeContext): AnyRef = {
+  override def visitCurrentDatetime(ctx: CurrentDatetimeContext): AnyRef = withOrigin(ctx) {
     if (conf.ansiParserEnabled) {
       ctx.name.getType match {
         case SqlBaseParser.CURRENT_DATE =>
