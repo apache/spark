@@ -93,25 +93,6 @@ private[spark] class SecurityManager(
     "; users  with modify permissions: " + modifyAcls.toString() +
     "; groups with modify permissions: " + modifyAclsGroups.toString())
 
-  // Set our own authenticator to properly negotiate user/password for HTTP connections.
-  // This is needed by the HTTP client fetching from the HttpServer. Put here so its
-  // only set once.
-  if (authOn) {
-    Authenticator.setDefault(
-      new Authenticator() {
-        override def getPasswordAuthentication(): PasswordAuthentication = {
-          var passAuth: PasswordAuthentication = null
-          val userInfo = getRequestingURL().getUserInfo()
-          if (userInfo != null) {
-            val  parts = userInfo.split(":", 2)
-            passAuth = new PasswordAuthentication(parts(0), parts(1).toCharArray())
-          }
-          return passAuth
-        }
-      }
-    )
-  }
-
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
   private val defaultSSLOptions =
@@ -290,13 +271,6 @@ private[spark] class SecurityManager(
   def isEncryptionEnabled(): Boolean = {
     sparkConf.get(Network.NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)
   }
-
-  /**
-   * Gets the user used for authenticating HTTP connections.
-   * For now use a single hardcoded user.
-   * @return the HTTP user as a String
-   */
-  def getHttpUser(): String = "sparkHttpUser"
 
   /**
    * Gets the user used for authenticating SASL connections.
