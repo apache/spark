@@ -26,6 +26,7 @@ ERRORS=$(echo -e "q\n" \
         -Pkubernetes \
         -Pyarn \
         -Phive \
+        -Phadoop-3.1 \
         -Phive-thriftserver2 \
         checkstyle test:checkstyle \
     | awk '{if($1~/error/)print}' \
