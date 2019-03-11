@@ -73,7 +73,7 @@ class StringUtilsSuite extends SparkFunSuite {
       sc.append(s)
       sc.atLimit
     }
-    assert(checkLimit("under") === false)
+    assert(!checkLimit("under"))
     assert(checkLimit("1234567"))
     assert(checkLimit("1234567890"))
   }
