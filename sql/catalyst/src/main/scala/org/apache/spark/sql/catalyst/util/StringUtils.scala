@@ -150,8 +150,7 @@ object StringUtils extends Logging {
         strings.foreach(result.append)
         result.append(truncateMsg)
         result.toString
-      }
-      else {
+      } else {
         super.toString
       }
     }
