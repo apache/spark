@@ -52,6 +52,9 @@ public final class SpecializedGettersReader {
     if (dataType instanceof DoubleType) {
       return obj.getDouble(ordinal);
     }
+    if (dataType instanceof StringType) {
+      return obj.getUTF8String(ordinal);
+    }
     if (dataType instanceof DecimalType) {
       DecimalType dt = (DecimalType) dataType;
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
@@ -62,14 +65,11 @@ public final class SpecializedGettersReader {
     if (dataType instanceof TimestampType) {
       return obj.getLong(ordinal);
     }
-    if (dataType instanceof BinaryType) {
-      return obj.getBinary(ordinal);
-    }
-    if (dataType instanceof StringType) {
-      return obj.getUTF8String(ordinal);
-    }
     if (dataType instanceof CalendarIntervalType) {
       return obj.getInterval(ordinal);
+    }
+    if (dataType instanceof BinaryType) {
+      return obj.getBinary(ordinal);
     }
     if (dataType instanceof StructType) {
       return obj.getStruct(ordinal, ((StructType) dataType).size());
