@@ -1182,24 +1182,7 @@ setMethod("collect",
             arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
             if (arrowEnabled) {
               useArrow <- tryCatch({
-                requireNamespace1 <- requireNamespace
-                if (!requireNamespace1("arrow", quietly = TRUE)) {
-                  stop("'arrow' package should be installed.")
-                }
-                # Currenty Arrow optimization does not support raw for now.
-                # Also, it does not support explicit float type set by users.
-                if (inherits(schema(x), "structType")) {
-                  if (any(sapply(schema(x)$fields(),
-                                 function(x) x$dataType.toString() == "FloatType"))) {
-                    stop(paste0("Arrow optimization in the conversion from Spark DataFrame to R ",
-                                "DataFrame does not support FloatType yet."))
-                  }
-                  if (any(sapply(schema(x)$fields(),
-                                 function(x) x$dataType.toString() == "BinaryType"))) {
-                    stop(paste0("Arrow optimization in the conversion from Spark DataFrame to R ",
-                                "DataFrame does not support BinaryType yet."))
-                  }
-                }
+                checkSchemaInArrow(schema(x))
                 TRUE
               }, error = function(e) {
                 warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
@@ -1495,19 +1478,8 @@ dapplyInternal <- function(x, func, schema) {
 
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
   if (arrowEnabled) {
-    requireNamespace1 <- requireNamespace
-    if (!requireNamespace1("arrow", quietly = TRUE)) {
-      stop("'arrow' package should be installed.")
-    }
-    # Currenty Arrow optimization does not support raw for now.
-    # Also, it does not support explicit float type set by users.
     if (inherits(schema, "structType")) {
-      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
-        stop("Arrow optimization with dapply do not support FloatType yet.")
-      }
-      if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "BinaryType"))) {
-        stop("Arrow optimization with dapply do not support BinaryType yet.")
-      }
+      checkSchemaInArrow(schema)
     } else if (is.null(schema)) {
       stop(paste0("Arrow optimization does not support 'dapplyCollect' yet. Please disable ",
                   "Arrow optimization or use 'collect' and 'dapply' APIs instead."))
