@@ -226,30 +226,34 @@ private[hive] class IsolatedClientLoader(
             // and before Java 9 can see all JDK classes
             null
           }
-        new URLClassLoader(allJars, rootClassLoader) {
-          override def loadClass(name: String, resolve: Boolean): Class[_] = {
-            val loaded = findLoadedClass(name)
-            if (loaded == null) doLoadClass(name, resolve) else loaded
-          }
-          def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-            val classFileName = name.replaceAll("\\.", "/") + ".class"
-            if (isBarrierClass(name)) {
-              // For barrier classes, we construct a new copy of the class.
-              val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
-              logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
-              defineClass(name, bytes, 0, bytes.length)
-            } else if (!isSharedClass(name)) {
-              logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
-              super.loadClass(name, resolve)
-            } else {
-              // For shared classes, we delegate to baseClassLoader, but fall back in case the
-              // class is not found.
-              logDebug(s"shared class: $name")
-              try {
-                baseClassLoader.loadClass(name)
-              } catch {
-                case _: ClassNotFoundException =>
-                  super.loadClass(name, resolve)
+        if (allJars.isEmpty) {
+          rootClassLoader
+        } else {
+          new URLClassLoader(allJars, rootClassLoader) {
+            override def loadClass(name: String, resolve: Boolean): Class[_] = {
+              val loaded = findLoadedClass(name)
+              if (loaded == null) doLoadClass(name, resolve) else loaded
+            }
+            def doLoadClass(name: String, resolve: Boolean): Class[_] = {
+              val classFileName = name.replaceAll("\\.", "/") + ".class"
+              if (isBarrierClass(name)) {
+                // For barrier classes, we construct a new copy of the class.
+                val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+                logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
+                defineClass(name, bytes, 0, bytes.length)
+              } else if (!isSharedClass(name)) {
+                logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
+                super.loadClass(name, resolve)
+              } else {
+                // For shared classes, we delegate to baseClassLoader, but fall back in case the
+                // class is not found.
+                logDebug(s"shared class: $name")
+                try {
+                  baseClassLoader.loadClass(name)
+                } catch {
+                  case _: ClassNotFoundException =>
+                    super.loadClass(name, resolve)
+                }
               }
             }
           }
