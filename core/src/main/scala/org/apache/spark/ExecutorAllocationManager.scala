@@ -733,7 +733,7 @@ private[spark] class ExecutorAllocationManager(
         // Above cases are possible because these events are posted in different threads.
         // (see SPARK-4951 SPARK-26927)
         if (!allocationManager.executorIds.contains(executorId) &&
-          client.getExecutorIds().contains(executorId)) {
+            client.getExecutorIds().contains(executorId)) {
           allocationManager.onExecutorAdded(executorId)
         }
 
