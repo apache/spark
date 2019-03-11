@@ -566,6 +566,24 @@ private[spark] class ApplicationMaster(
           allocator.allocateResources()
         }
         failureCount = 0
+      } catch {
+        case i: InterruptedException => // do nothing
+        case e: ApplicationAttemptNotFoundException =>
+          failureCount += 1
+          logError("Exception from Reporter thread.", e)
+          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
+            e.getMessage)
+        case e: Throwable =>
+          failureCount += 1
+          if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+            finish(FinalApplicationStatus.FAILED,
+              ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
+                s"$failureCount time(s) from Reporter thread.")
+          } else {
+            logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
+          }
+      }
+      try {
         val numPendingAllocate = allocator.getPendingAllocate.size
         var sleepStartNs = 0L
         var sleepInterval = 200L // ms
