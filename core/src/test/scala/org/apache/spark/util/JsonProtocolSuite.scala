@@ -86,11 +86,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
+    val executorBlacklistedForStage = SparkListenerExecutorBlacklistedForStage(
+      executorBlacklistedForStageTime, "exec2", 10, 5, 0)
     val executorUnblacklisted =
       SparkListenerExecutorUnblacklisted(executorUnblacklistedTime, "exec1")
     val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeBlacklistedTime, "node1", 33)
     val nodeUnblacklisted =
       SparkListenerNodeUnblacklisted(nodeUnblacklistedTime, "node1")
+    val nodeBlacklistedForStage = SparkListenerNodeBlacklistedForStage(nodeBlacklistedForStageTime,
+      "node2", 10, 5, 0)
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
@@ -130,8 +134,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorRemoved, executorRemovedJsonString)
     testEvent(executorBlacklisted, executorBlacklistedJsonString)
     testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
+    testEvent(executorBlacklistedForStage, executorUnblacklistedForStageJsonString)
     testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
+    testEvent(nodeBlacklistedForStage, nodeUnblacklistedForStageJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
@@ -483,8 +489,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val executorRemovedTime = 1421458922000L
   private val executorBlacklistedTime = 1421458932000L
   private val executorUnblacklistedTime = 1421458942000L
+  private val executorBlacklistedForStageTime = 1421459002000L
   private val nodeBlacklistedTime = 1421458952000L
   private val nodeUnblacklistedTime = 1421458962000L
+  private val nodeBlacklistedForStageTime = 1421459402000L
 
   private def testEvent(event: SparkListenerEvent, jsonString: String) {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
@@ -2174,35 +2182,57 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val executorBlacklistedJsonString =
     s"""
       |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorBlacklisted",
-      |  "time" : ${executorBlacklistedTime},
-      |  "executorId" : "exec1",
-      |  "taskFailures" : 22
+      |  "Event" : "SparkListenerExecutorBlacklisted",
+      |  "Timestamp" : ${executorBlacklistedTime},
+      |  "Executor ID" : "exec1",
+      |  "Task Failures" : 22
       |}
     """.stripMargin
   private val executorUnblacklistedJsonString =
     s"""
       |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted",
-      |  "time" : ${executorUnblacklistedTime},
-      |  "executorId" : "exec1"
+      |  "Event" : "SparkListenerExecutorUnblacklisted",
+      |  "Timestamp" : ${executorUnblacklistedTime},
+      |  "Executor ID" : "exec1"
       |}
+    """.stripMargin
+  private val executorUnblacklistedForStageJsonString =
+    s"""
+       |{
+       |  "Event" : "SparkListenerExecutorBlacklistedForStage",
+       |  "Timestamp" : ${executorBlacklistedForStageTime},
+       |  "Executor ID" : "exec1",
+       |  "Task Failures" : 10,
+       |  "Stage ID" : 5,
+       |  "Stage Attempt ID" : 0
+       |}
     """.stripMargin
   private val nodeBlacklistedJsonString =
     s"""
       |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
-      |  "time" : ${nodeBlacklistedTime},
-      |  "hostId" : "node1",
-      |  "executorFailures" : 33
+      |  "Event" : "SparkListenerNodeBlacklisted",
+      |  "Timestamp" : ${nodeBlacklistedTime},
+      |  "Host ID" : "node1",
+      |  "Executor Failures" : 33
       |}
     """.stripMargin
   private val nodeUnblacklistedJsonString =
     s"""
       |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
-      |  "time" : ${nodeUnblacklistedTime},
-      |  "hostId" : "node1"
+      |  "Event" : "SparkListenerNodeUnblacklisted",
+      |  "Timestamp" : ${nodeUnblacklistedTime},
+      |  "Host ID" : "node1"
       |}
+    """.stripMargin
+  private val nodeUnblacklistedForStageJsonString =
+    s"""
+       |{
+       |  "Event" : "SparkListenerNodeBlacklistedForStage",
+       |  "Timestamp" : ${nodeBlacklistedForStageTime},
+       |  "Host ID" : "node2",
+       |  "Executor Failures" : 10,
+       |  "Stage ID" : 5,
+       |  "Stage Attempt ID" : 0
+       |}
     """.stripMargin
 }

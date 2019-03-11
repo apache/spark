@@ -101,6 +101,18 @@ private[spark] object JsonProtocol {
         executorMetricsUpdateToJson(metricsUpdate)
       case stageExecutorMetrics: SparkListenerStageExecutorMetrics =>
         stageExecutorMetricsToJson(stageExecutorMetrics)
+      case executorBlacklisted: SparkListenerExecutorBlacklisted =>
+        executorBlacklistedToJson(executorBlacklisted)
+      case executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage =>
+        executorBlacklistedForStageToJson(executorBlacklistedForStage)
+      case nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage =>
+        nodeBlacklistedForStageToJson(nodeBlacklistedForStage)
+      case executorUnblacklisted: SparkListenerExecutorUnblacklisted =>
+        executorUnblacklistedToJson(executorUnblacklisted)
+      case nodeBlacklisted: SparkListenerNodeBlacklisted =>
+        nodeBlacklistedToJson(nodeBlacklisted)
+      case nodeUnblacklisted: SparkListenerNodeUnblacklisted =>
+        nodeUnblacklistedToJson(nodeUnblacklisted)
       case blockUpdate: SparkListenerBlockUpdated =>
         blockUpdateToJson(blockUpdate)
       case _ => parse(mapper.writeValueAsString(event))
@@ -260,6 +272,53 @@ private[spark] object JsonProtocol {
     ("Stage ID" -> metrics.stageId) ~
     ("Stage Attempt ID" -> metrics.stageAttemptId) ~
     ("Executor Metrics" -> executorMetricsToJson(metrics.executorMetrics))
+  }
+
+  def executorBlacklistedToJson(executorBlacklisted: SparkListenerExecutorBlacklisted): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorBlacklisted) ~
+    ("Timestamp" -> executorBlacklisted.time) ~
+    ("Executor ID" -> executorBlacklisted.executorId) ~
+    ("Task Failures" -> executorBlacklisted.taskFailures)
+  }
+
+  def executorBlacklistedForStageToJson(
+    execBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorBlacklistedForStage) ~
+    ("Timestamp" -> execBlacklistedForStage.time) ~
+    ("Executor ID" -> execBlacklistedForStage.executorId) ~
+    ("Task Failures" -> execBlacklistedForStage.taskFailures) ~
+    ("Stage ID" -> execBlacklistedForStage.stageId) ~
+    ("Stage Attempt ID" -> execBlacklistedForStage.stageAttemptId)
+  }
+
+  def nodeBlacklistedForStageToJson(
+    nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.nodeBlacklistedForStage) ~
+    ("Timestamp" -> nodeBlacklistedForStage.time) ~
+    ("Host ID" -> nodeBlacklistedForStage.hostId) ~
+    ("Executor Failures" -> nodeBlacklistedForStage.executorFailures) ~
+    ("Stage ID" -> nodeBlacklistedForStage.stageId) ~
+    ("Stage Attempt ID" -> nodeBlacklistedForStage.stageAttemptId)
+  }
+
+  def executorUnblacklistedToJson(
+    executorUnblacklisted: SparkListenerExecutorUnblacklisted): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorUnblacklisted) ~
+    ("Timestamp" -> executorUnblacklisted.time) ~
+    ("Executor ID" -> executorUnblacklisted.executorId)
+  }
+
+  def nodeBlacklistedToJson(nodeBlacklisted: SparkListenerNodeBlacklisted): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.nodeBlacklisted) ~
+    ("Timestamp" -> nodeBlacklisted.time) ~
+    ("Host ID" -> nodeBlacklisted.hostId) ~
+    ("Executor Failures" -> nodeBlacklisted.executorFailures)
+  }
+
+  def nodeUnblacklistedToJson(nodeUnblacklisted: SparkListenerNodeUnblacklisted): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.nodeUnblacklisted) ~
+    ("Timestamp" -> nodeUnblacklisted.time) ~
+    ("Host ID" -> nodeUnblacklisted.hostId)
   }
 
   def blockUpdateToJson(blockUpdate: SparkListenerBlockUpdated): JValue = {
@@ -557,6 +616,14 @@ private[spark] object JsonProtocol {
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
     val stageExecutorMetrics = Utils.getFormattedClassName(SparkListenerStageExecutorMetrics)
+    val executorBlacklisted = Utils.getFormattedClassName(SparkListenerExecutorBlacklisted)
+    val executorBlacklistedForStage = Utils.getFormattedClassName(
+      SparkListenerExecutorBlacklistedForStage)
+    val nodeBlacklistedForStage = Utils.getFormattedClassName(SparkListenerNodeBlacklistedForStage)
+    val executorUnblacklisted = Utils.getFormattedClassName(
+      SparkListenerExecutorUnblacklisted)
+    val nodeBlacklisted = Utils.getFormattedClassName(SparkListenerNodeBlacklisted)
+    val nodeUnblacklisted = Utils.getFormattedClassName(SparkListenerNodeUnblacklisted)
     val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdated)
   }
 
@@ -582,6 +649,12 @@ private[spark] object JsonProtocol {
       case `logStart` => logStartFromJson(json)
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
       case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
+      case `executorBlacklisted` => executorBlacklistedFromJson(json)
+      case `executorBlacklistedForStage` => executorBlacklistedForStageFromJson(json)
+      case `nodeBlacklistedForStage` => nodeBlacklistedForStageFromJson(json)
+      case `executorUnblacklisted` => executorUnblacklistedFromJson(json)
+      case `nodeBlacklisted` => nodeBlacklistedFromJson(json)
+      case `nodeUnblacklisted` => nodeUnblacklistedFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
       case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
         .asInstanceOf[SparkListenerEvent]
@@ -745,6 +818,51 @@ private[spark] object JsonProtocol {
     val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
     val executorMetrics = executorMetricsFromJson(json \ "Executor Metrics")
     SparkListenerStageExecutorMetrics(execId, stageId, stageAttemptId, executorMetrics)
+  }
+
+  def executorBlacklistedFromJson(json: JValue): SparkListenerExecutorBlacklisted = {
+    val time = (json \ "Timestamp").extract[Long]
+    val execId = (json \ "Executor ID").extract[String]
+    val taskFailures = (json \ "Task Failures").extract[Int]
+    SparkListenerExecutorBlacklisted(time, execId, taskFailures)
+  }
+
+  def executorBlacklistedForStageFromJson(
+    json: JValue): SparkListenerExecutorBlacklistedForStage = {
+    val time = (json \ "Timestamp").extract[Long]
+    val execId = (json \ "Executor ID").extract[String]
+    val taskFailures = (json \ "Task Failures").extract[Int]
+    val stageId = (json \ "Stage ID").extract[Int]
+    val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
+    SparkListenerExecutorBlacklistedForStage(time, execId, taskFailures, stageId, stageAttemptId)
+  }
+
+  def nodeBlacklistedForStageFromJson(json: JValue): SparkListenerNodeBlacklistedForStage = {
+    val time = (json \ "Timestamp").extract[Long]
+    val hostId = (json \ "Host ID").extract[String]
+    val executorFailures = (json \ "Executor Failures").extract[Int]
+    val stageId = (json \ "Stage ID").extract[Int]
+    val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
+    SparkListenerNodeBlacklistedForStage(time, hostId, executorFailures, stageId, stageAttemptId)
+  }
+
+  def executorUnblacklistedFromJson(json: JValue): SparkListenerExecutorUnblacklisted = {
+    val time = (json \ "Timestamp").extract[Long]
+    val execId = (json \ "Executor ID").extract[String]
+    SparkListenerExecutorUnblacklisted(time, execId)
+  }
+
+  def nodeBlacklistedFromJson(json: JValue): SparkListenerNodeBlacklisted = {
+    val time = (json \ "Timestamp").extract[Long]
+    val hostId = (json \ "Host ID").extract[String]
+    val executorFailures = (json \ "Executor Failures").extract[Int]
+    SparkListenerNodeBlacklisted(time, hostId, executorFailures)
+  }
+
+  def nodeUnblacklistedFromJson(json: JValue): SparkListenerNodeUnblacklisted = {
+    val time = (json \ "Timestamp").extract[Long]
+    val hostId = (json \ "Host ID").extract[String]
+    SparkListenerNodeUnblacklisted(time, hostId)
   }
 
   def blockUpdateFromJson(json: JValue): SparkListenerBlockUpdated = {
