@@ -248,7 +248,7 @@ NULL
 -- !query 30
 select json_tuple(a, a) from t
 -- !query 30 schema
-struct<c0:string>
+struct<col1:string>
 -- !query 30 output
 NULL
 

@@ -1554,7 +1554,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // we should use `c0`, `c1`... as the name of fields if no alias is provided, to follow hive.
     checkAnswer(sql(
       """
-        |SELECT c0, c1
+        |SELECT col1, col2
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
         |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt
       """.stripMargin), Row("value1", "12"))

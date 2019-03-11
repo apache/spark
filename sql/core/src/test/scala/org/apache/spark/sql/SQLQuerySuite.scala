@@ -141,6 +141,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
+  test("SPARK-26879 Standardize One-Based column indexing for stack and json_tuple function") {
+    val dfstack = sql("SELECT stack(2, 1, 2, 3)")
+    assert(dfstack.columns(0) == "col1" && dfstack.columns(1) == "col2")
+    val dfjson_tuple = sql("SELECT json_tuple('{\"a\":1, \"b\":2}', 'a', 'b')")
+    assert(dfjson_tuple.columns(0) == "col1" && dfjson_tuple.columns(1) == "col2")
+  }
+
   test("support table.star") {
     checkAnswer(
       sql(

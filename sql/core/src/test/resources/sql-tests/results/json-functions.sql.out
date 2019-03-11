@@ -163,7 +163,7 @@ Invalid number of arguments for function from_json. Expected: one of 2 and 3; Fo
 -- !query 18
 SELECT json_tuple('{"a" : 1, "b" : 2}', CAST(NULL AS STRING), 'b', CAST(NULL AS STRING), 'a')
 -- !query 18 schema
-struct<c0:string,c1:string,c2:string,c3:string>
+struct<col1:string,col2:string,col3:string,col4:string>
 -- !query 18 output
 NULL	2	NULL	1
 
@@ -179,7 +179,7 @@ struct<>
 -- !query 20
 SELECT json_tuple(jsonField, 'b', CAST(NULL AS STRING), a) FROM jsonTable
 -- !query 20 schema
-struct<c0:string,c1:string,c2:string>
+struct<col1:string,col2:string,col3:string>
 -- !query 20 output
 2	NULL	1
 

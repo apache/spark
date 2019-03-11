@@ -372,7 +372,7 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
-    case (_, idx) => StructField(s"c$idx", StringType, nullable = true)
+    case (_, idx) => StructField(s"col${idx + 1}", StringType, nullable = true)
   })
 
   override def prettyName: String = "json_tuple"

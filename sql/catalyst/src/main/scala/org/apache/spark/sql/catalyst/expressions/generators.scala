@@ -179,7 +179,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   override def elementSchema: StructType =
     StructType(children.tail.take(numFields).zipWithIndex.map {
-      case (e, index) => StructField(s"col$index", e.dataType)
+      case (e, index) => StructField(s"col${index + 1}", e.dataType)
     })
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
