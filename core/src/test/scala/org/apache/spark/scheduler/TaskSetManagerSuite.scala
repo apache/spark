@@ -131,8 +131,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   val executors = new mutable.HashMap[String, String]
 
-  val skipRackResolving = sc.conf.getTimeAsMs(
-    "spark.locality.wait.rack", sc.conf.get(config.LOCALITY_WAIT).toString) == 0
+  val skipRackResolving = sc.conf.get(config.LOCALITY_WAIT_RACK) == 0L
 
   for ((execId, host) <- liveExecutors) {
     addExecutor(execId, host)

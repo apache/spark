@@ -22,7 +22,7 @@ import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.SparkRackResolver
-import org.apache.spark.internal.config.LOCALITY_WAIT
+import org.apache.spark.internal.config.LOCALITY_WAIT_RACK
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
@@ -31,8 +31,7 @@ private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(s
   private[spark] val resolver = new SparkRackResolver
 
   // Add a on-off switch to save time for rack resolving
-  val skipRackResolving: Boolean = sc.conf.getTimeAsMs(
-    "spark.locality.wait.rack", sc.conf.get(LOCALITY_WAIT).toString) == 0
+  val skipRackResolving: Boolean = sc.conf.get(LOCALITY_WAIT_RACK) == 0L
 
   // By default, rack is unknown
   override def getRackForHost(hostPort: String): Option[String] = {

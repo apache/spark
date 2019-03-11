@@ -83,16 +83,11 @@ object SparkRackResolver extends Logging {
           s"may reduce the time of rack resolving when submits a stage with a mass of tasks. " +
           s"Current number is $numArgs")
       }
-      try {
-        val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
-          .asInstanceOf[DNSToSwitchMapping]
-        dnsToSwitchMapping = newInstance match {
-          case _: CachedDNSToSwitchMapping => newInstance
-          case _ => new CachedDNSToSwitchMapping(newInstance)
-        }
-      } catch {
-        case e: Exception =>
-          throw new RuntimeException(e)
+      val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
+        .asInstanceOf[DNSToSwitchMapping]
+      dnsToSwitchMapping = newInstance match {
+        case _: CachedDNSToSwitchMapping => newInstance
+        case _ => new CachedDNSToSwitchMapping(newInstance)
       }
     }
   }
@@ -108,7 +103,6 @@ object SparkRackResolver extends Logging {
     } else {
       for ((hostName, rName) <- hostNames.zip(rNameList)) {
         if (Strings.isNullOrEmpty(rName)) {
-          // fallback to use default rack
           nodes += new NodeBase(hostName, NetworkTopology.DEFAULT_RACK)
           logDebug(s"Could not resolve $hostName. " +
             s"Falling back to ${NetworkTopology.DEFAULT_RACK}")

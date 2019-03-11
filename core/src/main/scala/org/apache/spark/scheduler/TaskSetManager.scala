@@ -189,17 +189,17 @@ private[spark] class TaskSetManager(
   addPendingTasks()
 
   private def addPendingTasks(): Unit = {
-    val array = new ArrayBuffer[(String, Int)]() // Array(preferredLocation, task index)
-    val duration = Utils.timeTakenMs(
+    val (_, duration) = Utils.timeTakenMs {
+      val array = new ArrayBuffer[(String, Int)]() // Array(preferredLocation, task index)
       for (i <- (0 until numTasks).reverse) {
         addPendingTask(i, Some(array))
       }
-    )
-    // Convert preferred location list to rack list in one invocation and zip with the origin index
-    sched.getRacksForHosts(array.map(_._1).toList).zip(array.map(_._2)) foreach {
-      case (Some(rack), index) =>
-        pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
-      case _ =>
+      // Convert preferred locations to racks in one invocation and zip with the origin indices
+      sched.getRacksForHosts(array.map(_._1).toList).zip(array.map(_._2)) foreach {
+        case (Some(rack), index) =>
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+        case _ =>
+      }
     }
     logInfo(s"Adding pending tasks take $duration ms")
   }
