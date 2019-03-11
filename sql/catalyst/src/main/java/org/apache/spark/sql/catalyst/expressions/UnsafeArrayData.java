@@ -234,7 +234,7 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UTF8String getUTF8String(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    return UnsafeHelper.getUTF8String(getLong(ordinal), baseObject, baseOffset);
+    return SqlTypesUnsafeHelper.getUTF8String(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
@@ -246,7 +246,7 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    return UnsafeHelper.getInterval(getLong(ordinal), baseObject, baseOffset);
+    return SqlTypesUnsafeHelper.getInterval(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override

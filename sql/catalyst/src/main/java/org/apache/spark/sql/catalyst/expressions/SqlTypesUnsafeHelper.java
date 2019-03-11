@@ -18,13 +18,32 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeHelper;
+import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
 public final class SqlTypesUnsafeHelper {
   private SqlTypesUnsafeHelper() {}
+
+  public static UTF8String getUTF8String(long offsetAndSize, Object baseObject, long baseOffset) {
+    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
+    final int size = UnsafeHelper.getSizeFromOffsetAndSize(offsetAndSize);
+    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+  }
+
+  public static CalendarInterval getInterval(
+      long offsetAndSize,
+      Object baseObject,
+      long baseOffset) {
+    final int offset = UnsafeHelper.getOffsetFromOffsetAndSize(offsetAndSize);
+    final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+    final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
+    return new CalendarInterval(months, microseconds);
+  }
 
   public static Decimal getDecimalExceedingLong(
       byte[] bytes,
