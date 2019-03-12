@@ -200,13 +200,14 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     case _ => false
   }
 
-  // HIVE-11253 removed toKryo(). Adapted it from Hive 1.2's SearchArgumentImpl.toKryo().
+  // HIVE-11253 moved `toKryo` from `SearchArgument` to `storage-api` module.
+  // This is copied from Hive 1.2's SearchArgumentImpl.toKryo().
   private def toKryo(sarg: SearchArgument): String = {
     val kryo = new Kryo()
     val out = new Output(4 * 1024, 10 * 1024 * 1024)
     kryo.writeObject(out, sarg)
     out.close()
-    Base64.encodeBase64String(out.toBytes())
+    Base64.encodeBase64String(out.toBytes)
   }
 }
 
