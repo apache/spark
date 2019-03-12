@@ -46,7 +46,7 @@ case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
 class CacheManager extends Logging {
 
   @transient
-	@volatile
+  @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
   @transient
@@ -145,9 +145,9 @@ class CacheManager extends Logging {
         _.sameResult(plan)
       }
     val (plansToUncache, remainingPlans) = cachedData.partition(cd => shouldRemove(cd.plan))
-	  writeLock {
-		  cachedData = remainingPlans
-	  }
+    writeLock {
+      cachedData = remainingPlans
+    }
     plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
 
     // Re-compile dependent cached queries after removing the cached query.
@@ -185,10 +185,10 @@ class CacheManager extends Logging {
       spark: SparkSession,
       condition: CachedData => Boolean): Unit = {
     val (needToRecache, remainingPlans) = cachedData.partition(condition)
-	  writeLock {
-		  // Remove the cache entry before creating a new ones.
-		  cachedData = remainingPlans
-	  }
+    writeLock {
+      // Remove the cache entry before creating a new ones.
+      cachedData = remainingPlans
+    }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val plan = spark.sessionState.executePlan(cd.plan).executedPlan
