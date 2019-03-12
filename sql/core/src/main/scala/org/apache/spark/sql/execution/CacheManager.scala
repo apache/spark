@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
@@ -239,6 +239,7 @@ class CacheManager extends Logging {
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
+      case command: IgnoreCachedData => command
       // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
       // canonicalizing plans, so that plans which are same except hint can hit the same cache.
       // However, we also want to keep the hint info after cache lookup. Here we skip the hint
