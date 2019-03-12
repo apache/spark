@@ -1055,7 +1055,7 @@ See the below table for the full list of pod specifications that will be overwri
   <td>annotations</td>
   <td>Adds the annotations from <code>spark.kubernetes.{driver,executor}.annotation.*</code></td>
   <td>
-    Spark will add additional labels specified by the spark configuration.
+    Spark will add additional annotations specified by the spark configuration.
   </td>
 </tr>
 </table>
