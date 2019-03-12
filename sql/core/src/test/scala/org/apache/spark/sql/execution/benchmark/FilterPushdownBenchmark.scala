@@ -417,7 +417,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
       val columns = (1 to width).map(i => s"id c$i")
       val df = spark.range(1).selectExpr(columns: _*)
-      (1000 to 15000 by 2000).foreach { numFilter =>
+      Seq(25, 5000, 15000).foreach { numFilter =>
         val whereExpression = (1 to numFilter)
           .map {
             i =>
@@ -450,7 +450,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
         val df = spark.range(1).selectExpr(columns: _*)
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
-          (1 to 1001 by 200).foreach { numFilter =>
+          Seq(25, 500, 1000).foreach { numFilter =>
             val whereColumn = (1 to numFilter)
               .map(i => col("c1") === lit(i))
               .foldLeft(lit(false))(_ || _)
