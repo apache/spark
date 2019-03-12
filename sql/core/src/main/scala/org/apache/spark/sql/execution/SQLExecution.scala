@@ -79,8 +79,9 @@ object SQLExecution {
       val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
         .filter(_ => truncateLength > 0)
         .map { sqlStr =>
-          Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
-            .substring(0, Math.min(truncateLength, sqlStr.length))
+          val redactedStr = Utils
+            .redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
+          redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
         }.getOrElse(callSite.shortForm)
 
       withSQLConfPropagated(sparkSession) {
