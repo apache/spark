@@ -213,9 +213,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         val objectMapper = new ObjectMapper()
         Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
-      // TODO SPARK-27113: remove this option.
-      val checkFilesExistsOpt = "check_files_exist" -> "true"
-      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption + checkFilesExistsOpt
+
+      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
