@@ -388,7 +388,7 @@ class ColumnPruningSuite extends PlanTest {
 
     val query2 = Sample(0.0, 0.6, false, 11L, x).select('a as 'aa)
     val optimized2 = Optimize.execute(query2.analyze)
-    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a)).select('a as 'aa)
+    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a as 'aa))
     comparePlans(optimized2, expected2.analyze)
   }
 
