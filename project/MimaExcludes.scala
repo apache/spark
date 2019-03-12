@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-26594] DataSourceOptions.asMap should return CaseInsensitiveMap
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.sources.v2.DataSourceOptions.asMap"),
+
     // [SPARK-25838] Remove formatVersion from Saveable
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.formatVersion"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.LocalLDAModel.formatVersion"),
