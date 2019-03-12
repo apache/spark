@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs.{Path, PathParam}
+import javax.ws.rs.Path
 
 @Path("/v1")
 private[v1] class ApiSqlRootResource extends ApiRequestContext {
