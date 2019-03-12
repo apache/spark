@@ -173,9 +173,7 @@ object RowEncoder {
         propagateNull = false)
 
       if (inputObject.nullable) {
-        If(IsNull(inputObject),
-          Literal.create(null, nonNullOutput.dataType),
-          nonNullOutput)
+        expressionForNullableExpr(inputObject, nonNullOutput)
       } else {
         nonNullOutput
       }
@@ -202,9 +200,7 @@ object RowEncoder {
       })
 
       if (inputObject.nullable) {
-        If(IsNull(inputObject),
-          Literal.create(null, nonNullOutput.dataType),
-          nonNullOutput)
+        expressionForNullableExpr(inputObject, nonNullOutput)
       } else {
         nonNullOutput
       }
@@ -337,5 +333,11 @@ object RowEncoder {
       If(IsNull(input),
         Literal.create(null, externalDataTypeFor(input.dataType)),
         CreateExternalRow(convertedFields, schema))
+  }
+
+  private def expressionForNullableExpr(
+      expr: Expression,
+      newExprWhenNotNull: Expression): Expression = {
+    If(IsNull(expr), Literal.create(null, newExprWhenNotNull.dataType), newExprWhenNotNull)
   }
 }
