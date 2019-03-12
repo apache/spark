@@ -699,6 +699,24 @@ object CollapseProject extends Rule[LogicalPlan] {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       }
+    case p1 @ Project(_, g @ GlobalLimit(_, l @ LocalLimit(_, p2: Project))) =>
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+        p1
+      } else {
+        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+        g.copy(child = l.copy(child = p2.copy(projectList = newProjectList)))
+      }
+    case p1 @ Project(_, l @ LocalLimit(_, p2: Project)) =>
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+        p1
+      } else {
+        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+        l.copy(child = p2.copy(projectList = newProjectList))
+      }
+    case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
+      r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
+    case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+      s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
@@ -737,6 +755,14 @@ object CollapseProject extends Rule[LogicalPlan] {
     // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
     rewrittenUpper.map { p =>
       CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+    }
+  }
+
+  private def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {
+    list1.length == list2.length && list1.zip(list2).forall {
+      case (e1, e2) if e1.semanticEquals(e2) => true
+      case (Alias(a: Attribute, _), b) if a.metadata == Metadata.empty && a.name == b.name => true
+      case _ => false
     }
   }
 }
