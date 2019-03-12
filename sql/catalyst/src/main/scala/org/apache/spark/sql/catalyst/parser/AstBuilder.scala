@@ -1301,8 +1301,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx: FunctionCallContext): FunctionIdentifier = {
       val opt = ctx.trimOption
       if (opt != null) {
-        if (ctx.functionIdentifier.getText.toLowerCase(Locale.ROOT) != "trim") {
-          throw new ParseException(s"The specified function ${ctx.functionIdentifier.getText} " +
+        if (ctx.qualifiedName.getText.toLowerCase(Locale.ROOT) != "trim") {
+          throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
             s"doesn't support with option ${opt.getText}.", ctx)
         }
         opt.getType match {
@@ -1317,7 +1317,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }
     }
     // Create the function call.
-    val name = ctx.functionIdentifier.getText
+    val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))
@@ -1327,7 +1327,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
-    val funcId = replaceFunctions(visitFunctionName(ctx.functionIdentifier), ctx)
+    val funcId = replaceFunctions(visitFunctionName(ctx.qualifiedName), ctx)
     val function = UnresolvedFunction(funcId, arguments, isDistinct)
 
 
@@ -1348,17 +1348,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ctx.identifier().asScala.map(_.getText) match {
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
-      case _ => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
+      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
-  }
-
-  private def visitFunctionName(ctx: FunctionIdentifierContext): FunctionIdentifier = {
-    val dbOption = if (ctx.db != null) {
-      Some(ctx.db.getText)
-    } else {
-      None
-    }
-    FunctionIdentifier(ctx.functionName.getText, dbOption)
   }
 
   /**

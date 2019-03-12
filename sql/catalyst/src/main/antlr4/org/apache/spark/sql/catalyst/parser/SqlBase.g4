@@ -559,12 +559,7 @@ tableIdentifier
     ;
 
 functionIdentifier
-    : (db=identifier '.')? function=functionName
-    ;
-
-functionName
-    : identifier
-    | {ansi}? (CURRENT_DATE | CURRENT_TIMESTAMP)
+    : (db=identifier '.')? function=identifier
     ;
 
 namedExpression
@@ -621,9 +616,9 @@ primaryExpression
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | functionIdentifier '(' (setQuantifier? argument+=expression
-       (',' argument+=expression)*)? ')' (OVER windowSpec)?                                    #functionCall
-    | functionIdentifier '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
+    | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
+       (OVER windowSpec)?                                                                      #functionCall
+    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
       FROM argument+=expression ')'                                                            #functionCall
     | IDENTIFIER '->' expression                                                               #lambda
     | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda

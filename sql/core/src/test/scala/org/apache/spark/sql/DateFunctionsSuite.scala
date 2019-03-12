@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -56,26 +55,6 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     // Now alias
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = NOW()"""), Row(true))
-  }
-
-  test("SPARK-26976 current_date and current_timestamp should work even if ANSI mode enabled") {
-    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
-      // current_date
-      Seq("CURRENT_DATE", "CURRENT_DATE()").foreach { funcName =>
-        val before = DateTimeUtils.millisToDays(System.currentTimeMillis())
-        val got = DateTimeUtils.fromJavaDate(sql(s"SELECT $funcName").collect().head.getDate(0))
-        val after = DateTimeUtils.millisToDays(System.currentTimeMillis())
-        assert(got >= before && got <= after)
-      }
-
-      // current_timestamp
-      Seq("CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP()").foreach { funcName =>
-        val before = System.currentTimeMillis
-        val got = sql(s"SELECT $funcName").collect().head.getTimestamp(0).getTime
-        val after = System.currentTimeMillis
-        assert(got >= before && got <= after)
-      }
-    }
   }
 
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
