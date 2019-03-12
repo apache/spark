@@ -155,7 +155,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      DDLUtils.checkDataColNames(tableDesc)
+      DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
       CreateHiveTableAsSelectCommand(tableDesc, query, query.output.map(_.name), mode)
 
     case InsertIntoDir(isLocal, storage, provider, child, overwrite)
@@ -210,7 +210,7 @@ case class RelationConversions(
       case CreateTable(tableDesc, mode, Some(query))
           if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
             isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
-        DDLUtils.checkDataColNames(tableDesc)
+        DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
     }
