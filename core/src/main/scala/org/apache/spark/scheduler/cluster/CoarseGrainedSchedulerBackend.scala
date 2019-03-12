@@ -258,15 +258,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       // Make sure no executor is killed while some task is launching on it
-      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
-        // Filter out executors under killing
-        val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
-        val workOffers = activeExecutors.map {
-          case (id, executorData) =>
-            new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort))
-        }.toIndexedSeq
-        scheduler.resourceOffers(workOffers)
+      val taskDescs = scheduler.synchronized {
+        CoarseGrainedSchedulerBackend.this.synchronized {
+          // Filter out executors under killing
+          val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+          val workOffers = activeExecutors.map {
+            case (id, executorData) =>
+              new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
+                Some(executorData.executorAddress.hostPort))
+          }.toIndexedSeq
+          scheduler.resourceOffers(workOffers)
+        }
       }
       if (!taskDescs.isEmpty) {
         launchTasks(taskDescs)
@@ -284,16 +286,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
       // Make sure no executor is killed while some task is launching on it
-      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
-        // Filter out executors under killing
-        if (executorIsAlive(executorId)) {
-          val executorData = executorDataMap(executorId)
-          val workOffers = IndexedSeq(
-            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort)))
-          scheduler.resourceOffers(workOffers)
-        } else {
-          Seq.empty
+      val taskDescs = scheduler.synchronized {
+        CoarseGrainedSchedulerBackend.this.synchronized {
+          // Filter out executors under killing
+          if (executorIsAlive(executorId)) {
+            val executorData = executorDataMap(executorId)
+            val workOffers = IndexedSeq(
+              new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
+                Some(executorData.executorAddress.hostPort)))
+            scheduler.resourceOffers(workOffers)
+          } else {
+            Seq.empty
+          }
         }
       }
       if (!taskDescs.isEmpty) {
@@ -631,8 +635,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       force: Boolean): Seq[String] = {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
 
+    val idleExecutorIds = executorIds.filter { id => force || !scheduler.isExecutorBusy(id) }
+
     val response = synchronized {
-      val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
+      val (knownExecutors, unknownExecutors) = idleExecutorIds.partition(executorDataMap.contains)
       unknownExecutors.foreach { id =>
         logWarning(s"Executor to kill $id does not exist!")
       }
@@ -641,7 +647,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
       val executorsToKill = knownExecutors
         .filter { id => !executorsPendingToRemove.contains(id) }
-        .filter { id => force || !scheduler.isExecutorBusy(id) }
       executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
 
       logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")
