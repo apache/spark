@@ -482,7 +482,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         """.stripMargin)
 
       // Analyzes one column in the cached logical plan
-      spark.sql("ANALYZE TABLE cachedTempView COMPUTE STATISTICS FOR COLUMNS v1".stripMargin)
+      spark.sql("ANALYZE TABLE cachedTempView COMPUTE STATISTICS FOR COLUMNS v1")
       val queryStats1 = spark.table("cachedTempView").queryExecution
         .optimizedPlan.stats.attributeStats
       assert(queryStats1.map(_._1.name).toSet === Set("v1"))

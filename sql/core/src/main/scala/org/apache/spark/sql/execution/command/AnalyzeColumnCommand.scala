@@ -91,9 +91,7 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInCatalog(sparkSession: SparkSession): Unit = {
     val sessionState = sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdent)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
@@ -117,7 +115,7 @@ case class AnalyzeColumnCommand(
       // Newly computed column stats should override the existing ones.
       colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColCatalogStats)
 
-    sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
+    sessionState.catalog.alterTableStats(tableIdent, Some(statistics))
   }
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */

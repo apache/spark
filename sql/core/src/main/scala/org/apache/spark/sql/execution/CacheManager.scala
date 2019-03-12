@@ -157,7 +157,7 @@ class CacheManager extends Logging {
 
   private[sql] def analyzeColumnCacheQuery(
       query: Dataset[_],
-      columnNames: Seq[Attribute]): Unit = writeLock {
+      column: Seq[Attribute]): Unit = writeLock {
     val cachedData = lookupCachedData(query)
     if (cachedData.isEmpty) {
       logWarning("The cached data not found, so you need to cache the query first.")
@@ -165,13 +165,13 @@ class CacheManager extends Logging {
       cachedData.foreach { cachedData =>
         val relation = cachedData.cachedRepresentation
         val (rowCount, newColStats) =
-          CommandUtils.computeColumnStats(query.sparkSession, relation, columnNames)
-        val oldStats = cachedData.cachedRepresentation.statsOfPlanToCache
+          CommandUtils.computeColumnStats(query.sparkSession, relation, column)
+        val oldStats = relation.statsOfPlanToCache
         val newStats = oldStats.copy(
           rowCount = Some(rowCount),
           attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
         )
-        cachedData.cachedRepresentation.statsOfPlanToCache = newStats
+        relation.statsOfPlanToCache = newStats
       }
     }
   }
