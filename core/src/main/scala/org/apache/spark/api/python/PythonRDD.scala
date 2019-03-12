@@ -164,7 +164,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
-    val (port, secret) = PythonServer.setupOneConnectionServer(
+    val (port, secret) = SocketAuthServer.setupOneConnectionServer(
         authHelper, "serve toLocalIterator") { s =>
       val out = new DataOutputStream(s.getOutputStream)
       val in = new DataInputStream(s.getInputStream)
