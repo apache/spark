@@ -928,6 +928,15 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val SHUFFLE_DETECT_CORRUPT_MEMORY =
+    ConfigBuilder("spark.shuffle.detectCorrupt.useExtraMemory")
+      .doc("If enabled, part of a compressed/encrypted stream will be de-compressed/de-crypted " +
+        "by using extra memory to detect early corruption. Any IOException thrown will cause " +
+        "the task to be retried once and if it fails again with same exception, then " +
+        "FetchFailedException will be thrown to retry previous stage")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")
       .doc("Whether to force outstanding writes to disk.")
