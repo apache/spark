@@ -40,6 +40,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
+import org.apache.spark.SparkContext.State.State
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -84,11 +85,11 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val startTime = System.currentTimeMillis()
 
-  private[spark] val stopping: AtomicBoolean = new AtomicBoolean(false)
-  private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
+  private[spark] val state: AtomicReference[State] =
+    new AtomicReference[State](SparkContext.State.INITIAL)
 
   private[spark] def assertNotStopped(): Unit = {
-    if (stopped.get()) {
+    if (state.get() == SparkContext.State.STOPPED) {
       val activeContext = SparkContext.activeContext.get()
       val activeCreationSite =
         if (activeContext == null) {
@@ -243,7 +244,10 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * @return true if context is stopped or in the midst of stopping.
    */
-  def isStopped: Boolean = stopped.get()
+  def isStopped: Boolean = {
+    val curState = state.get()
+    curState == SparkContext.State.STOPPING || curState == SparkContext.State.STOPPED
+  }
 
   private[spark] def statusStore: AppStatusStore = _statusStore
 
@@ -1867,8 +1871,8 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
-    if (!stopping.compareAndSet(false, true)) {
-      if (stopped.get()) {
+    if (!state.compareAndSet(SparkContext.State.INITIAL, SparkContext.State.STOPPING)) {
+      if (state.get() == SparkContext.State.STOPPED) {
         logInfo("SparkContext already stopped.")
       } else {
         logInfo("SparkContext is being stopped.")
@@ -1880,9 +1884,9 @@ class SparkContext(config: SparkConf) extends Logging {
         hook => Try(Utils.logUncaughtExceptions(hook()))
       }
     }
-    if (!stopped.compareAndSet(false, true)) {
+    if (!state.compareAndSet(SparkContext.State.STOPPING, SparkContext.State.STOPPED)) {
       // this should not happen
-      logError("SparkContext already stopped.")
+      logInfo("SparkContext already stopped.")
       return
     }
     if (_shutdownHookRef != null) {
@@ -2020,7 +2024,7 @@ class SparkContext(config: SparkConf) extends Logging {
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       resultHandler: (Int, U) => Unit): Unit = {
-    if (stopped.get()) {
+    if (isStopped) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
@@ -2423,6 +2427,11 @@ class SparkContext(config: SparkConf) extends Logging {
 object SparkContext extends Logging {
   private val VALID_LOG_LEVELS =
     Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
+
+  object State extends Enumeration {
+    type State = Value
+    val INITIAL, STOPPING, STOPPED = Value
+  }
 
   /**
    * Lock that guards access to global variables that track SparkContext construction.
