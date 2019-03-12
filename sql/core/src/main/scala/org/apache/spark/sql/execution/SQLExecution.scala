@@ -74,10 +74,9 @@ object SQLExecution {
       // streaming queries would give us call site like "run at <unknown>:0"
       val callSite = sc.getCallSite()
 
-      val truncateLength = sparkSession.sparkContext.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
+      val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
 
-      val desc = Option(sparkSession.sparkContext
-        .getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+      val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
         .filter(_ => truncateLength > 0)
         .map { sqlStr =>
           Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
