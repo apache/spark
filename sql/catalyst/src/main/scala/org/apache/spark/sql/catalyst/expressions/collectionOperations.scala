@@ -3087,7 +3087,7 @@ case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
-  
+
   override def dataType: DataType = child.dataType
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
@@ -3128,6 +3128,7 @@ case class ArrayDistinct(child: Expression)
             arrayBuffer += data(i)
           }
         } else {
+          // De-duplicate the null values.
           if (!alreadyStoredNull) {
             arrayBuffer += data(i)
             alreadyStoredNull = true
