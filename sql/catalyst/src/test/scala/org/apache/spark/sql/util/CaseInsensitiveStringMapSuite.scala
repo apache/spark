@@ -53,7 +53,10 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     assert(!options.getBoolean("isFoo2", true))
     assert(options.getBoolean("isBar", true))
     assert(!options.getBoolean("isBar", false))
-    assert(!options.getBoolean("FOO", true))
+
+    intercept[IllegalArgumentException] {
+      options.getBoolean("FOO", true)
+    }
   }
 
   test("getLong") {
