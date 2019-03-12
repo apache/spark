@@ -128,7 +128,6 @@ private[spark] class AppStatusListener(
     // code registers the driver before this event is sent.
     event.driverLogs.foreach { logs =>
       val driver = liveExecutors.get(SparkContext.DRIVER_IDENTIFIER)
-        .orElse(liveExecutors.get(SparkContext.LEGACY_DRIVER_IDENTIFIER))
       driver.foreach { d =>
         d.executorLogs = logs.toMap
         d.attributes = event.driverAttributes.getOrElse(Map.empty).toMap
