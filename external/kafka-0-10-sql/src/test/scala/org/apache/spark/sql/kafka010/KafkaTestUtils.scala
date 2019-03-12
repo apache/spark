@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.{Map => JMap, Properties, UUID}
+import java.util.{Collections, Map => JMap, Properties, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -32,8 +32,9 @@ import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.ZkUtils
+import kafka.zk.AdminZkClient
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions}
+import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions, NewTopic}
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -195,7 +196,8 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     var created = false
     while (!created) {
       try {
-        AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+        val newTopic = new NewTopic(topic, partitions, 1)
+        adminClient.createTopics(Collections.singleton(newTopic))
         created = true
       } catch {
         // Workaround fact that TopicExistsException is in kafka.common in 0.10.0 and
