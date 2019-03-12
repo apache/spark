@@ -27,12 +27,10 @@ import scala.collection.JavaConverters._
 import scala.language.postfixOps
 import scala.util.Random
 
-import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.ZkUtils
-import kafka.zk.AdminZkClient
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions, NewTopic}
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -224,7 +222,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   /** Delete a Kafka topic and wait until it is propagated to the whole cluster */
   def deleteTopic(topic: String): Unit = {
     val partitions = zkUtils.getPartitionsForTopics(Seq(topic))(topic).size
-    AdminUtils.deleteTopic(zkUtils, topic)
+    adminClient.deleteTopics(Collections.singleton(topic))
     verifyTopicDeletionWithRetries(zkUtils, topic, partitions, List(this.server))
   }
 
@@ -424,7 +422,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
           // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
           // chance that a topic will be recreated after deletion due to the asynchronous update.
           // Hence, delete the topic and retry.
-          AdminUtils.deleteTopic(zkUtils, topic)
+          adminClient.deleteTopics(Collections.singleton(topic))
           throw e
       }
     }
