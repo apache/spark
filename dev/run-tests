@@ -26,4 +26,10 @@ if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
   exit -1
 fi
 
+
+echo "##### test locale #####"
+locale
+echo "##### test environment #####"
+export
+
 exec python -u ./dev/run-tests.py "$@"
