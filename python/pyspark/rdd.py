@@ -153,38 +153,37 @@ def _load_from_socket(sock_info, serializer):
 
 
 class _PyLocalIterable(object):
+    """ Create a synchronous local iterable over a socket """
 
     def __init__(self, sock_info, serializer):
         (self.sockfile, self.sock) = _create_local_socket(sock_info)
         self.serializer = serializer
+        self.read_iter = iter([])  # Initialize as empty iterator
 
     def __iter__(self):
         while True:
             try:
-                # Request data from Java, if no more then connection is closed
+                # Request next partition data from Java, if no more then connection is closed
                 write_int(1, self.sockfile)
                 self.sockfile.flush()
 
-                # Read one item from Java, if using BatchedSerializer batches have multiple items
-                for item in self.serializer.load_stream(self.sockfile):
+                # Load the partition data as a stream and read each item
+                self.read_iter = self.serializer.load_stream(self.sockfile)
+                for item in self.read_iter:
                     yield item
             except Exception:  # TODO: more specific error, ConnectionError / socket.error
                 break
 
     def __del__(self):
         try:
+            # Finish consuming partition data stream
+            for _ in self.read_iter:
+                pass
             # Tell Java to stop sending data and close connection
             write_int(0, self.sockfile)
             self.sockfile.flush()
         except Exception:
-            pass
-        finally:
-            try:
-                # Attempt to close the socket, ignore any errors
-                self.sockfile.close()
-                self.sock.close()
-            except Exception:
-                pass
+            pass  # Ignore any errors, socket will be automatically closed when garbage-collected
 
 
 def ignore_unicode_prefix(f):

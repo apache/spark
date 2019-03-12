@@ -554,7 +554,7 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        PythonRDD.writeObjectToStream(inputIterator, dataOut)
+        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
       }
     }
