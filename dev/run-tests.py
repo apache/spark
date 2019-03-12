@@ -180,9 +180,13 @@ def run_scala_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
 
 
-def run_java_style_checks():
+def run_java_style_checks(build_profiles):
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
+    # The same profiles used for building are used to run Checkstyle by SBT as well because
+    # the previous build looks reused for Checkstyle and affecting Checkstyle. See SPARK-27130.
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Java style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
 
 
 def run_python_style_checks():
@@ -333,7 +337,7 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     exec_sbt(profiles_and_goals)
 
     if checkstyle:
-        run_java_style_checks()
+        run_java_style_checks(build_profiles)
 
     build_spark_unidoc_sbt(hadoop_version)
 
