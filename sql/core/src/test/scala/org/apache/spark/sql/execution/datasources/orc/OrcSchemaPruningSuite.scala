@@ -17,11 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
 import org.apache.spark.sql.internal.SQLConf
 
-class ParquetSchemaPruningSuite extends SchemaPruningSuite {
-  override protected val dataSourceName: String = "parquet"
+class OrcSchemaPruningSuite extends SchemaPruningSuite {
+  override protected val dataSourceName: String = "orc"
   override protected val vectorizedReaderEnabledKey: String =
-    SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key
+    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
 }
