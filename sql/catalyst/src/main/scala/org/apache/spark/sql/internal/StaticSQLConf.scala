@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.internal.SQLConf.buildConf
 import org.apache.spark.util.Utils
 
 
