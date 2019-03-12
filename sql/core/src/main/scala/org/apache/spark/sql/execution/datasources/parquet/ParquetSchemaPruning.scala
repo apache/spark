@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
@@ -81,7 +82,8 @@ object ParquetSchemaPruning extends Rule[LogicalPlan] {
    * Checks to see if the given relation is Parquet and can be pruned.
    */
   private def canPruneRelation(fsRelation: HadoopFsRelation) =
-    fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]
+    fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
+      fsRelation.fileFormat.isInstanceOf[OrcFileFormat]
 
   /**
    * Normalizes the names of the attribute references in the given projects and filters to reflect
