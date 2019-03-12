@@ -136,17 +136,6 @@ object RowEncoder {
               val value = serializerFor(ValidateExternalType(element, et), et)
               expressionWithNullSafety(value, containsNull, WalkedTypePath())
             })
-          MapObjects(
-          element => {
-            val value = serializerFor(ValidateExternalType(element, et), et)
-            if (!containsNull) {
-              AssertNotNull(value)
-            } else {
-              value
-            }
-          },
-          inputObject,
-          ObjectType(classOf[Object]))
       }
 
     case t @ MapType(kt, vt, valueNullable) =>
