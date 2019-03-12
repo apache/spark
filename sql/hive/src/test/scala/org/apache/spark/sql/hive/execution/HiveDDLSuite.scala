@@ -498,7 +498,7 @@ class HiveDDLSuite
     }
   }
 
-  ignore("create Hive-serde table and view with unicode columns and comment") {
+  test("create Hive-serde table and view with unicode columns and comment") {
     val catalog = spark.sessionState.catalog
     val tabName = "tab1"
     val viewName = "view1"
