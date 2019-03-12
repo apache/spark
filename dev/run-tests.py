@@ -180,9 +180,9 @@ def run_scala_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
 
 
-def run_java_style_checks():
+def run_java_style_checks(build_profiles):
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), build_profiles])
 
 
 def run_python_style_checks():
@@ -333,7 +333,7 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     exec_sbt(profiles_and_goals)
 
     if checkstyle:
-        run_java_style_checks()
+        run_java_style_checks(" ".join(build_profiles))
 
     build_spark_unidoc_sbt(hadoop_version)
 
