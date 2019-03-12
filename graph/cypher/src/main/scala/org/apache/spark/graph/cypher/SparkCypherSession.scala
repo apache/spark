@@ -64,8 +64,8 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     }
 
     val entityVars = sparkCypherResult.relationalTable.header.entityVars
-    val nodeVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTNode).isTrue => v.name }
-    val relVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTRelationship).isTrue => v.name }
+    val nodeVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTNode) => v.name }
+    val relVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTRelationship) => v.name }
 
     val nodeFrames = nodeVarNames.flatMap(result.nodeFrames).toSeq
     val relFrames = relVarNames.flatMap(result.relationshipFrames).toSeq

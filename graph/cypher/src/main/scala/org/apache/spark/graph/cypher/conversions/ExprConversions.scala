@@ -10,7 +10,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, functions}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException, UnsupportedOperationException}
+import org.opencypher.okapi.impl.exception._
 import org.opencypher.okapi.impl.temporal.TemporalTypesHelper._
 import org.opencypher.okapi.impl.temporal.{Duration => DurationValue}
 import org.opencypher.okapi.ir.api.PropertyKey
@@ -18,6 +18,8 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object ExprConversions {
+
+  final case class ExprConversionException(msg: String) extends InternalException(msg)
 
   private val NULL_LIT: Column = functions.lit(null)
 
@@ -63,15 +65,33 @@ object ExprConversions {
 
       expr match {
 
-        // Context based lookups
-        case p@Param(name) if p.cypherType.isInstanceOf[CTList] =>
-          parameters(name) match {
-            case CypherList(l) => functions.array(l.unwrap.map(functions.lit): _*)
-            case notAList => throw IllegalArgumentException("a Cypher list", notAList)
-          }
+        case AliasExpr(innerExpr, _) => innerExpr.asSparkSQLExpr
+
+        case Explode(list) => list.cypherType match {
+          case CTList(_) | CTListOrNull(_) => functions.explode(list.asSparkSQLExpr)
+          case CTNull => functions.explode(functions.lit(null).cast(ArrayType(NullType)))
+          case other => throw IllegalArgumentException("CTList", other)
+        }
+
+        case e if e.cypherType == CTNull => NULL_LIT
 
         case Param(name) =>
-          toSparkLiteral(parameters(name).unwrap)
+          expr.cypherType match {
+            case CTList(inner) =>
+              if (inner == CTAny) {
+                throw ExprConversionException(s"List parameter with inner type $inner not supported")
+              } else {
+                functions.array(parameters(name).asInstanceOf[CypherList].value.unwrap.map(functions.lit): _*)
+              }
+            case _ => toSparkLiteral(parameters(name).unwrap)
+          }
+
+        case ListLit(exprs) =>
+          if (expr.cypherType == CTAny) {
+            throw ExprConversionException(s"List literal with inner type ${expr.cypherType} not supported")
+          } else {
+            functions.array(exprs.map(_.asSparkSQLExpr): _*)
+          }
 
         case Property(e, PropertyKey(key)) =>
           e.cypherType.material match {
@@ -79,10 +99,10 @@ object ExprConversions {
               if (inner.keySet.contains(key)) e.asSparkSQLExpr.getField(key) else functions.lit(null)
 
             case CTDate =>
-              TemporalConversions.temporalAccessor[Date](e.asSparkSQLExpr, key)
+              temporalAccessor[Date](e.asSparkSQLExpr, key)
 
             case CTLocalDateTime =>
-              TemporalConversions.temporalAccessor[Timestamp](e.asSparkSQLExpr, key)
+              temporalAccessor[Timestamp](e.asSparkSQLExpr, key)
 
             case CTDuration =>
               TemporalUdfs.durationAccessor(key.toLowerCase).apply(e.asSparkSQLExpr)
@@ -94,29 +114,17 @@ object ExprConversions {
               columnFor(expr)
           }
 
-        case IsNull(e) =>
-          e.asSparkSQLExpr.isNull
+        case IsNull(e) => e.asSparkSQLExpr.isNull
+        case IsNotNull(e) => e.asSparkSQLExpr.isNotNull
 
-        case IsNotNull(e) =>
-          e.asSparkSQLExpr.isNotNull
+        case _: Var | _: Param | _: HasLabel | _: HasType | _: StartNode | _: EndNode => columnFor(expr)
 
-        case _: Var | _: Param | _: HasLabel | _: HasType | _: StartNode | _: EndNode =>
-          columnFor(expr)
-
-        case AliasExpr(innerExpr, _) =>
-          innerExpr.asSparkSQLExpr
-
-        // Literals
-        case ListLit(exprs) =>
-          functions.array(exprs.map(_.asSparkSQLExpr): _*)
-
-        case NullLit(ct) =>
-          NULL_LIT.cast(ct.toSparkType.get)
+        case NullLit(ct) => NULL_LIT.cast(ct.getSparkType)
 
         case LocalDateTime(dateExpr) =>
           dateExpr match {
             case Some(e) =>
-              val localDateTimeValue = TemporalConversions.resolveTemporalArgument(e)
+              val localDateTimeValue = resolveTemporalArgument(e)
                 .map(parseLocalDateTime)
                 .map(java.sql.Timestamp.valueOf)
                 .map {
@@ -132,7 +140,7 @@ object ExprConversions {
         case Date(dateExpr) =>
           dateExpr match {
             case Some(e) =>
-              val dateValue = TemporalConversions.resolveTemporalArgument(e)
+              val dateValue = resolveTemporalArgument(e)
                 .map(parseDate)
                 .map(java.sql.Date.valueOf)
                 .orNull
@@ -142,7 +150,7 @@ object ExprConversions {
           }
 
         case Duration(durationExpr) =>
-          val durationValue = TemporalConversions.resolveTemporalArgument(durationExpr).map {
+          val durationValue = resolveTemporalArgument(durationExpr).map {
             case Left(m) => DurationValue(m.mapValues(_.toLong)).toCalendarInterval
             case Right(s) => DurationValue.parse(s).toCalendarInterval
           }.orNull
@@ -162,22 +170,26 @@ object ExprConversions {
                 col.isNotNull,
                 functions.size(col).cast(LongType)
               )
-            case CTNull => NULL_LIT
             case other => throw NotImplementedException(s"size() on values of type $other")
           }
 
         case Ands(exprs) => exprs.map(_.asSparkSQLExpr).foldLeft(TRUE_LIT)(_ && _)
-
         case Ors(exprs) => exprs.map(_.asSparkSQLExpr).foldLeft(FALSE_LIT)(_ || _)
 
+        case In(lhs, rhs) if lhs.cypherType == CTNull =>
+          val array = rhs.asSparkSQLExpr
+          functions
+            .when(functions.size(array) === 0, FALSE_LIT)
+            .otherwise(NULL_LIT)
+
         case In(lhs, rhs) =>
-          if (rhs.cypherType == CTNull || lhs.cypherType == CTNull) {
-            NULL_LIT.cast(BooleanType)
-          } else {
-            val element = lhs.asSparkSQLExpr
-            val array = rhs.asSparkSQLExpr
-            new Column(ArrayContains(element.expr, array.expr))
-          }
+          val element = lhs.asSparkSQLExpr
+          val array = rhs.asSparkSQLExpr
+          functions
+            .when(functions.size(array) === 0, FALSE_LIT)
+            .when(array.isNull, NULL_LIT)
+            .when(element.isNull, NULL_LIT)
+            .otherwise(new Column(ArrayContains(array.expr, element.expr)))
 
         case LessThan(lhs, rhs) => compare(lt, lhs, rhs)
         case LessThanOrEqual(lhs, rhs) => compare(lteq, lhs, rhs)
@@ -192,34 +204,45 @@ object ExprConversions {
           val regex: String = parameters(name).unwrap.toString
           prop.asSparkSQLExpr.rlike(regex)
 
-        // Arithmetics
+        // Arithmetic
         case Add(lhs, rhs) =>
           val lhsCT = lhs.cypherType
           val rhsCT = rhs.cypherType
-          lhsCT.material -> rhsCT.material match {
-            case (_: CTList, _) =>
-              throw UnsupportedOperationException("List concatenation is not supported")
+          if (rhsCT == CTNull || rhsCT == CTNull) {
+            NULL_LIT
+          } else {
+            lhsCT.material -> rhsCT.material match {
+              case (CTList(lhInner), CTList(rhInner)) =>
+                if (lhInner.material == rhInner.material || lhInner == CTVoid || rhInner == CTVoid) {
+                  functions.concat(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
+                } else {
+                  throw ExprConversionException(s"Lists of different inner types are not supported (${lhInner.material}, ${rhInner.material})")
+                }
 
-            case (_, _: CTList) =>
-              throw UnsupportedOperationException("List concatenation is not supported")
+              case (CTList(inner), nonListType) if nonListType == inner.material || inner.material == CTVoid =>
+                functions.concat(lhs.asSparkSQLExpr, functions.array(rhs.asSparkSQLExpr))
 
-            case (CTString, _) if rhsCT.subTypeOf(CTNumber).maybeTrue =>
-              functions.concat(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr.cast(StringType))
+              case (nonListType, CTList(inner)) if inner.material == nonListType || inner.material == CTVoid =>
+                functions.concat(functions.array(lhs.asSparkSQLExpr), rhs.asSparkSQLExpr)
 
-            case (_, CTString) if lhsCT.subTypeOf(CTNumber).maybeTrue =>
-              functions.concat(lhs.asSparkSQLExpr.cast(StringType), rhs.asSparkSQLExpr)
+              case (CTString, _) if rhsCT.subTypeOf(CTNumber) =>
+                functions.concat(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr.cast(StringType))
 
-            case (CTString, CTString) =>
-              functions.concat(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
+              case (_, CTString) if lhsCT.subTypeOf(CTNumber) =>
+                functions.concat(lhs.asSparkSQLExpr.cast(StringType), rhs.asSparkSQLExpr)
 
-            case (CTDate, CTDuration) =>
-              TemporalUdfs.dateAdd(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
+              case (CTString, CTString) =>
+                functions.concat(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
 
-            case _ =>
-              lhs.asSparkSQLExpr + rhs.asSparkSQLExpr
+              case (CTDate, CTDuration) =>
+                TemporalUdfs.dateAdd(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
+
+              case _ =>
+                lhs.asSparkSQLExpr + rhs.asSparkSQLExpr
+            }
           }
 
-        case Subtract(lhs, rhs) if lhs.cypherType.material.subTypeOf(CTDate).isTrue && rhs.cypherType.material.subTypeOf(CTDuration).isTrue =>
+        case Subtract(lhs, rhs) if lhs.cypherType.material.subTypeOf(CTDate) && rhs.cypherType.material.subTypeOf(CTDuration) =>
           TemporalUdfs.dateSubtract(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
 
         case Subtract(lhs, rhs) => lhs.asSparkSQLExpr - rhs.asSparkSQLExpr
@@ -227,8 +250,12 @@ object ExprConversions {
         case Multiply(lhs, rhs) => lhs.asSparkSQLExpr * rhs.asSparkSQLExpr
         case div@Divide(lhs, rhs) => (lhs.asSparkSQLExpr / rhs.asSparkSQLExpr).cast(div.cypherType.getSparkType)
 
-        // Functions
+        // Id functions
+
         case Id(e) => e.asSparkSQLExpr
+
+        // Functions
+        case _: MonotonicallyIncreasingId => functions.monotonically_increasing_id()
         case Exists(e) => e.asSparkSQLExpr.isNotNull
         case Labels(e) =>
           e.cypherType match {
@@ -242,7 +269,6 @@ object ExprConversions {
                 .unzip
               val booleanLabelFlagColumn = functions.array(labelColumns: _*)
               get_node_labels(labelNames)(booleanLabelFlagColumn)
-            case CTNull => NULL_LIT
             case other => throw IllegalArgumentException("an expression with type CTNode, CTNodeOrNull, or CTNull", other)
           }
 
@@ -298,18 +324,9 @@ object ExprConversions {
           header.endNodeFor(rel).asSparkSQLExpr
 
         case ToFloat(e) => e.asSparkSQLExpr.cast(DoubleType)
-
         case ToInteger(e) => e.asSparkSQLExpr.cast(IntegerType)
-
         case ToString(e) => e.asSparkSQLExpr.cast(StringType)
-
         case ToBoolean(e) => e.asSparkSQLExpr.cast(BooleanType)
-
-        case Explode(list) => list.cypherType match {
-          case CTList(_) | CTListOrNull(_) => functions.explode(list.asSparkSQLExpr)
-          case CTNull => functions.explode(functions.lit(null).cast(ArrayType(NullType)))
-          case other => throw IllegalArgumentException("CTList", other)
-        }
 
         case Trim(str) => functions.trim(str.asSparkSQLExpr)
         case LTrim(str) => functions.ltrim(str.asSparkSQLExpr)
@@ -324,7 +341,6 @@ object ExprConversions {
 
         case Replace(original, search, replacement) =>
           new Column(StringTranslate(original.asSparkSQLExpr.expr, search.asSparkSQLExpr.expr, replacement.asSparkSQLExpr.expr))
-
         case Substring(original, start, maybeLength) =>
           val origCol = original.asSparkSQLExpr
           val startCol = start.asSparkSQLExpr + ONE_LIT
@@ -359,24 +375,16 @@ object ExprConversions {
         case Sin(e) => functions.sin(e.asSparkSQLExpr)
         case Tan(e) => functions.tan(e.asSparkSQLExpr)
 
-
         // Time functions
 
         case Timestamp() => functions.current_timestamp().cast(LongType)
 
         // Bit operations
 
-        case BitwiseAnd(lhs, rhs) =>
-          lhs.asSparkSQLExpr.bitwiseAND(rhs.asSparkSQLExpr)
-
-        case BitwiseOr(lhs, rhs) =>
-          lhs.asSparkSQLExpr.bitwiseOR(rhs.asSparkSQLExpr)
-
-        case ShiftLeft(value, IntegerLit(shiftBits)) =>
-          functions.shiftLeft(value.asSparkSQLExpr, shiftBits.toInt)
-
-        case ShiftRightUnsigned(value, IntegerLit(shiftBits)) =>
-          functions.shiftRightUnsigned(value.asSparkSQLExpr, shiftBits.toInt)
+        case BitwiseAnd(lhs, rhs) => lhs.asSparkSQLExpr.bitwiseAND(rhs.asSparkSQLExpr)
+        case BitwiseOr(lhs, rhs) => lhs.asSparkSQLExpr.bitwiseOR(rhs.asSparkSQLExpr)
+        case ShiftLeft(value, IntegerLit(shiftBits)) => functions.shiftLeft(value.asSparkSQLExpr, shiftBits.toInt)
+        case ShiftRightUnsigned(value, IntegerLit(shiftBits)) => functions.shiftRightUnsigned(value.asSparkSQLExpr, shiftBits.toInt)
 
         // Pattern Predicate
         case ep: ExistsPatternExpr => ep.targetField.asSparkSQLExpr
@@ -412,11 +420,9 @@ object ExprConversions {
           }
 
         case MapExpression(items) => expr.cypherType.material match {
-          case CTMap(inner) =>
+          case CTMap(_) =>
             val innerColumns = items.map {
-              case (key, innerExpr) =>
-                val targetType = inner(key).toSparkType.get
-                innerExpr.asSparkSQLExpr.cast(targetType).as(key)
+              case (key, innerExpr) => innerExpr.asSparkSQLExpr.as(key)
             }.toSeq
             createStructColumn(innerColumns)
           case other => throw IllegalArgumentException("an expression of type CTMap", other)
@@ -457,6 +463,7 @@ object ExprConversions {
       functions.struct(structColumns: _*)
     }
   }
+
 
 }
 
