@@ -236,10 +236,11 @@ SPARK_WORKER_OPTS supports the following system properties:
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
+    This must be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
 </tr>
 <tr>
@@ -258,6 +259,17 @@ SPARK_WORKER_OPTS supports the following system properties:
     and should depend on the amount of available disk space you have.  Application logs and jars are
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
+  </td>
+</tr>
+<tr>
+  <td><spark.shuffle.service.db.enabled</code></td>
+  <td>true</td>
+  <td>
+    Enable record RegisteredExecutors information by leveldb, which can be reloaded and
+    used again when the external shuffle service is restarted. Note that this only affects standalone
+    mode, its has always on for yarn. We should Enable `spark.worker.cleanup.enabled` to remove the entry
+    (It will leave an entry in the DB forever when an application is stopped while the external shuffle
+    service is down) in the leveldb with WorkDirCleanup. It may be removed in the future.
   </td>
 </tr>
 <tr>
