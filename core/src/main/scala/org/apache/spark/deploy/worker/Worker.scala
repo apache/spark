@@ -69,8 +69,8 @@ private[deploy] class Worker(
 
   // A separated thread to clean up the workDir and the directories of finished applications.
   // Used to provide the implicit parameter of `Future` methods.
-  private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(new ShutdownSafeExecutor(
-    ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread")))
+  private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
