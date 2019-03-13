@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Evaluator for regression.
@@ -43,11 +43,18 @@ class RegressionMetrics @Since("2.0.0") (
 
   /**
    * An auxiliary constructor taking a DataFrame.
-   * @param predictionAndObservations a DataFrame with two double columns:
-   *                                  prediction and observation
+   * @param predictionAndObservations a DataFrame with double columns:
+   *                                  prediction, observation and optional weight
    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
-    this(predictionAndObservations.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
+  this(predictionAndObservations.rdd.map {
+    case Row(prediction: Double, observation: Double, weight: Double) =>
+      (prediction, observation, weight)
+    case Row(prediction: Double, observation: Double) =>
+      (prediction, observation, 1.0)
+    case other =>
+      throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+  })
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.

@@ -95,8 +95,8 @@ class RegressionMetrics(JavaModelWrapper):
     """
     Evaluator for regression.
 
-    :param predictionAndObservations: an RDD of (prediction,
-                                      observation) pairs.
+    :param predictionAndObservations: an RDD of prediction,
+                                      observation and optional weight
 
     >>> predictionAndObservations = sc.parallelize([
     ...     (2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)])
@@ -111,6 +111,19 @@ class RegressionMetrics(JavaModelWrapper):
     0.61...
     >>> metrics.r2
     0.94...
+    >>> predictionAndObservationsWithOptWeight = sc.parallelize([
+    ...     (2.5, 3.0, 0.1), (0.0, -0.5, 0.2), (2.0, 2.0, 0.15), (8.0, 7.0, 0.05)])
+    >>> metrics = RegressionMetrics(predictionAndObservationsWithOptWeight)
+    >>> metrics.explainedVariance
+    5.28...
+    >>> metrics.meanAbsoluteError
+    0.4...
+    >>> metrics.meanSquaredError
+    0.25...
+    >>> metrics.rootMeanSquaredError
+    0.5...
+    >>> metrics.r2
+    1.03424...
 
     .. versionadded:: 1.4.0
     """
@@ -118,9 +131,13 @@ class RegressionMetrics(JavaModelWrapper):
     def __init__(self, predictionAndObservations):
         sc = predictionAndObservations.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
-        df = sql_ctx.createDataFrame(predictionAndObservations, schema=StructType([
+        numCol = len(predictionAndObservations.first())
+        schema = StructType([
             StructField("prediction", DoubleType(), nullable=False),
-            StructField("observation", DoubleType(), nullable=False)]))
+            StructField("observation", DoubleType(), nullable=False)])
+        if numCol == 3:
+            schema.add("weight", DoubleType(), False)
+        df = sql_ctx.createDataFrame(predictionAndObservations, schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.RegressionMetrics
         java_model = java_class(df._jdf)
         super(RegressionMetrics, self).__init__(java_model)
