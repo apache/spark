@@ -31,19 +31,20 @@ import java.util.Set;
  * This is used to pass options to v2 implementations to ensure consistent case insensitivity.
  * <p>
  * Methods that return keys in this map, like {@link #entrySet()} and {@link #keySet()}, return
- * keys converted to lower case.
+ * keys converted to lower case. This map doesn't allow null key.
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
 
   public static CaseInsensitiveStringMap empty() {
-    return new CaseInsensitiveStringMap();
+    return new CaseInsensitiveStringMap(new HashMap<>(0));
   }
 
   private final Map<String, String> delegate;
 
-  private CaseInsensitiveStringMap() {
-    this.delegate = new HashMap<>();
+  public CaseInsensitiveStringMap(Map<String, String> originalMap) {
+    this.delegate = new HashMap<>(originalMap.size());
+    putAll(originalMap);
   }
 
   @Override
@@ -56,9 +57,13 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
     return delegate.isEmpty();
   }
 
+  private String toLowerCase(Object key) {
+    return key.toString().toLowerCase(Locale.ROOT);
+  }
+
   @Override
   public boolean containsKey(Object key) {
-    return delegate.containsKey(key.toString().toLowerCase(Locale.ROOT));
+    return delegate.containsKey(toLowerCase(key));
   }
 
   @Override
@@ -68,17 +73,17 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   @Override
   public String get(Object key) {
-    return delegate.get(key.toString().toLowerCase(Locale.ROOT));
+    return delegate.get(toLowerCase(key));
   }
 
   @Override
   public String put(String key, String value) {
-    return delegate.put(key.toLowerCase(Locale.ROOT), value);
+    return delegate.put(toLowerCase(key), value);
   }
 
   @Override
   public String remove(Object key) {
-    return delegate.remove(key.toString().toLowerCase(Locale.ROOT));
+    return delegate.remove(toLowerCase(key));
   }
 
   @Override
@@ -106,5 +111,50 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
   @Override
   public Set<Map.Entry<String, String>> entrySet() {
     return delegate.entrySet();
+  }
+
+  /**
+   * Returns the boolean value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
+   */
+  public boolean getBoolean(String key, boolean defaultValue) {
+    String value = get(key);
+    // We can't use `Boolean.parseBoolean` here, as it returns false for invalid strings.
+    if (value == null) {
+      return defaultValue;
+    } else if (value.equalsIgnoreCase("true")) {
+      return true;
+    } else if (value.equalsIgnoreCase("false")) {
+      return false;
+    } else {
+      throw new IllegalArgumentException(value + " is not a boolean string.");
+    }
+  }
+
+  /**
+   * Returns the integer value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
+   */
+  public int getInt(String key, int defaultValue) {
+    String value = get(key);
+    return value == null ? defaultValue : Integer.parseInt(value);
+  }
+
+  /**
+   * Returns the long value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
+   */
+  public long getLong(String key, long defaultValue) {
+    String value = get(key);
+    return value == null ? defaultValue : Long.parseLong(value);
+  }
+
+  /**
+   * Returns the double value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
+   */
+  public double getDouble(String key, double defaultValue) {
+    String value = get(key);
+    return value == null ? defaultValue : Double.parseDouble(value);
   }
 }

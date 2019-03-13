@@ -22,13 +22,13 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.TableProvider;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.sources.v2.reader.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Distribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaPartitionAwareDataSource implements TableProvider {
 
@@ -54,10 +54,10 @@ public class JavaPartitionAwareDataSource implements TableProvider {
   }
 
   @Override
-  public Table getTable(DataSourceOptions options) {
+  public Table getTable(CaseInsensitiveStringMap options) {
     return new JavaSimpleBatchTable() {
       @Override
-      public ScanBuilder newScanBuilder(DataSourceOptions options) {
+      public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
         return new MyScanBuilder();
       }
     };
