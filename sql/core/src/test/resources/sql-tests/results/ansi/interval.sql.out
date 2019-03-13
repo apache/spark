@@ -290,9 +290,15 @@ interval 4 weeks 2 days
 -- !query 22
 select 30 day day
 -- !query 22 schema
-struct<day:calendarinterval>
+struct<>
 -- !query 22 output
-interval 4 weeks 2 days
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 14)
+
+== SQL ==
+select 30 day day
+--------------^^^
 
 
 -- !query 23
@@ -302,11 +308,11 @@ struct<>
 -- !query 23 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'day' expecting <EOF>(line 1, pos 18)
+no viable alternative at input 'day'(line 1, pos 14)
 
 == SQL ==
 select 30 day day day
-------------------^^^
+--------------^^^
 
 
 -- !query 24
@@ -320,9 +326,15 @@ struct<CAST(CAST(DATE '2012-01-01' AS TIMESTAMP) - interval 4 weeks 2 days AS DA
 -- !query 25
 select date '2012-01-01' - 30 day day
 -- !query 25 schema
-struct<day:date>
+struct<>
 -- !query 25 output
-2011-12-02
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 34)
+
+== SQL ==
+select date '2012-01-01' - 30 day day
+----------------------------------^^^
 
 
 -- !query 26
@@ -332,11 +344,11 @@ struct<>
 -- !query 26 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'day' expecting <EOF>(line 1, pos 38)
+no viable alternative at input 'day'(line 1, pos 34)
 
 == SQL ==
 select date '2012-01-01' - 30 day day day
---------------------------------------^^^
+----------------------------------^^^
 
 
 -- !query 27
@@ -360,8 +372,13 @@ select date '2012-01-01' + interval (-30) day
 -- !query 29 schema
 struct<>
 -- !query 29 output
-org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 27
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 42)
+
+== SQL ==
+select date '2012-01-01' + interval (-30) day
+------------------------------------------^^^
 
 
 -- !query 30
@@ -369,8 +386,13 @@ select date '2012-01-01' + (-30) day
 -- !query 30 schema
 struct<>
 -- !query 30 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(DATE '2012-01-01' + -30)' due to data type mismatch: differing types in '(DATE '2012-01-01' + -30)' (date and int).; line 1 pos 7
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 33)
+
+== SQL ==
+select date '2012-01-01' + (-30) day
+---------------------------------^^^
 
 
 -- !query 31
@@ -386,8 +408,13 @@ select date '2012-01-01' + interval (a + 1) day from t
 -- !query 32 schema
 struct<>
 -- !query 32 output
-org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 27
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 44)
+
+== SQL ==
+select date '2012-01-01' + interval (a + 1) day from t
+--------------------------------------------^^^
 
 
 -- !query 33
@@ -395,8 +422,13 @@ select date '2012-01-01' + (a + 1) day from t
 -- !query 33 schema
 struct<>
 -- !query 33 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(DATE '2012-01-01' + (t.`a` + 1))' due to data type mismatch: differing types in '(DATE '2012-01-01' + (t.`a` + 1))' (date and int).; line 1 pos 7
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 35)
+
+== SQL ==
+select date '2012-01-01' + (a + 1) day from t
+-----------------------------------^^^
 
 
 -- !query 34
