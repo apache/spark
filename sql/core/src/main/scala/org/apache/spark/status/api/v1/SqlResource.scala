@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData}
 import org.apache.spark.ui.UIUtils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class SqlListResource extends BaseAppResource {
+private[v1] class SqlResource extends BaseAppResource {
 
   @GET
   def sqlList(): Seq[ExecutionData] = {
@@ -35,7 +35,7 @@ private[v1] class SqlListResource extends BaseAppResource {
 
       var executions = sqlStore.executionsList()
         .map(exec => prepareExecutionData(exec))
-      if (executions.size > 0) {
+      if (executions.nonEmpty) {
         executions = executions.sortBy(x => x.id)
       }
       executions
@@ -72,7 +72,7 @@ private[v1] class SqlListResource extends BaseAppResource {
 
     val status = if (exec.jobs.size == completed.size) {
       "COMPLETED"
-    } else if (failed.length > 0) {
+    } else if (failed.nonEmpty) {
       "FAILED"
     } else {
       "RUNNING"
@@ -85,12 +85,3 @@ private[v1] class SqlListResource extends BaseAppResource {
       duration, running, completed, failed)
   }
 }
-
-class ExecutionData (val id : Long,
-    val status: String,
-    val description: String,
-    val submissionTime: String,
-    val duration: String,
-    val runningJobs: Seq[Int],
-    val successJobs: Seq[Int],
-    val failedJobs: Seq[Int])

@@ -405,3 +405,13 @@ case class ThreadStackTrace(
     val blockedByThreadId: Option[Long],
     val blockedByLock: String,
     val holdingLocks: Seq[String])
+
+
+class ExecutionData (val id : Long,
+    val status: String,
+    val description: String,
+    val submissionTime: String,
+    val duration: String,
+    val runningJobs: Seq[Int],
+    val successJobs: Seq[Int],
+    val failedJobs: Seq[Int])

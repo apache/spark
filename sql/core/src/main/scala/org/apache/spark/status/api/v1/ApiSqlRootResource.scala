@@ -23,5 +23,5 @@ import javax.ws.rs.Path
 private[v1] class ApiSqlRootResource extends ApiRequestContext {
 
   @Path("applications/{appId}/sql")
-  def sqlList(): Class[SqlListResource] = classOf[SqlListResource]
+  def sqlList(): Class[SqlResource] = classOf[SqlResource]
 }
