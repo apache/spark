@@ -1273,7 +1273,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(3 === taskDescriptions.length)
   }
 
-  test("barrier taskSet can launch all tasks after multiple resourceOffers round" +
+  test("barrier taskSet can launch all tasks after multiple resourceOffers round " +
     "until it accumulate sufficient resource") {
     val taskCpus = 2
     val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
@@ -1291,7 +1291,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // submit barrier taskSet 1, offer some resources, since the available Cpus are not
     // sufficient, so scheduler won't launch any tasks.
-    val ts1 = FakeTask.createBarrierTaskSet(3)
+    val ts1 = FakeTask.createBarrierTaskSet(3, 0, 0)
     taskScheduler.submitTasks(ts1)
     val taskDescriptions1 = taskScheduler.resourceOffers(workerOffers1).flatten
     assert(0 === taskDescriptions1.length)
@@ -1299,7 +1299,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // submit non-barrier taskSet 2, offer the same resources, since ts1 has
     // already reserved resources, so there're no more available Cpus for ts2
     // to launch any tasks.
-    val ts2 = FakeTask.createTaskSet(3)
+    val ts2 = FakeTask.createTaskSet(3, 1, 0)
     taskScheduler.submitTasks(ts2)
     val taskDescriptions2 = taskScheduler.resourceOffers(workerOffers1).flatten
     assert(0 === taskDescriptions2.length)
