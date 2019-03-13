@@ -45,8 +45,7 @@ case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
  */
 class CacheManager extends Logging {
 
-  @transient
-  @volatile
+  @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
   @transient
