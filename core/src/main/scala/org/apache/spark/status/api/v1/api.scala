@@ -406,7 +406,6 @@ case class ThreadStackTrace(
     val blockedByLock: String,
     val holdingLocks: Seq[String])
 
-
 class ExecutionData (val id : Long,
     val status: String,
     val description: String,
