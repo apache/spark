@@ -115,52 +115,51 @@ private[spark] class ExecutorPodsAllocator(
 
   private def requestExecutorsIfNecessary(applicationId: String,
                                           snapshot: ExecutorPodsSnapshot): Unit = {
-      val currentRunningExecutors = snapshot.executorPods.values.count {
-        case PodRunning(_) => true
-        case _ => false
+    val currentRunningExecutors = snapshot.executorPods.values.count {
+      case PodRunning(_) => true
+      case _ => false
+    }
+    val currentPendingExecutors = snapshot.executorPods.values.count {
+      case PodPending(_) => true
+      case _ => false
+    }
+    val currentTotalExpectedExecutors = totalExpectedExecutors.get
+    logDebug(s"Currently have $currentRunningExecutors running executors and" +
+      s" $currentPendingExecutors pending executors. $newlyCreatedExecutors executors" +
+      s" have been requested but are pending appearance in the cluster.")
+    if (newlyCreatedExecutors.isEmpty
+      && currentPendingExecutors == 0
+      && currentRunningExecutors < currentTotalExpectedExecutors) {
+      val numExecutorsToAllocate = math.min(
+        currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
+      logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
+      for (_ <- 0 until numExecutorsToAllocate) {
+        val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
+        val executorConf = KubernetesConf.createExecutorConf(
+          conf,
+          newExecutorId.toString,
+          applicationId,
+          driverPod)
+        val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr,
+          kubernetesClient)
+        val podWithAttachedContainer = new PodBuilder(executorPod.pod)
+          .editOrNewSpec()
+          .addToContainers(executorPod.container)
+          .endSpec()
+          .build()
+        kubernetesClient.pods().create(podWithAttachedContainer)
+        newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
       }
-      val currentPendingExecutors = snapshot.executorPods.values.count {
-        case PodPending(_) => true
-        case _ => false
-      }
-      val currentTotalExpectedExecutors = totalExpectedExecutors.get
-      logDebug(s"Currently have $currentRunningExecutors running executors and" +
-        s" $currentPendingExecutors pending executors. $newlyCreatedExecutors executors" +
-        s" have been requested but are pending appearance in the cluster.")
-      if (newlyCreatedExecutors.isEmpty
-        && currentPendingExecutors == 0
-        && currentRunningExecutors < currentTotalExpectedExecutors) {
-        val numExecutorsToAllocate = math.min(
-          currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
-        logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
-        for ( _ <- 0 until numExecutorsToAllocate) {
-          val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
-          val executorConf = KubernetesConf.createExecutorConf(
-            conf,
-            newExecutorId.toString,
-            applicationId,
-            driverPod)
-          val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr,
-            kubernetesClient)
-          val podWithAttachedContainer = new PodBuilder(executorPod.pod)
-            .editOrNewSpec()
-            .addToContainers(executorPod.container)
-            .endSpec()
-            .build()
-          kubernetesClient.pods().create(podWithAttachedContainer)
-          newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
-        }
-      } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
-        // TODO handle edge cases if we end up with more running executors than expected.
-        logDebug("Current number of running executors is equal to the number of requested" +
-          " executors. Not scaling up further.")
-      } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
-        logDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
-          s" executors to begin running before requesting for more executors. # of executors in" +
-          s" pending status in the cluster: $currentPendingExecutors. # of executors that we have" +
-          s" created but we have not observed as being present in the cluster yet:" +
-          s" ${newlyCreatedExecutors.size}.")
-      }
+    } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
+      // TODO handle edge cases if we end up with more running executors than expected.
+      logDebug("Current number of running executors is equal to the number of requested" +
+        " executors. Not scaling up further.")
+    } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
+      logDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
+        s" executors to begin running before requesting for more executors. # of executors in" +
+        s" pending status in the cluster: $currentPendingExecutors. # of executors that we have" +
+        s" created but we have not observed as being present in the cluster yet:" +
+        s" ${newlyCreatedExecutors.size}.")
     }
   }
 }
