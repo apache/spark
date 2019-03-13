@@ -585,7 +585,7 @@ abstract class StreamExecution(
       options: Map[String, String],
       inputPlan: LogicalPlan): StreamingWrite = {
     val writeBuilder = table.newWriteBuilder(new DataSourceOptions(options.asJava))
-      .withQueryId(runId.toString)
+      .withQueryId(id.toString)
       .withInputDataSchema(inputPlan.schema)
     outputMode match {
       case Append =>

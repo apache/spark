@@ -510,7 +510,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _taskScheduler.start()
 
     _applicationId = _taskScheduler.applicationId()
-    _applicationAttemptId = taskScheduler.applicationAttemptId()
+    _applicationAttemptId = _taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
     if (_conf.get(UI_REVERSE_PROXY)) {
       System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
@@ -2555,10 +2555,6 @@ object SparkContext extends Logging {
    */
   private[spark] val DRIVER_IDENTIFIER = "driver"
 
-  /**
-   * Legacy version of DRIVER_IDENTIFIER, retained for backwards-compatibility.
-   */
-  private[spark] val LEGACY_DRIVER_IDENTIFIER = "<driver>"
 
   private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Traversable[T])
     : ArrayWritable = {

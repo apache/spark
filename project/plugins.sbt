@@ -33,7 +33,7 @@ libraryDependencies += "org.ow2.asm"  % "asm" % "7.0"
 libraryDependencies += "org.ow2.asm"  % "asm-commons" % "7.0"
 
 // sbt 1.0.0 support: https://github.com/ihji/sbt-antlr4/issues/14
-addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.12")
+addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.13")
 
 // Spark uses a custom fork of the sbt-pom-reader plugin which contains a patch to fix issues
 // related to test-jar dependencies (https://github.com/sbt/sbt-pom-reader/pull/14). The source for

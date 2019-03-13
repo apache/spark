@@ -173,6 +173,8 @@ def main():
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.6"
     if "test-hadoop2.7" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.7"
+    if "test-hadoop3.1" in ghprb_pull_title:
+        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop3.1"
 
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]

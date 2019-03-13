@@ -132,4 +132,10 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
+    .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
+      "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
+    .intConf
+    .checkValue(_ >= 0, "Must be set greater or equal to zero")
+    .createWithDefault(Int.MaxValue)
 }
