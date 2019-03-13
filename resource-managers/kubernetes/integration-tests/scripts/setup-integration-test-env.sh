@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -x
+set -ex
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 UNPACKED_SPARK_TGZ="$TEST_ROOT_DIR/target/spark-dist-unpacked"
 IMAGE_TAG_OUTPUT_FILE="$TEST_ROOT_DIR/target/image-tag.txt"
@@ -85,8 +85,8 @@ then
   # Build PySpark image
   LANGUAGE_BINDING_BUILD_ARGS="-p $DOCKER_FILE_BASE_PATH/bindings/python/Dockerfile"
 
-  # Build SparkR image
-  LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
+  # Build SparkR image -- disabled since this fails, re-enable as part of SPARK-25152
+  # LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
 
   case $DEPLOY_MODE in
     cloud)
