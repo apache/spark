@@ -680,8 +680,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[Project]] operators into one and perform alias substitution,
- * merging the expressions into one single expression.
+ * Combines two [[Project]] operators into one and perform alias substitution,
+ * merging the expressions into one single expression for the following cases.
+ * 1. When two [[Project]] operators are adjacent.
+ * 2. When two [[Project]] operators have LocalLimit/Sample/Repartition operator between them
+ *    and the upper project consists of the same number of columns which is equal or aliasing.
+ *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
 object CollapseProject extends Rule[LogicalPlan] {
 
@@ -699,20 +703,13 @@ object CollapseProject extends Rule[LogicalPlan] {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       }
-    case p1 @ Project(_, g @ GlobalLimit(_, l @ LocalLimit(_, p2: Project))) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
-        p1
-      } else {
-        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
-        g.copy(child = l.copy(child = p2.copy(projectList = newProjectList)))
-      }
-    case p1 @ Project(_, l @ LocalLimit(_, p2: Project)) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
-        p1
-      } else {
-        val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
-        l.copy(child = p2.copy(projectList = newProjectList))
-      }
+    case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
+        if isRenaming(l1, l2) =>
+      val newProjectList = buildCleanedProjectList(l1, l2)
+      g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
+    case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+      val newProjectList = buildCleanedProjectList(l1, l2)
+      limit.copy(child = p2.copy(projectList = newProjectList))
     case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
       r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
     case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
