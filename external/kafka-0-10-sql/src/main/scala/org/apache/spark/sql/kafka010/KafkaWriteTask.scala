@@ -36,7 +36,8 @@ private[kafka010] class KafkaWriteTask(
     inputSchema: Seq[Attribute],
     topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
-  protected val producer: CachedKafkaProducer = CachedKafkaProducer.acquire(producerConfiguration)
+  protected val producer: CachedKafkaProducer =
+    CachedKafkaProducer.acquire(producerConfiguration)
 
   /**
    * Writes key value data out to topics.
@@ -52,7 +53,7 @@ private[kafka010] class KafkaWriteTask(
     checkForErrors()
     producer.flush()
     checkForErrors()
-    CachedKafkaProducer.release(producer, offending = failedWrite != null)
+    CachedKafkaProducer.release(producer, failedWrite != null)
   }
 }
 
@@ -95,7 +96,7 @@ private[kafka010] abstract class KafkaRowWriter(
     if (failedWrite != null) {
       // Before throwing exception, we should mark this acquired producer as not in use,
       // for this particular task. Otherwise it will linger on, assuming that it is in use.
-      CachedKafkaProducer.release(producer, offending = true)
+      CachedKafkaProducer.release(producer, failing = true)
       throw failedWrite
     }
   }

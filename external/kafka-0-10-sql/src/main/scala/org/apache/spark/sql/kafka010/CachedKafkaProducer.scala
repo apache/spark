@@ -38,13 +38,19 @@ private[kafka010] case class CachedKafkaProducer(
 
   private val configMap = kafkaParams.map(x => x._1 -> x._2).toMap.asJava
 
+  private def updatedAuthConfigIfNeeded(kafkaParamsMap: ju.Map[String, Object]) =
+    KafkaConfigUpdater("executor", kafkaParamsMap.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
+
   lazy val kafkaProducer: KafkaProducer[Array[Byte], Array[Byte]] = {
-    val producer = new KafkaProducer[Array[Byte], Array[Byte]](configMap)
+    val producer = new KafkaProducer[Array[Byte], Array[Byte]](updatedAuthConfigIfNeeded(configMap))
     logDebug(s"Created a new instance of KafkaProducer for " +
       s"$kafkaParams with Id: $id")
     closed = false
     producer
   }
+  @volatile
   private var isCached: Boolean = true
   private var closed: Boolean = true
   private def close(): Unit = {
@@ -53,7 +59,7 @@ private[kafka010] case class CachedKafkaProducer(
         if (!closed) {
           closed = true
           kafkaProducer.close()
-          logInfo(s"Closed kafka producer: $kafkaProducer")
+          logInfo(s"Closed kafka producer: $this")
         }
       }
     } catch {
@@ -85,8 +91,8 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private lazy val cacheExpireTimeout: Long =
     Option(SparkEnv.get).map(_.conf.getTimeAsMs(
-      key = "spark.kafka.producer.cache.timeout",
-      defaultValue = s"${defaultCacheExpireTimeout}ms")).getOrElse(defaultCacheExpireTimeout)
+      "spark.kafka.producer.cache.timeout",
+      s"${defaultCacheExpireTimeout}ms")).getOrElse(defaultCacheExpireTimeout)
 
   private val cacheLoader = new CacheLoader[Seq[(String, Object)], CachedKafkaProducer] {
     override def load(params: Seq[(String, Object)]): CachedKafkaProducer = {
@@ -101,7 +107,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
         notification: RemovalNotification[Seq[(String, Object)], CachedKafkaProducer]): Unit = {
       val producer: CachedKafkaProducer = notification.getValue
       if (producer.inUse()) {
-        logDebug(s"Evicting kafka producer $producer, due to ${notification.getCause}")
+        logDebug(s"Evicting kafka producer $producer, due to ${notification.getCause}.")
         // When `inuse` producer is evicted we wait for it to be released before finally closing it.
         closeQueue.add(producer)
         producer.unCache()
@@ -116,29 +122,25 @@ private[kafka010] object CachedKafkaProducer extends Logging {
       .removalListener(removalListener)
       .build[Seq[(String, Object)], CachedKafkaProducer](cacheLoader)
 
-  private def updatedAuthConfigIfNeeded(kafkaParamsMap: ju.Map[String, Object]) =
-    KafkaConfigUpdater("executor", kafkaParamsMap.asScala.toMap)
-      .setAuthenticationConfigIfNeeded()
-      .build()
-
   /**
    * Get a cached KafkaProducer for a given configuration. If matching KafkaProducer doesn't
    * exist, a new KafkaProducer will be created. KafkaProducer is thread safe, it is best to keep
    * one instance per specified kafkaParams.
    */
-  private[kafka010] def acquire(kafkaParamsMap: ju.Map[String, Object]): CachedKafkaProducer = {
-    val paramsSeq: Seq[(String, Object)] = paramsToSeq(updatedAuthConfigIfNeeded(kafkaParamsMap))
-    try {
-      val cachedKafkaProducer: CachedKafkaProducer = guavaCache.get(paramsSeq)
-      val useCount: Int = cachedKafkaProducer.inUseCount.incrementAndGet()
-      logDebug(s"Granted producer $cachedKafkaProducer, inuse-count: $useCount")
-      cachedKafkaProducer
-    } catch {
-      case e @ (_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
-        if e.getCause != null =>
-        throw e.getCause
+  private[kafka010] def acquire(kafkaParamsMap: ju.Map[String, Object]): CachedKafkaProducer =
+    this.synchronized {
+      val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParamsMap)
+      try {
+        val cachedKafkaProducer: CachedKafkaProducer = guavaCache.get(paramsSeq)
+        val useCount = cachedKafkaProducer.inUseCount.incrementAndGet()
+        logDebug(s"Granted producer $cachedKafkaProducer, inuse-count: $useCount")
+        cachedKafkaProducer
+      } catch {
+        case e@(_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
+          if e.getCause != null =>
+          throw e.getCause
+      }
     }
-  }
 
   private def paramsToSeq(kafkaParamsMap: ju.Map[String, Object]): Seq[(String, Object)] = {
     val paramsSeq: Seq[(String, Object)] = kafkaParamsMap.asScala.toSeq.sortBy(x => x._1)
@@ -146,28 +148,25 @@ private[kafka010] object CachedKafkaProducer extends Logging {
   }
 
   /* Release a kafka producer back to the kafka cache. We simple decrement it's inuse count. */
-  private[kafka010] def release(producer: CachedKafkaProducer, offending: Boolean): Boolean = {
-    if (producer != null) {
-      producer.inUseCount.decrementAndGet()
-      logDebug(s"Released producer $producer, updated inuse count: ${producer.getInUseCount}")
-      if (offending) {
-        // If this producer is failing to write(i.e. offending), we send it to close queue.
+  private[kafka010] def release(producer: CachedKafkaProducer, failing: Boolean): Unit = {
+    this.synchronized {
+      val inUseCount = producer.inUseCount.decrementAndGet()
+      logDebug(s"Released producer $producer, updated inuse count: $inUseCount")
+      if (failing) {
+        // If this producer is failing to write, we remove it from cache.
         // So that it is re-created, eventually.
-        logDebug(s"Invalidated an offending producer:$producer.")
+        logDebug(s"Invalidated a failing producer: $producer.")
         guavaCache.invalidate(producer.kafkaParams)
       }
       if (!producer.inUse() && !producer.isCached) {
         // it will take care of removing it from close queue as well.
         close(producer)
       }
-      true
-    } else {
-      false
     }
   }
 
   /** Close this producer and process pending closes. */
-  private def close(producer: CachedKafkaProducer): Unit = synchronized {
+  private def close(producer: CachedKafkaProducer): Unit = {
     producer.close()
     // Check and close any other producers previously evicted, but pending to be closed.
     for (p <- closeQueue.iterator().asScala) {

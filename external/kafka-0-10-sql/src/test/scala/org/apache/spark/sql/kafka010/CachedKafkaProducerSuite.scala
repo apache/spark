@@ -19,8 +19,6 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
-
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
 
@@ -58,28 +56,22 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
     assert(map.size == 2)
   }
 
-  test("Should return the cached instance, even if auth tokens are set up.") {
-    // TODO.
-    // Question: What happens when a delegation token value is changed for a given producer?
-    // we would need to recreate a kafka producer.
-  }
-
-  test("Remove an offending kafka producer from cache.") {
+  test("Automatically remove a failing kafka producer from cache.") {
     import testImplicits._
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
-    intercept[SparkException] {
+    val ex = intercept[SparkException] {
       // This will fail because the service is not reachable.
       df.write
         .format("kafka")
         .option("topic", "topic")
-        .option("retries", "1")
-        .option("max.block.ms", "2")
-        .option("request.timeout.ms", "2")
-        .option("linger.ms", "2")
+        .option("kafka.retries", "1")
+        .option("kafka.max.block.ms", "2")
         .option("kafka.bootstrap.servers", "12.0.0.1:39022")
         .save()
     }
-    // Since offending kafka producer is released on error and also invalidated, it should not be in
+    assert(ex.getMessage.contains("org.apache.kafka.common.errors.TimeoutException"),
+      "Spark command should fail due to service not reachable.")
+    // Since failing kafka producer is released on error and also invalidated, it should not be in
     // cache.
     val map = CachedKafkaProducer.getAsMap
     assert(map.size == 0)

@@ -418,17 +418,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
     val data = new Array[Byte](15000) // large value
     val writeTask = new KafkaStreamDataWriter(Some(topic), options, inputSchema)
-    try {
-      val fieldTypes: Array[DataType] = Array(BinaryType)
-      val converter = UnsafeProjection.create(fieldTypes)
-      val row = new SpecificInternalRow(fieldTypes)
-      row.update(0, data)
-      val iter = Seq.fill(1000)(converter.apply(row)).iterator
-      iter.foreach(writeTask.write(_))
-      writeTask.commit()
-    } finally {
-      writeTask.close()
-    }
+    val fieldTypes: Array[DataType] = Array(BinaryType)
+    val converter = UnsafeProjection.create(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes)
+    row.update(0, data)
+    val iter = Seq.fill(1000)(converter.apply(row)).iterator
+    iter.foreach(writeTask.write(_))
+    writeTask.commit()
   }
 
   private def createKafkaReader(topic: String): DataFrame = {
