@@ -60,7 +60,9 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
   }
 
   after {
-    kvstore.close()
+    if (kvstore != null) {
+      kvstore.close()
+    }
   }
 
   private def createTestDataFrame: DataFrame = {
@@ -600,6 +602,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       time))
     assert(statusStore.executionsCount === 2)
     assert(statusStore.execution(2) === None)
+    store.close()
   }
 }
 
