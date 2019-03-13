@@ -48,29 +48,8 @@ class CacheManager extends Logging {
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
-  @transient
-  private val cacheLock = new ReentrantReadWriteLock
-
-  /** Acquires a read lock on the cache for the duration of `f`. */
-  private def readLock[A](f: => A): A = {
-    val lock = cacheLock.readLock()
-    lock.lock()
-    try f finally {
-      lock.unlock()
-    }
-  }
-
-  /** Acquires a write lock on the cache for the duration of `f`. */
-  private def writeLock[A](f: => A): A = {
-    val lock = cacheLock.writeLock()
-    lock.lock()
-    try f finally {
-      lock.unlock()
-    }
-  }
-
   /** Clears all cached tables. */
-  def clearCache(): Unit = writeLock {
+  def clearCache(): Unit = this.synchronized {
     cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
     cachedData = IndexedSeq[CachedData]()
   }
@@ -100,7 +79,7 @@ class CacheManager extends Logging {
         sparkSession.sessionState.executePlan(planToCache).executedPlan,
         tableName,
         planToCache)
-      writeLock {
+	    this.synchronized {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
         } else {
@@ -143,9 +122,9 @@ class CacheManager extends Logging {
       } else {
         _.sameResult(plan)
       }
-    val (plansToUncache, remainingPlans) = cachedData.partition(cd => shouldRemove(cd.plan))
-    writeLock {
-      cachedData = remainingPlans
+    val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
+	  this.synchronized {
+      cachedData = cachedData.filter(!plansToUncache.contains(_))
     }
     plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
 
@@ -183,10 +162,10 @@ class CacheManager extends Logging {
   private def recacheByCondition(
       spark: SparkSession,
       condition: CachedData => Boolean): Unit = {
-    val (needToRecache, remainingPlans) = cachedData.partition(condition)
-    writeLock {
+    val needToRecache = cachedData.filter(condition)
+    this.synchronized {
       // Remove the cache entry before creating a new ones.
-      cachedData = remainingPlans
+      cachedData = cachedData.filter(!needToRecache.contains(_))
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
@@ -195,7 +174,7 @@ class CacheManager extends Logging {
         cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = plan),
         logicalPlan = cd.plan)
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
-      writeLock {
+      this.synchronized {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
           logWarning("While recaching, data was already added to cache.")
         } else {
