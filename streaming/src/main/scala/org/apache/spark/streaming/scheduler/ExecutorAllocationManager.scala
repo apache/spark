@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, Utils}
 
@@ -55,8 +55,6 @@ private[streaming] class ExecutorAllocationManager(
     conf: SparkConf,
     batchDurationMs: Long,
     clock: Clock) extends StreamingListener with Logging {
-
-  import ExecutorAllocationManager._
 
   private val scalingIntervalSecs = conf.get(STREAMING_DYN_ALLOCATION_SCALING_INTERVAL)
   private val scalingUpRatio = conf.get(STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO)

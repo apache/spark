@@ -25,15 +25,14 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
+import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
 
 class ExecutorAllocationManagerSuite extends SparkFunSuite
   with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
-
-  import ExecutorAllocationManager._
 
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
