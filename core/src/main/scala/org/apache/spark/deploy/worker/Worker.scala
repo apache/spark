@@ -473,8 +473,8 @@ private[deploy] class Worker(
           logError("App dir cleanup failed: " + e.getMessage, e)
         )(cleanupThreadExecutor)
       } catch {
-        case _ : RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
-          logDebug("Failed to cleanup work dir as executor pool was shutdown")
+        case _: RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
+          logWarning("Failed to cleanup work dir as executor pool was shutdown")
       }
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
@@ -651,8 +651,8 @@ private[deploy] class Worker(
           )(cleanupThreadExecutor)
         }
       } catch {
-        case _ : RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
-          logDebug("Failed to cleanup application as executor pool was shutdown")
+        case _: RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
+          logWarning("Failed to cleanup application as executor pool was shutdown")
       }
       shuffleService.applicationRemoved(id)
     }
