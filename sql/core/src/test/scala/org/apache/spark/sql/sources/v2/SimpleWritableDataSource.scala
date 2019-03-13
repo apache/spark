@@ -25,12 +25,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -141,22 +141,24 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     }
   }
 
-  class MyTable(options: DataSourceOptions) extends SimpleBatchTable with SupportsBatchWrite {
-    private val path = options.get("path").get()
+  class MyTable(options: CaseInsensitiveStringMap)
+    extends SimpleBatchTable with SupportsBatchWrite {
+
+    private val path = options.get("path")
     private val conf = SparkContext.getActive.get.hadoopConfiguration
 
     override def schema(): StructType = tableSchema
 
-    override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(new Path(path).toUri.toString, conf)
     }
 
-    override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
+    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
       new MyWriteBuilder(path)
     }
   }
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new MyTable(options)
   }
 }

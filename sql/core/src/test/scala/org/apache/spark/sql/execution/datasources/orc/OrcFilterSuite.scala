@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsR
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -58,7 +57,7 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
       case PhysicalOperation(_, filters,
         DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        val scanBuilder = orcTable.newScanBuilder(new DataSourceOptions(options.asJava))
+        val scanBuilder = orcTable.newScanBuilder(options)
         scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
         val pushedFilters = scanBuilder.pushedFilters()
         assert(pushedFilters.nonEmpty, "No filter is pushed down")
@@ -102,7 +101,7 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
       case PhysicalOperation(_, filters,
       DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        val scanBuilder = orcTable.newScanBuilder(new DataSourceOptions(options.asJava))
+        val scanBuilder = orcTable.newScanBuilder(options)
         scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
         val pushedFilters = scanBuilder.pushedFilters()
         if (noneSupported) {
