@@ -19,3 +19,13 @@ $(document).ready(function(){
    $("[data-toggle=tooltip]").tooltip({container: 'body'});
 });
 
+$(document).on('mouseenter', ".description-input", function () {
+   var $this = $(this);
+   if (this.offsetWidth < this.scrollWidth && !$this.attr('title')) {
+        $this.tooltip({
+            title: $this.text(),
+            placement: "right"
+        });
+        $this.tooltip('show');
+   }
+});
