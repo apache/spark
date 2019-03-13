@@ -60,9 +60,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
   }
 
   after {
-    if (kvstore != null) {
-      kvstore.close()
-    }
+    kvstore.close()
   }
 
   private def createTestDataFrame: DataFrame = {
@@ -561,9 +559,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
 
   test("eviction should respect execution completion time") {
     val conf = sparkContext.conf.clone().set(UI_RETAINED_EXECUTIONS.key, "2")
-    val store = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, store, live = true)
-    val statusStore = new SQLAppStatusStore(store, Some(listener))
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    val statusStore = new SQLAppStatusStore(kvstore, Some(listener))
 
     var time = 0
     val df = createTestDataFrame
@@ -602,7 +599,6 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       time))
     assert(statusStore.executionsCount === 2)
     assert(statusStore.execution(2) === None)
-    store.close()
   }
 }
 

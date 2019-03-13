@@ -24,6 +24,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.DataFrame
@@ -32,9 +33,19 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
 
-class AllExecutionsPageSuite extends SharedSQLContext {
+class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
 
   import testImplicits._
+
+  var kvstore: ElementTrackingStore = _
+
+  before {
+    kvstore = new ElementTrackingStore(new InMemoryStore, sparkContext.conf)
+  }
+
+  after {
+    kvstore.close()
+  }
 
   test("SPARK-27019: correctly display SQL page when event reordering happens") {
     val statusStore = createStatusStore
@@ -69,10 +80,8 @@ class AllExecutionsPageSuite extends SharedSQLContext {
 
 
   private def createStatusStore: SQLAppStatusStore = {
-    val conf = sparkContext.conf
-    val store = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, store, live = true)
-    new SQLAppStatusStore(store, Some(listener))
+    val listener = new SQLAppStatusListener(sparkContext.conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
   }
 
   private def createTestDataFrame: DataFrame = {
