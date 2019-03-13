@@ -45,6 +45,11 @@ case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
  */
 class CacheManager extends Logging {
 
+  /**
+    * Maintains the list of cached plans as an immutable sequence.  Any updates to the list
+    * should be protected in a "this.synchronized" block which includes the reading of the
+    * existing value and the update of the cachedData var.
+    */
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
@@ -79,7 +84,7 @@ class CacheManager extends Logging {
         sparkSession.sessionState.executePlan(planToCache).executedPlan,
         tableName,
         planToCache)
-	    this.synchronized {
+      this.synchronized {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
         } else {
@@ -123,7 +128,7 @@ class CacheManager extends Logging {
         _.sameResult(plan)
       }
     val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
-	  this.synchronized {
+    this.synchronized {
       cachedData = cachedData.filter(!plansToUncache.contains(_))
     }
     plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
