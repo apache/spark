@@ -18,21 +18,15 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.TimeUnit
 
-import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
-
-  type KP = KafkaProducer[Array[Byte], Array[Byte]]
-
-  protected override def beforeEach(): Unit = {
-    super.beforeEach()
-    CachedKafkaProducer.clear()
-  }
 
   test("Should return the cached instance on calling acquire with same params.") {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
@@ -81,19 +75,71 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
     val producer: CachedKafkaProducer = CachedKafkaProducer.acquire(kafkaParams)
     producer.kafkaProducer // initializing the producer.
-    assert(producer.getInUseCount.intValue() == 1)
+    assert(producer.getInUseCount == 1)
     // Explicitly cause the producer from guava cache to be evicted.
     CachedKafkaProducer.evict(producer.getKafkaParams)
-    assert(producer.getInUseCount.intValue() == 1)
+    assert(producer.getInUseCount == 1)
     assert(!producer.isClosed, "An in-use producer should not be closed.")
   }
 
- private def generateKafkaParams: ju.HashMap[String, Object] = {
+  private def generateKafkaParams: ju.HashMap[String, Object] = {
     val kafkaParams = new ju.HashMap[String, Object]()
+    kafkaParams.put("ack", "0")
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
-    kafkaParams.put("ack", "1")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams
+  }
+}
+
+class KafkaSinkStressSuite extends KafkaContinuousTest {
+
+  import testImplicits._
+
+  override val streamingTimeout = 30.seconds
+
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
+
+  override def afterAll(): Unit = {
+    if (testUtils != null) {
+      testUtils.teardown()
+      testUtils = null
+    }
+    super.afterAll()
+  }
+
+  override def sparkConf: SparkConf = {
+    val conf = super.sparkConf
+    conf.set("spark.kafka.producer.cache.timeout", "2ms")
+  }
+
+  /*
+   * The following stress suite will cause frequent eviction of kafka producers from
+   * the guava cache. Since these producers remain in use, because they are used by
+   * multiple tasks, they stay in close queue till they are released finally. This test
+   * will cause new tasks to use fresh instance of kafka producers and as a result it
+   * simulates a stress situation, where multiple producers are requested from CachedKafkaProducer
+   * and at the same time there will be multiple releases. It is supposed to catch a race
+   * condition if any, due to multiple threads requesting and releasing producers.
+   */
+  test("Single source and multiple kafka sink with 2ms cache timeout.") {
+
+    val query = spark.readStream
+      .format("rate")
+      .option("numPartitions", "100")
+      .option("rowsPerSecond", "200")
+      .load()
+      .selectExpr("CAST(timestamp AS STRING) key", "CAST(value AS STRING) value")
+    val queries = for (i <- 1 to 10) yield {
+      val topic = newTopic()
+      testUtils.createTopic(topic, 100)
+      query.writeStream.format("kafka")
+        .option("broker.address", testUtils.brokerAddress)
+        .option("topic", topic).start()
+    }
+    queries.foreach{ q =>
+      q.processAllAvailable()
+      q.awaitTermination(TimeUnit.MINUTES.toMillis(2))
+    }
   }
 }
