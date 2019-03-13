@@ -43,8 +43,8 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
     val objectMapper = new ObjectMapper()
     Option(map.get("paths")).map { pathStr =>
       objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
-    }.orElse(Option(map.get("path")).map(Seq(_))).getOrElse {
-      Nil
+    }.getOrElse {
+      Option(map.get("path")).toSeq
     }
   }
 }
