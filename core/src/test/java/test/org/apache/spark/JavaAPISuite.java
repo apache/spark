@@ -158,7 +158,10 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void sample() {
-    List<Integer> ints = IntStream.iterate(1, x -> x + 1).limit(20).boxed().collect(Collectors.toList());
+    List<Integer> ints = IntStream.iterate(1, x -> x + 1)
+      .limit(20)
+      .boxed()
+      .collect(Collectors.toList());
     JavaRDD<Integer> rdd = sc.parallelize(ints);
     // the seeds here are "magic" to make this work out nicely
     JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 8);
