@@ -25,6 +25,8 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * A CREATE TABLE command, as parsed from SQL.
+ *
+ * This is a metadata-only command and is not used to write data to the created table.
  */
 case class CreateTable(
     table: TableIdentifier,

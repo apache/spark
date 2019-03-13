@@ -34,5 +34,5 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * kept in a [[org.apache.spark.sql.catalyst.parser.AbstractSqlParser]].
  */
 private[sql] abstract class ParsedLogicalPlan extends LogicalPlan {
-  override lazy val resolved = false
+  final override lazy val resolved = false
 }
