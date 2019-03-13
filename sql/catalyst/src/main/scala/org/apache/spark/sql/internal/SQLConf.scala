@@ -1691,6 +1691,17 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
+  val MAX_PLAN_STRING_LENGTH = buildConf("spark.sql.maxPlanStringLength")
+    .doc("Maximum number of characters to output for a plan string.  If the plan is " +
+      "longer, further output will be truncated.  The default setting always generates a full " +
+      "plan.  Set this to a lower value such as 8k if plan strings are taking up too much " +
+      "memory or are causing OutOfMemory errors in the driver or UI processes.")
+    .bytesConf(ByteUnit.BYTE)
+    .checkValue(i => i >= 0 && i <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, "Invalid " +
+      "value for 'spark.sql.maxPlanStringLength'.  Length must be a valid string length " +
+      "(nonnegative and shorter than the maximum size).")
+    .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
@@ -2145,6 +2156,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
