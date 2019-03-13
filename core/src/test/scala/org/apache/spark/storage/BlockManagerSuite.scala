@@ -195,9 +195,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(id2_.eq(id1), "Deserialized id2 is not the same object as original id1")
   }
 
-  test("BlockManagerId.isDriver() backwards-compatibility with legacy driver ids (SPARK-6716)") {
+  test("BlockManagerId.isDriver() with DRIVER_IDENTIFIER (SPARK-27090)") {
     assert(BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "XXX", 1).isDriver)
-    assert(BlockManagerId(SparkContext.LEGACY_DRIVER_IDENTIFIER, "XXX", 1).isDriver)
     assert(!BlockManagerId("notADriverIdentifier", "XXX", 1).isDriver)
   }
 

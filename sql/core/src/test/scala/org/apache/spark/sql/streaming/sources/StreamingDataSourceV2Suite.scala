@@ -26,7 +26,8 @@ import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder
+import org.apache.spark.sql.sources.v2.writer.{WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -60,6 +61,19 @@ class FakeScanBuilder extends ScanBuilder with Scan {
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
 }
 
+class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
+  override def buildForStreaming(): StreamingWrite = this
+  override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
+    throw new IllegalStateException("fake sink - cannot actually write")
+  }
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    throw new IllegalStateException("fake sink - cannot actually write")
+  }
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    throw new IllegalStateException("fake sink - cannot actually write")
+  }
+}
+
 trait FakeMicroBatchReadTable extends Table with SupportsMicroBatchRead {
   override def name(): String = "fake"
   override def schema(): StructType = StructType(Seq())
@@ -76,7 +90,7 @@ trait FakeStreamingWriteTable extends Table with SupportsStreamingWrite {
   override def name(): String = "fake"
   override def schema(): StructType = StructType(Seq())
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    throw new IllegalStateException("fake sink - cannot actually write")
+    new FakeWriteBuilder
   }
 }
 

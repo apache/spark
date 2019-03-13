@@ -6,35 +6,35 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
 Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
 Selection:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    113            196          89          8.8         113.0       1.0X
-Nested column                                      1316           1639         240          0.8        1315.5       0.1X
+Top-level column                                    116            151          36          8.6         116.3       1.0X
+Nested column                                       544            604          31          1.8         544.5       0.2X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
 Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
 Limiting:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    260            474         211          3.8         260.4       1.0X
-Nested column                                      2322           3312         701          0.4        2322.3       0.1X
+Top-level column                                    360            397          32          2.8         360.4       1.0X
+Nested column                                      3322           3503         166          0.3        3322.4       0.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
 Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
 Repartitioning:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    275            318          55          3.6         274.8       1.0X
-Nested column                                      2482           3263         759          0.4        2482.2       0.1X
+Top-level column                                    292            334          32          3.4         291.8       1.0X
+Nested column                                      3306           3489         123          0.3        3305.7       0.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
 Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
 Repartitioning by exprs:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    274            288          11          3.7         273.9       1.0X
-Nested column                                      2783           2905          86          0.4        2782.7       0.1X
+Top-level column                                    302            333          27          3.3         302.0       1.0X
+Nested column                                      2697           3347         390          0.4        2697.4       0.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
 Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
 Sorting:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    382            419          23          2.6         382.4       1.0X
-Nested column                                      2974           3517         699          0.3        2974.1       0.1X
+Top-level column                                    316            440         146          3.2         315.8       1.0X
+Nested column                                      2728           2928         205          0.4        2727.9       0.1X
 
 

@@ -15,23 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 /**
- * Prunes unnecessary Parquet columns given a [[PhysicalOperation]] over a
- * [[ParquetRelation]]. By "Parquet column", we mean a column as defined in the
- * Parquet format. In Spark SQL, a root-level Parquet column corresponds to a
- * SQL column, and a nested Parquet column corresponds to a [[StructField]].
+ * Prunes unnecessary physical columns given a [[PhysicalOperation]] over a data source relation.
+ * By "physical column", we mean a column as defined in the data source format like Parquet format
+ * or ORC format. For example, in Spark SQL, a root-level Parquet column corresponds to a SQL
+ * column, and a nested Parquet column corresponds to a [[StructField]].
  */
-object ParquetSchemaPruning extends Rule[LogicalPlan] {
+object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
   override def apply(plan: LogicalPlan): LogicalPlan =
@@ -61,10 +62,10 @@ object ParquetSchemaPruning extends Rule[LogicalPlan] {
           // each schemata, assuming the fields in prunedDataSchema are a subset of the fields
           // in dataSchema.
           if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
-            val prunedParquetRelation =
+            val prunedHadoopRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
 
-            val prunedRelation = buildPrunedRelation(l, prunedParquetRelation)
+            val prunedRelation = buildPrunedRelation(l, prunedHadoopRelation)
             val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
             buildNewProjection(normalizedProjects, normalizedFilters, prunedRelation,
@@ -78,10 +79,11 @@ object ParquetSchemaPruning extends Rule[LogicalPlan] {
     }
 
   /**
-   * Checks to see if the given relation is Parquet and can be pruned.
+   * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC v1.
    */
   private def canPruneRelation(fsRelation: HadoopFsRelation) =
-    fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]
+    fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
+      fsRelation.fileFormat.isInstanceOf[OrcFileFormat]
 
   /**
    * Normalizes the names of the attribute references in the given projects and filters to reflect

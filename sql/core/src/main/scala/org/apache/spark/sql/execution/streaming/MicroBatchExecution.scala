@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatch
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, RateControlMicroBatchStream}
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchStream, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
@@ -121,7 +121,14 @@ class MicroBatchExecution(
       case r: StreamingDataSourceV2Relation => r.stream
     }
     uniqueSources = sources.distinct
-    _logicalPlan
+
+    sink match {
+      case s: SupportsStreamingWrite =>
+        val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
+        WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
+
+      case _ => _logicalPlan
+    }
   }
 
   /**
@@ -512,9 +519,8 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: SupportsStreamingWrite =>
-        val streamingWrite = createStreamingWrite(s, extraOptions, newAttributePlan)
-        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, streamingWrite), newAttributePlan)
+      case _: SupportsStreamingWrite =>
+        newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].createPlan(currentBatchId)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 

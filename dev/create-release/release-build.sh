@@ -125,7 +125,7 @@ fi
 PUBLISH_SCALA_2_12=0
 SCALA_2_12_PROFILES="-Pscala-2.12"
 if [[ $SPARK_VERSION < "3.0." ]]; then
-  SCALA_2_12_PROFILES="-Pflume"
+  SCALA_2_12_PROFILES="-Pscala-2.12 -Pflume"
 fi
 if [[ $SPARK_VERSION > "2.4" ]]; then
   PUBLISH_SCALA_2_12=1

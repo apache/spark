@@ -45,6 +45,7 @@ private[deploy] class ExecutorRunner(
     val memory: Int,
     val worker: RpcEndpointRef,
     val workerId: String,
+    val webUiScheme: String,
     val host: String,
     val webUiPort: Int,
     val publicAddress: String,
@@ -165,7 +166,7 @@ private[deploy] class ExecutorRunner(
         if (conf.get(UI_REVERSE_PROXY)) {
           s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
         } else {
-          s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+          s"$webUiScheme$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
         }
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
