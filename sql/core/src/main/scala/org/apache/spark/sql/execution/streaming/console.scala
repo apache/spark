@@ -24,6 +24,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer.{SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
   extends BaseRelation {
@@ -34,7 +35,7 @@ class ConsoleSinkProvider extends TableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     ConsoleTable
   }
 
@@ -62,7 +63,7 @@ object ConsoleTable extends Table with SupportsStreamingWrite {
 
   override def schema(): StructType = StructType(Nil)
 
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var inputSchema: StructType = _
 

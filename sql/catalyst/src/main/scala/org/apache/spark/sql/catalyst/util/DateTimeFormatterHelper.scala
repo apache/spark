@@ -28,16 +28,18 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 trait DateTimeFormatterHelper {
-  protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
-    val localTime = if (temporalAccessor.query(TemporalQueries.localTime) == null) {
-      LocalTime.ofNanoOfDay(0)
-    } else {
-      LocalTime.from(temporalAccessor)
-    }
-    val localDate = LocalDate.from(temporalAccessor)
-    val localDateTime = LocalDateTime.of(localDate, localTime)
-    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-    Instant.from(zonedDateTime)
+  // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
+  // if they does not exist in the parsed object.
+  protected def toZonedDateTime(
+      temporalAccessor: TemporalAccessor,
+      zoneId: ZoneId): ZonedDateTime = {
+    // Parsed input might not have time related part. In that case, time component is set to zeros.
+    val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
+    val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
+    // Parsed input must have date component. At least, year must present in temporalAccessor.
+    val localDate = temporalAccessor.query(TemporalQueries.localDate)
+
+    ZonedDateTime.of(localDate, localTime, zoneId)
   }
 
   // Gets a formatter from the cache or creates new one. The buildFormatter method can be called

@@ -362,7 +362,12 @@ object JavaTypeInference {
     def toCatalystArray(input: Expression, elementType: TypeToken[_]): Expression = {
       val (dataType, nullable) = inferDataType(elementType)
       if (ScalaReflection.isNativeType(dataType)) {
-        createSerializerForGenericArray(input, dataType, nullable = nullable)
+        val cls = input.dataType.asInstanceOf[ObjectType].cls
+        if (cls.isArray && cls.getComponentType.isPrimitive) {
+          createSerializerForPrimitiveArray(input, dataType)
+        } else {
+          createSerializerForGenericArray(input, dataType, nullable = nullable)
+        }
       } else {
         createSerializerForMapObjects(input, ObjectType(elementType.getRawType),
           serializerFor(_, elementType))

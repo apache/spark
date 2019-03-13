@@ -1212,6 +1212,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  override def visitCurrentDatetime(ctx: CurrentDatetimeContext): Expression = withOrigin(ctx) {
+    if (conf.ansiParserEnabled) {
+      ctx.name.getType match {
+        case SqlBaseParser.CURRENT_DATE =>
+          CurrentDate()
+        case SqlBaseParser.CURRENT_TIMESTAMP =>
+          CurrentTimestamp()
+      }
+    } else {
+      // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
+      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP`.
+      UnresolvedAttribute.quoted(ctx.name.getText)
+    }
+  }
+
   /**
    * Create a [[Cast]] expression.
    */

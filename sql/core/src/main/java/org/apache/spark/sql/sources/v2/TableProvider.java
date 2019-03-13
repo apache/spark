@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources.v2;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.DataSourceRegister;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * The base interface for v2 data sources which don't have a real catalog. Implementations must
@@ -37,7 +38,7 @@ public interface TableProvider {
    * @param options the user-specified options that can identify a table, e.g. file path, Kafka
    *                topic name, etc. It's an immutable case-insensitive string-to-string map.
    */
-  Table getTable(DataSourceOptions options);
+  Table getTable(CaseInsensitiveStringMap options);
 
   /**
    * Return a {@link Table} instance to do read/write with user-specified schema and options.
@@ -50,7 +51,7 @@ public interface TableProvider {
    * @param schema the user-specified schema.
    * @throws UnsupportedOperationException
    */
-  default Table getTable(DataSourceOptions options, StructType schema) {
+  default Table getTable(CaseInsensitiveStringMap options, StructType schema) {
     String name;
     if (this instanceof DataSourceRegister) {
       name = ((DataSourceRegister) this).shortName();
