@@ -86,12 +86,12 @@ case class InsertIntoHiveDirCommand(
     val jobConf = new JobConf(hadoopConf)
 
     val targetPath = new Path(storage.locationUri.get)
+    val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
     val writeToPath =
       if (isLocal) {
         val localFileSystem = FileSystem.getLocal(jobConf)
         localFileSystem.makeQualified(targetPath)
       } else {
-        val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
         val dfs = qualifiedPath.getFileSystem(jobConf)
         if (!dfs.exists(qualifiedPath)) {
           dfs.mkdirs(qualifiedPath.getParent)
@@ -99,7 +99,8 @@ case class InsertIntoHiveDirCommand(
         qualifiedPath
       }
 
-    val tmpPath = getExternalTmpPath(sparkSession, hadoopConf, writeToPath)
+    // The temporary path must be a HDFS path, not a local path.
+    val tmpPath = getExternalTmpPath(sparkSession, hadoopConf, qualifiedPath)
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
       tmpPath.toString, tableDesc, false)
 
@@ -119,7 +120,12 @@ case class InsertIntoHiveDirCommand(
       }
 
       fs.listStatus(tmpPath).foreach {
-        tmpFile => fs.rename(tmpFile.getPath, writeToPath)
+        tmpFile =>
+          if (isLocal) {
+            fs.copyToLocalFile(tmpFile.getPath, writeToPath)
+          } else {
+            fs.rename(tmpFile.getPath, writeToPath)
+          }
       }
     } catch {
       case e: Throwable =>
