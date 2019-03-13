@@ -33,12 +33,12 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
-abstract class FileWriteBuilder(options: DataSourceOptions)
+abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
   extends WriteBuilder with SupportsSaveMode {
   private var schema: StructType = _
   private var queryId: String = _
@@ -61,18 +61,17 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
 
   override def buildForBatch(): BatchWrite = {
     validateInputs()
-    val pathName = options.paths().head
-    val path = new Path(pathName)
+    val path = new Path(paths.head)
     val sparkSession = SparkSession.active
-    val optionsAsScala = options.asMap().asScala.toMap
+    val optionsAsScala = options.asScala.toMap
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = pathName)
+      outputPath = paths.head)
     lazy val description =
-      createWriteJobDescription(sparkSession, hadoopConf, job, pathName, optionsAsScala)
+      createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, optionsAsScala)
 
     val fs = path.getFileSystem(hadoopConf)
     mode match {
@@ -127,7 +126,7 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
     assert(mode != null, "Missing save mode")
-    assert(options.paths().length == 1)
+    assert(paths.length == 1)
     DataSource.validateSchema(schema)
     schema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
