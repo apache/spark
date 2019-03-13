@@ -69,10 +69,8 @@ private[deploy] class Worker(
 
   // A separated thread to clean up the workDir and the directories of finished applications.
   // Used to provide the implicit parameter of `Future` methods.
-  private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
-
-  private val cleanupLock = new Object
+  private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(new ShutdownSafeExecutor(
+    ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread")))
 
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
@@ -451,31 +449,32 @@ private[deploy] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
-      cleanupLock.synchronized {
-        if (!cleanupThreadExecutor.isShutdown) {
-          val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
-          val cleanupFuture = concurrent.Future {
-            val appDirs = workDir.listFiles()
-            if (appDirs == null) {
-              throw new IOException("ERROR: Failed to list files in " + appDirs)
-            }
-            appDirs.filter { dir =>
-              // the directory is used by an application - check that the application is not running
-              // when cleaning up
-              val appIdFromDir = dir.getName
-              val isAppStillRunning = appIds.contains(appIdFromDir)
-              dir.isDirectory && !isAppStillRunning &&
-                !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECONDS)
-            }.foreach { dir =>
-              logInfo(s"Removing directory: ${dir.getPath}")
-              Utils.deleteRecursively(dir)
-            }
-          }(cleanupThreadExecutor)
+      val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
+      try {
+        val cleanupFuture: concurrent.Future[Unit] = concurrent.Future {
+          val appDirs = workDir.listFiles()
+          if (appDirs == null) {
+            throw new IOException("ERROR: Failed to list files in " + appDirs)
+          }
+          appDirs.filter { dir =>
+            // the directory is used by an application - check that the application is not running
+            // when cleaning up
+            val appIdFromDir = dir.getName
+            val isAppStillRunning = appIds.contains(appIdFromDir)
+            dir.isDirectory && !isAppStillRunning &&
+              !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECONDS)
+          }.foreach { dir =>
+            logInfo(s"Removing directory: ${dir.getPath}")
+            Utils.deleteRecursively(dir)
+          }
+        }(cleanupThreadExecutor)
 
-          cleanupFuture.failed.foreach(e =>
-            logError("App dir cleanup failed: " + e.getMessage, e)
-          )(cleanupThreadExecutor)
-        }
+        cleanupFuture.failed.foreach(e =>
+          logError("App dir cleanup failed: " + e.getMessage, e)
+        )(cleanupThreadExecutor)
+      } catch {
+        case _ : RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
+          logDebug("Failed to cleanup work dir as executor pool was shutdown")
       }
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
@@ -640,15 +639,20 @@ private[deploy] class Worker(
     val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
     if (shouldCleanup) {
       finishedApps -= id
-      appDirectories.remove(id).foreach { dirList =>
-        concurrent.Future {
-          logInfo(s"Cleaning up local directories for application $id")
-          dirList.foreach { dir =>
-            Utils.deleteRecursively(new File(dir))
-          }
-        }(cleanupThreadExecutor).failed.foreach(e =>
-          logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
-        )(cleanupThreadExecutor)
+      try {
+        appDirectories.remove(id).foreach { dirList =>
+          concurrent.Future {
+            logInfo(s"Cleaning up local directories for application $id")
+            dirList.foreach { dir =>
+              Utils.deleteRecursively(new File(dir))
+            }
+          }(cleanupThreadExecutor).failed.foreach(e =>
+            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+          )(cleanupThreadExecutor)
+        }
+      } catch {
+        case _ : RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
+          logDebug("Failed to cleanup application as executor pool was shutdown")
       }
       shuffleService.applicationRemoved(id)
     }
@@ -672,9 +676,7 @@ private[deploy] class Worker(
   }
 
   override def onStop() {
-    cleanupLock.synchronized {
-      cleanupThreadExecutor.shutdownNow()
-    }
+    cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()
     forwardMessageScheduler.shutdownNow()
