@@ -79,16 +79,15 @@ private[spark] class ExecutorPodsAllocator(
   def setTotalExpectedExecutors(total: Int): Unit = {
     logDebug("Setting total expected executors", SafeArg.of("totalExpectedExecutors", total))
     totalExpectedExecutors.set(total)
-    appId.foreach { id => latestSnapshot.foreach {
-      requestExecutorsIfNecessary(id, _)
-    }
+    appId.foreach { id =>
+      latestSnapshot.foreach {
+        requestExecutorsIfNecessary(id, _)
+      }
     }
   }
 
-  private def onNewSnapshots(
-                              applicationId: String,
-                              snapshots: Seq[ExecutorPodsSnapshot]
-                            ): Unit = {
+  private def onNewSnapshots(applicationId: String,
+                             snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
     this.appId = Some(applicationId)
     newlyCreatedExecutors --= snapshots.flatMap(_.executorPods.keys)
     // For all executors we've created against the API but have not seen in a snapshot
@@ -130,10 +129,8 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  private def requestExecutorsIfNecessary(
-                                           applicationId: String,
-                                           snapshot: ExecutorPodsSnapshot
-                                         ): Unit = {
+  private def requestExecutorsIfNecessary(applicationId: String,
+                                          snapshot: ExecutorPodsSnapshot): Unit = {
     val currentRunningExecutors = snapshot.executorPods.values.count {
       case PodRunning(_) => true
       case _ => false
