@@ -189,20 +189,26 @@ private[spark] class BasicExecutorFeatureStep(
         .build()
     }.getOrElse(executorContainer)
     val containerWithLifecycle = kubernetesConf.workerDecomissioning match {
+      case false =>
+        logInfo("Decommissioning not enabled, skipping shutdown script")
+        containerWithLimitCores
       case true =>
         logInfo("Adding decommission script to lifecycle")
-        new ContainerBuilder(executorContainer).editOrNewLifecycle()
+        new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
+          .withNewPostStart()
+            .withNewExec()
+              .withCommand(
+                List("/bin/sh", "-c", "exit 1").asJava)
+            .endExec()
+          .endPostStart()
           .withNewPreStop()
             .withNewExec()
               .withCommand(
-                List("/opt/spark/sbin/decommission-slave.sh", "--block-until-exit").asJava)
+                List("/opt/decom.sh").asJava)
                .endExec()
           .endPreStop()
           .endLifecycle()
           .build()
-      case false =>
-        logInfo("Decommissioning not enabled, skipping shutdown script")
-        containerWithLimitCores
     }
     val ownerReference = kubernetesConf.driverPod.map { pod =>
       new OwnerReferenceBuilder()
@@ -227,6 +233,8 @@ private[spark] class BasicExecutorFeatureStep(
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
         .endSpec()
       .build()
+
+    logInfo(s"Built container $containerWithLifeCycle")
 
     SparkPod(executorPod, containerWithLifeCycle)
   }

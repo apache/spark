@@ -27,6 +27,8 @@
 # Usage: decommission-slave.sh [--block-until-exit]
 #   Decommissions all slaves on this worker machine
 
+set -ex
+
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
