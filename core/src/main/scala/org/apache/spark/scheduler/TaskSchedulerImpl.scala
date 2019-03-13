@@ -589,17 +589,18 @@ private[spark] class TaskSchedulerImpl(
           val readyTasks = taskSet.getReadyTaskToReservedWorkerOffer
           val curTime = clock.getTimeMillis()
           // Record all the executor IDs assigned barrier tasks on.
-          val addressesWithDescs = readyTasks.map { case (index, (speculative, reservedOffer)) =>
-            val execId = reservedOffer.execId
-            val host = reservedOffer.host
-            val locality = reservedOffer.locality
-            val taskDesc = taskSet.setupTask(index, execId, host, locality, curTime, speculative)
-            val offerIndex = execIdToOfferIndex(execId)
-            tasks(offerIndex) += taskDesc
-            addRunningTask(taskDesc.taskId, taskSet, execId)
-            // The executor address is expected to be non empty.
-            (shuffledOffers(offerIndex).address, taskDesc)
-          }.toArray
+          val addressesWithDescs =
+            readyTasks.toIterator.map { case (index, (speculative, reservedOffer)) =>
+              val execId = reservedOffer.execId
+              val host = reservedOffer.host
+              val locality = reservedOffer.locality
+              val taskDesc = taskSet.setupTask(index, execId, host, locality, curTime, speculative)
+              val offerIndex = execIdToOfferIndex(execId)
+              tasks(offerIndex) += taskDesc
+              addRunningTask(taskDesc.taskId, taskSet, execId)
+              // The executor address is expected to be non empty.
+              (shuffledOffers(offerIndex).address, taskDesc)
+            }.toArray
 
           // materialize the barrier coordinator.
           maybeInitBarrierCoordinator()
