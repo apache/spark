@@ -35,15 +35,20 @@ private[v1] class SqlListResource extends BaseAppResource {
       var executions = List[ExecutionData]()
 
       sqlStore.executionsList().foreach { exec =>
-        val running = exec.jobs
-          .filter {case(_, status) => status == JobExecutionStatus.RUNNING }
-          .keys.toSeq
-        val completed = exec.jobs
-          .filter {case(_, status) => status == JobExecutionStatus.SUCCEEDED }
-          .keys.toSeq
-        val failed = exec.jobs
-          .filter {case(_, status) => status == JobExecutionStatus.FAILED }
-          .keys.toSeq
+        var running = Seq[Int]()
+        var completed = Seq[Int]()
+        var failed = Seq[Int]()
+
+        exec.jobs.map { job => job match {
+          case (id, status) if status == JobExecutionStatus.RUNNING =>
+            running = running :+ id
+          case (id, status) if status == JobExecutionStatus.SUCCEEDED =>
+            completed = completed :+ id
+          case (id, status) if status == JobExecutionStatus.FAILED =>
+            failed = failed :+ id
+          }
+        }
+
         val status = if (exec.jobs.size == completed.size) {
           "COMPLETED"
         } else if (failed.length > 0) {
@@ -51,6 +56,7 @@ private[v1] class SqlListResource extends BaseAppResource {
         } else {
           "RUNNING"
         }
+
         val duration = UIUtils.formatDuration(
           exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime)
         executions = executions.+:(new ExecutionData(exec.executionId,
