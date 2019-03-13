@@ -31,8 +31,8 @@ object SparkTransportConf {
 
   /**
    * Utility for creating a [[TransportConf]] from a [[SparkConf]].
-   * @param _conf         the [[SparkConf]]
-   * @param module         the module name
+   * @param _conf the [[SparkConf]]
+   * @param module the module name
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
@@ -45,13 +45,21 @@ object SparkTransportConf {
       numUsableCores: Int = 0,
       role: Option[String] = None): TransportConf = {
     val conf = _conf.clone
-    val (serverThreads, clientThreads) = getThreadsConfByRole(conf, module, role)
-    // Or specify thread configuration based on our JVM's allocation of cores (rather than
+    // specify default thread configuration based on our JVM's allocation of cores (rather than
     // necessarily assuming we have all the machine's cores).
     val numThreads = NettyUtils.defaultNumThreads(numUsableCores)
+    // module threads configuration
+    val (modServerThreads, modClientThreads) =
+      (conf.getInt(s"spark.$module.io.serverThreads", numThreads),
+       conf.getInt(s"spark.$module.io.clientThreads", numThreads))
     // override threads configurations with role specific values if specified
-    setThreads(conf, s"spark.$module.io.serverThreads", serverThreads, numThreads)
-    setThreads(conf, s"spark.$module.io.clientThreads", clientThreads, numThreads)
+    val (serverThreads, clientThreads) = role match {
+      case Some(r) => (conf.getInt(s"spark.$r.$module.io.serverThreads", modServerThreads),
+        conf.getInt(s"spark.$r.$module.io.clientThreads", modClientThreads))
+      case None => (modServerThreads, modClientThreads)
+    }
+    conf.set(s"spark.$module.io.serverThreads", serverThreads.toString)
+    conf.set(s"spark.$module.io.clientThreads", clientThreads.toString)
 
     new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)
@@ -60,38 +68,5 @@ object SparkTransportConf {
         conf.getAll.toMap.asJava.entrySet()
       }
     })
-  }
-
-  /**
-   * get role specific number of threads of server and client
-   * @param conf the [[SparkConf]]
-   * @param module the module name
-   * @param role  optional role, value could be driver, executor, worker and master.
-   * @return a pair of server thread configuration and client thread configuration.
-   *         If the configuration is not specified, set it to -1
-   */
-  def getThreadsConfByRole(
-      conf: SparkConf,
-      module: String,
-      role: Option[String]): (Int, Int) = {
-    if (role.isEmpty) {
-      (-1, -1)
-    } else {
-      (conf.getInt(s"spark.${role.get}.$module.io.serverThreads", -1),
-        conf.getInt(s"spark.${role.get}.$module.io.clientThreads", -1)
-      )
-    }
-  }
-
-  def setThreads(
-      conf: SparkConf,
-      key: String,
-      specificValue: Int,
-      defaultValue: Int): Unit = {
-    if (specificValue > 0) {
-      conf.set(key, specificValue.toString)
-    } else {
-      conf.setIfMissing(key, defaultValue.toString)
-    }
   }
 }

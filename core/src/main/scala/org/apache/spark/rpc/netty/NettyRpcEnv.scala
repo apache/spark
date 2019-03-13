@@ -50,14 +50,11 @@ private[netty] class NettyRpcEnv(
   // try to get specific threads configurations of driver and executor
   val executorId = conf.get("spark.executor.id", "")
   // neither driver nor executor if executor id is not set
-  var role: Option[String] = None
-  if (!executorId.isEmpty) {
-    role =
-      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
-        Some("driver")
-      } else {
-        Some("executor")
-      }
+  val role = executorId match {
+    case "" => None
+    case SparkContext.DRIVER_IDENTIFIER => Some("driver")
+    // any other non-empty values since executor must has "spark.executor.id" set
+    case _ => Some("executor")
   }
 
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(

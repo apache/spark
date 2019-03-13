@@ -195,31 +195,25 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   }
 
   def getNumOfThreads(conf: SparkConf): Int = {
+    val availableCores =
+      if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
+    // module configuration
+    val modNumThreads = nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
+      .getOrElse(math.max(2, availableCores))
     // try to get specific threads configurations of driver and executor
+    // override module configurations if specified
     val executorId = conf.get("spark.executor.id", "")
     // neither driver nor executor if executor id is not set
-    var role = ""
-    if (!executorId.isEmpty) {
-      role =
-        if (executorId == SparkContext.DRIVER_IDENTIFIER) {
-          "driver"
-        } else {
-          "executor"
-        }
+    val role = executorId match {
+      case "" => ""
+      case SparkContext.DRIVER_IDENTIFIER => "driver"
+      // any other non-empty values since executor must has "spark.executor.id" set
+      case _ => "executor"
     }
-    val num =
-      if (role.isEmpty) {
-        -1
-      } else {
-        conf.getInt(s"spark.$role.rpc.netty.dispatcher.numThreads", -1)
-      }
-    if (num > 0) {
-      num
-    } else { // no role specific configuration
-      val availableCores =
-        if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
-      nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
-        .getOrElse(math.max(2, availableCores))
+    if (role.isEmpty) {
+      modNumThreads
+    } else {
+      conf.getInt(s"spark.$role.rpc.netty.dispatcher.numThreads", modNumThreads)
     }
   }
 
