@@ -145,7 +145,11 @@ object StringUtils extends Logging {
           "Truncated the string representation of a plan since it was too long. The " +
             s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
             "can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
-        val truncateMsg = s"... ${length - maxLength} more characters"
+        val truncateMsg = if (maxLength == 0) {
+          s"Truncated plan of $length characters"
+        } else {
+          s"... ${length - maxLength} more characters"
+        }
         val result = new java.lang.StringBuilder(maxLength + truncateMsg.length)
         strings.foreach(result.append)
         result.append(truncateMsg)
