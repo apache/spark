@@ -115,7 +115,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   /**
    * Returns the boolean value to which the specified key is mapped,
-   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
    */
   public boolean getBoolean(String key, boolean defaultValue) {
     String value = get(key);
@@ -133,7 +133,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   /**
    * Returns the integer value to which the specified key is mapped,
-   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
    */
   public int getInt(String key, int defaultValue) {
     String value = get(key);
@@ -142,7 +142,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   /**
    * Returns the long value to which the specified key is mapped,
-   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
    */
   public long getLong(String key, long defaultValue) {
     String value = get(key);
@@ -151,7 +151,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   /**
    * Returns the double value to which the specified key is mapped,
-   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive.
    */
   public double getDouble(String key, double defaultValue) {
     String value = get(key);
