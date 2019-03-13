@@ -61,7 +61,7 @@ class ContinuousExecution(
   // Throwable that caused the execution to fail
   private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
 
-  override val logicalPlan: LogicalPlan = {
+  override val logicalPlan: WriteToContinuousDataSource = {
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
     var nextSourceId = 0
     val _logicalPlan = analyzedPlan.transform {
@@ -88,7 +88,8 @@ class ContinuousExecution(
     }
     uniqueSources = sources.distinct
 
-    _logicalPlan
+    WriteToContinuousDataSource(
+      createStreamingWrite(sink, extraOptions, _logicalPlan), _logicalPlan)
   }
 
   private val triggerExecutor = trigger match {
@@ -178,13 +179,10 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val streamingWrite = createStreamingWrite(sink, extraOptions, withNewSources)
-    val planWithSink = WriteToContinuousDataSource(streamingWrite, withNewSources)
-
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSessionForQuery,
-        planWithSink,
+        withNewSources,
         outputMode,
         checkpointFile("state"),
         id,
@@ -194,7 +192,7 @@ class ContinuousExecution(
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
-    val stream = planWithSink.collect {
+    val stream = withNewSources.collect {
       case relation: StreamingDataSourceV2Relation =>
         relation.stream.asInstanceOf[ContinuousStream]
     }.head
@@ -215,7 +213,13 @@ class ContinuousExecution(
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint = EpochCoordinatorRef.create(
-      streamingWrite, stream, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+      logicalPlan.write,
+      stream,
+      this,
+      epochCoordinatorId,
+      currentBatchId,
+      sparkSession,
+      SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
