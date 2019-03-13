@@ -26,12 +26,12 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-hive-thriftserver2_2.12</artifactId>
+  <artifactId>spark-hive-thriftserverV2_2.12</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Hive Thrift Server2</name>
+  <name>Spark Project Hive Thrift Server V2</name>
   <url>http://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>hive-thriftserver2</sbt.project.name>
+    <sbt.project.name>hive-thriftserverV2</sbt.project.name>
   </properties>
 
   <dependencies>

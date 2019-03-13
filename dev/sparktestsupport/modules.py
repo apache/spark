@@ -18,8 +18,14 @@
 from functools import total_ordering
 import itertools
 import re
+import os
 
 all_modules = []
+
+if os.environ.get("AMPLAB_JENKINS"):
+    hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
+else:
+    hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
 
 
 @total_ordering
@@ -72,7 +78,12 @@ class Module(object):
         self.dependent_modules = set()
         for dep in dependencies:
             dep.dependent_modules.add(self)
-        all_modules.append(self)
+        if (not environ or
+                environ.get("SUPPORTED_HADOOP_PROFILE") is None or
+                environ.get("SUPPORTED_HADOOP_PROFILE") == hadoop_version):
+            all_modules.append(self)
+        else:
+            print("[info] Skip unsupported module: ", name)
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
@@ -154,18 +165,39 @@ repl = Module(
     ],
 )
 
-hive_thriftserver2 = Module(
-    name="hive-thriftserver2",
+hive_thriftserver = Module(
+    name="hive-thriftserver",
     dependencies=[hive],
     source_file_regexes=[
-        "sql/hive-thriftserver2",
+        "sql/hive-thriftserver",
         "sbin/start-thriftserver.sh",
     ],
     build_profile_flags=[
-        "-Phive-thriftserver2",
+        "-Phive-thriftserver",
     ],
+    environ={
+        "SUPPORTED_HADOOP_PROFILE": "hadoop2.7"
+    },
     sbt_test_goals=[
-        "hive-thriftserver2/test",
+        "hive-thriftserver/test",
+    ]
+)
+
+hive_thriftserverV2 = Module(
+    name="hive-thriftserverV2",
+    dependencies=[hive],
+    source_file_regexes=[
+        "sql/hive-thriftserverV2",
+        "sbin/start-thriftserver.sh",
+    ],
+    build_profile_flags=[
+        "-Phive-thriftserverV2",
+    ],
+    environ={
+        "SUPPORTED_HADOOP_PROFILE": "hadoop3.1"
+    },
+    sbt_test_goals=[
+        "hive-thriftserverV2/test",
     ]
 )
 

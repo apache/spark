@@ -71,7 +71,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   if [ "${HADOOP_PROFILE}" = 'hadoop-2.7' ]; then
     HIVE_THRIFTSERVER_MODULE="-Phive-thriftserver"
   else
-    HIVE_THRIFTSERVER_MODULE="-Phive-thriftserver2"
+    HIVE_THRIFTSERVER_MODULE="-Phive-thriftserverV2"
   fi
 
   echo "Performing Maven install for $HADOOP_PROFILE"

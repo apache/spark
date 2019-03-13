@@ -179,11 +179,11 @@
       </dependencies>
     </profile>
     <profile>
-      <id>hive-thriftserver2</id>
+      <id>hive-thriftserverV2</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-hive-thriftserver2_${scala.binary.version}</artifactId>
+          <artifactId>spark-hive-thriftserverV2_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

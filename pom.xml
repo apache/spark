@@ -2867,9 +2867,9 @@
     </profile>
 
     <profile>
-      <id>hive-thriftserver2</id>
+      <id>hive-thriftserverV2</id>
       <modules>
-        <module>sql/hive-thriftserver2</module>
+        <module>sql/hive-thriftserverV2</module>
       </modules>
     </profile>
 
