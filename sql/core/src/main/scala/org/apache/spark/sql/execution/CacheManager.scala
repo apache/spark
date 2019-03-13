@@ -46,10 +46,10 @@ case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
 class CacheManager extends Logging {
 
   /**
-    * Maintains the list of cached plans as an immutable sequence.  Any updates to the list
-    * should be protected in a "this.synchronized" block which includes the reading of the
-    * existing value and the update of the cachedData var.
-    */
+   * Maintains the list of cached plans as an immutable sequence.  Any updates to the list
+   * should be protected in a "this.synchronized" block which includes the reading of the
+   * existing value and the update of the cachedData var.
+   */
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
