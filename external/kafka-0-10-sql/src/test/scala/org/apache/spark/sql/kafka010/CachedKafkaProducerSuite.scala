@@ -81,10 +81,10 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
     val producer: CachedKafkaProducer = CachedKafkaProducer.acquire(kafkaParams)
     producer.kafkaProducer // initializing the producer.
-    assert(producer.getInUseCount.intValue() > 0)
+    assert(producer.getInUseCount.intValue() == 1)
     // Explicitly cause the producer from guava cache to be evicted.
     CachedKafkaProducer.evict(producer.getKafkaParams)
-    assert(producer.getInUseCount.intValue() > 0)
+    assert(producer.getInUseCount.intValue() == 1)
     assert(!producer.isClosed, "An in-use producer should not be closed.")
   }
 
