@@ -1893,72 +1893,71 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       coefficientsStd
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                         s0
-              -1.5898288335
-      data.V3  0.1691226336
-      data.V4  0.0002983651
-      data.V5  0.1001732896
-      data.V6  0.2554575585
+                       s0
+              -1.68571384
+      data.V3  0.17156077
+      data.V4  0.01658014
+      data.V5  0.10303296
+      data.V6  0.26459585
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
                       s0
-               0.2125746
-      data.V3 -0.2304586
-      data.V4  0.6153492
-      data.V5 -0.1537017
-      data.V6 -0.2975443
+               0.2364585
+      data.V3 -0.2182805
+      data.V4  0.5960025
+      data.V5 -0.1587441
+      data.V6 -0.3121284
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
-               1.37725427
-      data.V3  0.06133600
-      data.V4 -0.61564761
-      data.V5  0.05352840
-      data.V6  0.04208671
-
+               1.44925536
+      data.V3  0.04671972
+      data.V4 -0.61258267
+      data.V5  0.05571116
+      data.V6  0.04753251
 
       coefficients
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                      s0
-              -1.5681088
-      data.V3  0.1508182
-      data.V4  0.0121955
-      data.V5  0.1217930
-      data.V6  0.2162850
+                       s0
+              -1.65140201
+      data.V3  0.15446206
+      data.V4  0.02134769
+      data.V5  0.12524946
+      data.V6  0.22607972
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
                       s0
-               1.1217130
-      data.V3 -0.2028984
-      data.V4  0.2862431
-      data.V5 -0.1843559
-      data.V6 -0.2481218
+               1.1367722
+      data.V3 -0.1931713
+      data.V4  0.2766548
+      data.V5 -0.1910455
+      data.V6 -0.2629336
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
-               0.44639579
-      data.V3  0.05208012
-      data.V4 -0.29843864
-      data.V5  0.06256289
-      data.V6  0.03183676
+               0.51462979
+      data.V3  0.03870921
+      data.V4 -0.29800245
+      data.V5  0.06579606
+      data.V6  0.03685390
 
 
      */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
-      0.1691226336, 0.0002983651, 0.1001732896, 0.2554575585,
-      -0.2304586, 0.6153492, -0.1537017, -0.2975443,
-      0.06133600, -0.61564761, 0.05352840, 0.04208671), isTransposed = true)
-    val interceptsRStd = Vectors.dense(-1.5898288335, 0.2125746, 1.37725427)
+      0.17156077, 0.01658014, 0.10303296, 0.26459585,
+      -0.2182805, 0.5960025, -0.1587441, -0.3121284,
+      0.04671972, -0.61258267, 0.05571116, 0.04753251), isTransposed = true)
+    val interceptsRStd = Vectors.dense(-1.68571384, 0.2364585, 1.44925536)
     val coefficientsR = new DenseMatrix(3, 4, Array(
-      0.1508182, 0.0121955, 0.1217930, 0.2162850,
-      -0.2028984, 0.2862431, -0.1843559, -0.2481218,
-      0.05208012, -0.29843864, 0.06256289, 0.03183676), isTransposed = true)
-    val interceptsR = Vectors.dense(-1.5681088, 1.1217130, 0.44639579)
+      0.15446206, 0.02134769, 0.12524946, 0.22607972,
+      -0.1931713, 0.2766548, -0.1910455, -0.2629336,
+      0.03870921, -0.29800245, 0.06579606, 0.03685390), isTransposed = true)
+    val interceptsR = Vectors.dense(-1.65140201, 1.1367722, 0.51462979)
 
     assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.001)
     assert(model1.interceptVector ~== interceptsRStd relTol 0.05)
@@ -2033,69 +2032,68 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
                .
-      data.V3  0.04048126
-      data.V4 -0.23075758
-      data.V5  0.08228864
-      data.V6  0.22277648
+      data.V3  0.03804571
+      data.V4 -0.23204409
+      data.V5  0.08337512
+      data.V6  0.23029089
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
                       s0
                .
-      data.V3 -0.2149745
-      data.V4  0.6478666
-      data.V5 -0.1515158
-      data.V6 -0.2930498
+      data.V3 -0.2015495
+      data.V4  0.6328705
+      data.V5 -0.1562475
+      data.V6 -0.3071447
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
                .
-      data.V3  0.17449321
-      data.V4 -0.41710901
-      data.V5  0.06922716
-      data.V6  0.07027332
-
+      data.V3  0.16350376
+      data.V4 -0.40082637
+      data.V5  0.07287239
+      data.V6  0.07685379
 
       coefficients
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
                         s0
                .
-      data.V3 -0.003949652
-      data.V4 -0.142982415
-      data.V5  0.091439598
-      data.V6  0.179286241
+      data.V3 -0.006493452
+      data.V4 -0.143831823
+      data.V5  0.092538445
+      data.V6  0.187244839
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
                .
-      data.V3 -0.09071124
-      data.V4  0.39752531
-      data.V5 -0.16233832
-      data.V6 -0.22206059
+      data.V3 -0.08068443
+      data.V4  0.39038929
+      data.V5 -0.16822390
+      data.V6 -0.23667470
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
                .
-      data.V3  0.09466090
-      data.V4 -0.25454290
-      data.V5  0.07089872
-      data.V6  0.04277435
+      data.V3  0.08717788
+      data.V4 -0.24655746
+      data.V5  0.07568546
+      data.V6  0.04942986
 
 
      */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
-      0.04048126, -0.23075758, 0.08228864, 0.22277648,
-      -0.2149745, 0.6478666, -0.1515158, -0.2930498,
-      0.17449321, -0.41710901, 0.06922716, 0.07027332), isTransposed = true)
+      0.03804571, -0.23204409, 0.08337512, 0.23029089,
+      -0.2015495, 0.6328705, -0.1562475, -0.3071447,
+      0.16350376, -0.40082637, 0.07287239, 0.07685379), isTransposed = true)
 
     val coefficientsR = new DenseMatrix(3, 4, Array(
-      -0.003949652, -0.142982415, 0.091439598, 0.179286241,
-      -0.09071124, 0.39752531, -0.16233832, -0.22206059,
-      0.09466090, -0.25454290, 0.07089872, 0.04277435), isTransposed = true)
+      -0.006493452, -0.143831823, 0.092538445, 0.187244839,
+      -0.08068443, 0.39038929, -0.16822390, -0.23667470,
+      0.08717788, -0.24655746, 0.07568546, 0.04942986), isTransposed = true)
 
     assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.01)
     assert(model1.interceptVector.toArray === Array.fill(3)(0.0))
@@ -2166,54 +2164,53 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
-              -0.50133383
+              -0.55325803
       data.V3  .
       data.V4  .
       data.V5  .
-      data.V6  0.08351653
+      data.V6  0.09074857
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                      s0
-              -0.3151913
-      data.V3 -0.1058702
-      data.V4  0.3183251
-      data.V5 -0.1212969
-      data.V6 -0.1629778
+                       s0
+              -0.27291366
+      data.V3 -0.09093399
+      data.V4  0.28078251
+      data.V5 -0.12854559
+      data.V6 -0.18382494
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
                       s0
-               0.8165252
+               0.8261717
       data.V3  .
-      data.V4 -0.3943069
+      data.V4 -0.4064444
       data.V5  .
       data.V6  .
-
 
       coefficients
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
-              -0.38857157
+              -0.40016908
       data.V3  .
       data.V4  .
-      data.V5  0.02384198
-      data.V6  0.03127749
+      data.V5  0.02312769
+      data.V6  0.04159224
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
-               0.62492165
-      data.V3 -0.04949061
+               0.62474768
+      data.V3 -0.03776471
       data.V4  .
-      data.V5 -0.18584462
-      data.V6 -0.08952455
+      data.V5 -0.19588206
+      data.V6 -0.11187712
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
                       s0
-              -0.2363501
+              -0.2245786
       data.V3  .
       data.V4  .
       data.V5  .
@@ -2222,21 +2219,21 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
      */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
-      0.0, 0.0, 0.0, 0.08351653,
-      -0.1058702, 0.3183251, -0.1212969, -0.1629778,
-      0.0, -0.3943069, 0.0, 0.0), isTransposed = true)
-    val interceptsRStd = Vectors.dense(-0.50133383, -0.3151913, 0.8165252)
+      0.0, 0.0, 0.0, 0.09074857,
+      -0.09093399, 0.28078251, -0.12854559, -0.18382494,
+      0.0, -0.4064444, 0.0, 0.0), isTransposed = true)
+    val interceptsRStd = Vectors.dense(-0.55325803, -0.27291366, 0.8261717)
     val coefficientsR = new DenseMatrix(3, 4, Array(
-      0.0, 0.0, 0.02384198, 0.03127749,
-      -0.04949061, 0.0, -0.18584462, -0.08952455,
+      0.0, 0.0, 0.02312769, 0.04159224,
+      -0.03776471, 0.0, -0.19588206, -0.11187712,
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
-    val interceptsR = Vectors.dense(-0.38857157, 0.62492165, -0.2363501)
+    val interceptsR = Vectors.dense(-0.40016908, 0.62474768, -0.2245786)
 
     assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.05)
     assert(model1.interceptVector ~== interceptsRStd absTol 0.1)
     assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficientMatrix ~== coefficientsR absTol 0.01)
-    assert(model2.interceptVector ~== interceptsR absTol 0.01)
+    assert(model2.interceptVector ~== interceptsR absTol 0.9)
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
   }
 
@@ -2270,26 +2267,25 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       data.V3 .
       data.V4 .
       data.V5 .
-      data.V6 0.03238285
+      data.V6 0.03418889
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
                       s0
                .
-      data.V3 -0.1328284
-      data.V4  0.4219321
-      data.V5 -0.1247544
-      data.V6 -0.1893318
+      data.V3 -0.1114779
+      data.V4  0.3992145
+      data.V5 -0.1315371
+      data.V6 -0.2107956
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
                        s0
               .
-      data.V3 0.004572312
+      data.V3 0.006442826
       data.V4 .
       data.V5 .
       data.V6 .
-
 
       coefficients
       $`0`
@@ -2306,9 +2302,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
                        s0
                .
       data.V3  .
-      data.V4  0.14571623
-      data.V5 -0.16456351
-      data.V6 -0.05866264
+      data.V4  0.15710979
+      data.V5 -0.16871602
+      data.V6 -0.07928527
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
@@ -2322,13 +2318,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
      */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
-      0.0, 0.0, 0.0, 0.03238285,
-      -0.1328284, 0.4219321, -0.1247544, -0.1893318,
-      0.004572312, 0.0, 0.0, 0.0), isTransposed = true)
+      0.0, 0.0, 0.0, 0.03418889,
+      -0.1114779, 0.3992145, -0.1315371, -0.2107956,
+      0.006442826, 0.0, 0.0, 0.0), isTransposed = true)
 
     val coefficientsR = new DenseMatrix(3, 4, Array(
       0.0, 0.0, 0.0, 0.0,
-      0.0, 0.14571623, -0.16456351, -0.05866264,
+      0.0, 0.15710979, -0.16871602, -0.07928527,
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
 
     assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.01)
