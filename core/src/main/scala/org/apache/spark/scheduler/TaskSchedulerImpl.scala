@@ -511,7 +511,7 @@ private[spark] class TaskSchedulerImpl(
 
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     val shuffledOffers = shuffleOffers(filteredOffers)
-    val availableCpus = excludeReservedCpus(shuffledOffers, sortedTaskSets)
+    val availableCpus = excludeReservedCpus(shuffledOffers, getSortedBarrierTaskSets)
     val execIdToOfferIndex =
       shuffledOffers.zipWithIndex.map { case (o, i) => (o.executorId, i)}.toMap
     // Build a list of tasks to assign to each worker.
