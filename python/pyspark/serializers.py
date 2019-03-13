@@ -229,6 +229,7 @@ class ArrowStreamSerializer(Serializer):
         try:
             for batch in iterator:
                 if writer is None:
+                    self._init_dump_stream(stream)
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
         finally:
@@ -240,6 +241,10 @@ class ArrowStreamSerializer(Serializer):
         reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
+
+    def _init_dump_stream(self, stream):
+        """Called just before writing an Arrow stream"""
+        pass
 
     def __repr__(self):
         return "ArrowStreamSerializer"
@@ -328,7 +333,7 @@ def _create_batch(series, timezone, safecheck, assign_cols_by_name):
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
 
 
-class ArrowStreamPandasSerializer(Serializer):
+class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
@@ -347,33 +352,28 @@ class ArrowStreamPandasSerializer(Serializer):
         s = _check_series_localize_timestamps(s, self._timezone)
         return s
 
+    def _init_dump_stream(self, stream):
+        # Override to signal the start of writing an Arrow stream
+        # NOTE: this is required by Pandas UDFs to be called after creating first record batch so
+        # that any errors can be sent back to the JVM, but not interfere with the Arrow stream
+        write_int(SpecialLengths.START_ARROW_STREAM, stream)
+
     def dump_stream(self, iterator, stream):
         """
         Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
         a list of series accompanied by an optional pyarrow type to coerce the data to.
         """
-        import pyarrow as pa
-        writer = None
-        try:
-            for series in iterator:
-                batch = _create_batch(series, self._timezone, self._safecheck,
-                                      self._assign_cols_by_name)
-                if writer is None:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
-                writer.write_batch(batch)
-        finally:
-            if writer is not None:
-                writer.close()
+        batches = (_create_batch(series, self._timezone, self._safecheck, self._assign_cols_by_name)
+                   for series in iterator)
+        super(ArrowStreamPandasSerializer, self).dump_stream(batches, stream)
 
     def load_stream(self, stream):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
+        batch_iter = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         import pyarrow as pa
-        reader = pa.ipc.open_stream(stream)
-
-        for batch in reader:
+        for batch in batch_iter:
             yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
 
     def __repr__(self):
