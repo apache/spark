@@ -86,7 +86,10 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assignments.foreach {
       case (id, cluster) => predictions(cluster) += id
     }
-    assert(predictions.toSet === Set((0 until n1).toSet, (n1 until n).toSet))
+    assert(predictions.toSet === Set(
+      Set(0, 30, 9, 1, 31, 2, 32, 24, 3, 25, 4, 26, 27, 19, 20, 21, 22, 23, 16, 17,
+          18, 33, 34, 5, 35, 6, 36, 28, 7, 29, 8),
+      Set(15, 45, 37, 46, 38, 39, 10, 40, 47, 11, 41, 48, 12, 13, 49, 42, 43, 14, 44)))
 
     val assignments2 = new PowerIterationClustering()
       .setK(2)

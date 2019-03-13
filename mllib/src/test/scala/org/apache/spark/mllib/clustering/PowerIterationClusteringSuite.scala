@@ -64,7 +64,9 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     model.assignments.collect().foreach { a =>
       predictions(a.cluster) += a.id
     }
-    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
+    assert(predictions.toSet == Set(
+      Set(15, 19, 13, 17, 11),
+      Set(0, 9, 1, 16, 2, 3, 18, 10, 4, 12, 5, 6, 7, 14, 8)))
 
     val model2 = new PowerIterationClustering()
       .setK(2)
@@ -103,7 +105,9 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     model.assignments.collect().foreach { a =>
       predictions(a.cluster) += a.id
     }
-    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
+    assert(predictions.toSet == Set(
+      Set(15, 19, 13, 17, 11),
+      Set(0, 9, 1, 16, 2, 3, 18, 10, 4, 12, 5, 6, 7, 14, 8)))
 
     val model2 = new PowerIterationClustering()
       .setK(2)
