@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -34,13 +34,11 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -134,26 +132,6 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case sql.CreateTable(
-        table, schema, partitionCols, bucketSpec, properties, V1Provider(provider), options,
-        location, comment, ifNotExists) =>
-
-      val tableDesc = buildCatalogTable(table, schema, partitionCols, bucketSpec, properties,
-        provider, options, location, comment, ifNotExists)
-      val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-
-      CreateTable(tableDesc, mode, None)
-
-    case sql.CreateTableAsSelect(
-        table, query, partitionCols, bucketSpec, properties, V1Provider(provider), options,
-        location, comment, ifNotExists) =>
-
-      val tableDesc = buildCatalogTable(table, query.schema, partitionCols, bucketSpec, properties,
-        provider, options, location, comment, ifNotExists)
-      val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-
-      CreateTable(tableDesc, mode, Some(query))
-
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
@@ -230,58 +208,6 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         table,
         Some(t.location),
         actualQuery.output.map(_.name))
-  }
-
-  object V1Provider {
-    def unapply(provider: String): Option[String] = {
-      lazy val providerClass = DataSource.lookupDataSource(provider, conf)
-      provider match {
-        case "hive" =>
-          None
-        case _ if classOf[TableProvider].isAssignableFrom(providerClass) =>
-          None
-        case _ =>
-          Some(provider)
-      }
-    }
-  }
-
-  private def buildCatalogTable(
-      table: TableIdentifier,
-      schema: StructType,
-      partitionColumnNames: Seq[String],
-      bucketSpec: Option[BucketSpec],
-      properties: Map[String, String],
-      provider: String,
-      options: Map[String, String],
-      location: Option[String],
-      comment: Option[String],
-      ifNotExists: Boolean): CatalogTable = {
-
-    val storage = DataSource.buildStorageFormatFromOptions(options)
-    if (location.isDefined && storage.locationUri.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-            "you can only specify one of them.")
-    }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
-
-    val tableType = if (customLocation.isDefined) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
-
-    CatalogTable(
-      identifier = table,
-      tableType = tableType,
-      storage = storage.copy(locationUri = customLocation),
-      schema = schema,
-      provider = Some(provider),
-      partitionColumnNames = partitionColumnNames,
-      bucketSpec = bucketSpec,
-      properties = properties,
-      comment = comment)
   }
 }
 
