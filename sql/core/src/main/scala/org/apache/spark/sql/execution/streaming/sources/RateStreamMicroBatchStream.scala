@@ -155,7 +155,7 @@ class RateStreamMicroBatchStream(
 
   override def toString: String = s"RateStreamV2[rowsPerSecond=$rowsPerSecond, " +
     s"rampUpTimeSeconds=$rampUpTimeSeconds, " +
-    s"numPartitions=${Option(options.get(NUM_PARTITIONS)).getOrElse("default")}"
+    s"numPartitions=${options.getOrDefault(NUM_PARTITIONS, "default")}"
 }
 
 case class RateStreamMicroBatchInputPartition(

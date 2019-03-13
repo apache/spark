@@ -44,7 +44,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
     Option(map.get("paths")).map { pathStr =>
       objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
     }.orElse(Option(map.get("path")).map(Seq(_))).getOrElse {
-      throw new IllegalArgumentException("'path' must be given when reading files.")
+      Nil
     }
   }
 }
