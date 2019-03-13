@@ -18,11 +18,11 @@
 package org.apache.spark.status.api.v1
 
 import java.util.Date
-import javax.ws.rs.{GET, Produces}
+import javax.ws.rs.{GET, Path, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.sql.execution.ui.SQLAppStatusStore
+import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData}
 import org.apache.spark.ui.UIUtils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -32,50 +32,65 @@ private[v1] class SqlListResource extends BaseAppResource {
   def sqlList(): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      var executions = List[ExecutionData]()
 
-      sqlStore.executionsList().foreach { exec =>
-        var running = Seq[Int]()
-        var completed = Seq[Int]()
-        var failed = Seq[Int]()
-
-        exec.jobs.map { job => job match {
-          case (id, status) if status == JobExecutionStatus.RUNNING =>
-            running = running :+ id
-          case (id, status) if status == JobExecutionStatus.SUCCEEDED =>
-            completed = completed :+ id
-          case (id, status) if status == JobExecutionStatus.FAILED =>
-            failed = failed :+ id
-          }
-        }
-
-        val status = if (exec.jobs.size == completed.size) {
-          "COMPLETED"
-        } else if (failed.length > 0) {
-          "FAILED"
-        } else {
-          "RUNNING"
-        }
-
-        val duration = UIUtils.formatDuration(
-          exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime)
-        executions = executions.+:(new ExecutionData(exec.executionId,
-          status, exec.description, UIUtils.formatDate(exec.submissionTime),
-          duration, running, completed, failed))
-      }
+      var executions = sqlStore.executionsList()
+        .map(exec => prepareExecutionData(exec))
       if (executions.size > 0) {
         executions = executions.sortBy(x => x.id)
       }
       executions
     }
   }
+
+  @GET
+  @Path("{executionId:\\d+}")
+  def sql(@PathParam("executionId") execId: Long): Seq[ExecutionData] = {
+    withUI { ui =>
+      val sqlStore = new SQLAppStatusStore(ui.store.store)
+
+      sqlStore.executionsList()
+        .filter(execution => execution.executionId == execId)
+        .map(exec => prepareExecutionData(exec))
+    }
+  }
+
+  def prepareExecutionData(exec: SQLExecutionUIData): ExecutionData = {
+    var running = Seq[Int]()
+    var completed = Seq[Int]()
+    var failed = Seq[Int]()
+
+    exec.jobs.map { job =>
+      job match {
+        case (id, status) if status == JobExecutionStatus.RUNNING =>
+          running = running :+ id
+        case (id, status) if status == JobExecutionStatus.SUCCEEDED =>
+          completed = completed :+ id
+        case (id, status) if status == JobExecutionStatus.FAILED =>
+          failed = failed :+ id
+      }
+    }
+
+    val status = if (exec.jobs.size == completed.size) {
+      "COMPLETED"
+    } else if (failed.length > 0) {
+      "FAILED"
+    } else {
+      "RUNNING"
+    }
+
+    val duration = UIUtils.formatDuration(
+      exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime)
+    new ExecutionData(exec.executionId,
+      status, exec.description, UIUtils.formatDate(exec.submissionTime),
+      duration, running, completed, failed)
+  }
 }
 
 class ExecutionData (val id : Long,
-                     val status: String,
-                     val description: String,
-                     val submissionTime: String,
-                     val duration: String,
-                     val runningJobs: Seq[Int],
-                     val successJobs: Seq[Int],
-                     val failedJobs: Seq[Int])
+    val status: String,
+    val description: String,
+    val submissionTime: String,
+    val duration: String,
+    val runningJobs: Seq[Int],
+    val successJobs: Seq[Int],
+    val failedJobs: Seq[Int])
