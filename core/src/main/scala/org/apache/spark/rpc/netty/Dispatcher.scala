@@ -201,8 +201,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     var role = ""
     if (!executorId.isEmpty) {
       role =
-        if (executorId == SparkContext.DRIVER_IDENTIFIER ||
-          executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER) {
+        if (executorId == SparkContext.DRIVER_IDENTIFIER) {
           "driver"
         } else {
           "executor"

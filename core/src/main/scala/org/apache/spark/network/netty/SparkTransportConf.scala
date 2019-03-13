@@ -19,7 +19,7 @@ package org.apache.spark.network.netty
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.network.util.{ConfigProvider, NettyUtils, TransportConf}
 
 /**

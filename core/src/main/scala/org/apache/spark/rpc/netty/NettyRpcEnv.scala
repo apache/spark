@@ -53,8 +53,7 @@ private[netty] class NettyRpcEnv(
   var role: Option[String] = None
   if (!executorId.isEmpty) {
     role =
-      if (executorId == SparkContext.DRIVER_IDENTIFIER ||
-        executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER) {
+      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some("driver")
       } else {
         Some("executor")
