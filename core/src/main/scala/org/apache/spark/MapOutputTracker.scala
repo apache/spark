@@ -63,9 +63,9 @@ private class ShuffleStatus(numPartitions: Int) {
   val mapStatuses = new Array[MapStatus](numPartitions)
 
   /**
-   * Whether an active job in the [[org.apache.spark.scheduler.DAGScheduler]] depends on this.
-   * If dynamic allocation is enabled, then executors that do not contain active shuffles may
-   * eventually be surrendered by the [[ExecutorAllocationManager]].
+   * Whether an active/pending stage in the [[org.apache.spark.scheduler.DAGScheduler]] depends
+   * on this. If dynamic allocation is enabled, then executors that do not contain active shuffles
+   * may eventually be surrendered by the [[ExecutorAllocationManager]].
    */
   var isActive = true
 
@@ -93,9 +93,10 @@ private class ShuffleStatus(numPartitions: Int) {
   private[this] var _numAvailableOutputs: Int = 0
 
   /**
-   * Cached set of executorIds on which outputs exist. This is a performance optimization to avoid
-   * having to repeatedly iterate over ever element in the `mapStatuses` array and should be
-   * equivalent to `mapStatuses.map(_.location.executorId).groupBy(x => x).mapValues(_.length)`.
+   * Cached mapping of executorIds to the number of outputs associated with those executors. This
+   * is a performance optimization to avoid having to repeatedly iterate over ever element in the
+   * `mapStatuses` array and should be equivalent to
+   * `mapStatuses.map(_.location.executorId).groupBy(x => x).mapValues(_.length)`.
    */
   private[this] val _numOutputsPerExecutorId = HashMap[String, Int]().withDefaultValue(0)
 

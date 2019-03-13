@@ -339,6 +339,10 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.cachedExecutorIdleTimeout")
       .timeConf(TimeUnit.SECONDS).createWithDefault(Integer.MAX_VALUE)
 
+  private[spark] val DYN_ALLOCATION_INACTIVE_SHUFFLE_EXECUTOR_IDLE_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.inactiveShuffleExecutorIdleTimeout")
+      .timeConf(TimeUnit.SECONDS).createWithDefault(Integer.MAX_VALUE)
+
   private[spark] val DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.executorIdleTimeout")
       .timeConf(TimeUnit.SECONDS).createWithDefault(60)

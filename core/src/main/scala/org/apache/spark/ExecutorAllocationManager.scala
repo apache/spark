@@ -119,8 +119,8 @@ private[spark] class ExecutorAllocationManager(
 
   private val cachedExecutorIdleTimeoutS = conf.get(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT)
 
-  private val inactiveShuffleExecutorIdleTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.inactiveShuffleExecutorIdleTimeout", s"${Integer.MAX_VALUE}s")
+  private val inactiveShuffleExecutorIdleTimeoutS =
+    conf.get(DYN_ALLOCATION_INACTIVE_SHUFFLE_EXECUTOR_IDLE_TIMEOUT)
 
   private val externalShuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
 

@@ -618,7 +618,7 @@ class ExecutorAllocationManagerSuite
       .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout}s")
       .set(config.DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key,
         s"${cachedExecutorIdleTimeout}s")
-      .set("spark.dynamicAllocation.inactiveShuffleExecutorIdleTimeout",
+      .set(config.DYN_ALLOCATION_INACTIVE_SHUFFLE_EXECUTOR_IDLE_TIMEOUT.key,
         s"${inactiveShuffleExecutorIdleTimeout}s")
     val mockAllocationClient = mock(classOf[ExecutorAllocationClient])
     val mockMOTM = mock(classOf[MapOutputTrackerMaster])
