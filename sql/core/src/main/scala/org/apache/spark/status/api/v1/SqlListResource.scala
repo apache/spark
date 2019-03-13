@@ -29,7 +29,7 @@ import org.apache.spark.ui.UIUtils
 private[v1] class SqlListResource extends BaseAppResource {
 
   @GET
-  def sqlList(): ExecutionSummary = {
+  def sqlList(): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       var executions = List[ExecutionData]()
@@ -66,7 +66,7 @@ private[v1] class SqlListResource extends BaseAppResource {
       if (executions.size > 0) {
         executions = executions.sortBy(x => x.id)
       }
-      new ExecutionSummary(executions)
+      executions
     }
   }
 }
@@ -79,5 +79,3 @@ class ExecutionData (val id : Long,
                      val runningJobs: Seq[Int],
                      val successJobs: Seq[Int],
                      val failedJobs: Seq[Int])
-
-class ExecutionSummary (val sql: Seq[ExecutionData])
