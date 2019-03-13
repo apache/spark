@@ -31,26 +31,27 @@ object SparkTransportConf {
 
   /**
    * Utility for creating a [[TransportConf]] from a [[SparkConf]].
-   * @param _conf the [[SparkConf]]
-   * @param module the module name
+   * @param _conf         the [[SparkConf]]
+   * @param module         the module name
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
+   * @param role           optional role, could be driver, executor, worker and master. Default is
+   *                      [[None]], means no role specific configurations.
    */
-  def fromSparkConf(_conf: SparkConf, module: String, numUsableCores: Int = 0): TransportConf = {
+  def fromSparkConf(
+      _conf: SparkConf,
+      module: String,
+      numUsableCores: Int = 0,
+      role: Option[String] = None): TransportConf = {
     val conf = _conf.clone
-    val executorId = conf.get("spark.executor.id", "")
-    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER ||
-          executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
-    val role = if (isDriver) "driver" else "executor"
-    // try to get specific threads configurations of driver and executor
-    val (serverSpecificThreads, clientSpecificThreads) = getSpecificNumOfThreads(conf, module, role)
+    val (serverThreads, clientThreads) = getThreadsConfByRole(conf, module, role)
     // Or specify thread configuration based on our JVM's allocation of cores (rather than
     // necessarily assuming we have all the machine's cores).
     val numThreads = NettyUtils.defaultNumThreads(numUsableCores)
     // override threads configurations with role specific values if specified
-    setThreads(conf, s"spark.$module.io.serverThreads", serverSpecificThreads, numThreads)
-    setThreads(conf, s"spark.$module.io.clientThreads", clientSpecificThreads, numThreads)
+    setThreads(conf, s"spark.$module.io.serverThreads", serverThreads, numThreads)
+    setThreads(conf, s"spark.$module.io.clientThreads", clientThreads, numThreads)
 
     new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)
@@ -65,17 +66,21 @@ object SparkTransportConf {
    * get role specific number of threads of server and client
    * @param conf the [[SparkConf]]
    * @param module the module name
-   * @param role  driver or executor for now, can be extended to others, like master and worker
+   * @param role  optional role, value could be driver, executor, worker and master.
    * @return a pair of server thread configuration and client thread configuration.
    *         If the configuration is not specified, set it to -1
    */
-  def getSpecificNumOfThreads(
+  def getThreadsConfByRole(
       conf: SparkConf,
       module: String,
-      role: String): (Int, Int) = {
-    (conf.getInt(s"spark.$role.$module.io.serverThreads", -1),
-      conf.getInt(s"spark.$role.$module.io.clientThreads", -1)
-    )
+      role: Option[String]): (Int, Int) = {
+    if (role.isEmpty) {
+      (-1, -1)
+    } else {
+      (conf.getInt(s"spark.${role.get}.$module.io.serverThreads", -1),
+        conf.getInt(s"spark.${role.get}.$module.io.clientThreads", -1)
+      )
+    }
   }
 
   def setThreads(

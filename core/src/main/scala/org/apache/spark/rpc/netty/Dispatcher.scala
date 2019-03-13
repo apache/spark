@@ -195,15 +195,28 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   }
 
   def getNumOfThreads(conf: SparkConf): Int = {
+    // try to get specific threads configurations of driver and executor
     val executorId = conf.get("spark.executor.id", "")
-    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER ||
-      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
-    val side = if (isDriver) "driver" else "executor"
-
-    val num = conf.getInt(s"spark.$side.rpc.netty.dispatcher.numThreads", -1)
+    // neither driver nor executor if executor id is not set
+    var role = ""
+    if (!executorId.isEmpty) {
+      role =
+        if (executorId == SparkContext.DRIVER_IDENTIFIER ||
+          executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER) {
+          "driver"
+        } else {
+          "executor"
+        }
+    }
+    val num =
+      if (role.isEmpty) {
+        -1
+      } else {
+        conf.getInt(s"spark.$role.rpc.netty.dispatcher.numThreads", -1)
+      }
     if (num > 0) {
       num
-    } else {
+    } else { // no role specific configuration
       val availableCores =
         if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
       nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
