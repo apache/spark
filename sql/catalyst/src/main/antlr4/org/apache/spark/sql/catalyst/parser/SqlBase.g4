@@ -669,8 +669,24 @@ intervalValue
     ;
 
 intervalUnit
-    : YEAR | YEARS | MONTH | MONTHS | WEEK | WEEKS | DAY | DAYS | HOUR | HOURS | MINUTE | MINUTES | SECOND | SECONDS
-    | MILLISECOND | MILLISECONDS | MICROSECOND | MICROSECONDS
+    : DAY
+    | DAYS
+    | HOUR
+    | HOURS
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
+    | SECOND
+    | SECONDS
+    | WEEK
+    | WEEKS
+    | YEAR
+    | YEARS
     ;
 
 colPosition
