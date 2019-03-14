@@ -162,7 +162,7 @@ object SetCommand {
  *   reset;
  * }}}
  */
-case object ResetCommand extends RunnableCommand with IgnoreCachedData with Logging {
+case object ResetCommand extends RunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sessionState.conf.clear()
