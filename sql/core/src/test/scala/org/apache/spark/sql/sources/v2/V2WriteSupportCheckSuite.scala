@@ -28,12 +28,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LeafNode, Overwr
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, V2WriteSupportCheck}
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class V2WriteSupportCheckSuite extends AnalysisTest {
 
   test("AppendData: check missing capabilities") {
     val plan = AppendData.byName(
-      DataSourceV2Relation.create(CapabilityTable(), Map.empty), TestRelation)
+      DataSourceV2Relation.create(CapabilityTable(), CaseInsensitiveStringMap.empty), TestRelation)
 
     val exc = intercept[AnalysisException]{
       V2WriteSupportCheck.apply(plan)
@@ -44,7 +45,8 @@ class V2WriteSupportCheckSuite extends AnalysisTest {
 
   test("AppendData: check correct capabilities") {
     val plan = AppendData.byName(
-      DataSourceV2Relation.create(CapabilityTable(BATCH_WRITE), Map.empty), TestRelation)
+      DataSourceV2Relation.create(CapabilityTable(BATCH_WRITE), CaseInsensitiveStringMap.empty),
+      TestRelation)
 
     V2WriteSupportCheck.apply(plan)
   }
@@ -56,7 +58,8 @@ class V2WriteSupportCheckSuite extends AnalysisTest {
       CapabilityTable(OVERWRITE_BY_FILTER)).foreach { table =>
 
       val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, Map.empty), TestRelation, Literal(true))
+        DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation,
+        Literal(true))
 
       val exc = intercept[AnalysisException]{
         V2WriteSupportCheck.apply(plan)
@@ -71,7 +74,8 @@ class V2WriteSupportCheckSuite extends AnalysisTest {
       CapabilityTable(BATCH_WRITE, OVERWRITE_BY_FILTER)).foreach { table =>
 
       val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, Map.empty), TestRelation, Literal(true))
+        DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation,
+        Literal(true))
 
       V2WriteSupportCheck.apply(plan)
     }
@@ -83,7 +87,7 @@ class V2WriteSupportCheckSuite extends AnalysisTest {
       CapabilityTable(OVERWRITE_BY_FILTER)).foreach { table =>
 
       val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, Map.empty), TestRelation,
+        DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation,
         EqualTo(AttributeReference("x", LongType)(), Literal(5)))
 
       val exc = intercept[AnalysisException]{
@@ -98,7 +102,7 @@ class V2WriteSupportCheckSuite extends AnalysisTest {
   test("OverwriteByExpression: check correct capabilities") {
     val table = CapabilityTable(BATCH_WRITE, OVERWRITE_BY_FILTER)
     val plan = OverwriteByExpression.byName(
-      DataSourceV2Relation.create(table, Map.empty), TestRelation,
+      DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation,
       EqualTo(AttributeReference("x", LongType)(), Literal(5)))
 
     V2WriteSupportCheck.apply(plan)
@@ -110,7 +114,7 @@ class V2WriteSupportCheckSuite extends AnalysisTest {
       CapabilityTable(OVERWRITE_DYNAMIC)).foreach { table =>
 
       val plan = OverwritePartitionsDynamic.byName(
-        DataSourceV2Relation.create(table, Map.empty), TestRelation)
+        DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation)
 
       val exc = intercept[AnalysisException] {
         V2WriteSupportCheck.apply(plan)
@@ -123,7 +127,7 @@ class V2WriteSupportCheckSuite extends AnalysisTest {
   test("OverwritePartitionsDynamic: check correct capabilities") {
     val table = CapabilityTable(BATCH_WRITE, OVERWRITE_DYNAMIC)
     val plan = OverwritePartitionsDynamic.byName(
-      DataSourceV2Relation.create(table, Map.empty), TestRelation)
+      DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation)
 
     V2WriteSupportCheck.apply(plan)
   }
