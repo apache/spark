@@ -344,8 +344,8 @@ class JDBCSuite extends QueryTest
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
     assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
+    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     // SPARK-27033: Add Optimize rule RewriteArithmeticFiltersOnIntOrLongColumn
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
   }
 

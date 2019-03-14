@@ -22,10 +22,9 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
-import org.apache.spark.sql.catalyst.optimizer.RewriteArithmeticFiltersOnIntegralColumn
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Filter, Project, SubqueryAlias}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_EXCLUDED_RULES, OPTIMIZER_METADATA_ONLY}
+import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_METADATA_ONLY
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -61,10 +60,7 @@ class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleto
   }
 
   test("SPARK-23877: filter on projected expression") {
-    // exclude `RewriteArithmeticFiltersOnIntegralColumn` here because
-    // it will optimize part + 1 < 5 to part < 4 and then pushed to metastore
-    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true",
-      OPTIMIZER_EXCLUDED_RULES.key -> RewriteArithmeticFiltersOnIntegralColumn.ruleName) {
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
       val startCount = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
 
       // verify the matching partitions

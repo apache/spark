@@ -40,7 +40,8 @@ import org.apache.spark.sql.types._
  *
  * Note:
  * 1. This rule supports `Add` and `Subtract` in arithmetic expressions.
- * 2. This rule supports `=`, `>=`, `<=`, `>`, `<`, and `!=` in comparators.
+ * 2. This rule supports `=` and `!=` in comparators. For `>`, `>=`, `<`, `<=`,
+ *    it may brings inconsistencies after rewrite.
  * 3. This rule supports integral-type (`byte`, `short`, `int`, `long`) only.
  *    It doesn't support `float` or `double` because of precision issues.
   */
@@ -48,17 +49,17 @@ object RewriteArithmeticFiltersOnIntegralColumn extends Rule[LogicalPlan] with P
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f: Filter =>
       f transformExpressionsUp {
-        case e @ BinaryComparison(left: BinaryArithmetic, right: Expression)
+        case e @ EqualTo(left: BinaryArithmetic, right: Expression)
             if right.foldable && isDataTypeSafe(left.dataType) =>
           transformLeft(e, left, right)
-        case e @ BinaryComparison(left: Expression, right: BinaryArithmetic)
+        case e @ EqualTo(left: Expression, right: BinaryArithmetic)
             if left.foldable && isDataTypeSafe(right.dataType) =>
           transformRight(e, left, right)
       }
   }
 
   private def transformLeft(
-      bc: BinaryComparison,
+      bc: EqualTo,
       left: BinaryArithmetic,
       right: Expression): Expression = {
     left match {
@@ -75,7 +76,7 @@ object RewriteArithmeticFiltersOnIntegralColumn extends Rule[LogicalPlan] with P
   }
 
   private def transformRight(
-      bc: BinaryComparison,
+      bc: EqualTo,
       left: Expression,
       right: BinaryArithmetic): Expression = {
     right match {
