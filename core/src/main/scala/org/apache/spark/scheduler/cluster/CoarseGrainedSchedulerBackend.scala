@@ -653,7 +653,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (adjustTargetNumExecutors) {
           requestedTotalExecutors = math.max(requestedTotalExecutors - executorsToKill.size, 0)
           if (requestedTotalExecutors !=
-            (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
+              (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
             logDebug(
               s"""killExecutors($executorIds, $adjustTargetNumExecutors, $countFailures, $force):
                  |Executor counts do not match:
