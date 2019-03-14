@@ -261,18 +261,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // SPARK-27112: We need to ensure that there is ordering of lock acquisition
       // between TaskSchedulerImpl and CoarseGrainedSchedulerBackend objects in order to fix
       // the deadlock issue exposed in SPARK-27112
-      val taskDescs = scheduler.synchronized {
-        CoarseGrainedSchedulerBackend.this.synchronized {
-          // Filter out executors under killing
-          val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
-          val workOffers = activeExecutors.map {
-            case (id, executorData) =>
-              new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
-                Some(executorData.executorAddress.hostPort))
-          }.toIndexedSeq
-          scheduler.resourceOffers(workOffers)
-        }
-      }
+      val taskDescs = withLock({
+        // Filter out executors under killing
+        val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+        val workOffers = activeExecutors.map {
+          case (id, executorData) =>
+            new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
+              Some(executorData.executorAddress.hostPort))
+        }.toIndexedSeq
+        scheduler.resourceOffers(workOffers)
+      })
       if (!taskDescs.isEmpty) {
         launchTasks(taskDescs)
       }
@@ -292,20 +290,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // SPARK-27112: We need to ensure that there is ordering of lock acquisition
       // between TaskSchedulerImpl and CoarseGrainedSchedulerBackend objects in order to fix
       // the deadlock issue exposed in SPARK-27112
-      val taskDescs = scheduler.synchronized {
-        CoarseGrainedSchedulerBackend.this.synchronized {
-          // Filter out executors under killing
-          if (executorIsAlive(executorId)) {
-            val executorData = executorDataMap(executorId)
-            val workOffers = IndexedSeq(
-              new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
-                Some(executorData.executorAddress.hostPort)))
-            scheduler.resourceOffers(workOffers)
-          } else {
-            Seq.empty
-          }
+      val taskDescs = withLock({
+        // Filter out executors under killing
+        if (executorIsAlive(executorId)) {
+          val executorData = executorDataMap(executorId)
+          val workOffers = IndexedSeq(
+            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
+              Some(executorData.executorAddress.hostPort)))
+          scheduler.resourceOffers(workOffers)
+        } else {
+          Seq.empty
         }
-      }
+      })
       if (!taskDescs.isEmpty) {
         launchTasks(taskDescs)
       }
@@ -644,58 +640,56 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // SPARK-27112: We need to ensure that there is ordering of lock acquisition
     // between TaskSchedulerImpl and CoarseGrainedSchedulerBackend objects in order to fix
     // the deadlock issue exposed in SPARK-27112
-    val response = scheduler.synchronized {
-      this.synchronized {
-        val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
-        unknownExecutors.foreach { id =>
-          logWarning(s"Executor to kill $id does not exist!")
-        }
-
-        // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
-        // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
-        val executorsToKill = knownExecutors
-          .filter { id => !executorsPendingToRemove.contains(id) }
-          .filter { id => force || !scheduler.isExecutorBusy(id) }
-        executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
-
-        logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")
-
-        // If we do not wish to replace the executors we kill, sync the target number of executors
-        // with the cluster manager to avoid allocating new ones. When computing the new target,
-        // take into account executors that are pending to be added or removed.
-        val adjustTotalExecutors =
-        if (adjustTargetNumExecutors) {
-          requestedTotalExecutors = math.max(requestedTotalExecutors - executorsToKill.size, 0)
-          if (requestedTotalExecutors !=
-            (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
-            logDebug(
-              s"""killExecutors($executorIds, $adjustTargetNumExecutors, $countFailures, $force):
-                 |Executor counts do not match:
-                 |requestedTotalExecutors  = $requestedTotalExecutors
-                 |numExistingExecutors     = $numExistingExecutors
-                 |numPendingExecutors      = $numPendingExecutors
-                 |executorsPendingToRemove = ${executorsPendingToRemove.size}""".stripMargin)
-          }
-          doRequestTotalExecutors(requestedTotalExecutors)
-        } else {
-          numPendingExecutors += executorsToKill.size
-          Future.successful(true)
-        }
-
-        val killExecutors: Boolean => Future[Boolean] =
-          if (!executorsToKill.isEmpty) {
-            _ => doKillExecutors(executorsToKill)
-          } else {
-            _ => Future.successful(false)
-          }
-
-        val killResponse = adjustTotalExecutors.flatMap(killExecutors)(ThreadUtils.sameThread)
-
-        killResponse.flatMap(killSuccessful =>
-          Future.successful(if (killSuccessful) executorsToKill else Seq.empty[String])
-        )(ThreadUtils.sameThread)
+    val response = withLock({
+      val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
+      unknownExecutors.foreach { id =>
+        logWarning(s"Executor to kill $id does not exist!")
       }
-    }
+
+      // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
+      // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
+      val executorsToKill = knownExecutors
+        .filter { id => !executorsPendingToRemove.contains(id) }
+        .filter { id => force || !scheduler.isExecutorBusy(id) }
+      executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
+
+      logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")
+
+      // If we do not wish to replace the executors we kill, sync the target number of executors
+      // with the cluster manager to avoid allocating new ones. When computing the new target,
+      // take into account executors that are pending to be added or removed.
+      val adjustTotalExecutors =
+      if (adjustTargetNumExecutors) {
+        requestedTotalExecutors = math.max(requestedTotalExecutors - executorsToKill.size, 0)
+        if (requestedTotalExecutors !=
+          (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
+          logDebug(
+            s"""killExecutors($executorIds, $adjustTargetNumExecutors, $countFailures, $force):
+               |Executor counts do not match:
+               |requestedTotalExecutors  = $requestedTotalExecutors
+               |numExistingExecutors     = $numExistingExecutors
+               |numPendingExecutors      = $numPendingExecutors
+               |executorsPendingToRemove = ${executorsPendingToRemove.size}""".stripMargin)
+        }
+        doRequestTotalExecutors(requestedTotalExecutors)
+      } else {
+        numPendingExecutors += executorsToKill.size
+        Future.successful(true)
+      }
+
+      val killExecutors: Boolean => Future[Boolean] =
+        if (!executorsToKill.isEmpty) {
+          _ => doKillExecutors(executorsToKill)
+        } else {
+          _ => Future.successful(false)
+        }
+
+      val killResponse = adjustTotalExecutors.flatMap(killExecutors)(ThreadUtils.sameThread)
+
+      killResponse.flatMap(killSuccessful =>
+        Future.successful(if (killSuccessful) executorsToKill else Seq.empty[String])
+      )(ThreadUtils.sameThread)
+    })
 
     defaultAskTimeout.awaitResult(response)
   }
@@ -744,6 +738,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
+
+  private def withLock[T](fn: => T): T = scheduler.synchronized {
+    CoarseGrainedSchedulerBackend.this.synchronized { fn }
+  }
 
 }
 
