@@ -1717,7 +1717,7 @@ object SQLConf {
       "and java.sql.Date are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
-  
+
   val MAX_REPEATED_ALIAS_SIZE =
     buildConf("spark.sql.maxRepeatedAliasSize")
       .internal()
