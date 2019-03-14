@@ -3,7 +3,6 @@ package org.apache.spark.graph.cypher
 import org.apache.spark.graph.api._
 import org.apache.spark.graph.api.io.{ReaderConfig, WriterConfig}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
-import org.apache.spark.graph.cypher.adapters.MappingAdapter._
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
 import org.apache.spark.graph.cypher.io.ReadWriteGraph._
 import org.apache.spark.sql.SparkSession
@@ -48,10 +47,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
 
   override def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame] = Seq.empty): PropertyGraph = {
     require(nodes.nonEmpty, "Creating a graph requires at least one NodeDataFrame")
-    val nodeTables = nodes.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
-    val relTables = relationships.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
-
-    RelationalGraphAdapter(this, graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*))
+    RelationalGraphAdapter(this, nodes, relationships)
   }
 
   override def createGraph(result: CypherResult): PropertyGraph = {
@@ -107,7 +103,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
 
   private def toRelationalGraph(graph: PropertyGraph): RelationalCypherGraph[DataFrameTable] = {
     graph match {
-      case RelationalGraphAdapter(_, relGraph) => relGraph
+      case adapter: RelationalGraphAdapter => adapter.graph
       case other => throw IllegalArgumentException(
         expected = "A graph that has been created by `SparkCypherSession.createGraph`",
         actual = other.getClass.getSimpleName

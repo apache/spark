@@ -13,6 +13,21 @@ import org.apache.spark.sql.DataFrame
 trait PropertyGraph {
 
   /**
+    * Returns all labels occurring on any node in the graph.
+    */
+  def labels: Set[String] = labelSets.flatten
+
+  /**
+    * Returns all distinct label sets occurring on nodes in the graph.
+    */
+  def labelSets: Set[Set[String]]
+
+  /**
+    * Returns all relationship types occurring on relationships in the graph.
+    */
+  def relationshipTypes: Set[String]
+
+  /**
     * The session in which this graph is managed.
     */
   def cypherSession: CypherSession
@@ -24,6 +39,22 @@ trait PropertyGraph {
     * @param parameters parameters used by the Cypher query
     */
   def cypher(query: String, parameters: Map[String, Any] = Map.empty): CypherResult = cypherSession.cypher(this, query, parameters)
+
+  /**
+    * Returns the [[NodeFrame]] for a given node label set.
+    *
+    * @param labelSet Label set used for [[NodeFrame]] lookup
+    * @return [[NodeFrame]] for the given label set
+    */
+  def nodeFrame(labelSet: Set[String]): NodeFrame
+
+  /**
+    * Returns the [[RelationshipFrame]] for a given relationship type.
+    *
+    * @param relationshipType Relationship type used for [[RelationshipFrame]] lookup
+    * @return [[RelationshipFrame]] for the given relationship type
+    */
+  def relationshipFrame(relationshipType: String): RelationshipFrame
 
   /**
     * Returns a [[DataFrame]] that contains a row for each node in this graph.
