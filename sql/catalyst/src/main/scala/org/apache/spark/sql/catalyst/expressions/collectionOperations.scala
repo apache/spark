@@ -3113,25 +3113,21 @@ case class ArrayDistinct(child: Expression)
   } else {
     (data: Array[AnyRef]) => {
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
-      var alreadyStoredNull = false
       for (i <- 0 until data.length) {
-        if (data(i) != null) {
-          var found = false
-          var j = 0
-          while (!found && j < arrayBuffer.size) {
-            val va = arrayBuffer(j)
-            found = (va != null) && ordering.equiv(va, data(i))
-            j += 1
+        var found = false
+        var j = 0
+        while (!found && j < arrayBuffer.size) {
+          val va = arrayBuffer(j)
+          if (data(i) == null) {
+            // De-duplicate null values.
+            found = va == null
+          } else if (va != null) {
+            found = ordering.equiv(va, data(i))
           }
-          if (!found) {
-            arrayBuffer += data(i)
-          }
-        } else {
-          // De-duplicate the null values.
-          if (!alreadyStoredNull) {
-            arrayBuffer += data(i)
-            alreadyStoredNull = true
-          }
+          j += 1
+        }
+        if (!found) {
+          arrayBuffer += data(i)
         }
       }
       new GenericArrayData(arrayBuffer)
