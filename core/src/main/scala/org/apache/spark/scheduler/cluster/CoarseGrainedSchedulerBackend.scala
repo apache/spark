@@ -650,23 +650,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // with the cluster manager to avoid allocating new ones. When computing the new target,
       // take into account executors that are pending to be added or removed.
       val adjustTotalExecutors =
-      if (adjustTargetNumExecutors) {
-        requestedTotalExecutors = math.max(requestedTotalExecutors - executorsToKill.size, 0)
-        if (requestedTotalExecutors !=
-          (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
-          logDebug(
-            s"""killExecutors($executorIds, $adjustTargetNumExecutors, $countFailures, $force):
-               |Executor counts do not match:
-               |requestedTotalExecutors  = $requestedTotalExecutors
-               |numExistingExecutors     = $numExistingExecutors
-               |numPendingExecutors      = $numPendingExecutors
-               |executorsPendingToRemove = ${executorsPendingToRemove.size}""".stripMargin)
+        if (adjustTargetNumExecutors) {
+          requestedTotalExecutors = math.max(requestedTotalExecutors - executorsToKill.size, 0)
+          if (requestedTotalExecutors !=
+            (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
+            logDebug(
+              s"""killExecutors($executorIds, $adjustTargetNumExecutors, $countFailures, $force):
+                 |Executor counts do not match:
+                 |requestedTotalExecutors  = $requestedTotalExecutors
+                 |numExistingExecutors     = $numExistingExecutors
+                 |numPendingExecutors      = $numPendingExecutors
+                 |executorsPendingToRemove = ${executorsPendingToRemove.size}""".stripMargin)
+          }
+          doRequestTotalExecutors(requestedTotalExecutors)
+        } else {
+          numPendingExecutors += executorsToKill.size
+          Future.successful(true)
         }
-        doRequestTotalExecutors(requestedTotalExecutors)
-      } else {
-        numPendingExecutors += executorsToKill.size
-        Future.successful(true)
-      }
 
       val killExecutors: Boolean => Future[Boolean] =
         if (!executorsToKill.isEmpty) {
@@ -678,7 +678,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val killResponse = adjustTotalExecutors.flatMap(killExecutors)(ThreadUtils.sameThread)
 
       killResponse.flatMap(killSuccessful =>
-        Future.successful(if (killSuccessful) executorsToKill else Seq.empty[String])
+        Future.successful (if (killSuccessful) executorsToKill else Seq.empty[String])
       )(ThreadUtils.sameThread)
     }
 
