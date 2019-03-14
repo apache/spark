@@ -2173,7 +2173,7 @@ object functions {
    * column.
    *
    * @group misc_funcs
-   * @since 2.4.1
+   * @since 3.0.0
    */
   @scala.annotation.varargs
   def xxhash64(cols: Column*): Column = withExpr {
