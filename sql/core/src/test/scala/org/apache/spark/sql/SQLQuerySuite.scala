@@ -3013,16 +3013,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("reset")
     }
   }
-
-  test("clear cache command should not fail with cache") {
-    withTable("tbl") {
-      val provider = spark.sessionState.conf.defaultDataSourceName
-      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
-      sql("clear cache")
-      sql("cache table tbl")
-      sql("clear cache")
-    }
-  }
 }
 
 case class Foo(bar: Option[String])
