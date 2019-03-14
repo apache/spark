@@ -1364,6 +1364,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(DoubleType))
     val a7 = Literal.create(Seq(1.123f, 0.1234f, 1.121f, 1.123f, 1.1230f, 1.121f, 0.1234f),
       ArrayType(FloatType))
+    val a8 =
+      Literal.create(Seq(2, 1, 2, 3, 4, 4, 5).map(_.toString.getBytes), ArrayType(BinaryType))
 
     checkEvaluation(new ArrayDistinct(a0), Seq(2, 1, 3, 4, 5))
     checkEvaluation(new ArrayDistinct(a1), Seq.empty[Integer])
@@ -1373,6 +1375,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new ArrayDistinct(a5), Seq(true, false))
     checkEvaluation(new ArrayDistinct(a6), Seq(1.123, 0.1234, 1.121))
     checkEvaluation(new ArrayDistinct(a7), Seq(1.123f, 0.1234f, 1.121f))
+    checkEvaluation(new ArrayDistinct(a8), Seq(2, 1, 3, 4, 5).map(_.toString.getBytes))
 
     // complex data types
     val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2),

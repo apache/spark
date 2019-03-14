@@ -3112,13 +3112,12 @@ case class ArrayDistinct(child: Expression)
     (data: Array[AnyRef]) => new GenericArrayData(data.distinct.asInstanceOf[Array[Any]])
   } else {
     (data: Array[AnyRef]) => {
-      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
       var alreadyStoredNull = false
-      var found = false
       for (i <- 0 until data.length) {
         if (data(i) != null) {
-          found = false
-          var j = 0;
+          var found = false
+          var j = 0
           while (!found && j < arrayBuffer.size) {
             val va = arrayBuffer(j)
             found = (va != null) && ordering.equiv(va, data(i))
