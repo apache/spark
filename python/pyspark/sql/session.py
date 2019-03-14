@@ -557,8 +557,9 @@ class SparkSession(object):
 
         # Create Arrow record batches
         safecheck = self._wrapped._conf.arrowSafeTypeConversion()
+        col_by_name = True  # col by name only applies to StructType columns, can't happen here
         batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)],
-                                 timezone, safecheck)
+                                 timezone, safecheck, col_by_name)
                    for pdf_slice in pdf_slices]
 
         # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)

@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -180,7 +181,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Seconds") {
     assert(Second(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Second(Cast(Literal(d), TimestampType, gmtId), gmtId).resolved === true)
+    assert(Second(Cast(Literal(d), TimestampType, gmtId), gmtId).resolved )
     checkEvaluation(Second(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
     checkEvaluation(Second(Cast(Literal(date), TimestampType, gmtId), gmtId), 15)
     checkEvaluation(Second(Literal(ts), gmtId), 15)
@@ -267,7 +268,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Hour") {
     assert(Hour(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Hour(Literal(ts), gmtId).resolved === true)
+    assert(Hour(Literal(ts), gmtId).resolved)
     checkEvaluation(Hour(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
     checkEvaluation(Hour(Cast(Literal(date), TimestampType, gmtId), gmtId), 13)
     checkEvaluation(Hour(Literal(ts), gmtId), 13)
@@ -293,7 +294,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Minute") {
     assert(Minute(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Minute(Literal(ts), gmtId).resolved === true)
+    assert(Minute(Literal(ts), gmtId).resolved)
     checkEvaluation(Minute(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
     checkEvaluation(
       Minute(Cast(Literal(date), TimestampType, gmtId), gmtId), 10)
@@ -705,14 +706,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           1000L)
         checkEvaluation(
           UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2), timeZoneId),
           -1000L)
         checkEvaluation(UnixTimestamp(
           Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-          DateTimeUtils.daysToMillis(
-            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz)))
         val t1 = UnixTimestamp(
           CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
         val t2 = UnixTimestamp(
@@ -727,7 +728,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           null)
         checkEvaluation(
           UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
       }
@@ -759,14 +760,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           1000L)
         checkEvaluation(
           ToUnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           ToUnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2), timeZoneId),
           -1000L)
         checkEvaluation(ToUnixTimestamp(
           Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-          DateTimeUtils.daysToMillis(
-            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz)))
         val t1 = ToUnixTimestamp(
           CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
         val t2 = ToUnixTimestamp(
@@ -780,7 +781,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           null)
         checkEvaluation(ToUnixTimestamp(
           Literal(date1), Literal.create(null, StringType), timeZoneId),
-          DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz) / 1000L)
+          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           ToUnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
       }
@@ -819,9 +820,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
-    // Test escaping of timezone
-    GenerateUnsafeProjection.generate(
-      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("\"quote")) :: Nil)
+  }
+
+  test("to_utc_timestamp - invalid time zone id") {
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(
+          ToUTCTimestamp(
+            Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
+    }
   }
 
   test("from_utc_timestamp") {
@@ -842,7 +851,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
-    // Test escaping of timezone
-    GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal("\"quote")) :: Nil)
+  }
+
+  test("from_utc_timestamp - invalid time zone id") {
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
+    }
   }
 }

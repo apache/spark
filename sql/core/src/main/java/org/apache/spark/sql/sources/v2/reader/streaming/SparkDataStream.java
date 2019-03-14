@@ -24,7 +24,8 @@ import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
  * The base interface representing a readable data stream in a Spark streaming query. It's
  * responsible to manage the offsets of the streaming source in the streaming query.
  *
- * Data sources should implement concrete data stream interfaces: {@link MicroBatchStream}.
+ * Data sources should implement concrete data stream interfaces:
+ * {@link MicroBatchStream} and {@link ContinuousStream}.
  */
 @Evolving
 public interface SparkDataStream extends BaseStreamingSource {

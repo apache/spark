@@ -190,8 +190,10 @@ of the most common options to set are:
     and it is up to the application to avoid exceeding the overhead memory space
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
-
-    NOTE: Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
+    <br/>
+    <em>Note:</em> This feature is dependent on Python's `resource` module; therefore, the behaviors and 
+    limitations are inherited. For instance, Windows does not support resource limiting and actual 
+    resource is not limited on MacOS.
   </td>
 </tr>
 <tr>
@@ -223,7 +225,8 @@ of the most common options to set are:
     stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
 
-    NOTE: In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone), MESOS_SANDBOX (Mesos) or
+    <br/>
+    <em>Note:</em> This will be overridden by SPARK_LOCAL_DIRS (Standalone), MESOS_SANDBOX (Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
@@ -627,19 +630,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
-  <td>Int.MaxValue - 512</td>
-  <td>
-    The remote block will be fetched to disk when size of the block is above this threshold in bytes.
-    This is to avoid a giant request that takes too much memory.  By default, this is only enabled
-    for blocks > 2GB, as those cannot be fetched directly into memory, no matter what resources are
-    available.  But it can be turned down to a much lower value (eg. 200m) to avoid using too much
-    memory on smaller blocks as well. Note this configuration will affect both shuffle fetch
-    and block manager remote block fetch. For users who enabled external shuffle service,
-    this feature can only be used when external shuffle service is newer than Spark 2.2.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -921,6 +911,21 @@ Apart from these, the following properties are also available, and may be useful
     Show the progress bar in the console. The progress bar shows the progress of stages
     that run for longer than 500ms. If multiple stages run at the same time, multiple
     progress bars will be displayed on the same line.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.custom.executor.log.url</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies custom spark executor log URL for supporting external log service instead of using cluster
+    managers' application log URLs in Spark UI. Spark will support some path variables via patterns
+    which can vary on cluster manager. Please check the documentation for your cluster manager to
+    see which patterns are supported, if any. <p/>
+    Please note that this configuration also replaces original log urls in event log,
+    which will be also effective when accessing the application on history server. The new log urls must be
+    permanent, otherwise you might have dead link for executor log urls.
+    <p/>
+    For now, only YARN mode supports this configuration
   </td>
 </tr>
 <tr>
@@ -1517,6 +1522,17 @@ Apart from these, the following properties are also available, and may be useful
     How long for the connection to wait for ack to occur before timing
     out and giving up. To avoid unwilling timeout caused by long pause like GC,
     you can set larger value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td>200m</td>
+  <td>
+    Remote block will be fetched to disk when size of the block is above this threshold
+    in bytes. This is to avoid a giant request takes too much memory. Note this
+    configuration will affect both shuffle fetch and block manager remote block fetch.
+    For users who enabled external shuffle service, this feature can only work when
+    external shuffle service is at least 2.3.0.
   </td>
 </tr>
 </table>

@@ -24,10 +24,10 @@ import org.apache.spark.storage.StorageLevel
 class SparkContextInfoSuite extends SparkFunSuite with LocalSparkContext {
   test("getPersistentRDDs only returns RDDs that are marked as cached") {
     sc = new SparkContext("local", "test")
-    assert(sc.getPersistentRDDs.isEmpty === true)
+    assert(sc.getPersistentRDDs.isEmpty)
 
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    assert(sc.getPersistentRDDs.isEmpty === true)
+    assert(sc.getPersistentRDDs.isEmpty)
 
     rdd.cache()
     assert(sc.getPersistentRDDs.size === 1)
@@ -60,6 +60,7 @@ class SparkContextInfoSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
     assert(sc.getRDDStorageInfo.size === 0)
     rdd.collect()
+    sc.listenerBus.waitUntilEmpty(10000)
     assert(sc.getRDDStorageInfo.size === 1)
     assert(sc.getRDDStorageInfo.head.isCached)
     assert(sc.getRDDStorageInfo.head.memSize > 0)

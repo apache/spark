@@ -198,7 +198,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         result = df.groupby(col('id') % 2 == 0).apply(normalize).sort('id', 'v').toPandas()
         pdf = df.toPandas()
-        expected = pdf.groupby(pdf['id'] % 2 == 0).apply(normalize.func)
+        expected = pdf.groupby(pdf['id'] % 2 == 0, as_index=False).apply(normalize.func)
         expected = expected.sort_values(['id', 'v']).reset_index(drop=True)
         expected = expected.assign(norm=expected.norm.astype('float64'))
         self.assertPandasEqual(expected, result)
@@ -273,6 +273,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             StructField('map', MapType(StringType(), IntegerType())),
             StructField('arr_ts', ArrayType(TimestampType())),
             StructField('null', NullType()),
+            StructField('struct', StructType([StructField('l', LongType())])),
         ]
 
         # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0
@@ -345,21 +346,21 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         # Test groupby column
         result1 = df.groupby('id').apply(udf1).sort('id', 'v').toPandas()
-        expected1 = pdf.groupby('id')\
+        expected1 = pdf.groupby('id', as_index=False)\
             .apply(lambda x: udf1.func((x.id.iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected1, result1)
 
         # Test groupby expression
         result2 = df.groupby(df.id % 2).apply(udf1).sort('id', 'v').toPandas()
-        expected2 = pdf.groupby(pdf.id % 2)\
+        expected2 = pdf.groupby(pdf.id % 2, as_index=False)\
             .apply(lambda x: udf1.func((x.id.iloc[0] % 2,), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected2, result2)
 
         # Test complex groupby
         result3 = df.groupby(df.id, df.v % 2).apply(udf2).sort('id', 'v').toPandas()
-        expected3 = pdf.groupby([pdf.id, pdf.v % 2])\
+        expected3 = pdf.groupby([pdf.id, pdf.v % 2], as_index=False)\
             .apply(lambda x: udf2.func((x.id.iloc[0], (x.v % 2).iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected3, result3)
@@ -379,7 +380,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         df = self.data
         grouped_df = df.groupby('id')
-        grouped_pdf = df.toPandas().groupby('id')
+        grouped_pdf = df.toPandas().groupby('id', as_index=False)
 
         # Function returns a pdf with required column names, but order could be arbitrary using dict
         def change_col_order(pdf):

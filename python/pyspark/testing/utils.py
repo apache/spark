@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import glob
 import os
 import struct
 import sys
@@ -100,3 +101,27 @@ class ByteArrayOutput(object):
 
     def close(self):
         pass
+
+
+def search_jar(project_relative_path, jar_name_prefix):
+    project_full_path = os.path.join(
+        os.environ["SPARK_HOME"], project_relative_path)
+
+    # We should ignore the following jars
+    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
+
+    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
+    # build because the artifact jars are in different directories.
+    sbt_build = glob.glob(os.path.join(
+        project_full_path, "target/scala-*/%s*.jar" % jar_name_prefix))
+    maven_build = glob.glob(os.path.join(
+        project_full_path, "target/%s*.jar" % jar_name_prefix))
+    jar_paths = sbt_build + maven_build
+    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
+
+    if not jars:
+        return None
+    elif len(jars) > 1:
+        raise Exception("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
+    else:
+        return jars[0]

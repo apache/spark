@@ -37,7 +37,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -86,9 +86,10 @@ private[deploy] class Master(
 
   Utils.checkHost(address.host)
 
-  private val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
-  private val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
-    securityMgr)
+  private val masterMetricsSystem =
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MASTER, conf, securityMgr)
+  private val applicationMetricsSystem =
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATIONS, conf, securityMgr)
   private val masterSource = new MasterSource(this)
 
   // After onStart, webUi will be set
@@ -142,7 +143,7 @@ private[deploy] class Master(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
-    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
+    masterWebUiUrl = s"${webUi.scheme}$masterPublicAddress:${webUi.boundPort}"
     if (reverseProxy) {
       masterWebUiUrl = conf.get(UI_REVERSE_PROXY_URL).orElse(Some(masterWebUiUrl)).get
       webUi.addProxy()
@@ -370,7 +371,7 @@ private[deploy] class Master(
 
           val validExecutors = executors.filter(exec => idToApp.get(exec.appId).isDefined)
           for (exec <- validExecutors) {
-            val app = idToApp.get(exec.appId).get
+            val app = idToApp(exec.appId)
             val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
             worker.addExecutor(execInfo)
             execInfo.copyState(exec)
@@ -994,9 +995,10 @@ private[deploy] class Master(
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - workerTimeoutMs).toArray
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {
+        val workerTimeoutSecs = TimeUnit.MILLISECONDS.toSeconds(workerTimeoutMs)
         logWarning("Removing %s because we got no heartbeat in %d seconds".format(
-          worker.id, workerTimeoutMs / 1000))
-        removeWorker(worker, s"Not receiving heartbeat for ${workerTimeoutMs / 1000} seconds")
+          worker.id, workerTimeoutSecs))
+        removeWorker(worker, s"Not receiving heartbeat for $workerTimeoutSecs seconds")
       } else {
         if (worker.lastHeartbeat < currentTime - ((reaperIterations + 1) * workerTimeoutMs)) {
           workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it

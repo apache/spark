@@ -22,30 +22,31 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * This is no-op datasource. It does not do anything besides consuming its input.
  * This can be useful for benchmarking or to cache data without any additional overhead.
  */
-class NoopDataSource
-  extends DataSourceV2
-  with TableProvider
-  with DataSourceRegister {
-
+class NoopDataSource extends TableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
-  override def getTable(options: DataSourceOptions): Table = NoopTable
+  override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
 }
 
-private[noop] object NoopTable extends Table with SupportsBatchWrite {
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = NoopWriteBuilder
+private[noop] object NoopTable extends Table with SupportsBatchWrite with SupportsStreamingWrite {
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
 }
 
-private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsSaveMode {
-  override def buildForBatch(): BatchWrite = NoopBatchWrite
+private[noop] object NoopWriteBuilder extends WriteBuilder
+  with SupportsSaveMode with SupportsTruncate {
   override def mode(mode: SaveMode): WriteBuilder = this
+  override def truncate(): WriteBuilder = this
+  override def buildForBatch(): BatchWrite = NoopBatchWrite
+  override def buildForStreaming(): StreamingWrite = NoopStreamingWrite
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {
@@ -64,3 +65,16 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
   override def abort(): Unit = {}
 }
 
+private[noop] object NoopStreamingWrite extends StreamingWrite {
+  override def createStreamingWriterFactory(): StreamingDataWriterFactory =
+    NoopStreamingDataWriterFactory
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+}
+
+private[noop] object NoopStreamingDataWriterFactory extends StreamingDataWriterFactory {
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = NoopWriter
+}

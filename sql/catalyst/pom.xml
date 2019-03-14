@@ -156,6 +156,7 @@
         <configuration>
           <visitor>true</visitor>
           <sourceDirectory>../catalyst/src/main/antlr4</sourceDirectory>
+          <treatWarningsAsErrors>true</treatWarningsAsErrors>
         </configuration>
       </plugin>
     </plugins>

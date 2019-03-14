@@ -40,7 +40,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     new UnifiedMemoryManager(
       new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
       Long.MaxValue,
-      Long.MaxValue,
+      Long.MaxValue / 2,
       1),
     0)
 
@@ -89,7 +89,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Long.MaxValue,
-        Long.MaxValue,
+        Long.MaxValue / 2,
         1),
       0)
     val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
@@ -161,7 +161,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Long.MaxValue,
-        Long.MaxValue,
+        Long.MaxValue / 2,
         1),
       0)
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
@@ -206,7 +206,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Long.MaxValue,
-        Long.MaxValue,
+        Long.MaxValue / 2,
         1),
       0)
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
@@ -260,7 +260,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Long.MaxValue,
-        Long.MaxValue,
+        Long.MaxValue / 2,
         1),
       0)
     val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))

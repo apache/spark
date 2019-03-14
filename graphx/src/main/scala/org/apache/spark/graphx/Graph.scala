@@ -119,16 +119,20 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   /**
    * Uncaches both vertices and edges of this graph. This is useful in iterative algorithms that
    * build a new graph in each iteration.
+   *
+   * @param blocking Whether to block until all data is unpersisted (default: false)
    */
-  def unpersist(blocking: Boolean = true): Graph[VD, ED]
+  def unpersist(blocking: Boolean = false): Graph[VD, ED]
 
   /**
    * Uncaches only the vertices of this graph, leaving the edges alone. This is useful in iterative
    * algorithms that modify the vertex attributes but reuse the edges. This method can be used to
    * uncache the vertex attributes of previous iterations once they are no longer needed, improving
    * GC performance.
+   *
+   * @param blocking Whether to block until all data is unpersisted (default: false)
    */
-  def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
+  def unpersistVertices(blocking: Boolean = false): Graph[VD, ED]
 
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.

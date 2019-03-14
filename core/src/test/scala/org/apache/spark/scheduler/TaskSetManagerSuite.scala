@@ -153,7 +153,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
  */
 class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
 
-  val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
+  val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024)
   val random = new Random(0)
   random.nextBytes(randomBuffer)
 
@@ -736,7 +736,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Complete one copy of the task, which should result in the task set manager
     // being marked as a zombie, because at least one copy of its only task has completed.
     manager.handleSuccessfulTask(task1.taskId, directTaskResult)
-    assert(manager.isZombie === true)
+    assert(manager.isZombie)
     assert(resubmittedTasks === 0)
     assert(manager.runningTasks === 1)
 

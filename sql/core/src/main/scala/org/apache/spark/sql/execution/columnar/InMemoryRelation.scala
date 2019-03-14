@@ -48,8 +48,9 @@ case class CachedRDDBuilder(
     batchSize: Int,
     storageLevel: StorageLevel,
     @transient cachedPlan: SparkPlan,
-    tableName: Option[String])(
-    @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null) {
+    tableName: Option[String]) {
+
+  @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
@@ -75,14 +76,8 @@ case class CachedRDDBuilder(
     }
   }
 
-  def withCachedPlan(cachedPlan: SparkPlan): CachedRDDBuilder = {
-    new CachedRDDBuilder(
-      useCompression,
-      batchSize,
-      storageLevel,
-      cachedPlan = cachedPlan,
-      tableName
-    )(_cachedColumnBuffers)
+  def isCachedColumnBuffersLoaded: Boolean = {
+    _cachedColumnBuffers != null
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
@@ -149,7 +144,7 @@ object InMemoryRelation {
       child: SparkPlan,
       tableName: Option[String],
       logicalPlan: LogicalPlan): InMemoryRelation = {
-    val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)()
+    val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)
     new InMemoryRelation(child.output, cacheBuilder, logicalPlan.outputOrdering)(
       statsOfPlanToCache = logicalPlan.stats)
   }

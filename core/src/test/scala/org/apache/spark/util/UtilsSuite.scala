@@ -18,8 +18,9 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream}
+  FileOutputStream, InputStream, PrintStream, SequenceInputStream}
 import java.lang.{Double => JDouble, Float => JFloat}
+import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
@@ -43,6 +44,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -209,6 +211,56 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     Utils.copyStream(new ByteArrayInputStream(bytes), os)
 
     assert(os.toByteArray.toList.equals(bytes.toList))
+  }
+
+  test("copyStreamUpTo") {
+    // input array initialization
+    val bytes = Array.ofDim[Byte](1200)
+    Random.nextBytes(bytes)
+
+    val limit = 1000
+    // testing for inputLength less than, equal to and greater than limit
+    (limit - 2 to limit + 2).foreach { inputLength =>
+      val in = new ByteArrayInputStream(bytes.take(inputLength))
+      val mergedStream = Utils.copyStreamUpTo(in, limit)
+      try {
+        // Get a handle on the buffered data, to make sure memory gets freed once we read past the
+        // end of it. Need to use reflection to get handle on inner structures for this check
+        val byteBufferInputStream = if (mergedStream.isInstanceOf[ChunkedByteBufferInputStream]) {
+          assert(inputLength < limit)
+          mergedStream.asInstanceOf[ChunkedByteBufferInputStream]
+        } else {
+          assert(inputLength >= limit)
+          val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
+          val fieldValue = getFieldValue(sequenceStream, "in")
+          assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
+          fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
+        }
+        (0 until inputLength).foreach { idx =>
+          assert(bytes(idx) === mergedStream.read().asInstanceOf[Byte])
+          if (idx == limit) {
+            assert(byteBufferInputStream.chunkedByteBuffer === null)
+          }
+        }
+        assert(mergedStream.read() === -1)
+        assert(byteBufferInputStream.chunkedByteBuffer === null)
+      } finally {
+        IOUtils.closeQuietly(mergedStream)
+        IOUtils.closeQuietly(in)
+      }
+    }
+  }
+
+  private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
+    val field: Field = obj.getClass().getDeclaredField(fieldName)
+    if (field.isAccessible()) {
+      field.get(obj)
+    } else {
+      field.setAccessible(true)
+      val result = field.get(obj)
+      field.setAccessible(false)
+      result
+    }
   }
 
   test("memoryStringToMb") {
@@ -619,7 +671,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         .filter { case (k, v) => k.startsWith("spark.")}
         .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
       val sparkConf = new SparkConf
-      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
+      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false))
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     }
   }
@@ -632,7 +684,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
     val time = Utils.timeIt(2)({}, Some(prepare))
     require(cnt === 2, "prepare should be called twice")
-    require(time < 500, "preparation time should not count")
+    require(time < TimeUnit.MILLISECONDS.toNanos(500), "preparation time should not count")
   }
 
   test("fetch hcfs dir") {
@@ -835,11 +887,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.isDynamicAllocationEnabled(
       conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set(DYN_ALLOCATION_ENABLED, true)) === true)
+      conf.set(DYN_ALLOCATION_ENABLED, true)))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === true)
+      conf.set("spark.executor.instances", "1")))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "0")) === true)
+      conf.set("spark.executor.instances", "0")))
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }
@@ -907,7 +959,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
       // Start up a process that runs 'sleep 10'. Terminate the process and assert it takes
       // less time and the process is no longer there.
-      val startTimeMs = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       val process = new ProcessBuilder("sleep", "10").start()
       val pid = getPid(process)
       try {
@@ -915,8 +967,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         val terminated = Utils.terminateProcess(process, 5000)
         assert(terminated.isDefined)
         process.waitFor(5, TimeUnit.SECONDS)
-        val durationMs = System.currentTimeMillis() - startTimeMs
-        assert(durationMs < 5000)
+        val durationNs = System.nanoTime() - startTimeNs
+        assert(durationNs < TimeUnit.SECONDS.toNanos(5))
         assert(!pidExists(pid))
       } finally {
         // Forcibly kill the test process just in case.
@@ -943,12 +995,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(pidExists(pid))
         try {
           signal(pid, "SIGSTOP")
-          val start = System.currentTimeMillis()
+          val startNs = System.nanoTime()
           val terminated = Utils.terminateProcess(process, 5000)
           assert(terminated.isDefined)
           process.waitFor(5, TimeUnit.SECONDS)
-          val duration = System.currentTimeMillis() - start
-          assert(duration < 6000) // add a little extra time to allow a force kill to finish
+          val duration = System.nanoTime() - startNs
+          // add a little extra time to allow a force kill to finish
+          assert(duration < TimeUnit.SECONDS.toNanos(6))
           assert(!pidExists(pid))
         } finally {
           signal(pid, "SIGKILL")
@@ -1013,6 +1066,58 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(redactedConf("spark.regular.property") === "regular_value")
     assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
 
+  }
+
+  test("redact sensitive information in command line args") {
+    val sparkConf = new SparkConf
+
+    // Set some secret keys
+    val secretKeysWithSameValue = Seq(
+      "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.my.password",
+      "spark.my.sECreT")
+    val cmdArgsForSecretWithSameValue = secretKeysWithSameValue.map(s => s"-D$s=sensitive_value")
+
+    val secretKeys = secretKeysWithSameValue ++ Seq("spark.your.password")
+    val cmdArgsForSecret = cmdArgsForSecretWithSameValue ++ Seq(
+      // Have '=' twice
+      "-Dspark.your.password=sensitive=sensitive2"
+    )
+
+    val ignoredArgs = Seq(
+      // starts with -D but no assignment
+      "-Ddummy",
+      // secret value contained not starting with -D (we don't care about this case for now)
+      "spark.my.password=sensitive_value",
+      // edge case: not started with -D, but matched pattern after first '-'
+      "--Dspark.my.password=sensitive_value")
+
+    val cmdArgs = cmdArgsForSecret ++ ignoredArgs ++ Seq(
+      // Set a non-secret key
+      "-Dspark.regular.property=regular_value",
+      // Set a property with a regular key but secret in the value
+      "-Dspark.sensitive.property=has_secret_in_value")
+
+    // Redact sensitive information
+    val redactedCmdArgs = Utils.redactCommandLineArgs(sparkConf, cmdArgs)
+
+    // These arguments should be left as they were:
+    // 1) argument without -D option is not applied
+    // 2) -D option without key-value assignment is not applied
+    assert(ignoredArgs.forall(redactedCmdArgs.contains))
+
+    val redactedCmdArgMap = redactedCmdArgs.filterNot(ignoredArgs.contains).map { cmd =>
+      val keyValue = cmd.substring("-D".length).split("=")
+      keyValue(0) -> keyValue.tail.mkString("=")
+    }.toMap
+
+    // Assert that secret information got redacted while the regular property remained the same
+    secretKeys.foreach { key =>
+      assert(redactedCmdArgMap(key) === Utils.REDACTION_REPLACEMENT_TEXT)
+    }
+
+    assert(redactedCmdArgMap("spark.regular.property") === "regular_value")
+    assert(redactedCmdArgMap("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
   }
 
   test("tryWithSafeFinally") {

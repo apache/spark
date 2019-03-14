@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatch
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, RateControlMicroBatchStream}
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchStream, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
@@ -95,11 +95,10 @@ class MicroBatchExecution(
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
           logInfo(s"Reading table [$table] from DataSourceV2 named '$dsName' [$ds]")
-          val dsOptions = new DataSourceOptions(options.asJava)
           // TODO: operator pushdown.
-          val scan = table.newScanBuilder(dsOptions).build()
+          val scan = table.newScanBuilder(options).build()
           val stream = scan.toMicroBatchStream(metadataPath)
-          StreamingDataSourceV2Relation(output, scan.description(), stream)
+          StreamingDataSourceV2Relation(output, scan, stream)
         })
       case s @ StreamingRelationV2(ds, dsName, _, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
@@ -122,7 +121,14 @@ class MicroBatchExecution(
       case r: StreamingDataSourceV2Relation => r.stream
     }
     uniqueSources = sources.distinct
-    _logicalPlan
+
+    sink match {
+      case s: SupportsStreamingWrite =>
+        val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
+        WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
+
+      case _ => _logicalPlan
+    }
   }
 
   /**
@@ -501,8 +507,11 @@ class MicroBatchExecution(
     // Rewire the plan to use the new attributes that were returned by the source.
     val newAttributePlan = newBatchesPlan transformAllExpressions {
       case ct: CurrentTimestamp =>
+        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
+        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
+        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
-          ct.dataType)
+          ct.dataType, Some("Dummy TimeZoneId"))
       case cd: CurrentDate =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           cd.dataType, cd.timeZoneId)
@@ -510,13 +519,8 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: StreamingWriteSupportProvider =>
-        val writer = s.createStreamingWriteSupport(
-          s"$runId",
-          newAttributePlan.schema,
-          outputMode,
-          new DataSourceOptions(extraOptions.asJava))
-        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, writer), newAttributePlan)
+      case _: SupportsStreamingWrite =>
+        newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].createPlan(currentBatchId)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
@@ -546,7 +550,7 @@ class MicroBatchExecution(
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
-          case _: StreamingWriteSupportProvider =>
+          case _: SupportsStreamingWrite =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }

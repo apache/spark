@@ -20,6 +20,7 @@ package org.apache.spark.internal
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -114,6 +115,24 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.gcMetrics.youngGenerationGarbageCollectors")
+      .doc("Names of supported young generation garbage collector. A name usually is " +
+        " the return of GarbageCollectorMXBean.getName. The built-in young generation garbage " +
+        s"collectors are ${GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
+      .stringConf
+      .toSequence
+      .createWithDefault(GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
+
+  private[spark] val EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.gcMetrics.oldGenerationGarbageCollectors")
+      .doc("Names of supported old generation garbage collector. A name usually is " +
+        "the return of GarbageCollectorMXBean.getName. The built-in old generation garbage " +
+        s"collectors are ${GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
+      .stringConf
+      .toSequence
+      .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 
@@ -195,6 +214,7 @@ package object config {
       "less working memory may be available to execution and tasks may spill to disk more " +
       "often. Leaving this at the default value is recommended. ")
     .doubleConf
+    .checkValue(v => v >= 0.0 && v < 1.0, "Storage fraction must be in [0,1)")
     .createWithDefault(0.5)
 
   private[spark] val MEMORY_FRACTION = ConfigBuilder("spark.memory.fraction")
@@ -270,6 +290,26 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
 
+  private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
+    ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
+      .doc("Whether or not cleanup the non-shuffle files on executor exits.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val DISKSTORE_SUB_DIRECTORIES =
+    ConfigBuilder("spark.diskStore.subDirectories")
+      .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
+        "hashing Block files into.")
+      .intConf
+      .createWithDefault(64)
+
+  private[spark] val BLOCK_FAILURES_BEFORE_LOCATION_REFRESH =
+    ConfigBuilder("spark.block.failures.beforeLocationRefresh")
+      .doc("Max number of failures before this block manager refreshes " +
+        "the block locations from the driver.")
+      .intConf
+      .createWithDefault(5)
+
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
@@ -332,6 +372,24 @@ package object config {
   private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.kerberos.relogin.period")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1m")
+
+  private[spark] val KERBEROS_RENEWAL_CREDENTIALS =
+    ConfigBuilder("spark.kerberos.renewal.credentials")
+      .doc(
+        "Which credentials to use when renewing delegation tokens for executors. Can be either " +
+        "'keytab', the default, which requires a keytab to be provided, or 'ccache', which uses " +
+        "the local credentials cache.")
+      .stringConf
+      .checkValues(Set("keytab", "ccache"))
+      .createWithDefault("keytab")
+
+  private[spark] val KERBEROS_FILESYSTEMS_TO_ACCESS =
+    ConfigBuilder("spark.kerberos.access.hadoopFileSystems")
+    .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
+      "that hosts fs.defaultFS does not need to be listed here.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
@@ -678,17 +736,19 @@ package object config {
   private[spark] val MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM =
     ConfigBuilder("spark.maxRemoteBlockSizeFetchToMem")
       .doc("Remote block will be fetched to disk when size of the block is above this threshold " +
-        "in bytes. This is to avoid a giant request takes too much memory. We can enable this " +
-        "config by setting a specific value(e.g. 200m). Note this configuration will affect " +
-        "both shuffle fetch and block manager remote block fetch. For users who enabled " +
-        "external shuffle service, this feature can only be worked when external shuffle" +
-        "service is newer than Spark 2.2.")
+        "in bytes. This is to avoid a giant request takes too much memory. Note this " +
+        "configuration will affect both shuffle fetch and block manager remote block fetch. " +
+        "For users who enabled external shuffle service, this feature can only work when " +
+        "external shuffle service is at least 2.3.0.")
       .bytesConf(ByteUnit.BYTE)
       // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
       // as well use fetch-to-disk in that case.  The message includes some metadata in addition
       // to the block data itself (in particular UploadBlock has a lot of metadata), so we leave
       // extra room.
-      .createWithDefault(Int.MaxValue - 512)
+      .checkValue(
+        _ <= Int.MaxValue - 512,
+        "maxRemoteBlockSizeFetchToMem cannot be larger than (Int.MaxValue - 512) bytes.")
+      .createWithDefaultString("200m")
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
     ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
@@ -867,6 +927,15 @@ package object config {
       .doc("Whether to detect any corruption in fetched blocks.")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val SHUFFLE_DETECT_CORRUPT_MEMORY =
+    ConfigBuilder("spark.shuffle.detectCorrupt.useExtraMemory")
+      .doc("If enabled, part of a compressed/encrypted stream will be de-compressed/de-crypted " +
+        "by using extra memory to detect early corruption. Any IOException thrown will cause " +
+        "the task to be retried once and if it fails again with same exception, then " +
+        "FetchFailedException will be thrown to retry previous stage")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")
@@ -1220,4 +1289,9 @@ package object config {
     ConfigBuilder("spark.speculation.quantile")
       .doubleConf
       .createWithDefault(0.75)
+
+  private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
+    .doc("Staging directory used while submitting applications.")
+    .stringConf
+    .createOptional
 }

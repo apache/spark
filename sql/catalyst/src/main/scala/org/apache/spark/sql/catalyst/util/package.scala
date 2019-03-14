@@ -125,18 +125,6 @@ package object util extends Logging {
     new String(out.toByteArray, StandardCharsets.UTF_8)
   }
 
-  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
-
-  def benchmark[A](f: => A): A = {
-    val startTime = System.nanoTime()
-    val ret = f
-    val endTime = System.nanoTime()
-    // scalastyle:off println
-    println(s"${(endTime - startTime).toDouble / 1000000}ms")
-    // scalastyle:on println
-    ret
-  }
-
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
   // generated column names don't contain back-ticks or double-quotes.
   def usePrettyExpression(e: Expression): Expression = e transform {
@@ -157,7 +145,6 @@ package object util extends Logging {
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
-
 
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder
@@ -203,11 +190,4 @@ package object util extends Logging {
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
   }
-
-  /* FIX ME
-  implicit class debugLogging(a: Any) {
-    def debugLogging() {
-      org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
-    }
-  } */
 }

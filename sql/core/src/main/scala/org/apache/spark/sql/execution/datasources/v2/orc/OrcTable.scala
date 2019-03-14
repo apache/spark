@@ -19,21 +19,26 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcUtils
 import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.writer.WriteBuilder
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class OrcTable(
     name: String,
     sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex,
+    options: CaseInsensitiveStringMap,
+    paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
-  extends FileTable(sparkSession, fileIndex, userSpecifiedSchema) {
-  override def newScanBuilder(options: DataSourceOptions): OrcScanBuilder =
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder =
     new OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     OrcUtils.readSchema(sparkSession, files)
+
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
+    new OrcWriteBuilder(options, paths)
 }

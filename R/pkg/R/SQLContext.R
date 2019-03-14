@@ -147,6 +147,93 @@ getDefaultSqlSource <- function() {
   l[["spark.sql.sources.default"]]
 }
 
+writeToFileInArrow <- function(fileName, rdf, numPartitions) {
+  requireNamespace1 <- requireNamespace
+
+  # R API in Arrow is not yet released in CRAN. CRAN requires to add the
+  # package in requireNamespace at DESCRIPTION. Later, CRAN checks if the package is available
+  # or not. Therefore, it works around by avoiding direct requireNamespace.
+  # Currently, as of Arrow 0.12.0, it can be installed by install_github. See ARROW-3204.
+  if (requireNamespace1("arrow", quietly = TRUE)) {
+    record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
+    RecordBatchStreamWriter <- get(
+      "RecordBatchStreamWriter", envir = asNamespace("arrow"), inherits = FALSE)
+    FileOutputStream <- get(
+      "FileOutputStream", envir = asNamespace("arrow"), inherits = FALSE)
+
+    numPartitions <- if (!is.null(numPartitions)) {
+      numToInt(numPartitions)
+    } else {
+      1
+    }
+
+    rdf_slices <- if (numPartitions > 1) {
+      split(rdf, makeSplits(numPartitions, nrow(rdf)))
+    } else {
+      list(rdf)
+    }
+
+    stream_writer <- NULL
+    tryCatch({
+      for (rdf_slice in rdf_slices) {
+        batch <- record_batch(rdf_slice)
+        if (is.null(stream_writer)) {
+          stream <- FileOutputStream(fileName)
+          schema <- batch$schema
+          stream_writer <- RecordBatchStreamWriter(stream, schema)
+        }
+
+        stream_writer$write_batch(batch)
+      }
+    },
+    finally = {
+      if (!is.null(stream_writer)) {
+        stream_writer$close()
+      }
+    })
+
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}
+
+getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
+  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
+    if (is.null(firstRow)) {
+      stopifnot(!is.null(rdd))
+      firstRow <- firstRDD(rdd)
+    }
+    names <- if (is.null(schema)) {
+      names(firstRow)
+    } else {
+      as.list(schema)
+    }
+    if (is.null(names)) {
+      names <- lapply(1:length(firstRow), function(x) {
+        paste0("_", as.character(x))
+      })
+    }
+
+    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
+    # TODO(davies): remove this once SPARK-2775 is fixed
+    names <- lapply(names, function(n) {
+      nn <- gsub("[.]", "_", n)
+      if (nn != n) {
+        warning(paste("Use", nn, "instead of", n, "as column name"))
+      }
+      nn
+    })
+
+    types <- lapply(firstRow, infer_type)
+    fields <- lapply(1:length(firstRow), function(i) {
+      structField(names[[i]], types[[i]], TRUE)
+    })
+    schema <- do.call(structType, fields)
+  } else {
+    schema
+  }
+}
+
 #' Create a SparkDataFrame
 #'
 #' Converts R data.frame or list into SparkDataFrame.
@@ -172,36 +259,75 @@ getDefaultSqlSource <- function() {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  useArrow <- FALSE
+  firstRow <- NULL
 
   if (is.data.frame(data)) {
+    # get the names of columns, they will be put into RDD
+    if (is.null(schema)) {
+      schema <- names(data)
+    }
+
+    # get rid of factor type
+    cleanCols <- function(x) {
+      if (is.factor(x)) {
+        as.character(x)
+      } else {
+        x
+      }
+    }
+    data[] <- lapply(data, cleanCols)
+
+    args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    if (arrowEnabled) {
+      useArrow <- tryCatch({
+        stopifnot(length(data) > 0)
+        firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
+        schema <- getSchema(schema, firstRow = firstRow)
+        checkSchemaInArrow(schema)
+        fileName <- tempfile(pattern = "sparwriteToFileInArrowk-arrow", fileext = ".tmp")
+        tryCatch({
+          writeToFileInArrow(fileName, data, numPartitions)
+          jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                     "readArrowStreamFromFile",
+                                     sparkSession,
+                                     fileName)
+        },
+        finally = {
+          # File might not be created.
+          suppressWarnings(file.remove(fileName))
+        })
+        TRUE
+      },
+      error = function(e) {
+        warning(paste0("createDataFrame attempted Arrow optimization because ",
+                       "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                       "failed, attempting non-optimization. Reason: ",
+                       e))
+        FALSE
+      })
+    }
+
+    if (!useArrow) {
       # Convert data into a list of rows. Each row is a list.
-
-      # get the names of columns, they will be put into RDD
-      if (is.null(schema)) {
-        schema <- names(data)
-      }
-
-      # get rid of factor type
-      cleanCols <- function(x) {
-        if (is.factor(x)) {
-          as.character(x)
-        } else {
-          x
-        }
-      }
-
       # drop factors and wrap lists
-      data <- setNames(lapply(data, cleanCols), NULL)
+      data <- setNames(as.list(data), NULL)
 
       # check if all columns have supported type
       lapply(data, getInternalType)
 
       # convert to rows
-      args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
       data <- do.call(mapply, append(args, data))
+      if (length(data) > 0) {
+        firstRow <- data[[1]]
+      }
+    }
   }
 
-  if (is.list(data)) {
+  if (useArrow) {
+    rdd <- jrddInArrow
+  } else if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
     if (!is.null(numPartitions)) {
       rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
@@ -214,42 +340,19 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     stop(paste("unexpected type:", class(data)))
   }
 
-  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    row <- firstRDD(rdd)
-    names <- if (is.null(schema)) {
-      names(row)
-    } else {
-      as.list(schema)
-    }
-    if (is.null(names)) {
-      names <- lapply(1:length(row), function(x) {
-        paste("_", as.character(x), sep = "")
-      })
-    }
-
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
-    # TODO(davies): remove this once SPARK-2775 is fixed
-    names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
-      if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, " as column name"))
-      }
-      nn
-    })
-
-    types <- lapply(row, infer_type)
-    fields <- lapply(1:length(row), function(i) {
-      structField(names[[i]], types[[i]], TRUE)
-    })
-    schema <- do.call(structType, fields)
-  }
+  schema <- getSchema(schema, firstRow, rdd)
 
   stopifnot(class(schema) == "structType")
 
-  jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
-  srdd <- callJMethod(jrdd, "rdd")
-  sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
-                     srdd, schema$jobj, sparkSession)
+  if (useArrow) {
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                       "toDataFrame", rdd, schema$jobj, sparkSession)
+  } else {
+    jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
+    srdd <- callJMethod(jrdd, "rdd")
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
+                       srdd, schema$jobj, sparkSession)
+  }
   dataFrame(sdf)
 }
 
@@ -358,7 +461,7 @@ read.parquet <- function(path, ...) {
 #'
 #' Loads text files and returns a SparkDataFrame whose schema starts with
 #' a string column named "value", and followed by partitioned columns if
-#' there are any.
+#' there are any. The text files must be encoded as UTF-8.
 #'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
