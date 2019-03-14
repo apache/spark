@@ -180,7 +180,7 @@ class CacheManager extends Logging {
    * Analyzes column statistics in an already-cached table.
    *
    * @param spark        The Spark session.
-   * @param tableName    The identifier of a cached table.
+   * @param tableName    The name of a cached table.
    * @param columnNames  The names of columns to be analyzed for computing statistics.
    */
   def analyzeColumn(spark: SparkSession, tableName: String, columnNames: Seq[Attribute]): Unit = {
