@@ -15,7 +15,7 @@ import org.opencypher.okapi.relational.impl.table._
 
 import scala.collection.JavaConverters._
 
-case class SparkCypherRecordsFactory(implicit caps: SparkCypherSession) extends RelationalCypherRecordsFactory[DataFrameTable] {
+case class SparkCypherRecordsFactory()(implicit caps: SparkCypherSession) extends RelationalCypherRecordsFactory[DataFrameTable] {
 
   override type Records = SparkCypherRecords
 
