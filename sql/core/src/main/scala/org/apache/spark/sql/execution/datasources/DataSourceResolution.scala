@@ -44,8 +44,8 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
         table, query, partitionCols, bucketSpec, properties, V1Provider(provider), options,
         location, comment, ifNotExists) =>
 
-      val tableDesc = buildCatalogTable(table, query.schema, partitionCols, bucketSpec, properties,
-        provider, options, location, comment, ifNotExists)
+      val tableDesc = buildCatalogTable(table, new StructType, partitionCols, bucketSpec,
+        properties, provider, options, location, comment, ifNotExists)
       val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
       CreateTable(tableDesc, mode, Some(query))
