@@ -46,18 +46,6 @@ case class SparkCypherRecordsFactory()(implicit caps: SparkCypherSession) extend
     SparkCypherRecords(header, table, displayNames)
   }
 
-  //  /**
-  //    * Wraps a Spark SQL table (DataFrame) in a CAPSRecords, making it understandable by Cypher.
-  //    *
-  //    * @param df   table to wrap.
-  //    * @param caps session to which the resulting CAPSRecords is tied.
-  //    * @return a Cypher table.
-  //    */
-  //  private[spark] def wrap(df: DataFrame)(implicit caps: SparkCypherSession): CAPSRecords = {
-  //    val compatibleDf = df.withCypherCompatibleTypes
-  //    CAPSRecords(compatibleDf.schema.toRecordHeader, compatibleDf)
-  //  }
-
   private case class EmptyRow()
 }
 
@@ -112,4 +100,3 @@ trait RecordBehaviour extends RelationalCypherRecords[DataFrameTable] {
     table.df.map(RowConversion(header.exprToColumn.toSeq))
   }
 }
-

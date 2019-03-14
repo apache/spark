@@ -27,4 +27,3 @@ object LegacyUdfs {
       case (key, value) if value != null => key
     }
 }
-

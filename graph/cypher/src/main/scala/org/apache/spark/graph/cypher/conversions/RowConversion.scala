@@ -130,4 +130,3 @@ final case class RowConversion(exprToColumn: Seq[(Expr, String)]) extends (Row =
     CypherList(values)
   }
 }
-
