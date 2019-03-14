@@ -25,7 +25,7 @@ ERRORS=$(echo -e "q\n" \
     | build/sbt \
         ${SPARK_PROFILES} \
         -Pdocker-integration-tests \
-	-Pkubernetes-integration-tests \
+        -Pkubernetes-integration-tests \
         scalastyle test:scalastyle \
     | awk '{if($1~/error/)print}' \
 )
