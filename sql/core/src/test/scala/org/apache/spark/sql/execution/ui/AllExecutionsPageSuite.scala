@@ -39,12 +39,11 @@ class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
 
   var kvstore: ElementTrackingStore = _
 
-  before {
-    kvstore = new ElementTrackingStore(new InMemoryStore, sparkContext.conf)
-  }
-
   after {
-    kvstore.close()
+    if (kvstore != null) {
+      kvstore.close()
+      kvstore = null
+    }
   }
 
   test("SPARK-27019: correctly display SQL page when event reordering happens") {
@@ -80,7 +79,9 @@ class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
 
 
   private def createStatusStore: SQLAppStatusStore = {
-    val listener = new SQLAppStatusListener(sparkContext.conf, kvstore, live = true)
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
     new SQLAppStatusStore(kvstore, Some(listener))
   }
 
