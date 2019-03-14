@@ -58,6 +58,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
   after {
     if (kvstore != null) {
       kvstore.close()
+      kvstore = null
     }
   }
 
