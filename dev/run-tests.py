@@ -175,9 +175,11 @@ def run_apache_rat_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "check-license")])
 
 
-def run_scala_style_checks():
+def run_scala_style_checks(build_profiles):
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Scala style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala"), profiles])
 
 
 def run_java_style_checks(build_profiles):
@@ -359,7 +361,10 @@ def build_apache_spark(build_tool, hadoop_version):
 def detect_binary_inop_with_mima(hadoop_version):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "mima")] + build_profiles)
+    profiles = " ".join(build_profiles)
+    print("[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
+          profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "mima"), profiles])
 
 
 def run_scala_tests_maven(test_profiles):
@@ -582,7 +587,8 @@ def main():
     if not changed_files or any(f.endswith(".scala")
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
-        run_scala_style_checks()
+        build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+        run_scala_style_checks(build_profiles)
     should_run_java_style_checks = False
     if not changed_files or any(f.endswith(".java")
                                 or f.endswith("checkstyle.xml")
