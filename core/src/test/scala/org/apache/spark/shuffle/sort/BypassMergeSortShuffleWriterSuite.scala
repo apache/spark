@@ -127,6 +127,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockResolver,
       shuffleHandle,
       0, // MapId
+      taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics
     )
@@ -151,6 +152,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockResolver,
       shuffleHandle,
       0, // MapId
+      taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics
     )
@@ -186,6 +188,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockResolver,
       shuffleHandle,
       0, // MapId
+      taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics
     )
@@ -208,6 +211,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockResolver,
       shuffleHandle,
       0, // MapId
+      taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics
     )

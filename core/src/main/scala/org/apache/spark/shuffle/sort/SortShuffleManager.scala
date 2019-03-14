@@ -150,6 +150,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           bypassMergeSortHandle,
           mapId,
+          context,
           env.conf,
           metrics)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
