@@ -186,17 +186,23 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   private def decommissionSelf(): Boolean = {
-    logDebug("Decommissioning self")
-    decommissioned = true
-    // Tell master we are are decommissioned so it stops trying to schedule us
-    if (driver.nonEmpty) {
-      driver.get.send(DecommissionExecutor(executorId))
+    logError("Decommissioning self")
+    try {
+      decommissioned = true
+      // Tell master we are are decommissioned so it stops trying to schedule us
+      if (driver.nonEmpty) {
+        driver.get.send(DecommissionExecutor(executorId))
+      }
+      if (executor != null) {
+        executor.decommission()
+      }
+      // Return true since we are handling a signal
+      true
+    } catch {
+      case e: Exception =>
+        logError(s"Error ${e} during attempt to decommission self")
+        false
     }
-    if (executor != null) {
-      executor.decommission()
-    }
-    // Return true since we are handling a signal
-    true
   }
 }
 
