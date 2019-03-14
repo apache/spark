@@ -84,7 +84,7 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Return root references and `GetStructField`s.
+   * Return root references that are individually accessed as a whole, and `GetStructField`s.
    */
   private def collectRootReferenceAndGetStructField(plan: LogicalPlan): Seq[Expression] = {
     def helper(e: Expression): Seq[Expression] = e match {

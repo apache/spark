@@ -47,9 +47,9 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     'employer.struct(employer))
 
   test("Pushing a single nested field projection") {
-    testSingleFieldPushDown("limit", (input: LogicalPlan) => input.limit(5))
-    testSingleFieldPushDown("repartition", (input: LogicalPlan) => input.repartition(1))
-    testSingleFieldPushDown("sample", (input: LogicalPlan) => Sample(0.0, 0.6, false, 11L, input))
+    testSingleFieldPushDown((input: LogicalPlan) => input.limit(5))
+    testSingleFieldPushDown((input: LogicalPlan) => input.repartition(1))
+    testSingleFieldPushDown((input: LogicalPlan) => Sample(0.0, 0.6, false, 11L, input))
   }
 
   test("Pushing multiple nested field projection") {
@@ -82,9 +82,14 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
     val optimized = Optimize.execute(query)
 
+    val aliases = collectGeneratedAliases(optimized)
+
     val expected = contact
-      .select('id, ConcatWs(Seq(first, last)))
+      .select('id, first.as(aliases(0)), last.as(aliases(1)))
       .limit(5)
+      .select(
+        'id,
+        ConcatWs(Seq($"${aliases(0)}", $"${aliases(1)}")).as("concat_ws(name.first, name.last)"))
       .analyze
     comparePlans(optimized, expected)
   }
@@ -179,33 +184,14 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val optimized = Optimize.execute(query)
 
     val expected = contact
+      .select('id, 'name)
+      .limit(5)
       .select('id, GetStructField('name, 0, Some("first")), 'name)
-      .limit(5)
       .analyze
     comparePlans(optimized, expected)
   }
 
-  test("Do not optimize when all fields are used") {
-    val first = GetStructField('name, 0, Some("first"))
-    val middle = GetStructField('name, 1, Some("middle"))
-    val last = GetStructField('name, 2, Some("last"))
-
-    val query = contact
-      .limit(5)
-      .select('id, first, middle, last)
-      .analyze
-
-    val optimized = Optimize.execute(query)
-
-    val expected = contact
-      .select('id, first, middle, last)
-      .limit(5)
-      .analyze
-
-    comparePlans(optimized, expected)
-  }
-
-  private def testSingleFieldPushDown(name: String, op: LogicalPlan => LogicalPlan): Unit = {
+  private def testSingleFieldPushDown(op: LogicalPlan => LogicalPlan): Unit = {
     val middle = GetStructField('name, 1, Some("middle"))
 
     val query = op(contact).select(middle).analyze
