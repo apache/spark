@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml
 
+import com.fasterxml.jackson.annotation.JsonIgnore
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.internal.Logging
@@ -29,53 +31,84 @@ import org.apache.spark.sql.{DataFrame, Dataset}
  * after each operation (the event should document this).
  *
  * @note This is supported via [[Pipeline]] and [[PipelineModel]].
+ * @note This is experimental and unstable. Do not use this unless you fully
+ *   understand what `Unstable` means.
  */
 @Unstable
-sealed trait MLEvent extends SparkListenerEvent
+sealed trait MLEvent extends SparkListenerEvent {
+  // Do not log ML events in event log. It should be revisited to see
+  // how it works with history server.
+  protected[spark] override def logEvent: Boolean = false
+}
 
 /**
  * Event fired before `Transformer.transform`.
  */
 @Unstable
-case class TransformStart(transformer: Transformer, input: Dataset[_]) extends MLEvent
+case class TransformStart() extends MLEvent {
+  @JsonIgnore var transformer: Transformer = _
+  @JsonIgnore var input: Dataset[_] = _
+}
+
 /**
  * Event fired after `Transformer.transform`.
  */
 @Unstable
-case class TransformEnd(transformer: Transformer, output: Dataset[_]) extends MLEvent
+case class TransformEnd() extends MLEvent {
+  @JsonIgnore var transformer: Transformer = _
+  @JsonIgnore var output: Dataset[_] = _
+}
 
 /**
  * Event fired before `Estimator.fit`.
  */
 @Unstable
-case class FitStart[M <: Model[M]](estimator: Estimator[M], dataset: Dataset[_]) extends MLEvent
+case class FitStart[M <: Model[M]]() extends MLEvent {
+  @JsonIgnore var estimator: Estimator[M] = _
+  @JsonIgnore var dataset: Dataset[_] = _
+}
+
 /**
  * Event fired after `Estimator.fit`.
  */
 @Unstable
-case class FitEnd[M <: Model[M]](estimator: Estimator[M], model: M) extends MLEvent
+case class FitEnd[M <: Model[M]]() extends MLEvent {
+  @JsonIgnore var estimator: Estimator[M] = _
+  @JsonIgnore var model: M = _
+}
 
 /**
  * Event fired before `MLReader.load`.
  */
 @Unstable
-case class LoadInstanceStart[T](reader: MLReader[T], path: String) extends MLEvent
+case class LoadInstanceStart[T](path: String) extends MLEvent {
+  @JsonIgnore var reader: MLReader[T] = _
+}
+
 /**
  * Event fired after `MLReader.load`.
  */
 @Unstable
-case class LoadInstanceEnd[T](reader: MLReader[T], instance: T) extends MLEvent
+case class LoadInstanceEnd[T]() extends MLEvent {
+  @JsonIgnore var reader: MLReader[T] = _
+  @JsonIgnore var instance: T = _
+}
 
 /**
  * Event fired before `MLWriter.save`.
  */
 @Unstable
-case class SaveInstanceStart(writer: MLWriter, path: String) extends MLEvent
+case class SaveInstanceStart(path: String) extends MLEvent {
+  @JsonIgnore var writer: MLWriter = _
+}
+
 /**
  * Event fired after `MLWriter.save`.
  */
 @Unstable
-case class SaveInstanceEnd(writer: MLWriter, path: String) extends MLEvent
+case class SaveInstanceEnd(path: String) extends MLEvent {
+  @JsonIgnore var writer: MLWriter = _
+}
 
 /**
  * A small trait that defines some methods to send [[org.apache.spark.ml.MLEvent]].
@@ -91,11 +124,15 @@ private[ml] trait MLEvents extends Logging {
 
   def withFitEvent[M <: Model[M]](
       estimator: Estimator[M], dataset: Dataset[_])(func: => M): M = {
-    val startEvent = FitStart(estimator, dataset)
+    val startEvent = FitStart[M]()
+    startEvent.estimator = estimator
+    startEvent.dataset = dataset
     logEvent(startEvent)
     listenerBus.post(startEvent)
     val model: M = func
-    val endEvent = FitEnd(estimator, model)
+    val endEvent = FitEnd[M]()
+    endEvent.estimator = estimator
+    endEvent.model = model
     logEvent(endEvent)
     listenerBus.post(endEvent)
     model
@@ -103,34 +140,42 @@ private[ml] trait MLEvents extends Logging {
 
   def withTransformEvent(
       transformer: Transformer, input: Dataset[_])(func: => DataFrame): DataFrame = {
-    val startEvent = TransformStart(transformer, input)
+    val startEvent = TransformStart()
+    startEvent.transformer = transformer
+    startEvent.input = input
     logEvent(startEvent)
     listenerBus.post(startEvent)
     val output: DataFrame = func
-    val endEvent = TransformEnd(transformer, output)
+    val endEvent = TransformEnd()
+    endEvent.transformer = transformer
+    endEvent.output = output
     logEvent(endEvent)
     listenerBus.post(endEvent)
     output
   }
 
   def withLoadInstanceEvent[T](reader: MLReader[T], path: String)(func: => T): T = {
-    val startEvent = LoadInstanceStart(reader, path)
+    val startEvent = LoadInstanceStart[T](path)
+    startEvent.reader = reader
     logEvent(startEvent)
     listenerBus.post(startEvent)
     val instance: T = func
-    val endEvent = LoadInstanceEnd(reader, instance)
+    val endEvent = LoadInstanceEnd[T]()
+    endEvent.reader = reader
+    endEvent.instance = instance
     logEvent(endEvent)
     listenerBus.post(endEvent)
     instance
   }
 
   def withSaveInstanceEvent(writer: MLWriter, path: String)(func: => Unit): Unit = {
-    listenerBus.post(SaveInstanceEnd(writer, path))
-    val startEvent = SaveInstanceStart(writer, path)
+    val startEvent = SaveInstanceStart(path)
+    startEvent.writer = writer
     logEvent(startEvent)
     listenerBus.post(startEvent)
     func
-    val endEvent = SaveInstanceEnd(writer, path)
+    val endEvent = SaveInstanceEnd(path)
+    endEvent.writer = writer
     logEvent(endEvent)
     listenerBus.post(endEvent)
   }

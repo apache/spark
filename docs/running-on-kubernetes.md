@@ -702,7 +702,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Add the label specified by <code>LabelName</code> to the executor pods.
     For example, <code>spark.kubernetes.executor.label.something=true</code>.
-    Note that Spark also adds its own labels to the driver pod
+    Note that Spark also adds its own labels to the executor pod
     for bookkeeping purposes.
   </td>
 </tr>
@@ -990,6 +990,34 @@ See the [configuration page](configuration.html) for information on Spark config
   Specify whether executor pods should be deleted in case of failure or normal termination.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.submission.connectionTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Connection timeout in milliseconds for the kubernetes client to use for starting the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.submission.requestTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Request timeout in milliseconds for the kubernetes client to use for starting the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Connection timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.requestTimeout</code></td>
+  <td>10000</td>
+  <td>
+    Request timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
+  </td>
+</tr>
 </table>
 
 #### Pod template properties
@@ -1027,7 +1055,7 @@ See the below table for the full list of pod specifications that will be overwri
   <td>annotations</td>
   <td>Adds the annotations from <code>spark.kubernetes.{driver,executor}.annotation.*</code></td>
   <td>
-    Spark will add additional labels specified by the spark configuration.
+    Spark will add additional annotations specified by the spark configuration.
   </td>
 </tr>
 </table>

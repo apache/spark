@@ -1270,7 +1270,8 @@ waiting to recompute a lost partition.
 
 Spark automatically monitors cache usage on each node and drops out old data partitions in a
 least-recently-used (LRU) fashion. If you would like to manually remove an RDD instead of waiting for
-it to fall out of the cache, use the `RDD.unpersist()` method.
+it to fall out of the cache, use the `RDD.unpersist()` method. Note that this method does not
+block by default. To block until resources are freed, specify `blocking=true` when calling this method.
 
 # Shared Variables
 
@@ -1341,6 +1342,12 @@ After the broadcast variable is created, it should be used instead of the value 
 run on the cluster so that `v` is not shipped to the nodes more than once. In addition, the object
 `v` should not be modified after it is broadcast in order to ensure that all nodes get the same
 value of the broadcast variable (e.g. if the variable is shipped to a new node later).
+
+To release the resources that the broadcast variable copied onto executors, call `.unpersist()`.
+If the broadcast is used again afterwards, it will be re-broadcast. To permanently release all
+resources used by the broadcast variable, call `.destroy()`. The broadcast variable can't be used
+after that. Note that these methods do not block by default. To block until resources are freed,
+specify `blocking=true` when calling them.
 
 ## Accumulators
 

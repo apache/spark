@@ -1395,7 +1395,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    df.unpersist()
+    df.unpersist(blocking = true)
     nullTest()
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()

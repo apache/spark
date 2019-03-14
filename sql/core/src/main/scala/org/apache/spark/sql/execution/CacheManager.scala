@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
@@ -145,17 +145,19 @@ class CacheManager extends Logging {
         _.sameResult(plan)
       }
     val plansToUncache = mutable.Buffer[CachedData]()
-    writeLock {
+    readLock {
       val it = cachedData.iterator()
       while (it.hasNext) {
         val cd = it.next()
         if (shouldRemove(cd.plan)) {
           plansToUncache += cd
-          it.remove()
         }
       }
     }
     plansToUncache.foreach { cd =>
+      writeLock {
+        cachedData.remove(cd)
+      }
       cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
     }
     // Re-compile dependent cached queries after removing the cached query.
@@ -193,24 +195,25 @@ class CacheManager extends Logging {
       spark: SparkSession,
       condition: CachedData => Boolean): Unit = {
     val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
-    writeLock {
+    readLock {
       val it = cachedData.iterator()
       while (it.hasNext) {
         val cd = it.next()
         if (condition(cd)) {
           needToRecache += cd
-          // Remove the cache entry before we create a new one, so that we can have a different
-          // physical plan.
-          it.remove()
         }
       }
     }
     needToRecache.map { cd =>
+      writeLock {
+        // Remove the cache entry before we create a new one, so that we can have a different
+        // physical plan.
+        cachedData.remove(cd)
+      }
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val plan = spark.sessionState.executePlan(cd.plan).executedPlan
       val newCache = InMemoryRelation(
-        cacheBuilder = cd.cachedRepresentation
-          .cacheBuilder.copy(cachedPlan = plan)(_cachedColumnBuffers = null),
+        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = plan),
         logicalPlan = cd.plan)
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       writeLock {
@@ -236,6 +239,7 @@ class CacheManager extends Logging {
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
+      case command: IgnoreCachedData => command
       // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
       // canonicalizing plans, so that plans which are same except hint can hit the same cache.
       // However, we also want to keep the hint info after cache lookup. Here we skip the hint

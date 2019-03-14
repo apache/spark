@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources.v2.writer;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.SupportsBatchWrite;
 import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -64,6 +65,12 @@ public interface WriteBuilder {
    * {@link SupportsSaveMode}.
    */
   default BatchWrite buildForBatch() {
-    throw new UnsupportedOperationException("Batch scans are not supported");
+    throw new UnsupportedOperationException(getClass().getName() +
+      " does not support batch write");
+  }
+
+  default StreamingWrite buildForStreaming() {
+    throw new UnsupportedOperationException(getClass().getName() +
+      " does not support streaming write");
   }
 }

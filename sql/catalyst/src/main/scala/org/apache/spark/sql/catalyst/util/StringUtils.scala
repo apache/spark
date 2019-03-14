@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
-object StringUtils {
+object StringUtils extends Logging {
 
   /**
    * Validate and convert SQL 'like' pattern to a Java regular expression.
@@ -92,20 +96,29 @@ object StringUtils {
 
   /**
    * Concatenation of sequence of strings to final string with cheap append method
-   * and one memory allocation for the final string.
+   * and one memory allocation for the final string.  Can also bound the final size of
+   * the string.
    */
-  class StringConcat {
-    private val strings = new ArrayBuffer[String]
-    private var length: Int = 0
+  class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+    protected val strings = new ArrayBuffer[String]
+    protected var length: Int = 0
+
+    def atLimit: Boolean = length >= maxLength
 
     /**
      * Appends a string and accumulates its length to allocate a string buffer for all
-     * appended strings once in the toString method.
+     * appended strings once in the toString method.  Returns true if the string still
+     * has room for further appends before it hits its max limit.
      */
     def append(s: String): Unit = {
       if (s != null) {
-        strings.append(s)
-        length += s.length
+        val sLen = s.length
+        if (!atLimit) {
+          val available = maxLength - length
+          val stringToAppend = if (available >= sLen) s else s.substring(0, available)
+          strings.append(stringToAppend)
+        }
+        length += sLen
       }
     }
 
@@ -114,9 +127,36 @@ object StringUtils {
      * returns concatenated string.
      */
     override def toString: String = {
-      val result = new java.lang.StringBuilder(length)
+      val finalLength = if (atLimit) maxLength else length
+      val result = new java.lang.StringBuilder(finalLength)
       strings.foreach(result.append)
       result.toString
+    }
+  }
+
+  /**
+   * A string concatenator for plan strings.  Uses length from a configured value, and
+   *  prints a warning the first time a plan is truncated.
+   */
+  class PlanStringConcat extends StringConcat(Math.max(0, SQLConf.get.maxPlanStringLength - 30)) {
+    override def toString: String = {
+      if (atLimit) {
+        logWarning(
+          "Truncated the string representation of a plan since it was too long. The " +
+            s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
+            "can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
+        val truncateMsg = if (maxLength == 0) {
+          s"Truncated plan of $length characters"
+        } else {
+          s"... ${length - maxLength} more characters"
+        }
+        val result = new java.lang.StringBuilder(maxLength + truncateMsg.length)
+        strings.foreach(result.append)
+        result.append(truncateMsg)
+        result.toString
+      } else {
+        super.toString
+      }
     }
   }
 }
