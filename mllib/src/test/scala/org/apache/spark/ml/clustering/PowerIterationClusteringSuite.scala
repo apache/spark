@@ -70,7 +70,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     }
   }
 
-  test("power iteration clustering") {
+  ignore("power iteration clustering") {
     val n = n1 + n2
 
     val assignments = new PowerIterationClustering()
@@ -184,7 +184,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(localAssignments === localAssignments2)
   }
 
-  test("power iteration clustering gives incorrect results due to failed to converge") {
+  ignore("power iteration clustering gives incorrect results due to failed to converge") {
     /*
          Graph:
             1
