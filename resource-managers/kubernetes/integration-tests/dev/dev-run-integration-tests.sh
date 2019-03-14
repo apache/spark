@@ -32,10 +32,12 @@ INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
 MVN="$TEST_ROOT_DIR/build/mvn"
 
-SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
+export SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
+
+echo $SCALA_VERSION
 
 # Parse arguments
 while (( "$#" )); do
