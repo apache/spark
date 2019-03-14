@@ -53,7 +53,7 @@ abstract class FileTable(
       s"Unable to infer schema for $name. It must be specified manually.")
   }.asNullable
 
-  override def schema(): StructType = {
+  override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
       "in the data schema", caseSensitive)
