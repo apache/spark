@@ -19,6 +19,8 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -32,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
-import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, ExecutionListenerManager, QueryExecutionListener}
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -94,6 +96,11 @@ private[sql] class SessionState(
       }
     }
     hadoopConf
+  }
+
+  def newHadoopConfWithCaseInsensitiveOptions(options: CaseInsensitiveStringMap): Configuration = {
+    // Hadoop configurations are case sensitive.
+    newHadoopConfWithOptions(options.getOriginalMap.asScala.toMap)
   }
 
   /**

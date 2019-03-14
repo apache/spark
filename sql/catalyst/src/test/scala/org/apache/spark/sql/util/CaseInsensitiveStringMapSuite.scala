@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.util
 
+import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
@@ -79,5 +81,31 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     intercept[NumberFormatException]{
       options.getDouble("foo", 0.1d)
     }
+  }
+
+  test("getOriginalMap") {
+    val originalMap = new util.HashMap[String, String] {
+      put("Foo", "Bar")
+      put("OFO", "ABR")
+      put("OoF", "bar")
+    }
+
+    val options = new CaseInsensitiveStringMap(originalMap)
+    assert(options.getOriginalMap.equals(originalMap))
+
+    val key = "Key"
+    val value = "value"
+    originalMap.put(key, value)
+    options.put(key, value)
+    originalMap.put(key, value)
+    assert(options.getOriginalMap.equals(originalMap))
+
+    val removedKey = "OFO"
+    originalMap.remove(removedKey)
+    options.remove(removedKey)
+    assert(options.getOriginalMap.equals(originalMap))
+
+    options.clear()
+    assert(options.getOriginalMap.isEmpty)
   }
 }

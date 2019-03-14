@@ -35,11 +35,11 @@ abstract class FileTable(
   extends Table with SupportsBatchRead with SupportsBatchWrite {
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
-    val scalaMap = options.asScala.toMap
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(scalaMap)
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithCaseInsensitiveOptions(options)
     val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
       checkEmptyGlobPath = true, checkFilesExist = true)
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+    val scalaMap = options.getOriginalMap.asScala.toMap
     new InMemoryFileIndex(
       sparkSession, rootPathsSpecified, scalaMap, userSpecifiedSchema, fileStatusCache)
   }

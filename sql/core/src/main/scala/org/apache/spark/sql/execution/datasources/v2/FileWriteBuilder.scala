@@ -64,16 +64,14 @@ abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[St
     val sparkSession = SparkSession.active
     validateInputs(sparkSession.sessionState.conf.caseSensitiveAnalysis)
     val path = new Path(paths.head)
-    val optionsAsScala = options.asScala.toMap
-
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithCaseInsensitiveOptions(options)
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = paths.head)
     lazy val description =
-      createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, optionsAsScala)
+      createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
     val fs = path.getFileSystem(hadoopConf)
     mode match {
