@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.execution.adaptive.QueryStageInput
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -53,7 +52,6 @@ private[execution] object SparkPlanInfo {
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val children = plan match {
       case ReusedExchangeExec(_, child) => child :: Nil
-      case i: QueryStageInput => i.childStage :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>

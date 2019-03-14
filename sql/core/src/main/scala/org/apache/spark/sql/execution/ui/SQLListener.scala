@@ -38,13 +38,6 @@ case class SparkListenerSQLExecutionStart(
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerSQLAdaptiveExecutionUpdate(
-    executionId: Long,
-    physicalPlanDescription: String,
-    sparkPlanInfo: SparkPlanInfo)
-  extends SparkListenerEvent
-
-@DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent {
 

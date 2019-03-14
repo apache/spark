@@ -411,7 +411,8 @@ class PlannerSuite extends SharedSQLContext {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning))
+      DummySparkPlan(outputPartitioning = partitioning),
+      None)
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 2) {
@@ -426,7 +427,8 @@ class PlannerSuite extends SharedSQLContext {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning))
+      DummySparkPlan(outputPartitioning = partitioning),
+      None)
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
@@ -460,7 +462,8 @@ class PlannerSuite extends SharedSQLContext {
       DummySparkPlan(
         children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
         requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Seq.empty)))
+        requiredChildOrdering = Seq(Seq.empty)),
+      None)
 
     val inputPlan = SortMergeJoinExec(
       Literal(1) :: Nil,
