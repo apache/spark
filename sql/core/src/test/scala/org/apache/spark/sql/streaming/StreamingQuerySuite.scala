@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable
 
+import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.lang3.RandomStringUtils
+import org.apache.hadoop.fs.Path
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -131,7 +134,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val mapped = inputData.toDS().map { 6 / _}
 
     testStream(mapped)(
-      AssertOnQuery(_.isActive === true),
+      AssertOnQuery(_.isActive),
       AssertOnQuery(_.exception.isEmpty),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
@@ -145,7 +148,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 2000, expectedReturnValue = true),
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 10, expectedReturnValue = true),
       StartStream(),
-      AssertOnQuery(_.isActive === true),
+      AssertOnQuery(_.isActive),
       AddData(inputData, 0),
       ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
@@ -167,7 +170,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val mapped = inputData.toDS().map { 6 / _}
 
     testStream(mapped)(
-      AssertOnQuery(_.isActive === true),
+      AssertOnQuery(_.isActive),
       StopStream,
       AddData(inputData, 1, 2),
       StartStream(trigger = Once),
@@ -269,7 +272,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on `latestOffset`
       AssertStreamExecThreadIsWaitingForTime(1050),
       AssertOnQuery(_.status.isDataAvailable === false),
-      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
@@ -277,16 +280,16 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertClockTime(1050),
       // will block on `planInputPartitions` that needs 1350
       AssertStreamExecThreadIsWaitingForTime(1150),
-      AssertOnQuery(_.status.isDataAvailable === true),
-      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.isDataAvailable),
+      AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       AdvanceManualClock(100), // time = 1150 to unblock `planInputPartitions`
       AssertClockTime(1150),
       AssertStreamExecThreadIsWaitingForTime(1500), // will block on map task that needs 1500
-      AssertOnQuery(_.status.isDataAvailable === true),
-      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.isDataAvailable),
+      AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
@@ -295,7 +298,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertClockTime(1500),
       CheckAnswer(2),
       AssertStreamExecThreadIsWaitingForTime(2000),  // will block until the next trigger
-      AssertOnQuery(_.status.isDataAvailable === true),
+      AssertOnQuery(_.status.isDataAvailable),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
@@ -338,7 +341,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertClockTime(2000),
       AssertStreamExecThreadIsWaitingForTime(3000),  // will block waiting for next trigger time
       CheckAnswer(4),
-      AssertOnQuery(_.status.isDataAvailable === true),
+      AssertOnQuery(_.status.isDataAvailable),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
@@ -913,6 +916,189 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       StartStream(trigger = Trigger.Continuous(100)),
       AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
+  }
+
+  test("special characters in checkpoint path") {
+    withTempDir { tempDir =>
+      val checkpointDir = new File(tempDir, "chk @#chk")
+      val inputData = MemoryStream[Int]
+      inputData.addData(1)
+      val q = inputData.toDF()
+        .writeStream
+        .format("noop")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .start()
+      try {
+        q.processAllAvailable()
+        assert(checkpointDir.listFiles().toList.nonEmpty)
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
+  /**
+   * Copy the checkpoint generated by Spark 2.4.0 from test resource to `dir` to set up a legacy
+   * streaming checkpoint.
+   */
+  private def setUp2dot4dot0Checkpoint(dir: File): Unit = {
+    val input = getClass.getResource("/structured-streaming/escaped-path-2.4.0")
+    assert(input != null, "cannot find test resource '/structured-streaming/escaped-path-2.4.0'")
+    val inputDir = new File(input.toURI)
+
+    // Copy test files to tempDir so that we won't modify the original data.
+    FileUtils.copyDirectory(inputDir, dir)
+
+    // Spark 2.4 and earlier escaped the _spark_metadata path once
+    val legacySparkMetadataDir = new File(
+      dir,
+      new Path("output %@#output/_spark_metadata").toUri.toString)
+
+    // Migrate from legacy _spark_metadata directory to the new _spark_metadata directory.
+    // Ideally we should copy "_spark_metadata" directly like what the user is supposed to do to
+    // migrate to new version. However, in our test, "tempDir" will be different in each run and
+    // we need to fix the absolute path in the metadata to match "tempDir".
+    val sparkMetadata = FileUtils.readFileToString(new File(legacySparkMetadataDir, "0"), "UTF-8")
+    FileUtils.write(
+      new File(legacySparkMetadataDir, "0"),
+      sparkMetadata.replaceAll("TEMPDIR", dir.getCanonicalPath),
+      "UTF-8")
+  }
+
+  test("detect escaped path and report the migration guide") {
+    // Assert that the error message contains the migration conf, path and the legacy path.
+    def assertMigrationError(errorMessage: String, path: File, legacyPath: File): Unit = {
+      Seq(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key,
+          path.getCanonicalPath,
+          legacyPath.getCanonicalPath).foreach { msg =>
+        assert(errorMessage.contains(msg))
+      }
+    }
+
+    withTempDir { tempDir =>
+      setUp2dot4dot0Checkpoint(tempDir)
+
+      // Here are the paths we will use to create the query
+      val outputDir = new File(tempDir, "output %@#output")
+      val checkpointDir = new File(tempDir, "chk %@#chk")
+      val sparkMetadataDir = new File(tempDir, "output %@#output/_spark_metadata")
+
+      // The escaped paths used by Spark 2.4 and earlier.
+      // Spark 2.4 and earlier escaped the checkpoint path three times
+      val legacyCheckpointDir = new File(
+        tempDir,
+        new Path(new Path(new Path("chk %@#chk").toUri.toString).toUri.toString).toUri.toString)
+      // Spark 2.4 and earlier escaped the _spark_metadata path once
+      val legacySparkMetadataDir = new File(
+        tempDir,
+        new Path("output %@#output/_spark_metadata").toUri.toString)
+
+      // Reading a file sink output in a batch query should detect the legacy _spark_metadata
+      // directory and throw an error
+      val e = intercept[SparkException] {
+        spark.read.load(outputDir.getCanonicalPath).as[Int]
+      }
+      assertMigrationError(e.getMessage, sparkMetadataDir, legacySparkMetadataDir)
+
+      // Restarting the streaming query should detect the legacy _spark_metadata directory and throw
+      // an error
+      val inputData = MemoryStream[Int]
+      val e2 = intercept[SparkException] {
+        inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start(outputDir.getCanonicalPath)
+      }
+      assertMigrationError(e2.getMessage, sparkMetadataDir, legacySparkMetadataDir)
+
+      // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
+      FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
+
+      // Restarting the streaming query should detect the legacy checkpoint path and throw an error
+      val e3 = intercept[SparkException] {
+        inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start(outputDir.getCanonicalPath)
+      }
+      assertMigrationError(e3.getMessage, checkpointDir, legacyCheckpointDir)
+
+      // Fix the checkpoint path and verify that the user can migrate the issue by moving files.
+      FileUtils.moveDirectory(legacyCheckpointDir, checkpointDir)
+
+      val q = inputData.toDF()
+        .writeStream
+        .format("parquet")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .start(outputDir.getCanonicalPath)
+      try {
+        q.processAllAvailable()
+        // Check the query id to make sure it did use checkpoint
+        assert(q.id.toString == "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+
+        // Verify that the batch query can read "_spark_metadata" correctly after migration.
+        val df = spark.read.load(outputDir.getCanonicalPath)
+        assert(df.queryExecution.executedPlan.toString contains "MetadataLogFileIndex")
+        checkDatasetUnorderly(df.as[Int], 1, 2, 3)
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
+  test("ignore the escaped path check when the flag is off") {
+    withTempDir { tempDir =>
+      setUp2dot4dot0Checkpoint(tempDir)
+      val outputDir = new File(tempDir, "output %@#output")
+      val checkpointDir = new File(tempDir, "chk %@#chk")
+
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key -> "false") {
+        // Verify that the batch query ignores the legacy "_spark_metadata"
+        val df = spark.read.load(outputDir.getCanonicalPath)
+        assert(!(df.queryExecution.executedPlan.toString contains "MetadataLogFileIndex"))
+        checkDatasetUnorderly(df.as[Int], 1, 2, 3)
+
+        val inputData = MemoryStream[Int]
+        val q = inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start(outputDir.getCanonicalPath)
+        try {
+          q.processAllAvailable()
+          // Check the query id to make sure it ignores the legacy checkpoint
+          assert(q.id.toString != "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+        } finally {
+          q.stop()
+        }
+      }
+    }
+  }
+
+  test("containsSpecialCharsInPath") {
+    Seq("foo/b ar",
+        "/foo/b ar",
+        "file:/foo/b ar",
+        "file://foo/b ar",
+        "file:///foo/b ar",
+        "file://foo:bar@bar/foo/b ar").foreach { p =>
+      assert(StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
+    }
+    Seq("foo/bar",
+        "/foo/bar",
+        "file:/foo/bar",
+        "file://foo/bar",
+        "file:///foo/bar",
+        "file://foo:bar@bar/foo/bar",
+        // Special chars not in a path should not be considered as such urls won't hit the escaped
+        // path issue.
+        "file://foo:b ar@bar/foo/bar",
+        "file://foo:bar@b ar/foo/bar",
+        "file://f oo:bar@bar/foo/bar").foreach { p =>
+      assert(!StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
+    }
   }
 
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */

@@ -139,11 +139,17 @@ private[spark] abstract class WebUI(
     }
   }
 
+  /** @return Whether SSL enabled. Only valid after [[bind]]. */
+  def isSecure: Boolean = serverInfo.map(_.securePort.isDefined).getOrElse(false)
+
+  /** @return The scheme of web interface. Only valid after [[bind]]. */
+  def scheme: String = if (isSecure) "https://" else "http://"
+
   /** @return The url of web interface. Only valid after [[bind]]. */
-  def webUrl: String = s"http://$publicHostName:$boundPort"
+  def webUrl: String = s"${scheme}$publicHostName:${boundPort}"
 
   /** @return The actual port to which this server is bound. Only valid after [[bind]]. */
-  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
+  def boundPort: Int = serverInfo.map(si => si.securePort.getOrElse(si.boundPort)).getOrElse(-1)
 
   /** Stops the server behind this web interface. Only valid after [[bind]]. */
   def stop(): Unit = {

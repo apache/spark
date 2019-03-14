@@ -19,10 +19,11 @@ package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.sql.sources.v2.writer.BatchWrite;
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * An internal base interface of mix-in interfaces for writable {@link Table}. This adds
- * {@link #newWriteBuilder(DataSourceOptions)} that is used to create a write
+ * {@link #newWriteBuilder(CaseInsensitiveStringMap)} that is used to create a write
  * for batch or streaming.
  */
 interface SupportsWrite extends Table {
@@ -31,5 +32,5 @@ interface SupportsWrite extends Table {
    * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
    * this method to configure each data source write.
    */
-  WriteBuilder newWriteBuilder(DataSourceOptions options);
+  WriteBuilder newWriteBuilder(CaseInsensitiveStringMap options);
 }

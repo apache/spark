@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.io.IOException
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -32,12 +33,12 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
-abstract class FileWriteBuilder(options: DataSourceOptions)
+abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
   extends WriteBuilder with SupportsSaveMode {
   private var schema: StructType = _
   private var queryId: String = _
@@ -60,18 +61,17 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
 
   override def buildForBatch(): BatchWrite = {
     validateInputs()
-    val pathName = options.paths().head
-    val path = new Path(pathName)
+    val path = new Path(paths.head)
     val sparkSession = SparkSession.active
-    val optionsAsScala = options.asMap().asScala.toMap
+    val optionsAsScala = options.asScala.toMap
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = pathName)
+      outputPath = paths.head)
     lazy val description =
-      createWriteJobDescription(sparkSession, hadoopConf, job, pathName, optionsAsScala)
+      createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, optionsAsScala)
 
     val fs = path.getFileSystem(hadoopConf)
     mode match {
@@ -83,7 +83,9 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
         null
 
       case SaveMode.Overwrite =>
-        committer.deleteWithJob(fs, path, true)
+        if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
+          throw new IOException(s"Unable to clear directory $path prior to writing to it")
+        }
         committer.setupJob(job)
         new FileBatchWrite(job, description, committer)
 
@@ -104,12 +106,34 @@ abstract class FileWriteBuilder(options: DataSourceOptions)
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
+  /**
+   * Returns whether this format supports the given [[DataType]] in write path.
+   * By default all data types are supported.
+   */
+  def supportsDataType(dataType: DataType): Boolean = true
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def formatName(): String = "ORC"
+   * }}}
+   */
+  def formatName: String
+
   private def validateInputs(): Unit = {
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
     assert(mode != null, "Missing save mode")
-    assert(options.paths().length == 1)
+    assert(paths.length == 1)
     DataSource.validateSchema(schema)
+    schema.foreach { field =>
+      if (!supportsDataType(field.dataType)) {
+        throw new AnalysisException(
+          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
+      }
+    }
   }
 
   private def getJobInstance(hadoopConf: Configuration, path: Path): Job = {

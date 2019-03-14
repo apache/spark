@@ -17,8 +17,9 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile, PartitioningUtils}
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
@@ -44,6 +45,19 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
 
   def buildColumnarReader(partitionedFile: PartitionedFile): PartitionReader[ColumnarBatch] = {
     throw new UnsupportedOperationException("Cannot create columnar reader.")
+  }
+
+  protected def getReadDataSchema(
+      readSchema: StructType,
+      partitionSchema: StructType,
+      isCaseSensitive: Boolean): StructType = {
+    val partitionNameSet =
+      partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+    val fields = readSchema.fields.filterNot { field =>
+      partitionNameSet.contains(PartitioningUtils.getColName(field, isCaseSensitive))
+    }
+
+    StructType(fields)
   }
 }
 

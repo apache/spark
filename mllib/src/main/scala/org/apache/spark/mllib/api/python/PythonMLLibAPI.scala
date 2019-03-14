@@ -98,7 +98,7 @@ private[python] class PythonMLLibAPI extends Serializable {
         List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
       }
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -336,7 +336,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = isotonicRegressionAlg.run(input)
       List[AnyRef](model.boundaryVector, model.predictionVector).asJava
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -366,7 +366,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -411,7 +411,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK)))
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -704,7 +704,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
     } finally {
-      dataJRDD.rdd.unpersist(blocking = false)
+      dataJRDD.rdd.unpersist()
     }
   }
 
@@ -742,7 +742,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       DecisionTree.train(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), strategy)
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -783,7 +783,7 @@ private[python] class PythonMLLibAPI extends Serializable {
         RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       }
     } finally {
-      cached.unpersist(blocking = false)
+      cached.unpersist()
     }
   }
 
@@ -814,7 +814,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       GradientBoostedTrees.train(cached, boostingStrategy)
     } finally {
-      cached.unpersist(blocking = false)
+      cached.unpersist()
     }
   }
 

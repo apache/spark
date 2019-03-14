@@ -19,11 +19,12 @@ package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.sql.sources.v2.reader.Scan;
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * An internal base interface of mix-in interfaces for readable {@link Table}. This adds
- * {@link #newScanBuilder(DataSourceOptions)} that is used to create a scan for batch, micro-batch,
- * or continuous processing.
+ * {@link #newScanBuilder(CaseInsensitiveStringMap)} that is used to create a scan for batch,
+ * micro-batch, or continuous processing.
  */
 interface SupportsRead extends Table {
 
@@ -34,5 +35,5 @@ interface SupportsRead extends Table {
    * @param options The options for reading, which is an immutable case-insensitive
    *                string-to-string map.
    */
-  ScanBuilder newScanBuilder(DataSourceOptions options);
+  ScanBuilder newScanBuilder(CaseInsensitiveStringMap options);
 }

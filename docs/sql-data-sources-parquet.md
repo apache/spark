@@ -157,9 +157,10 @@ turned it off by default starting from 1.5.0. You may enable it by
 
 ### Hive metastore Parquet table conversion
 
-When reading from and writing to Hive metastore Parquet tables, Spark SQL will try to use its own
-Parquet support instead of Hive SerDe for better performance. This behavior is controlled by the
-`spark.sql.hive.convertMetastoreParquet` configuration, and is turned on by default.
+When reading from Hive metastore Parquet tables and writing to non-partitioned Hive metastore
+Parquet tables, Spark SQL will try to use its own Parquet support instead of Hive SerDe for
+better performance. This behavior is controlled by the `spark.sql.hive.convertMetastoreParquet`
+configuration, and is turned on by default.
 
 #### Hive/Parquet Schema Reconciliation
 

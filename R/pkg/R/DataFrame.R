@@ -950,7 +950,7 @@ setMethod("write.parquet",
 #'
 #' Save the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
-#' Each row becomes a new line in the output file.
+#' Each row becomes a new line in the output file. The text files will be encoded as UTF-8.
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
@@ -1177,11 +1177,50 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "SparkDataFrame"),
           function(x, stringsAsFactors = FALSE) {
+            connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
+            useArrow <- FALSE
+            arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+            if (arrowEnabled) {
+              useArrow <- tryCatch({
+                checkSchemaInArrow(schema(x))
+                TRUE
+              }, error = function(e) {
+                warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
+                               "with Arrow optimization because ",
+                               "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                               "failed, attempting non-optimization. Reason: ",
+                               e))
+                FALSE
+              })
+            }
+
             dtypes <- dtypes(x)
             ncol <- length(dtypes)
             if (ncol <= 0) {
               # empty data.frame with 0 columns and 0 rows
               data.frame()
+            } else if (useArrow) {
+              requireNamespace1 <- requireNamespace
+              if (requireNamespace1("arrow", quietly = TRUE)) {
+                read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
+                as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+
+                portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
+                port <- portAuth[[1]]
+                authSecret <- portAuth[[2]]
+                conn <- socketConnection(
+                  port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+                output <- tryCatch({
+                  doServerAuth(conn, authSecret)
+                  arrowTable <- read_arrow(readRaw(conn))
+                  as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                }, finally = {
+                  close(conn)
+                })
+                return(output)
+              } else {
+                stop("'arrow' package should be installed.")
+              }
             } else {
               # listCols is a list of columns
               listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
@@ -1435,6 +1474,18 @@ setMethod("summarize",
 dapplyInternal <- function(x, func, schema) {
   if (is.character(schema)) {
     schema <- structType(schema)
+  }
+
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  if (arrowEnabled) {
+    if (inherits(schema, "structType")) {
+      checkSchemaInArrow(schema)
+    } else if (is.null(schema)) {
+      stop(paste0("Arrow optimization does not support 'dapplyCollect' yet. Please disable ",
+                  "Arrow optimization or use 'collect' and 'dapply' APIs instead."))
+    } else {
+      stop("'schema' should be DDL-formatted string or structType.")
+    }
   }
 
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],

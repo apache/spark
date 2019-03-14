@@ -29,7 +29,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
   test("data writer") {
     val partition = 1234
     val writer = new MemoryDataWriter(
-      partition, OutputMode.Append(), new StructType().add("i", "int"))
+      partition, new StructType().add("i", "int"))
     writer.write(InternalRow(1))
     writer.write(InternalRow(2))
     writer.write(InternalRow(44))
@@ -43,9 +43,9 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("streaming writer") {
     val sink = new MemorySinkV2
-    val writeSupport = new MemoryStreamingWriteSupport(
-      sink, OutputMode.Append(), new StructType().add("i", "int"))
-    writeSupport.commit(0,
+    val write = new MemoryStreamingWrite(
+      sink, new StructType().add("i", "int"), needTruncate = false)
+    write.commit(0,
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
         MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
@@ -53,7 +53,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
       ))
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    writeSupport.commit(19,
+    write.commit(19,
       Array(
         MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
         MemoryWriterCommitMessage(0, Seq(Row(33)))

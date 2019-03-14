@@ -38,6 +38,7 @@ import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
@@ -73,7 +74,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
       MemoryStreamTableProvider,
       "memory",
       new MemoryStreamTable(this),
-      Map.empty,
+      CaseInsensitiveStringMap.empty(),
       attributes,
       None)(sqlContext.sparkSession)
   }
@@ -84,7 +85,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
 // This class is used to indicate the memory stream data source. We don't actually use it, as
 // memory stream is for test only and we never look it up by name.
 object MemoryStreamTableProvider extends TableProvider {
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
   }
 }
@@ -96,7 +97,7 @@ class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table
 
   override def schema(): StructType = stream.fullSchema()
 
-  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new MemoryStreamScanBuilder(stream)
   }
 }
