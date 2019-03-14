@@ -129,7 +129,7 @@ class CacheManager extends Logging {
       }
     val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
     this.synchronized {
-      cachedData = cachedData.filter(!plansToUncache.contains(_))
+      cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
     }
     plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
 
@@ -170,7 +170,7 @@ class CacheManager extends Logging {
     val needToRecache = cachedData.filter(condition)
     this.synchronized {
       // Remove the cache entry before creating a new ones.
-      cachedData = cachedData.filter(!needToRecache.contains(_))
+      cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
