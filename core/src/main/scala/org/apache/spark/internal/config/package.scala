@@ -360,7 +360,8 @@ package object config {
 
   private[spark] val SHUFFLE_SERVICE_DB_ENABLED =
     ConfigBuilder("spark.shuffle.service.db.enabled")
-      .doc("Whether use db in ExternalShuffleService.")
+      .doc("Whether to use db in ExternalShuffleService. Note that this only affects " +
+        "standalone mode.")
       .booleanConf
       .createWithDefault(true)
 
