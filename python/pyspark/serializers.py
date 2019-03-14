@@ -222,6 +222,17 @@ class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
     """
+    def __init__(self, send_start_stream=True):
+        self._send_start_stream = send_start_stream
+
+    def _init_dump_stream(self, stream):
+        """
+        Called just before writing an Arrow stream
+        """
+        # NOTE: this is required by Pandas UDFs to be called after creating first record batch so
+        # that any errors can be sent back to the JVM, but not interfere with the Arrow stream
+        if self._send_start_stream:
+            write_int(SpecialLengths.START_ARROW_STREAM, stream)
 
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
@@ -241,10 +252,6 @@ class ArrowStreamSerializer(Serializer):
         reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
-
-    def _init_dump_stream(self, stream):
-        """Called just before writing an Arrow stream"""
-        pass
 
     def __repr__(self):
         return "ArrowStreamSerializer"
@@ -338,8 +345,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name):
-        super(ArrowStreamPandasSerializer, self).__init__()
+    def __init__(self, timezone, safecheck, assign_cols_by_name, send_start_stream=True):
+        super(ArrowStreamPandasSerializer, self).__init__(send_start_stream)
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
@@ -351,12 +358,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         s = _arrow_column_to_pandas(arrow_column, from_arrow_type(arrow_column.type))
         s = _check_series_localize_timestamps(s, self._timezone)
         return s
-
-    def _init_dump_stream(self, stream):
-        # Override to signal the start of writing an Arrow stream
-        # NOTE: this is required by Pandas UDFs to be called after creating first record batch so
-        # that any errors can be sent back to the JVM, but not interfere with the Arrow stream
-        write_int(SpecialLengths.START_ARROW_STREAM, stream)
 
     def dump_stream(self, iterator, stream):
         """
