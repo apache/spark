@@ -195,17 +195,10 @@ private[spark] class BasicExecutorFeatureStep(
       case true =>
         logInfo("Adding decommission script to lifecycle")
         new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
-          .withNewPostStart()
-            .withNewExec()
-              .addToCommand("/bin/sh")
-              .addtoCommand("-c")
-              .addtoCommand("exit 1")
-            .endExec()
-          .endPostStart()
           .withNewPreStop()
             .withNewExec()
               .addToCommand("/opt/decom.sh")
-             .endExec()
+            .endExec()
           .endPreStop()
           .endLifecycle()
           .build()
@@ -234,8 +227,8 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
-    logInfo(s"Built container $containerWithLifeCycle")
+    logInfo(s"Built container $containerWithLifecycle")
 
-    SparkPod(executorPod, containerWithLifeCycle)
+    SparkPod(executorPod, containerWithLifecycle)
   }
 }
