@@ -30,6 +30,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
+
 /**
  * This patch was tested using the Oracle docker. Created this integration suite for the same.
  * The ojdbc6-11.2.0.2.0.jar was to be downloaded from the maven repository. Since there was
@@ -55,7 +56,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:16.04"
+    override val imageName = "deepdiver/docker-oracle-xe-11g:2.0"
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
