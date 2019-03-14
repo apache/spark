@@ -24,9 +24,9 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -197,15 +197,15 @@ private[spark] class BasicExecutorFeatureStep(
         new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
           .withNewPostStart()
             .withNewExec()
-              .withCommand(
-                List("/bin/sh", "-c", "exit 1").asJava)
+              .addToCommand("/bin/sh")
+              .addtoCommand("-c")
+              .addtoCommand("exit 1")
             .endExec()
           .endPostStart()
           .withNewPreStop()
             .withNewExec()
-              .withCommand(
-                List("/opt/decom.sh").asJava)
-               .endExec()
+              .addToCommand("/opt/decom.sh")
+             .endExec()
           .endPreStop()
           .endLifecycle()
           .build()
