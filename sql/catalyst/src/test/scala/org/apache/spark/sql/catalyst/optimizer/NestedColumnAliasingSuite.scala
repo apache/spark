@@ -191,6 +191,24 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
+  test("Some nested column means the whole structure") {
+    val nestedRelation = LocalRelation('a.struct('b.struct('c.int, 'd.int, 'e.int)))
+
+    val query = nestedRelation
+      .limit(5)
+      .select(GetStructField('a, 0, Some("b")))
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = nestedRelation
+      .select(GetStructField('a, 0, Some("b")))
+      .limit(5)
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
+
   private def testSingleFieldPushDown(op: LogicalPlan => LogicalPlan): Unit = {
     val middle = GetStructField('name, 1, Some("middle"))
 
