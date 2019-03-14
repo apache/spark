@@ -48,18 +48,14 @@ object SparkTransportConf {
     // specify default thread configuration based on our JVM's allocation of cores (rather than
     // necessarily assuming we have all the machine's cores).
     val numThreads = NettyUtils.defaultNumThreads(numUsableCores)
-    // module threads configuration
-    val (modServerThreads, modClientThreads) =
-      (conf.getInt(s"spark.$module.io.serverThreads", numThreads),
-       conf.getInt(s"spark.$module.io.clientThreads", numThreads))
     // override threads configurations with role specific values if specified
-    val (serverThreads, clientThreads) = role match {
-      case Some(r) => (conf.getInt(s"spark.$r.$module.io.serverThreads", modServerThreads),
-        conf.getInt(s"spark.$r.$module.io.clientThreads", modClientThreads))
-      case None => (modServerThreads, modClientThreads)
+    // config order is role > module > default
+    Seq("serverThreads", "clientThreads").foreach { suffix =>
+      val value = role.flatMap { r => conf.getOption(s"spark.$r.$module.io.$suffix") }
+        .getOrElse(
+          conf.get(s"spark.$module.io.$suffix", numThreads.toString))
+      conf.set(s"spark.$module.io.$suffix", value)
     }
-    conf.set(s"spark.$module.io.serverThreads", serverThreads.toString)
-    conf.set(s"spark.$module.io.clientThreads", clientThreads.toString)
 
     new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)

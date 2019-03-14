@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.internal.config.Network.RPC_NETTY_DISPATCHER_NUM_THREADS
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
@@ -194,20 +195,17 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     endpoints.containsKey(name)
   }
 
-  def getNumOfThreads(conf: SparkConf): Int = {
+  private def getNumOfThreads(conf: SparkConf): Int = {
     val availableCores =
       if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
     // module configuration
-    val modNumThreads = nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
+    val modNumThreads = conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
       .getOrElse(math.max(2, availableCores))
-    // try to get specific threads configurations of driver and executor
-    // override module configurations if specified
-    val executorId = conf.get("spark.executor.id", "")
-    // neither driver nor executor if executor id is not set
+    // get right role
+    val executorId = conf.get(EXECUTOR_ID).getOrElse("")
     val role = executorId match {
       case "" => ""
       case SparkContext.DRIVER_IDENTIFIER => "driver"
-      // any other non-empty values since executor must has "spark.executor.id" set
       case _ => "executor"
     }
     if (role.isEmpty) {

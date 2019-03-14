@@ -31,6 +31,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
@@ -48,7 +49,7 @@ private[netty] class NettyRpcEnv(
     securityManager: SecurityManager,
     numUsableCores: Int) extends RpcEnv(conf) with Logging {
   // try to get specific threads configurations of driver and executor
-  val executorId = conf.get("spark.executor.id", "")
+  val executorId = conf.get(EXECUTOR_ID).getOrElse("")
   // neither driver nor executor if executor id is not set
   val role = executorId match {
     case "" => None
