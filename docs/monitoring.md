@@ -618,33 +618,28 @@ A list of the available metrics, with a short description:
   <tr><th>Executor Level Metric name</th>
       <th>Short description</th>
   </tr>
-    <tr>
+  <tr>
     <td>totalGCTime</td>
     <td>Elapsed time the JVM spent in garbage collection summed in this Executor.
     The value is expressed in milliseconds.</td>
   </tr>
-  </tr>
-    <tr>
+  <tr>
     <td>totalInputBytes</td>
     <td>Total input bytes summed in this Executor.</td>
   </tr>
-  </tr>
-    <tr>
+  <tr>
     <td>totalShuffleRead</td>
     <td>Total shuffer read bytes summed in this Executor.</td>
   </tr>
-  </tr>
-    <tr>
+  <tr>
     <td>totalShuffleWrite</td>
     <td>Total shuffer write bytes summed in this Executor.</td>
   </tr>
-  </tr>
-    <tr>
+  <tr>
     <td>maxMemory</td>
     <td>Total amount of memory available for storage, in bytes.</td>
   </tr>
-  </tr>
-    <tr>
+  <tr>
     <td>memoryMetrics.*</td>
     <td>Current value of memory metrics:</td>
   </tr>
@@ -668,7 +663,7 @@ A list of the available metrics, with a short description:
     <td>peakMemoryMetrics.*</td>
     <td>Peak value of memory (and GC) metrics:</td>
   </tr>
-    <tr>
+  <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.JVMHeapMemory</td>
     <td>Peak memory usage of the heap that is used for object allocation.
     The heap consists of one or more memory pools. The used and committed size of the returned memory usage is the sum of those values of all heap memory pools whereas the init and max size of the returned memory usage represents the setting of the heap memory which may not be the sum of those of all heap memory pools.
