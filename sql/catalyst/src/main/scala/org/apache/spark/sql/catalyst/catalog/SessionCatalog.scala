@@ -47,9 +47,9 @@ object SessionCatalog {
 }
 
 /**
- * An internal catalog that is used by a Spark Session. This internal catalog serves as a
- * proxy to the underlying metastore (e.g. Hive Metastore) and it also manages temporary
- * views and functions of the Spark Session that it belongs to.
+ * An internal catalog that is used by a Spark Session, Rule, LogicalPlan and so on.
+ * This internal catalog serves as a proxy to the underlying metastore (e.g. Hive Metastore)
+ * and it also manages temporary views and functions of the Spark Session that it belongs to.
  *
  * This class must be thread-safe.
  */
