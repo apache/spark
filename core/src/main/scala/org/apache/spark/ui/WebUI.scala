@@ -62,7 +62,7 @@ private[spark] abstract class WebUI(
   def getHandlers: Seq[ServletContextHandler] = handlers
 
   def getDelegatingHandlers: Seq[DelegatingServletContextHandler] = {
-    handlers.map(handler => new DelegatingServletContextHandler(handler))
+    handlers.map(new DelegatingServletContextHandler(_))
   }
 
   /** Attaches a tab to this UI, along with all of its attached pages. */
@@ -102,12 +102,12 @@ private[spark] abstract class WebUI(
   }
 
   /** Attaches a handler to this UI. */
-  def attachNewHandler(contextPath: String,
-                       httpServlet: HttpServlet,
-                       pathSpec: String): Unit = synchronized {
-    val ctx = new ServletContextHandler()
-    ctx.setContextPath("/new-handler")
-    ctx.addServlet(new ServletHolder(httpServlet), "/")
+  def attachHandler(contextPath: String,
+    httpServlet: HttpServlet,
+    pathSpec: String): Unit = synchronized {
+    val ctx = new ServletContextHandler
+    ctx.setContextPath(contextPath)
+    ctx.addServlet(new ServletHolder(httpServlet), pathSpec)
     attachHandler(ctx)
   }
 
@@ -210,29 +210,29 @@ private[spark] abstract class WebUIPage(var prefix: String) {
   def renderJson(request: HttpServletRequest): JValue = JNothing
 }
 
-private[spark] class DelegatingServletContextHandler(servletContextHandler: ServletContextHandler) {
+private[spark] class DelegatingServletContextHandler(handler: ServletContextHandler) {
 
   def prependFilterMapping(filterName: String,
-                           spec: String,
-                           types: EnumSet[DispatcherType]): Unit = {
-    val mapping = new FilterMapping()
+    spec: String,
+    types: EnumSet[DispatcherType]): Unit = {
+    val mapping = new FilterMapping
     mapping.setFilterName(filterName)
     mapping.setPathSpec(spec)
-    mapping.setDispatcherTypes(EnumSet.allOf(classOf[DispatcherType]))
-    servletContextHandler.getServletHandler.prependFilterMapping(mapping)
+    mapping.setDispatcherTypes(types)
+    handler.getServletHandler.prependFilterMapping(mapping)
   }
 
   def addFilter(filterName: String,
-                className: String,
-                filterParams: Map[String, String]): Unit = {
-    val filterHolder = new FilterHolder()
+    className: String,
+    filterParams: Map[String, String]): Unit = {
+    val filterHolder = new FilterHolder
     filterHolder.setName(filterName)
     filterHolder.setClassName(className)
     filterParams.foreach { case (k, v) => filterHolder.setInitParameter(k, v) }
-    servletContextHandler.getServletHandler.addFilter(filterHolder)
+    handler.getServletHandler.addFilter(filterHolder)
   }
 
-  def filterSize(): Int = {
-    servletContextHandler.getServletHandler.getFilters.length
+  def filterCount(): Int = {
+    handler.getServletHandler.getFilters.length
   }
 }

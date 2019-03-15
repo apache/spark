@@ -103,7 +103,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
 
     sc.ui.get.getDelegatingHandlers.foreach { h =>
       // Two filters above + security filter.
-      assert(h.filterSize() === 3)
+      assert(h.filterCount() === 3)
     }
 
     // The filter should have been added first in the chain, so we should get SC_NOT_ACCEPTABLE
@@ -117,7 +117,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       }
     }
 
-    sc.ui.get.attachNewHandler("/new-handler", servlet, "/")
+    sc.ui.get.attachHandler("/new-handler", servlet, "/")
 
     val newUrl = new URL(sc.uiWebUrl.get + "/new-handler/")
     assert(TestUtils.httpResponseCode(newUrl) === HttpServletResponse.SC_NOT_ACCEPTABLE)
