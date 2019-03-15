@@ -102,13 +102,12 @@ private[spark] abstract class WebUI(
   }
 
   /** Attaches a handler to this UI. */
-  def attachHandler(contextPath: String, httpServlet: HttpServlet, pathSpec: String): Unit =
-    synchronized {
-      val ctx = new ServletContextHandler
-      ctx.setContextPath(contextPath)
-      ctx.addServlet(new ServletHolder(httpServlet), pathSpec)
-      attachHandler(ctx)
-    }
+  def attachHandler(contextPath: String, httpServlet: HttpServlet, pathSpec: String): Unit = {
+    val ctx = new ServletContextHandler()
+    ctx.setContextPath(contextPath)
+    ctx.addServlet(new ServletHolder(httpServlet), pathSpec)
+    attachHandler(ctx)
+  }
 
   /** Detaches a handler from this UI. */
   def detachHandler(handler: ServletContextHandler): Unit = synchronized {
@@ -215,7 +214,7 @@ private[spark] class DelegatingServletContextHandler(handler: ServletContextHand
       filterName: String,
       spec: String,
       types: EnumSet[DispatcherType]): Unit = {
-    val mapping = new FilterMapping
+    val mapping = new FilterMapping()
     mapping.setFilterName(filterName)
     mapping.setPathSpec(spec)
     mapping.setDispatcherTypes(types)
@@ -226,7 +225,7 @@ private[spark] class DelegatingServletContextHandler(handler: ServletContextHand
       filterName: String,
       className: String,
       filterParams: Map[String, String]): Unit = {
-    val filterHolder = new FilterHolder
+    val filterHolder = new FilterHolder()
     filterHolder.setName(filterName)
     filterHolder.setClassName(className)
     filterParams.foreach { case (k, v) => filterHolder.setInitParameter(k, v) }
