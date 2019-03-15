@@ -784,10 +784,12 @@ number
 
 // When `spark.sql.parser.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
-//     Keywords that reserved and can't be used as identifiers for table, view, column, alias, etc.
+//     Keywords that are reserved and can't be used as identifiers for table, view, column,
+//     function, alias, etc.
 // - Non-reserved keywords:
 //     Keywords that have a special meaning only in particular contexts and can be used as
-//     identifiers in other contexts.
+//     identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK
+//     can be used as identifiers in other places.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
@@ -970,8 +972,7 @@ ansiNonReserved
 
 // When `spark.sql.parser.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Keywords that have a special meaning only in particular contexts and can be used as
-//     identifiers in other contexts.
+//     Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
