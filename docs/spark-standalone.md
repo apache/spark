@@ -236,11 +236,11 @@ SPARK_WORKER_OPTS supports the following system properties:
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
-    This must be enabled if spark.shuffle.service.db.enabled is "true"
+    This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
 </tr>
 <tr>
@@ -265,11 +265,10 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td><spark.shuffle.service.db.enabled</code></td>
   <td>true</td>
   <td>
-    Enable record RegisteredExecutors information by leveldb, which can be reloaded and
-    used again when the external shuffle service is restarted. Note that this only affects standalone
-    mode, its has always on for yarn. We should Enable `spark.worker.cleanup.enabled` to remove the entry
-    (It will leave an entry in the DB forever when an application is stopped while the external shuffle
-    service is down) in the leveldb with WorkDirCleanup. It may be removed in the future.
+    Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
+    automatically reload info on current executors.  This only affects standalone mode (yarn always has this behavior
+    enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
+    eventually gets cleaned up.  This config may be removed in the future.
   </td>
 </tr>
 <tr>
