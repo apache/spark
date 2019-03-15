@@ -38,6 +38,9 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 trait DefinedByConstructorParams
 
 
+private[catalyst] object ScalaSubtypeLock
+
+
 /**
  * A default version of ScalaReflection that uses the runtime universe.
  */
@@ -66,8 +69,15 @@ object ScalaReflection extends ScalaReflection {
    */
   def dataTypeFor[T : TypeTag]: DataType = dataTypeFor(localTypeOf[T])
 
+  /**
+   * Synchronize to prevent concurrent usage of `<:<` operator.
+   * This operator is not thread safe in any current version of scala; i.e.
+   * (2.11.12, 2.12.8, 2.13.0-M5).
+   *
+   * See https://github.com/scala/bug/issues/10766
+   */
   private[catalyst] def isSubtype(tpe1: `Type`, tpe2: `Type`): Boolean = {
-    this.synchronized {
+    ScalaSubtypeLock.synchronized {
       tpe1 <:< tpe2
     }
   }
