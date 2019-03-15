@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.parquet.hadoop.ParquetOutputFormat
+import parquet.hadoop.metadata.CompressionCodecName
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
-import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -112,11 +112,39 @@ object HiveOptions {
     "mapkeyDelim" -> "mapkey.delim",
     "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
 
+  private val shortHiveParquetCompressionCodecNames = Map(
+    "none" -> CompressionCodecName.UNCOMPRESSED,
+    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
+    "snappy" -> CompressionCodecName.SNAPPY,
+    "gzip" -> CompressionCodecName.GZIP,
+    "lzo" -> CompressionCodecName.LZO)
+
+  private def getHiveParquetWriteCompression(
+      parameters: Map[String, String],
+      sqlConf: SQLConf): String = {
+    // `compression`, `parquet.compression`(i.e., ParquetOutputFormat.COMPRESSION), and
+    // `spark.sql.parquet.compression.codec`
+    // are in order of precedence from highest to lowest.
+    val parquetCompressionConf = parameters.get(ParquetOutputFormat.COMPRESSION)
+    val codecName = parameters
+      .get("compression")
+      .orElse(parquetCompressionConf)
+      .getOrElse(sqlConf.parquetCompressionCodec)
+      .toLowerCase(Locale.ROOT)
+    if (!shortHiveParquetCompressionCodecNames.contains(codecName)) {
+      val availableCodecs =
+        shortHiveParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
+      throw new IllegalArgumentException(s"For hive parquet table, codec [$codecName] " +
+        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+    }
+    shortHiveParquetCompressionCodecNames(codecName).name()
+  }
+
   def getHiveWriteCompression(tableInfo: TableDesc, sqlConf: SQLConf): Option[(String, String)] = {
     val tableProps = tableInfo.getProperties.asScala.toMap
     tableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
       case formatName if formatName.endsWith("parquetoutputformat") =>
-        val compressionCodec = new ParquetOptions(tableProps, sqlConf).compressionCodecClassName
+        val compressionCodec = getHiveParquetWriteCompression(tableProps, sqlConf)
         Option((ParquetOutputFormat.COMPRESSION, compressionCodec))
       case formatName if formatName.endsWith("orcoutputformat") =>
         val compressionCodec = new OrcOptions(tableProps, sqlConf).compressionCodec
