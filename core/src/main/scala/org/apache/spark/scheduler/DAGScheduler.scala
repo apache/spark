@@ -1239,8 +1239,9 @@ private[spark] class DAGScheduler(
           markMapStageJobsAsFinished(stage)
         case stage : ResultStage =>
           logDebug(s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})")
-          listenerBus.post(
-            SparkListenerJobEnd(stage.activeJob.get.jobId, clock.getTimeMillis(), JobSucceeded))
+          val jobId = stage.activeJob.get.jobId
+          cleanupStateForJobAndIndependentStages(stage.activeJob.get)
+          listenerBus.post(SparkListenerJobEnd(jobId, clock.getTimeMillis(), JobSucceeded))
       }
       submitWaitingChildStages(stage)
     }
