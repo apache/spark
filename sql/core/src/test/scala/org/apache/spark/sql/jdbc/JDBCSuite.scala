@@ -887,10 +887,14 @@ class JDBCSuite extends QueryTest
 
   test("MsSqlServerDialect jdbc type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
-    assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get == "DATETIME")
-    assert(msSqlServerDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "NVARCHAR(MAX)")
-    assert(msSqlServerDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BIT")
-    assert(msSqlServerDialect.getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "VARBINARY(MAX)")
+    assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==
+      "DATETIME")
+    assert(msSqlServerDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get ==
+      "NVARCHAR(MAX)")
+    assert(msSqlServerDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get ==
+      "BIT")
+    assert(msSqlServerDialect.getJDBCType(BinaryType).map(_.databaseTypeDefinition).get ==
+      "VARBINARY(MAX)")
   }
 
   test("table exists query by jdbc dialect") {
