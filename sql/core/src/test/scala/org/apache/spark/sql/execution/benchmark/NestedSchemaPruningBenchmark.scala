@@ -125,6 +125,26 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  protected def sampleBenchmark(numRows: Int, numIters: Int): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      Seq(1, 2).foreach { i =>
+        df.write.format(dataSourceName).save(path + s"/$i")
+        spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
+      }
+
+      val benchmark = new Benchmark(s"Sample", numRows, numIters, output = output)
+
+      addCase(benchmark, "Top-level column",
+        s"SELECT col1 FROM (SELECT col1 FROM t1 TABLESAMPLE(100 percent))")
+      addCase(benchmark, "Nested column",
+        s"SELECT col2._1 FROM (SELECT col2 FROM t2 TABLESAMPLE(100 percent))")
+
+      benchmark.run()
+    }
+  }
+
   protected def sortBenchmark(numRows: Int, numIters: Int): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -146,11 +166,12 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark(benchmarkName) {
       withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-        selectBenchmark (N, numIters)
-        limitBenchmark (N, numIters)
-        repartitionBenchmark (N, numIters)
-        repartitionByExprBenchmark (N, numIters)
-        sortBenchmark (N, numIters)
+        selectBenchmark(N, numIters)
+        limitBenchmark(N, numIters)
+        repartitionBenchmark(N, numIters)
+        repartitionByExprBenchmark(N, numIters)
+        sampleBenchmark(N, numIters)
+        sortBenchmark(N, numIters)
       }
     }
   }
