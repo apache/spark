@@ -17,16 +17,23 @@
 
 package org.apache.spark.sql.execution.adaptive.rule
 
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.adaptive.QueryFragmentExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 
-// A sanity check rule to make sure we are running query fragment optimizer rules on a sub-tree of
-// query plan with all input fragments materialized.
-object AssertChildFragmentsMaterialized extends Rule[SparkPlan] {
-  override def apply(plan: SparkPlan): SparkPlan = plan.transform {
-    case q: QueryFragmentExec if !q.materialize().isCompleted =>
-      throw new IllegalArgumentException(
-        s"The input fragments should all be materialized, but the below one is not.\n ${q.plan}")
+/**
+ * Remove shuffle nodes if the child's output partitions is already the desired partitioning.
+ *
+ * This should be the last rule of adaptive optimizer rules, as other rules may change plan
+ * node's output partitioning and make some shuffle nodes become unnecessary.
+ */
+object RemoveRedundantShuffles extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
+    case shuffle @ ShuffleExchangeExec(upper: HashPartitioning, child) =>
+      child.outputPartitioning match {
+        case lower: HashPartitioning if upper.semanticEquals(lower) => child
+        case _ => shuffle
+      }
   }
 }

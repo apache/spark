@@ -21,14 +21,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.MapOutputStatistics
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{QueryFragmentExec, ReusedQueryFragmentExec, ShuffleQueryFragmentExec}
+import org.apache.spark.sql.execution.adaptive.{QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -56,18 +55,19 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     val shuffleMetrics: Seq[MapOutputStatistics] = plan.collect {
-      case fragment: ShuffleQueryFragmentExec =>
+      case fragment: ShuffleQueryStageExec =>
         val metricsFuture = fragment.mapOutputStatisticsFuture
         assert(metricsFuture.isCompleted, "ShuffleQueryFragment should already be ready")
         ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
     }
 
-    val allFragmentLeaves = plan.collectLeaves().forall { node =>
-      node.isInstanceOf[QueryFragmentExec] || node.isInstanceOf[ReusedQueryFragmentExec]
-    }
-
-    if (allFragmentLeaves) {
-      // ShuffleQueryFragment gives null mapOutputStatistics when the input RDD has 0 partitions,
+    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])) {
+      // If not all leaf nodes are query stages, it's not safe to reduce the number of
+      // shuffle partitions, because we may break the assumption that all children of a spark plan
+      // have same number of output partitions.
+      plan
+    } else {
+      // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleMetrics.filter(_ != null)
       if (validMetrics.nonEmpty) {
@@ -75,21 +75,14 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
         // This transformation adds new nodes, so we must use `transformUp` here.
         plan.transformUp {
           // even for shuffle exchange whose input RDD has 0 partition, we should still update its
-          // `partitionStartIndices`, so that all the leaf shuffles in a fragment have the same
+          // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
-          case fragment: ShuffleQueryFragmentExec =>
-            CoalescedShuffleReaderExec(fragment, partitionStartIndices)
-          case r@ReusedQueryFragmentExec(fragment: ShuffleQueryFragmentExec, output) =>
-            CoalescedShuffleReaderExec(r, partitionStartIndices)
+          case stage: ShuffleQueryStageExec =>
+            CoalescedShuffleReaderExec(stage, partitionStartIndices)
         }
       } else {
         plan
       }
-    } else {
-      // If not all leaf nodes are query fragments, it's not safe to reduce the number of
-      // shuffle partitions, because we may break the assumption that all children of a spark plan
-      // have same number of output partitions.
-      plan
     }
   }
 
@@ -169,7 +162,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 }
 
 case class CoalescedShuffleReaderExec(
-    child: SparkPlan,
+    child: ShuffleQueryStageExec,
     partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
@@ -182,13 +175,7 @@ case class CoalescedShuffleReaderExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = child match {
-        case fragment: ShuffleQueryFragmentExec =>
-          fragment.plan.createShuffledRDD(Some(partitionStartIndices))
-        case ReusedQueryFragmentExec(fragment: ShuffleQueryFragmentExec, _) =>
-          fragment.plan.createShuffledRDD(Some(partitionStartIndices))
-        case _ => throw new SparkException("Invalid child for CoalescedShuffleReaderExec")
-      }
+      cachedShuffleRDD = child.plan.createShuffledRDD(Some(partitionStartIndices))
     }
     cachedShuffleRDD
   }

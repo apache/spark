@@ -29,32 +29,38 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
 
 /**
- * A query fragment is an individual sub-tree of a query plan, which can be executed ahead and
- * provide accurate data statistics. For example, a sub-tree under shuffle/broadcast node is a
- * query fragment. Each query fragment runs in a single Spark job/stage.
+ * A query stage is an independent subgraph of the query plan. Query stage materializes its output
+ * before proceeding with further operators of the query plan. The data statistics of the
+ * materialized output can be used to optimize subsequent query stages.
+ *
+ * There are 2 kinds of query stages:
+ *   1. Shuffle query stage. This stage materializes its output to shuffle files, and Spark launches
+ *      another job to execute the further operators.
+ *   2. Broadcast stage. This stage materializes its output to an array in driver JVM. Spark
+ *      broadcasts the array before executing the further operators.
  */
-abstract class QueryFragmentExec extends LeafExecNode {
+abstract class QueryStageExec extends LeafExecNode {
 
   /**
-   * An id of this query fragment which is unique in the entire query plan.
+   * An id of this query stage which is unique in the entire query plan.
    */
   def id: Int
 
   /**
-   * The sub-tree of the query plan that belongs to this query fragment.
+   * The sub-tree of the query plan that belongs to this query stage.
    */
   def plan: SparkPlan
 
   /**
-   * Returns a new query fragment with a new plan, which is optimized based on accurate runtime
+   * Returns a new query stage with a new plan, which is optimized based on accurate runtime data
    * statistics.
    */
-  def withNewPlan(newPlan: SparkPlan): QueryFragmentExec
+  def withNewPlan(newPlan: SparkPlan): QueryStageExec
 
   /**
-   * Materialize this QueryFragment, to prepare for the execution, like submitting map stages,
+   * Materialize this query stage, to prepare for the execution, like submitting map stages,
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
-   * fragment is ready.
+   * stage is ready.
    */
   def materialize(): Future[Any]
 
@@ -68,7 +74,7 @@ abstract class QueryFragmentExec extends LeafExecNode {
   override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
   override def doCanonicalize(): SparkPlan = plan.canonicalized
 
-  // TODO: maybe we should not hide QueryFragment entirely from explain result.
+  // TODO: maybe we should not hide query stage entirely from explain result.
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
@@ -83,25 +89,11 @@ abstract class QueryFragmentExec extends LeafExecNode {
 }
 
 /**
- * The last QueryFragment of an execution plan.
+ * A shuffle query stage whose child is a [[ShuffleExchangeExec]].
  */
-case class ResultQueryFragmentExec(id: Int, plan: SparkPlan) extends QueryFragmentExec {
+case class ShuffleQueryStageExec(id: Int, plan: ShuffleExchangeExec) extends QueryStageExec {
 
-  override def materialize(): Future[Any] = {
-    throw new IllegalStateException("Cannot materialize ResultQueryFragment.")
-  }
-
-  override def withNewPlan(newPlan: SparkPlan): QueryFragmentExec = {
-    copy(plan = newPlan)
-  }
-}
-
-/**
- * A shuffle QueryFragment whose child is a [[ShuffleExchangeExec]].
- */
-case class ShuffleQueryFragmentExec(id: Int, plan: ShuffleExchangeExec) extends QueryFragmentExec {
-
-  override def withNewPlan(newPlan: SparkPlan): QueryFragmentExec = {
+  override def withNewPlan(newPlan: SparkPlan): QueryStageExec = {
     copy(plan = newPlan.asInstanceOf[ShuffleExchangeExec])
   }
 
@@ -121,12 +113,11 @@ case class ShuffleQueryFragmentExec(id: Int, plan: ShuffleExchangeExec) extends 
 }
 
 /**
- * A broadcast QueryFragment whose child is a [[BroadcastExchangeExec]].
+ * A broadcast query stage whose child is a [[BroadcastExchangeExec]].
  */
-case class BroadcastQueryFragmentExec(id: Int, plan: BroadcastExchangeExec)
-  extends QueryFragmentExec {
+case class BroadcastQueryStageExec(id: Int, plan: BroadcastExchangeExec) extends QueryStageExec {
 
-  override def withNewPlan(newPlan: SparkPlan): QueryFragmentExec = {
+  override def withNewPlan(newPlan: SparkPlan): QueryStageExec = {
     copy(plan = newPlan.asInstanceOf[BroadcastExchangeExec])
   }
 
@@ -136,10 +127,10 @@ case class BroadcastQueryFragmentExec(id: Int, plan: BroadcastExchangeExec)
 }
 
 /**
- * A wrapper of QueryFragment to indicate that it's reused. Note that this is not a query fragment.
+ * A wrapper of query stage to indicate that it's reused. Note that itself is not a query stage.
  */
-case class ReusedQueryFragmentExec(child: QueryFragmentExec, output: Seq[Attribute])
-  extends LeafExecNode {
+case class ReusedQueryStageExec(child: SparkPlan, output: Seq[Attribute])
+  extends UnaryExecNode {
 
   // Ignore this wrapper for canonicalizing.
   override def doCanonicalize(): SparkPlan = child.canonicalized
@@ -152,7 +143,7 @@ case class ReusedQueryFragmentExec(child: QueryFragmentExec, output: Seq[Attribu
     child.executeBroadcast()
   }
 
-  // `ReusedQueryFragment` can have distinct set of output attribute ids from its child, we need
+  // `ReusedQueryStageExec` can have distinct set of output attribute ids from its child, we need
   // to update the attribute ids in `outputPartitioning` and `outputOrdering`.
   private lazy val updateAttr: Expression => Expression = {
     val originalAttrToNewAttr = AttributeMap(child.output.zip(output))

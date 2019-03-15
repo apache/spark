@@ -315,7 +315,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val finalPlan = agg.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan.plan
+          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
         val shuffleReaders = finalPlan.collect {
           case reader: CoalescedShuffleReaderExec => reader
         }
@@ -362,7 +362,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val finalPlan = join.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan.plan
+          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
         val shuffleReaders = finalPlan.collect {
           case reader: CoalescedShuffleReaderExec => reader
         }
@@ -414,7 +414,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val finalPlan = join.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan.plan
+          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
         val shuffleReaders = finalPlan.collect {
           case reader: CoalescedShuffleReaderExec => reader
         }
@@ -466,7 +466,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val finalPlan = join.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan.plan
+          .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
         val shuffleReaders = finalPlan.collect {
           case reader: CoalescedShuffleReaderExec => reader
         }
@@ -509,7 +509,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
 
           // Then, let's make sure we do not reduce number of ppst shuffle partitions.
           val finalPlan = join.queryExecution.executedPlan
-            .asInstanceOf[AdaptiveSparkPlanExec].finalPlan.plan
+            .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
           val shuffleReaders = finalPlan.collect {
             case reader: CoalescedShuffleReaderExec => reader
           }
@@ -534,8 +534,8 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       //   ReusedQueryFragment 0
       val resultDf = df.join(df, "key").join(df, "key")
       val finalPlan = resultDf.queryExecution.executedPlan
-        .asInstanceOf[AdaptiveSparkPlanExec].finalPlan.plan
-      assert(finalPlan.collect { case p: ReusedQueryFragmentExec => p }.length == 2)
+        .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
+      assert(finalPlan.collect { case p: ReusedQueryStageExec => p }.length == 2)
       assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
       checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
 
@@ -549,26 +549,23 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
         .union(grouped.groupBy(col("key") + 2).max("value"))
 
-      val resultFragment = resultDf2.queryExecution.executedPlan
+      val finalPlan2 = resultDf2.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
 
       // The result fragment has 2 children
-      val level1Fragments = resultFragment.plan.collect { case q: QueryFragmentExec => q }
+      val level1Fragments = finalPlan2.collect { case q: QueryStageExec => q }
       assert(level1Fragments.length == 2)
 
       val leafFragments = level1Fragments.flatMap { fragment =>
         // All of the child fragments of result fragment have only one child fragment.
-        val children = fragment.plan.collect {
-          case q: QueryFragmentExec => q
-          case r: ReusedQueryFragmentExec => r.child
-        }
+        val children = fragment.plan.collect { case q: QueryStageExec => q }
         assert(children.length == 1)
         children
       }
       assert(leafFragments.length == 2)
 
       val reusedFragments = level1Fragments.flatMap { fragment =>
-        fragment.plan.collect { case r: ReusedQueryFragmentExec => r }
+        fragment.plan.collect { case r: ReusedQueryStageExec => r }
       }
       assert(reusedFragments.length == 1)
 
