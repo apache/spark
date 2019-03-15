@@ -55,9 +55,9 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     val shuffleMetrics: Seq[MapOutputStatistics] = plan.collect {
-      case fragment: ShuffleQueryStageExec =>
-        val metricsFuture = fragment.mapOutputStatisticsFuture
-        assert(metricsFuture.isCompleted, "ShuffleQueryFragment should already be ready")
+      case stage: ShuffleQueryStageExec =>
+        val metricsFuture = stage.mapOutputStatisticsFuture
+        assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
         ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
     }
 
@@ -88,7 +88,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   /**
    * Estimates partition start indices for post-shuffle partitions based on
-   * mapOutputStatistics provided by all pre-shuffle fragments.
+   * mapOutputStatistics provided by all pre-shuffle stages.
    */
   // visible for testing.
   private[sql] def estimatePartitionStartIndices(
@@ -112,7 +112,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       s"advisoryTargetPostShuffleInputSize: $advisoryTargetPostShuffleInputSize, " +
         s"targetPostShuffleInputSize $targetPostShuffleInputSize.")
 
-    // Make sure we do get the same number of pre-shuffle partitions for those fragments.
+    // Make sure we do get the same number of pre-shuffle partitions for those stages.
     val distinctNumPreShufflePartitions =
       mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
     // The reason that we are expecting a single value of the number of pre-shuffle partitions
@@ -135,7 +135,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     var i = 0
     while (i < numPreShufflePartitions) {
-      // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle fragments.
+      // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle stages.
       // Then, we add the total size to postShuffleInputSize.
       var nextShuffleInputSize = 0L
       var j = 0

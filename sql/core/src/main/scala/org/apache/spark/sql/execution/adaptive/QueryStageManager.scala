@@ -49,7 +49,7 @@ class QueryStageManager(
     initialPlan: SparkPlan,
     session: SparkSession,
     callback: QueryStageManagerCallback)
-  extends EventLoop[QueryStageManagerEvent]("QueryFragmentCreator") {
+  extends EventLoop[QueryStageManagerEvent]("QueryStageCreator") {
 
   private def conf = session.sessionState.conf
 
@@ -201,7 +201,7 @@ case class CreateStageResult(newPlan: SparkPlan, allChildStagesReady: Boolean)
 
 object QueryStageManager {
   private val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("QueryFragmentCreator", 16))
+    ThreadUtils.newDaemonCachedThreadPool("QueryStageCreator", 16))
 }
 
 trait QueryStageManagerCallback {
