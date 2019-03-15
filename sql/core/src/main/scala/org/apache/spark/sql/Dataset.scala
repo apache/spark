@@ -478,8 +478,16 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
+  def printSchema(): Unit = printSchema(Int.MaxValue)
+
   // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
+  /**
+   * Prints the schema up to the given level to the console in a nice tree format.
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
 
   /**
