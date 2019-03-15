@@ -437,7 +437,7 @@ class CatalogSuite
         spark.catalog.setCurrentDatabase(db)
         assert(spark.catalog.tableExists("tbl_y"))
 
-        // Unable to find the table, although the temp view with the given name exists
+        // Unable to find the table, although the temporary view with the given name exists
         assert(!spark.catalog.tableExists(db, "tbl_x"))
       }
     }
@@ -469,7 +469,7 @@ class CatalogSuite
         spark.catalog.setCurrentDatabase(db)
         assert(spark.catalog.functionExists("fn2"))
 
-        // Unable to find the function, although the temp function with the given name exists
+        // Unable to find the function, although the temporary function with the given name exists
         assert(!spark.catalog.functionExists(db, "fn1"))
       }
     }

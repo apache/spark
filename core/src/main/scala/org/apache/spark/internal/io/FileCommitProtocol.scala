@@ -73,7 +73,7 @@ abstract class FileCommitProtocol {
    * Notifies the commit protocol to add a new file, and gets back the full path that should be
    * used. Must be called on the executors when running tasks.
    *
-   * Note that the returned temp file may have an arbitrary path. The commit protocol only
+   * Note that the returned temporary file may have an arbitrary path. The commit protocol only
    * promises that the file will be at the location specified by the arguments after job commit.
    *
    * A full file path consists of the following parts:

@@ -204,7 +204,7 @@ private[streaming] class BlockGenerator(
    */
   def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = {
     if (state == Active) {
-      // Unroll iterator into a temp buffer, and wait for pushing in the process
+      // Unroll iterator into a temporary buffer, and wait for pushing in the process
       val tempBuffer = new ArrayBuffer[Any]
       dataIterator.foreach { data =>
         waitToPush()

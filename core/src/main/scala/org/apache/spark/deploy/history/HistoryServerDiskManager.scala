@@ -58,7 +58,7 @@ private class HistoryServerDiskManager(
 
   private val tmpStoreDir = new File(path, "temp")
   if (!tmpStoreDir.isDirectory() && !tmpStoreDir.mkdir()) {
-    throw new IllegalArgumentException(s"Failed to create temp directory ($tmpStoreDir).")
+    throw new IllegalArgumentException(s"Failed to create temporary directory ($tmpStoreDir).")
   }
 
   private val maxUsage = conf.get(MAX_LOCAL_DISK_USAGE)

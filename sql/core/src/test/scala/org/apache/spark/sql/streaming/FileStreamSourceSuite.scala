@@ -112,7 +112,7 @@ abstract class FileStreamSourceTest
       AddOrcFileData(seq.toDS().toDF(), src, tmp)
     }
 
-    /** Write orc files in a temp dir, and move the individual files to the 'src' dir */
+    /** Write orc files in a temporary dir, and move the individual files to the 'src' dir */
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "orc"))
       df.write.orc(tmpDir.getCanonicalPath)
@@ -134,7 +134,7 @@ abstract class FileStreamSourceTest
       AddParquetFileData(seq.toDS().toDF(), src, tmp)
     }
 
-    /** Write parquet files in a temp dir, and move the individual files to the 'src' dir */
+    /** Write parquet files in a temporary dir, and move the individual files to the 'src' dir */
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
       df.write.parquet(tmpDir.getCanonicalPath)

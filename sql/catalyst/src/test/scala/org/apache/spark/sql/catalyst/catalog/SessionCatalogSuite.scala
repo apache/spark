@@ -279,7 +279,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("create temp view") {
+  test("create temporary view") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
       val tempTable2 = Range(1, 20, 2, 10)
@@ -331,21 +331,21 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("drop temp table") {
+  test("drop temporary table") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
       catalog.createTempView("tbl1", tempTable, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
       assert(catalog.getTempView("tbl1") == Some(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-      // If database is not specified, temp table should be dropped first
+      // If database is not specified, temporary table should be dropped first
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.getTempView("tbl1") == None)
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-      // If temp table does not exist, the table in the current database should be dropped
+      // If temporary table does not exist, the table in the current database should be dropped
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl2"))
-      // If database is specified, temp tables are never dropped
+      // If database is specified, temporary tables are never dropped
       catalog.createTempView("tbl1", tempTable, overrideIfExists = false)
       catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
       catalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false,
@@ -398,19 +398,19 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("rename temp table") {
+  test("rename temporary table") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
       catalog.createTempView("tbl1", tempTable, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
       assert(catalog.getTempView("tbl1") == Option(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-      // If database is not specified, temp table should be renamed first
+      // If database is not specified, temporary table should be renamed first
       catalog.renameTable(TableIdentifier("tbl1"), TableIdentifier("tbl3"))
       assert(catalog.getTempView("tbl1").isEmpty)
       assert(catalog.getTempView("tbl3") == Option(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-      // If database is specified, temp tables are never renamed
+      // If database is specified, temporary tables are never renamed
       catalog.renameTable(TableIdentifier("tbl2", Some("db2")), TableIdentifier("tbl4"))
       assert(catalog.getTempView("tbl3") == Option(tempTable))
       assert(catalog.getTempView("tbl4").isEmpty)
@@ -561,7 +561,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(catalog.tableExists(TableIdentifier("tbl2")))
 
       catalog.createTempView("tbl3", tempTable, overrideIfExists = false)
-      // tableExists should not check temp view.
+      // tableExists should not check temporary view.
       assert(!catalog.tableExists(TableIdentifier("tbl3")))
     }
   }
@@ -1160,7 +1160,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("create temp function") {
+  test("create temporary function") {
     withBasicCatalog { catalog =>
       val tempFunc1 = (e: Seq[Expression]) => e.head
       val tempFunc2 = (e: Seq[Expression]) => e.last
@@ -1281,7 +1281,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("drop temp function") {
+  test("drop temporary function") {
     withBasicCatalog { catalog =>
       val tempFunc = (e: Seq[Expression]) => e.head
       catalog.registerFunction(
@@ -1322,7 +1322,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("lookup temp function") {
+  test("lookup temporary function") {
     withBasicCatalog { catalog =>
       val tempFunc1 = (e: Seq[Expression]) => e.head
       catalog.registerFunction(
@@ -1372,7 +1372,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("copy SessionCatalog state - temp views") {
+  test("copy SessionCatalog state - temporary views") {
     withEmptyCatalog { original =>
       val tempTable1 = Range(1, 10, 1, 10)
       original.createTempView("copytest1", tempTable1, overrideIfExists = false)

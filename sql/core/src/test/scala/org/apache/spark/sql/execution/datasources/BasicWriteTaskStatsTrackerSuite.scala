@@ -46,7 +46,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   private val len2 = data2.length
 
   /**
-   * In teardown delete the temp dir.
+   * In teardown delete the temporary dir.
    */
   protected override def afterAll(): Unit = {
     try {

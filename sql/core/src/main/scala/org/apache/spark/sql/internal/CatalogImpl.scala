@@ -482,11 +482,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val table = sparkSession.table(tableIdent)
 
     if (tableMetadata.tableType == CatalogTableType.VIEW) {
-      // Temp or persistent views: refresh (or invalidate) any metadata/data cached
+      // Temporary or persistent views: refresh (or invalidate) any metadata/data cached
       // in the plan recursively.
       table.queryExecution.analyzed.refresh()
     } else {
-      // Non-temp tables: refresh the metadata cache.
+      // Non-temporary tables: refresh the metadata cache.
       sessionCatalog.refreshTable(tableIdent)
     }
 

@@ -149,7 +149,7 @@ case class AlterTableRenameCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    // If this is a temp view, just rename the view.
+    // If this is a temporary view, just rename the view.
     // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
     if (catalog.isTemporaryTable(oldName)) {
       catalog.renameTable(oldName, newName)

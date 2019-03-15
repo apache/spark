@@ -83,7 +83,7 @@ private[deploy] object DependencyUtils extends Logging {
   }
 
   /**
-   * Download a list of remote files to temp local files. If the file is local, the original file
+   * Download a list of remote files to temporary local files. If the file is local, the original file
    * will be returned.
    *
    * @param fileList A comma separated file list.

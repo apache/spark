@@ -981,7 +981,7 @@ class JDBCSuite extends QueryTest
     }
   }
 
-  test("hide credentials in create and describe a persistent/temp table") {
+  test("hide credentials in create and describe a persistent/temporary table") {
     val password = "testPass"
     val tableName = "tab1"
     Seq("TABLE", "TEMPORARY VIEW").foreach { tableType =>

@@ -2507,7 +2507,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(numRecordsRead.value === 10)
   }
 
-  test("CREATE TABLE USING should not fail if a same-name temp view exists") {
+  test("CREATE TABLE USING should not fail if a same-name temporary view exists") {
     withTable("same_name") {
       withTempView("same_name") {
         spark.range(10).createTempView("same_name")

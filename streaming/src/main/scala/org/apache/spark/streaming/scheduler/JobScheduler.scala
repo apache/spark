@@ -244,7 +244,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
         // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
         ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
 
-        // We need to assign `eventLoop` to a temp variable. Otherwise, because
+        // We need to assign `eventLoop` to a temporary variable. Otherwise, because
         // `JobScheduler.stop(false)` may set `eventLoop` to null when this method is running, then
         // it's possible that when `post` is called, `eventLoop` happens to null.
         var _eventLoop = eventLoop

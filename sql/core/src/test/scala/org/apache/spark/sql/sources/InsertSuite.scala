@@ -93,7 +93,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
-  test("insert into a temp view that does not point to an insertable data source") {
+  test("insert into a temporary view that does not point to an insertable data source") {
     import testImplicits._
     withTempView("t1", "t2") {
       sql(

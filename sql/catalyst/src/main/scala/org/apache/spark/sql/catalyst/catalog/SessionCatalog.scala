@@ -47,7 +47,7 @@ object SessionCatalog {
 }
 
 /**
- * An internal catalog that is used by a Spark Session. This internal catalog serves as a
+ * An internal catalog that is hold by a Spark Session. This internal catalog serves as a
  * proxy to the underlying metastore (e.g. Hive Metastore) and it also manages temporary
  * views and functions of the Spark Session that it belongs to.
  *
@@ -480,7 +480,7 @@ class SessionCatalog(
   }
 
   // ----------------------------------------------
-  // | Methods that interact with temp views only |
+  // | Methods that interact with temporary views only |
   // ----------------------------------------------
 
   /**
@@ -508,8 +508,8 @@ class SessionCatalog(
   }
 
   /**
-   * Alter the definition of a local/global temp view matching the given name, returns true if a
-   * temp view is matched and altered, false otherwise.
+   * Alter the definition of a local/global temporary view matching the given name, returns true if a
+   * temporary view is matched and altered, false otherwise.
    */
   def alterTempViewDefinition(
       name: TableIdentifier,
@@ -685,8 +685,8 @@ class SessionCatalog(
    * If no database is specified, this will first attempt to return a temporary view with
    * the same name, then, if that does not exist, return the table/view from the current database.
    *
-   * Note that, the global temp view database is also valid here, this will return the global temp
-   * view matching the given name.
+   * Note that, the global temporary view database is also valid here, this will return the global
+   *  temporary view matching the given name.
    *
    * If the relation is a view, we generate a [[View]] operator from the view description, and
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
@@ -784,7 +784,7 @@ class SessionCatalog(
 
     // Go through temporary views and invalidate them.
     // If the database is defined, this may be a global temporary view.
-    // If the database is not defined, there is a good chance this is a temp view.
+    // If the database is not defined, there is a good chance this is a temporary view.
     if (name.database.isEmpty) {
       tempViews.get(tableName).foreach(_.refresh())
     } else if (dbName == globalTempViewManager.database) {
@@ -1275,7 +1275,7 @@ class SessionCatalog(
       children: Seq[Expression]): Expression = synchronized {
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
-    // (built-in, temp, and external).
+    // (built-in, temporary, and external).
     if (name.database.isEmpty && functionRegistry.functionExists(name)) {
       // This function has been already loaded into the function registry.
       return functionRegistry.lookupFunction(name, children)

@@ -516,7 +516,7 @@ private[hive] class TestHiveSparkSession(
   protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   /**
-   * Resets the test instance by deleting any table, view, temp view, and UDF that have been created
+   * Resets the test instance by deleting any table, view, temporary view, and UDF that have been created
    */
   def reset() {
     try {

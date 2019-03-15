@@ -271,7 +271,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     provider.getStore(0).commit()
     provider.getStore(0).commit()
 
-    // Verify we don't leak temp files
+    // Verify we don't leak temporary files
     val tempFiles = FileUtils.listFiles(new File(provider.stateStoreId.checkpointRootLocation),
       null, true).asScala.filter(_.getName.startsWith("temp-"))
     assert(tempFiles.isEmpty)
@@ -497,7 +497,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(e.getCause.getMessage.contains("Failed to rename"))
   }
 
-  test("SPARK-18416: do not create temp delta file until the store is updated") {
+  test("SPARK-18416: do not create temporary delta file until the store is updated") {
     val dir = newDir()
     val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
     val storeConf = StateStoreConf.empty
@@ -523,23 +523,23 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       result
     }
 
-    // Getting the store should not create temp file
+    // Getting the store should not create temporary file
     val store0 = shouldNotCreateTempFile {
       StateStore.get(
         storeId, keySchema, valueSchema, indexOrdinal = None, version = 0, storeConf, hadoopConf)
     }
 
-    // Put should create a temp file
+    // Put should create a temporary file
     put(store0, "a", 1)
     assert(numTempFiles === 1)
     assert(numDeltaFiles === 0)
 
-    // Commit should remove temp file and create a delta file
+    // Commit should remove temporary file and create a delta file
     store0.commit()
     assert(numTempFiles === 0)
     assert(numDeltaFiles === 1)
 
-    // Remove should create a temp file
+    // Remove should create a temporary file
     val store1 = shouldNotCreateTempFile {
       StateStore.get(
         storeId, keySchema, valueSchema, indexOrdinal = None, version = 1, storeConf, hadoopConf)
@@ -548,7 +548,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(numTempFiles === 1)
     assert(numDeltaFiles === 1)
 
-    // Commit should remove temp file and create a delta file
+    // Commit should remove temporary file and create a delta file
     store1.commit()
     assert(numTempFiles === 0)
     assert(numDeltaFiles === 2)

@@ -156,8 +156,8 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   }
 
   /**
-   * Copy file in jar's resource to a temp file, then pass it to `f`.
-   * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
+   * Copy file in jar's resource to a temporary file, then pass it to `f`.
+   * This function is used to make `f` can use the path of temporary file(e.g. file:/), instead of
    * path of jar's resource which starts with 'jar:file:/'
    */
   protected def withResourceTempPath(resourcePath: String)(f: File => Unit): Unit = {
@@ -240,7 +240,7 @@ private[sql] trait SQLTestUtilsBase
       case cause: Throwable => throw cause
     } finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp tables that never got created.
+      // temporary tables that never got created.
       functions.foreach { case (functionName, isTemporary) =>
         val withTemporary = if (isTemporary) "TEMPORARY" else ""
         spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
@@ -257,7 +257,7 @@ private[sql] trait SQLTestUtilsBase
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp views that never got created.
+      // temporary views that never got created.
       try viewNames.foreach(spark.catalog.dropTempView) catch {
         case _: NoSuchTableException =>
       }
@@ -270,7 +270,7 @@ private[sql] trait SQLTestUtilsBase
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
-      // global temp views that never got created.
+      // global temporary views that never got created.
       try viewNames.foreach(spark.catalog.dropGlobalTempView) catch {
         case _: NoSuchTableException =>
       }

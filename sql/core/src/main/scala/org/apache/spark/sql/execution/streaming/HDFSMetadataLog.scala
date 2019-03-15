@@ -38,7 +38,7 @@ import org.apache.spark.sql.SparkSession
  * A [[MetadataLog]] implementation based on HDFS. [[HDFSMetadataLog]] uses the specified `path`
  * as the metadata storage.
  *
- * When writing a new batch, [[HDFSMetadataLog]] will firstly write to a temp file and then rename
+ * When writing a new batch, [[HDFSMetadataLog]] will firstly write to a temporary file and then rename
  * it to the final batch file. If the rename step fails, there must be multiple writers and only
  * one of them will succeed and the others will fail.
  *
@@ -114,7 +114,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
-  /** Write a batch to a temp file then rename it to the batch file.
+  /** Write a batch to a temporary file then rename it to the batch file.
    *
    * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
    * valid behavior, we still need to prevent it from destroying the files.

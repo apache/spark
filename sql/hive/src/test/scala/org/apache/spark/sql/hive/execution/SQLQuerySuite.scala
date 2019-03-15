@@ -70,7 +70,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
-  test("query global temp view") {
+  test("query global temporary view") {
     val df = Seq(1).toDF("i1")
     df.createGlobalTempView("tbl1")
     val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
@@ -78,7 +78,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     spark.sql(s"drop view ${global_temp_db}.tbl1")
   }
 
-  test("non-existent global temp view") {
+  test("non-existent global temporary view") {
     val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
     val message = intercept[AnalysisException] {
       spark.sql(s"select * from ${global_temp_db}.nonexistentview")

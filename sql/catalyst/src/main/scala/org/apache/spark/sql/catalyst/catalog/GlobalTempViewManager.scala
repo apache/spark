@@ -50,7 +50,7 @@ class GlobalTempViewManager(val database: String) {
   }
 
   /**
-   * Creates a global temp view, or issue an exception if the view already exists and
+   * Creates a global temporary view, or issue an exception if the view already exists and
    * `overrideIfExists` is false.
    */
   def create(
@@ -64,7 +64,7 @@ class GlobalTempViewManager(val database: String) {
   }
 
   /**
-   * Updates the global temp view if it exists, returns true if updated, false otherwise.
+   * Updates the global temporary view if it exists, returns true if updated, false otherwise.
    */
   def update(
       name: String,
@@ -78,14 +78,14 @@ class GlobalTempViewManager(val database: String) {
   }
 
   /**
-   * Removes the global temp view if it exists, returns true if removed, false otherwise.
+   * Removes the global temporary view if it exists, returns true if removed, false otherwise.
    */
   def remove(name: String): Boolean = synchronized {
     viewDefinitions.remove(name).isDefined
   }
 
   /**
-   * Renames the global temp view if the source view exists and the destination view not exists, or
+   * Renames the global temporary view if the source view exists and the destination view not exists, or
    * issue an exception if the source view exists but the destination view already exists. Returns
    * true if renamed, false otherwise.
    */

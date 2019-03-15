@@ -176,10 +176,10 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(taskMetrics.memoryBytesSpilled === 0)
   }
 
-  test("only generate temp shuffle file for non-empty partition") {
-    // Using exception to test whether only non-empty partition creates temp shuffle file,
-    // because temp shuffle file will only be cleaned after calling stop(false) in the failure
-    // case, so we could use it to validate the temp shuffle files.
+  test("only generate temporary shuffle file for non-empty partition") {
+    // Using exception to test whether only non-empty partition creates temporary shuffle file,
+    // because temporary shuffle file will only be cleaned after calling stop(false) in the failure
+    // case, so we could use it to validate the temporary shuffle files.
     def records: Iterator[(Int, Int)] =
       Iterator((1, 1), (5, 5)) ++
         (0 until 100000).iterator.map { i =>
@@ -204,7 +204,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     }
 
     assert(temporaryFilesCreated.nonEmpty)
-    // Only 3 temp shuffle files will be created
+    // Only 3 temporary shuffle files will be created
     assert(temporaryFilesCreated.count(_.exists()) === 3)
 
     writer.stop( /* success = */ false)

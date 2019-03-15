@@ -39,50 +39,50 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     withGlobalTempView("src") {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 'a'")
 
-      // If there is no database in table name, we should try local temp view first, if not found,
+      // If there is no database in table name, we should try local temporary view first, if not found,
       // try table/view in current database, which is "default" in this case. So we expect
       // NoSuchTableException here.
       var e = intercept[AnalysisException](spark.table("src")).getMessage
       assert(e.contains(expectedErrorMsg))
 
-      // Use qualified name to refer to the global temp view explicitly.
+      // Use qualified name to refer to the global temporary view explicitly.
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
-      // Table name without database will never refer to a global temp view.
+      // Table name without database will never refer to a global temporary view.
       e = intercept[AnalysisException](sql("DROP VIEW src")).getMessage
       assert(e.contains(expectedErrorMsg))
 
       sql(s"DROP VIEW $globalTempDB.src")
-      // The global temp view should be dropped successfully.
+      // The global temporary view should be dropped successfully.
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src")).getMessage
       assert(e.contains(expectedErrorMsg))
 
-      // We can also use Dataset API to create global temp view
+      // We can also use Dataset API to create global temporary view
       Seq(1 -> "a").toDF("i", "j").createGlobalTempView("src")
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
-      // Use qualified name to rename a global temp view.
+      // Use qualified name to rename a global temporary view.
       sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src")).getMessage
       assert(e.contains(expectedErrorMsg))
       checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
 
-      // Use qualified name to alter a global temp view.
+      // Use qualified name to alter a global temporary view.
       sql(s"ALTER VIEW $globalTempDB.src2 AS SELECT 2, 'b'")
       checkAnswer(spark.table(s"$globalTempDB.src2"), Row(2, "b"))
 
-      // We can also use Catalog API to drop global temp view
+      // We can also use Catalog API to drop global temporary view
       spark.catalog.dropGlobalTempView("src2")
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src2")).getMessage
       assert(e.contains(expectedErrorMsg))
 
-      // We can also use Dataset API to replace global temp view
+      // We can also use Dataset API to replace global temporary view
       Seq(2 -> "b").toDF("i", "j").createOrReplaceGlobalTempView("src")
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(2, "b"))
     }
   }
 
-  test("global temp view is shared among all sessions") {
+  test("global temporary view is shared among all sessions") {
     withGlobalTempView("src") {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 2")
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, 2))
@@ -91,7 +91,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("global temp view database should be preserved") {
+  test("global temporary view database should be preserved") {
     val e = intercept[AnalysisException](sql(s"CREATE DATABASE $globalTempDB"))
     assert(e.message.contains("system preserved database"))
 
@@ -111,7 +111,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("CREATE TABLE LIKE should work for global temp view") {
+  test("CREATE TABLE LIKE should work for global temporary view") {
     withTable("cloned") {
       withGlobalTempView("src") {
         sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
@@ -123,7 +123,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("list global temp views") {
+  test("list global temporary views") {
     try {
       sql("CREATE GLOBAL TEMP VIEW v1 AS SELECT 3, 4")
       sql("CREATE TEMP VIEW v2 AS SELECT 1, 2")
@@ -139,7 +139,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("should lookup global temp view if and only if global temp db is specified") {
+  test("should lookup global temporary view if and only if global temporary db is specified") {
     withTempView("same_name") {
       withGlobalTempView("same_name") {
         sql("CREATE GLOBAL TEMP VIEW same_name AS SELECT 3, 4")
@@ -147,17 +147,17 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
         checkAnswer(sql("SELECT * FROM same_name"), Row(1, 2))
 
-        // we never lookup global temp views if database is not specified in table name
+        // we never lookup global temporary views if database is not specified in table name
         spark.catalog.dropTempView("same_name")
         intercept[AnalysisException](sql("SELECT * FROM same_name"))
 
-        // Use qualified name to lookup a global temp view.
+        // Use qualified name to lookup a global temporary view.
         checkAnswer(sql(s"SELECT * FROM $globalTempDB.same_name"), Row(3, 4))
       }
     }
   }
 
-  test("public Catalog should recognize global temp view") {
+  test("public Catalog should recognize global temporary view") {
     withGlobalTempView("src")  {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 2")
 

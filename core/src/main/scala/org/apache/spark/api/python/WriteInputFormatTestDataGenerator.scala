@@ -102,7 +102,7 @@ private[python] class WritableToDoubleArrayConverter extends Converter[Any, Arra
 
 /**
  * This object contains method to generate SequenceFile test data and write it to a
- * given directory (probably a temp directory)
+ * given directory (probably a temporary directory)
  */
 object WriteInputFormatTestDataGenerator {
 

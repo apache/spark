@@ -280,7 +280,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   /**
-   * Initialize all test data such that all temp tables are properly registered.
+   * Initialize all test data such that all temporary tables are properly registered.
    */
   def loadTestData(): Unit = {
     assert(spark != null, "attempted to initialize test data before SparkSession.")

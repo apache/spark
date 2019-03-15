@@ -126,7 +126,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val tempDir = Utils.createTempDir()
     try {
       // Because we mocked "copyFileToRemote" above to avoid having to create fake local files,
-      // we need to create a fake config archive in the temp dir to avoid having
+      // we need to create a fake config archive in the temporary dir to avoid having
       // prepareLocalResources throw an exception.
       new FileOutputStream(new File(tempDir, LOCALIZED_CONF_ARCHIVE)).close()
 

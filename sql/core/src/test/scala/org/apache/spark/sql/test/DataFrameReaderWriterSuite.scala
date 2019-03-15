@@ -597,7 +597,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("saveAsTable with mode Append should not fail if the table not exists " +
-    "but a same-name temp view exist") {
+    "but a same-name temporary view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         spark.range(10).createTempView("same_name")
@@ -609,7 +609,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("saveAsTable with mode Append should not fail if the table already exists " +
-    "and a same-name temp view exist") {
+    "and a same-name temporary view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         val format = spark.sessionState.conf.defaultDataSourceName
@@ -623,7 +623,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("saveAsTable with mode ErrorIfExists should not fail if the table not exists " +
-    "but a same-name temp view exist") {
+    "but a same-name temporary view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         spark.range(10).createTempView("same_name")
@@ -634,8 +634,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("saveAsTable with mode Overwrite should not drop the temp view if the table not exists " +
-    "but a same-name temp view exist") {
+  test("saveAsTable with mode Overwrite should not drop the temporary view if the table not exists " +
+    "but a same-name temporary view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         spark.range(10).createTempView("same_name")
@@ -648,7 +648,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("saveAsTable with mode Overwrite should not fail if the table already exists " +
-    "and a same-name temp view exist") {
+    "and a same-name temporary view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         sql("CREATE TABLE same_name(id LONG) USING parquet")
@@ -661,7 +661,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("saveAsTable with mode Ignore should create the table if the table not exists " +
-    "but a same-name temp view exist") {
+    "but a same-name temporary view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         spark.range(10).createTempView("same_name")

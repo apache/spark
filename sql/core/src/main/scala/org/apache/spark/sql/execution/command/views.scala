@@ -49,7 +49,7 @@ object LocalTempView extends ViewType
  * GlobalTempView means cross-session global temporary views. Its lifetime is the lifetime of the
  * Spark application, i.e. it will be automatically dropped when the application terminates. It's
  * tied to a system preserved database `global_temp`, and we must use the qualified name to refer a
- * global temp view, e.g. SELECT * FROM global_temp.view1.
+ * global temporary view, e.g. SELECT * FROM global_temp.view1.
  */
 object GlobalTempView extends ViewType
 
@@ -178,7 +178,7 @@ case class CreateViewCommand(
   }
 
   /**
-   * Permanent views are not allowed to reference temp objects, including temp function and views
+   * Permanent views are not allowed to reference temporary objects, including temporary function and views
    */
   private def verifyTemporaryObjectsNotExists(sparkSession: SparkSession): Unit = {
     if (!isTemporary) {
@@ -186,7 +186,7 @@ case class CreateViewCommand(
       // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
       // logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
       // added/generated from a temporary view.
-      // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+      // 2) The temporary functions are represented by multiple classes. Most are inaccessible from this
       // package (e.g., HiveGenericUDF).
       child.collect {
         // Disallow creating permanent views based on temporary views.
@@ -277,7 +277,7 @@ case class AlterViewAsCommand(
     val analyzedPlan = qe.analyzed
 
     if (session.sessionState.catalog.alterTempViewDefinition(name, analyzedPlan)) {
-      // a local/global temp view has been altered, we are done.
+      // a local/global temporary view has been altered, we are done.
     } else {
       alterPermanentView(session, analyzedPlan)
     }

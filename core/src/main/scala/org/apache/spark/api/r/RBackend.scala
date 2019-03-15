@@ -123,7 +123,7 @@ private[spark] object RBackend extends Logging {
       val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
       val listenPort = serverSocket.getLocalPort()
       // Connection timeout is set by socket client. To make it configurable we will pass the
-      // timeout value to client inside the temp file
+      // timeout value to client inside the temporary file
       val conf = new SparkConf()
       val backendConnectionTimeout = conf.get(R_BACKEND_CONNECTION_TIMEOUT)
 

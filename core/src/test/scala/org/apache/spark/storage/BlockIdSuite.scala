@@ -124,7 +124,7 @@ class BlockIdSuite extends SparkFunSuite {
     assertSame(id, BlockId(id.toString))
   }
 
-  test("temp local") {
+  test("temporary local") {
     val id = TempLocalBlockId(new UUID(5, 2))
     assertSame(id, TempLocalBlockId(new UUID(5, 2)))
     assertDifferent(id, TempLocalBlockId(new UUID(5, 3)))
@@ -137,7 +137,7 @@ class BlockIdSuite extends SparkFunSuite {
     assertSame(id, BlockId(id.toString))
   }
 
-  test("temp shuffle") {
+  test("temporary shuffle") {
     val id = TempShuffleBlockId(new UUID(1, 2))
     assertSame(id, TempShuffleBlockId(new UUID(1, 2)))
     assertDifferent(id, TempShuffleBlockId(new UUID(1, 3)))

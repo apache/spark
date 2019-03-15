@@ -210,7 +210,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     val logDirectory2 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 1))
     val allLogFiles1 = new mutable.HashSet[String]()
     val allLogFiles2 = new mutable.HashSet[String]()
-    logInfo("Temp checkpoint directory = " + tempDirectory)
+    logInfo("Temporary checkpoint directory = " + tempDirectory)
 
     def getBothCurrentLogFiles(): (Seq[String], Seq[String]) = {
       (getCurrentLogFiles(logDirectory1), getCurrentLogFiles(logDirectory2))

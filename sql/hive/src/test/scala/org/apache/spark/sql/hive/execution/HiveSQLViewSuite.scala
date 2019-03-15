@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
 class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
   import testImplicits._
 
-  test("create a permanent/temp view using a hive, built-in, and permanent user function") {
+  test("create a permanent/temporary view using a hive, built-in, and permanent user function") {
     val permanentFuncName = "myUpper"
     val permanentFuncClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
@@ -61,7 +61,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
     }
   }
 
-  test("create a permanent/temp view using a temporary function") {
+  test("create a permanent/temporary view using a temporary function") {
     val tempFunctionName = "temp"
     val functionClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName

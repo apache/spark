@@ -125,7 +125,7 @@ abstract class BaseSessionStateBuilder(
 
   /**
    * Catalog for managing table and database states. If there is a pre-existing catalog, the state
-   * of that catalog (temp tables & current database) will be copied into the new catalog.
+   * of that catalog (temporary tables & current database) will be copied into the new catalog.
    *
    * Note: this depends on the `conf`, `functionRegistry` and `sqlParser` fields.
    */

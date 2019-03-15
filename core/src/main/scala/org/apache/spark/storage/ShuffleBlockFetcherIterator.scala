@@ -220,7 +220,7 @@ final class ShuffleBlockFetcherIterator(
     }
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
-        logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
+        logWarning("Failed to cleanup shuffle fetch temporary file " + file.path())
       }
     }
   }

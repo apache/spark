@@ -581,7 +581,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("insert overwrite to local dir from temp table") {
+  test("insert overwrite to local dir from temporary table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
 
@@ -610,7 +610,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("insert overwrite to dir from temp table") {
+  test("insert overwrite to dir from temporary table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
 

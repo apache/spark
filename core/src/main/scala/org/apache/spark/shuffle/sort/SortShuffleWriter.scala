@@ -73,7 +73,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
     } finally {
       if (tmp.exists() && !tmp.delete()) {
-        logError(s"Error while deleting temp file ${tmp.getAbsolutePath}")
+        logError(s"Error while deleting temporary file ${tmp.getAbsolutePath}")
       }
     }
   }

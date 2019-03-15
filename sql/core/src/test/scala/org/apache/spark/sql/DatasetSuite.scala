@@ -967,7 +967,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // No exception should be thrown here.
     dataset.createOrReplaceTempView("tempView")
 
-    // Throws AnalysisException if temp view with same name already exists
+    // Throws AnalysisException if temporary view with same name already exists
     val e = intercept[AnalysisException](
       dataset.createTempView("tempView"))
     intercept[AnalysisException](dataset.createTempView("tempView"))

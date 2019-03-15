@@ -93,7 +93,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }.sum
   }
 
-  test("cache temp table") {
+  test("cache temporary table") {
     withTempView("tempTable") {
       testData.select('key).createOrReplaceTempView("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
@@ -125,7 +125,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  test("uncaching temp table") {
+  test("uncaching temporary table") {
     testData.select('key).createOrReplaceTempView("tempTable1")
     testData.select('key).createOrReplaceTempView("tempTable2")
     spark.catalog.cacheTable("tempTable1")

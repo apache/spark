@@ -239,7 +239,7 @@ class CheckpointWriter(
           if (fs == null) {
             fs = new Path(checkpointDir).getFileSystem(hadoopConf)
           }
-          // Write checkpoint to temp file
+          // Write checkpoint to temporary file
           fs.delete(tempFile, true) // just in case it exists
           val fos = fs.create(tempFile)
           Utils.tryWithSafeFinally {
@@ -257,7 +257,7 @@ class CheckpointWriter(
             }
           }
 
-          // Rename temp file to the final checkpoint file
+          // Rename temporary file to the final checkpoint file
           if (!fs.rename(tempFile, checkpointFile)) {
             logWarning(s"Could not rename $tempFile to $checkpointFile")
           }

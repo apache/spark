@@ -230,11 +230,11 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
             assert(batchCounter.getNumCompletedBatches === data)
           }
         }
-        // Over time, create files in the temp directory 1
+        // Over time, create files in the temporary directory 1
         val input1 = Seq(1, 2, 3, 4, 5)
         input1.foreach(i => createFileAndAdvanceTime(i, testSubDir1))
 
-        // Over time, create files in the temp directory 1
+        // Over time, create files in the temporary directory 1
         val input2 = Seq(6, 7, 8, 9, 10)
         input2.foreach(i => createFileAndAdvanceTime(i, testSubDir2))
 

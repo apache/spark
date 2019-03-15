@@ -615,7 +615,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("configured checkpoint dir should not be deleted if a query is stopped without errors and" +
-    " force temp checkpoint deletion enabled") {
+    " force temporary checkpoint deletion enabled") {
     import testImplicits._
     withTempDir { checkpointPath =>
       withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath,
@@ -629,7 +629,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("temp checkpoint dir should be deleted if a query is stopped without errors") {
+  test("temporary checkpoint dir should be deleted if a query is stopped without errors") {
     import testImplicits._
     val query = MemoryStream[Int].toDS.writeStream.format("console").start()
     query.processAllAvailable()
@@ -641,12 +641,12 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(!fs.exists(checkpointDir))
   }
 
-  testQuietly("temp checkpoint dir should not be deleted if a query is stopped with an error") {
+  testQuietly("temporary checkpoint dir should not be deleted if a query is stopped with an error") {
     testTempCheckpointWithFailedQuery(false)
   }
 
-  testQuietly("temp checkpoint should be deleted if a query is stopped with an error and force" +
-    " temp checkpoint deletion enabled") {
+  testQuietly("temporary checkpoint should be deleted if a query is stopped with an error and force" +
+    " temporary checkpoint deletion enabled") {
     withSQLConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key -> "true") {
       testTempCheckpointWithFailedQuery(true)
     }

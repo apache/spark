@@ -734,7 +734,7 @@ class Analyzer(
         case e: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}", e)
         // If the database is defined and that database is not found, throw an AnalysisException.
-        // Note that if the database is not defined, it is possible we are looking up a temp view.
+        // Note that if the database is not defined, it is possible we are looking up a temporary view.
         case e: NoSuchDatabaseException =>
           u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
             s"database ${e.db} doesn't exist.", e)

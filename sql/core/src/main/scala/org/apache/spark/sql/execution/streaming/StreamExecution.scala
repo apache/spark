@@ -379,7 +379,7 @@ abstract class StreamExecution(
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
 
-        // Delete the temp checkpoint when either force delete enabled or the query didn't fail
+        // Delete the temporary checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
             (sparkSession.sessionState.conf
               .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
@@ -390,7 +390,7 @@ abstract class StreamExecution(
             fs.delete(checkpointPath, true)
           } catch {
             case NonFatal(e) =>
-              // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
+              // Deleting temporary checkpoint folder is best effort, don't throw non fatal exceptions
               // when we cannot delete them.
               logWarning(s"Cannot delete $checkpointPath", e)
           }

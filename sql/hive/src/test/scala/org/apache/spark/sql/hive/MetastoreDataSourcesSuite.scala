@@ -1143,7 +1143,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  test("create a temp view using hive") {
+  test("create a temporary view using hive") {
     val tableName = "tab1"
     withTempView(tableName) {
       val e = intercept[AnalysisException] {

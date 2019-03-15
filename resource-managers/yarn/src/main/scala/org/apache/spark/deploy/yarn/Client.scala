@@ -638,7 +638,7 @@ private[spark] class Client(
     //
     // This code forces the archive to be copied, so that unit tests pass (since in that case both
     // file systems are the same and the archive wouldn't normally be copied). In most (all?)
-    // deployments, the archive would be copied anyway, since it's a temp file in the local file
+    // deployments, the archive would be copied anyway, since it's a temporary file in the local file
     // system.
     val remoteConfArchivePath = new Path(destDir, LOCALIZED_CONF_ARCHIVE)
     val remoteFs = FileSystem.get(remoteConfArchivePath.toUri(), hadoopConf)

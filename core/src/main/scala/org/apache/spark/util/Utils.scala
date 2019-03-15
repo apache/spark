@@ -269,7 +269,7 @@ private[spark] object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+        throw new IOException("Failed to create a temporary directory (under " + root + ") after " +
           maxAttempts + " attempts!")
       }
       try {
@@ -775,7 +775,7 @@ private[spark] object Utils extends Logging {
     if (localRootDirs.isEmpty) {
       val configuredLocalDirs = getConfiguredLocalDirs(conf)
       throw new IOException(
-        s"Failed to get a temp directory under [${configuredLocalDirs.mkString(",")}].")
+        s"Failed to get a temporary directory under [${configuredLocalDirs.mkString(",")}].")
     } else {
       localRootDirs(scala.util.Random.nextInt(localRootDirs.length))
     }

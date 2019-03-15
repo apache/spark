@@ -39,8 +39,8 @@ private[spark] object ShutdownHookManager extends Logging {
   val SPARK_CONTEXT_SHUTDOWN_PRIORITY = 50
 
   /**
-   * The shutdown priority of temp directory must be lower than the SparkContext shutdown
-   * priority. Otherwise cleaning the temp directories while Spark jobs are running can
+   * The shutdown priority of temporary directory must be lower than the SparkContext shutdown
+   * priority. Otherwise cleaning the temporary directories while Spark jobs are running can
    * throw undesirable errors at the time of shutdown.
    */
   val TEMP_DIR_SHUTDOWN_PRIORITY = 25
@@ -53,7 +53,7 @@ private[spark] object ShutdownHookManager extends Logging {
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
 
-  // Add a shutdown hook to delete the temp dirs when the JVM exits
+  // Add a shutdown hook to delete the temporary dirs when the JVM exits
   logDebug("Adding shutdown hook") // force eager creation of logger
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
     logInfo("Shutdown hook called")
@@ -64,7 +64,7 @@ private[spark] object ShutdownHookManager extends Logging {
         logInfo("Deleting directory " + dirPath)
         Utils.deleteRecursively(new File(dirPath))
       } catch {
-        case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
+        case e: Exception => logError(s"Exception while deleting Spark temporary dir: $dirPath", e)
       }
     }
   }

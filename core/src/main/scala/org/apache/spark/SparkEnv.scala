@@ -102,7 +102,7 @@ class SparkEnv (
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
-              logWarning(s"Exception while deleting Spark temp dir: $path", e)
+              logWarning(s"Exception while deleting Spark temporary dir: $path", e)
           }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }

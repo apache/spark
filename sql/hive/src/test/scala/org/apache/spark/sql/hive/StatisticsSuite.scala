@@ -176,7 +176,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(queryTotalSize(partTable) === BigInt(17436))
     }
 
-    // Try to analyze a temp table
+    // Try to analyze a temporary table
     withView("tempTable") {
       sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
       intercept[AnalysisException] {

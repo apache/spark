@@ -296,7 +296,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     withTempDir { tmpDir =>
       val path = tmpDir.getCanonicalPath
-      // The generated temp path is not qualified.
+      // The generated temporary path is not qualified.
       assert(!path.startsWith("file:/"))
       val uri = tmpDir.toURI
       sql(s"CREATE DATABASE db1 LOCATION '$uri'")
@@ -890,7 +890,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("create temporary view using") {
     // when we test the HiveCatalogedDDLSuite, it will failed because the csvFile path above
     // starts with 'jar:', and it is an illegal parameter for Path, so here we copy it
-    // to a temp file by withResourceTempPath
+    // to a temporary file by withResourceTempPath
     withResourceTempPath("test-data/cars.csv") { tmpFile =>
       withTempView("testview") {
         sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
@@ -1951,7 +1951,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("block creating duplicate temp table") {
+  test("block creating duplicate temporary table") {
     withTempView("t_temp") {
       sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
       val e = intercept[TempTableAlreadyExistsException] {
@@ -1961,7 +1961,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("block creating duplicate temp view") {
+  test("block creating duplicate temporary view") {
     withTempView("t_temp") {
       sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
       val e = intercept[TempTableAlreadyExistsException] {
@@ -2589,7 +2589,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("alter table add columns -- not support temp view") {
+  test("alter table add columns -- not support temporary view") {
     withTempView("tmp_v") {
       sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
       val e = intercept[AnalysisException] {

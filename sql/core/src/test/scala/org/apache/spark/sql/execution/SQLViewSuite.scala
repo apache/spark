@@ -52,7 +52,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("create a temp view on a permanent view") {
+  test("create a temporary view on a permanent view") {
     withView("jtv1") {
       withTempView("temp_jtv1") {
         sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
@@ -62,7 +62,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("create a temp view on a temp view") {
+  test("create a temporary view on a temporary view") {
     withTempView("temp_jtv1", "temp_jtv2") {
       sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE TEMPORARY VIEW temp_jtv2 AS SELECT * FROM temp_jtv1 WHERE id < 6")
@@ -70,7 +70,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("create a permanent view on a temp view") {
+  test("create a permanent view on a temporary view") {
     withView("jtv1") {
       withTempView("temp_jtv1") {
         withGlobalTempView("global_temp_jtv1") {
@@ -215,7 +215,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
 
-  test("error handling: fail if the temp view name contains the database prefix") {
+  test("error handling: fail if the temporary view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
     val e = intercept[AnalysisException] {
       sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
@@ -232,7 +232,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("error handling: fail if the temp view sql itself is invalid") {
+  test("error handling: fail if the temporary view sql itself is invalid") {
     // A database that does not exist
     assertInvalidReference(
       "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt")
@@ -401,7 +401,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertNoSuchTable("ALTER VIEW default.testView AS SELECT 1, 2")
   }
 
-  test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
+  test("ALTER VIEW AS should try to alter temporary view first if view name has no database part") {
     withView("test_view") {
       withTempView("test_view") {
         sql("CREATE VIEW test_view AS SELECT 1 AS a, 2 AS b")
