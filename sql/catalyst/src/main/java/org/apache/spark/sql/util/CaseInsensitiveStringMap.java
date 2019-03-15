@@ -45,7 +45,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
   private final Map<String, String> delegate;
 
   public CaseInsensitiveStringMap(Map<String, String> originalMap) {
-    this.original = new HashMap<>(originalMap);
+    this.original = new HashMap<>(originalMap.size());
     this.delegate = new HashMap<>(originalMap.size());
     putAll(originalMap);
   }
