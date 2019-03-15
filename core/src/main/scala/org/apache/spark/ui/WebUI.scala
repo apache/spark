@@ -102,14 +102,13 @@ private[spark] abstract class WebUI(
   }
 
   /** Attaches a handler to this UI. */
-  def attachHandler(contextPath: String,
-    httpServlet: HttpServlet,
-    pathSpec: String): Unit = synchronized {
-    val ctx = new ServletContextHandler
-    ctx.setContextPath(contextPath)
-    ctx.addServlet(new ServletHolder(httpServlet), pathSpec)
-    attachHandler(ctx)
-  }
+  def attachHandler(contextPath: String, httpServlet: HttpServlet, pathSpec: String): Unit =
+    synchronized {
+      val ctx = new ServletContextHandler
+      ctx.setContextPath(contextPath)
+      ctx.addServlet(new ServletHolder(httpServlet), pathSpec)
+      attachHandler(ctx)
+    }
 
   /** Detaches a handler from this UI. */
   def detachHandler(handler: ServletContextHandler): Unit = synchronized {
@@ -212,9 +211,10 @@ private[spark] abstract class WebUIPage(var prefix: String) {
 
 private[spark] class DelegatingServletContextHandler(handler: ServletContextHandler) {
 
-  def prependFilterMapping(filterName: String,
-    spec: String,
-    types: EnumSet[DispatcherType]): Unit = {
+  def prependFilterMapping(
+      filterName: String,
+      spec: String,
+      types: EnumSet[DispatcherType]): Unit = {
     val mapping = new FilterMapping
     mapping.setFilterName(filterName)
     mapping.setPathSpec(spec)
@@ -222,9 +222,10 @@ private[spark] class DelegatingServletContextHandler(handler: ServletContextHand
     handler.getServletHandler.prependFilterMapping(mapping)
   }
 
-  def addFilter(filterName: String,
-    className: String,
-    filterParams: Map[String, String]): Unit = {
+  def addFilter(
+      filterName: String,
+      className: String,
+      filterParams: Map[String, String]): Unit = {
     val filterHolder = new FilterHolder
     filterHolder.setName(filterName)
     filterHolder.setClassName(className)
