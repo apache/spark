@@ -741,7 +741,7 @@ setMethod("hash",
 #' column.
 #'
 #' @rdname column_misc_functions
-#' @aliases hash hash,Column-method
+#' @aliases xxhash64 xxhash64,Column-method
 #' @note xxhash64 since 3.0.0
 setMethod("xxhash64",
           signature(x = "Column"),
