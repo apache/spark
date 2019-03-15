@@ -206,6 +206,8 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         val analyzedQuery = query.get
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
+        DDLUtils.checkDataColNames(tableDesc.copy(schema = analyzedQuery.schema))
+
         val output = analyzedQuery.output
         val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
           output.find(_.name == partCol).get
