@@ -257,6 +257,14 @@ object SQLConf {
     .longConf
     .createWithDefault(10L * 1024 * 1024)
 
+  val LIMIT_START_UP_FACTOR = buildConf("spark.sql.limit.startupFactor")
+    .internal()
+    .doc("The factor of total partition in the first execution. Higher values lead to more" +
+      " partitions read. Lower values might lead to longer execution times as more jobs will " +
+      "be run. By setting this value to 1.0, it will read all partition in the first time.")
+    .doubleConf
+    .createWithDefault(0.1)
+
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
     .doc("Minimal increase rate in number of partitions between attempts when executing a take " +
@@ -1924,6 +1932,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def limitStartUpFactor: Double = getConf(LIMIT_START_UP_FACTOR)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
