@@ -33,7 +33,6 @@ import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
-
 /**
  * Provides a server from which Executors can read shuffle files (rather than reading directly from
  * each other), to provide uninterrupted access to the files in the face of executors being turned
@@ -63,24 +62,12 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val shuffleServiceSource = new ExternalShuffleServiceSource
 
   protected def findRegisteredExecutorsDBFile(dbName: String): File = {
-    val localDirs = sparkConf.get("spark.local.dir", "").split(",")
-    var dbFile: File = null
-    if (localDirs.length > 1 || (localDirs.length == 1 && localDirs(0).nonEmpty)) {
-      for (dir <- localDirs) {
-        val tmpFile = new File(dir, dbName)
-        if (tmpFile.exists()) {
-          dbFile = tmpFile
-        }
-      }
-      if (dbFile != null) {
-        dbFile
-      }
-      else {
-        new File(localDirs(0), dbName)
-      }
-    }
-    else {
-      logWarning(s"'spark.local.dir' should be set first.")
+    val localDirs = sparkConf.getOption("spark.local.dir").map(_.split(",")).getOrElse(Array())
+    if (localDirs.length >= 1) {
+      new File(localDirs.find(new File(_, dbName).exists()).getOrElse(localDirs(0)), dbName)
+    } else {
+      logWarning(s"'spark.local.dir' should be set first when we use db in " +
+        s"ExternalShuffleService. Note that this only affects standalone mode.")
       null
     }
   }
@@ -94,8 +81,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       new ExternalShuffleBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB))
-    }
-    else {
+    } else {
       new ExternalShuffleBlockHandler(conf, null)
     }
   }
