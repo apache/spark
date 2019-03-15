@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -31,7 +32,8 @@ object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan)
     : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = plan match {
-    case Project(_, child) if canProjectPushThrough(child) =>
+    case Project(_, child)
+        if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       getAliasSubMap(plan, child)
     case _ => None
   }
@@ -87,12 +89,12 @@ object NestedColumnAliasing {
    * Return root references that are individually accessed as a whole, and `GetStructField`s.
    */
   private def collectRootReferenceAndGetStructField(plan: LogicalPlan): Seq[Expression] = {
-    def helper(e: Expression): Seq[Expression] = e match {
+    def doCollectFunc(e: Expression): Seq[Expression] = e match {
       case _: AttributeReference | _: GetStructField => Seq(e)
-      case es if es.children.nonEmpty => es.children.flatMap(helper)
+      case es if es.children.nonEmpty => es.children.flatMap(doCollectFunc)
       case _ => Seq.empty
     }
-    plan.expressions.flatMap(helper)
+    plan.expressions.flatMap(doCollectFunc)
   }
 
   /**
@@ -112,7 +114,7 @@ object NestedColumnAliasing {
     val aliasSub = nestedFieldReferences.asInstanceOf[Seq[GetStructField]]
       .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
       .groupBy(_.references.head)
-      .flatMap { case (attr: Attribute, nestedFields: Seq[GetStructField]) =>
+      .flatMap { case (attr, nestedFields: Seq[GetStructField]) =>
         // Each expression can contain multiple nested fields.
         // Note that we keep the original names to deliver to parquet in a case-sensitive way.
         val nestedFieldToAlias = nestedFields.distinct.map { f =>
@@ -120,6 +122,8 @@ object NestedColumnAliasing {
           (f, Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None))
         }
 
+        // If all nested fields of `attr` are used, we don't need to introduce new aliases.
+        // By default, ColumnPruning rule uses `attr` already.
         if (nestedFieldToAlias.nonEmpty &&
             nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
           Some(attr.exprId -> nestedFieldToAlias)
