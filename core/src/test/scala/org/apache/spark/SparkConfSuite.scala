@@ -173,7 +173,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       val t0 = System.nanoTime()
       while ((System.nanoTime() - t0) < TimeUnit.SECONDS.toNanos(1)) {
         val conf = Try(new SparkConf(loadDefaults = true))
-        assert(conf.isSuccess === true)
+        assert(conf.isSuccess)
       }
     } finally {
       executor.shutdownNow()

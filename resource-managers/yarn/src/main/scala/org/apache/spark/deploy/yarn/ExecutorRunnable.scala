@@ -76,7 +76,7 @@ private[yarn] class ExecutorRunnable(
     |  env:
     |${Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString}
     |  command:
-    |    ${commands.mkString(" \\ \n      ")}
+    |    ${Utils.redactCommandLineArgs(sparkConf, commands).mkString(" \\ \n      ")}
     |
     |  resources:
     |${localResources.map { case (k, v) => s"    $k -> $v\n" }.mkString}

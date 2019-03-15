@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite, SupportsOutputMode}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * This is no-op datasource. It does not do anything besides consuming its input.
@@ -32,19 +32,19 @@ import org.apache.spark.sql.types.StructType
  */
 class NoopDataSource extends TableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
-  override def getTable(options: DataSourceOptions): Table = NoopTable
+  override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
 }
 
 private[noop] object NoopTable extends Table with SupportsBatchWrite with SupportsStreamingWrite {
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = NoopWriteBuilder
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
 }
 
 private[noop] object NoopWriteBuilder extends WriteBuilder
-  with SupportsSaveMode with SupportsOutputMode {
+  with SupportsSaveMode with SupportsTruncate {
   override def mode(mode: SaveMode): WriteBuilder = this
-  override def outputMode(mode: OutputMode): WriteBuilder = this
+  override def truncate(): WriteBuilder = this
   override def buildForBatch(): BatchWrite = NoopBatchWrite
   override def buildForStreaming(): StreamingWrite = NoopStreamingWrite
 }

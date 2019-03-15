@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.python.PythonForeachWriter
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsStreamingWrite, Table}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite, SupportsOutputMode}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, Table}
+import org.apache.spark.sql.sources.v2.writer.{DataWriter, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A write-only table for forwarding data into the specified [[ForeachWriter]].
@@ -45,8 +45,8 @@ case class ForeachWriterTable[T](
 
   override def schema(): StructType = StructType(Nil)
 
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
-    new WriteBuilder with SupportsOutputMode {
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+    new WriteBuilder with SupportsTruncate {
       private var inputSchema: StructType = _
 
       override def withInputDataSchema(schema: StructType): WriteBuilder = {
@@ -54,7 +54,9 @@ case class ForeachWriterTable[T](
         this
       }
 
-      override def outputMode(mode: OutputMode): WriteBuilder = this
+      // Do nothing for truncate. Foreach sink is special that it just forwards all the records to
+      // ForeachWriter.
+      override def truncate(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
         new StreamingWrite {

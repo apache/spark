@@ -131,17 +131,11 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   /**
-   * Submit the application using the provided parameters.
-   *
-   * This runs in two steps. First, we prepare the launch environment by setting up
-   * the appropriate classpath, system properties, and application arguments for
-   * running the child main class based on the cluster manager and the deploy mode.
-   * Second, we use this launch environment to invoke the main method of the child
-   * main class.
+   * Submit the application using the provided parameters, ensuring to first wrap
+   * in a doAs when --proxy-user is specified.
    */
   @tailrec
   private def submit(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
-    val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
@@ -150,7 +144,7 @@ private[spark] class SparkSubmit extends Logging {
         try {
           proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+              runMain(args, uninitLog)
             }
           })
         } catch {
@@ -165,13 +159,8 @@ private[spark] class SparkSubmit extends Logging {
             }
         }
       } else {
-        runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+        runMain(args, uninitLog)
       }
-    }
-
-    // Let the main class re-initialize the logging system once it starts.
-    if (uninitLog) {
-      Logging.uninitialize()
     }
 
     // In standalone cluster mode, there are two submission gateways:
@@ -526,6 +515,7 @@ private[spark] class SparkSubmit extends Logging {
         confKey = PRINCIPAL.key),
       OptionAssigner(args.keytab, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = KEYTAB.key),
+      OptionAssigner(args.pyFiles, ALL_CLUSTER_MGRS, CLUSTER, confKey = SUBMIT_PYTHON_FILES.key),
 
       // Propagate attributes for dependency resolution at the driver side
       OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.packages"),
@@ -700,9 +690,6 @@ private[spark] class SparkSubmit extends Logging {
         if (args.isPython) {
           childArgs ++= Array("--primary-py-file", args.primaryResource)
           childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
-          if (args.pyFiles != null) {
-            childArgs ++= Array("--other-py-files", args.pyFiles)
-          }
         } else if (args.isR) {
           childArgs ++= Array("--primary-r-file", args.primaryResource)
           childArgs ++= Array("--main-class", "org.apache.spark.deploy.RRunner")
@@ -750,7 +737,7 @@ private[spark] class SparkSubmit extends Logging {
     // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
     val pyFiles = sparkConf.get(SUBMIT_PYTHON_FILES)
     val resolvedPyFiles = Utils.resolveURIs(pyFiles.mkString(","))
-    val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
+    val formattedPyFiles = if (deployMode != CLUSTER) {
       PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
     } else {
       // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
@@ -774,18 +761,25 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   /**
-   * Run the main method of the child class using the provided launch environment.
+   * Run the main method of the child class using the submit arguments.
+   *
+   * This runs in two steps. First, we prepare the launch environment by setting up
+   * the appropriate classpath, system properties, and application arguments for
+   * running the child main class based on the cluster manager and the deploy mode.
+   * Second, we use this launch environment to invoke the main method of the child
+   * main class.
    *
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    */
-  private def runMain(
-      childArgs: Seq[String],
-      childClasspath: Seq[String],
-      sparkConf: SparkConf,
-      childMainClass: String,
-      verbose: Boolean): Unit = {
-    if (verbose) {
+  private def runMain(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
+    val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
+    // Let the main class re-initialize the logging system once it starts.
+    if (uninitLog) {
+      Logging.uninitialize()
+    }
+
+    if (args.verbose) {
       logInfo(s"Main class:\n$childMainClass")
       logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
@@ -832,9 +826,17 @@ private[spark] class SparkSubmit extends Logging {
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
       mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
     } else {
-      // SPARK-4170
-      if (classOf[scala.App].isAssignableFrom(mainClass)) {
-        logWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
+      // Scala object subclassing scala.App has its whole class body executed in the
+      // main method it inherits. Fields of the object will not have been initialized
+      // before the main method has been executed, which will cause problems like SPARK-4170
+      // Note two Java classes are generated, the childMainClass and childMainClass$.
+      // Users will pass in childMainClass which will delegate all invocations to childMainClass$
+      // but it's childMainClass$ that subclasses scala.App and we should check for.
+      Try {
+        if (classOf[scala.App].isAssignableFrom(Utils.classForName(s"$childMainClass$$"))) {
+          logWarning("Subclasses of scala.App may not work correctly. " +
+            "Use a main() method instead.")
+        }
       }
       new JavaMainApplication(mainClass)
     }
@@ -1085,7 +1087,7 @@ private[spark] object SparkSubmitUtils {
     val sp: IBiblioResolver = new IBiblioResolver
     sp.setM2compatible(true)
     sp.setUsepoms(true)
-    sp.setRoot("http://dl.bintray.com/spark-packages/maven")
+    sp.setRoot("https://dl.bintray.com/spark-packages/maven")
     sp.setName("spark-packages")
     cr.add(sp)
     cr

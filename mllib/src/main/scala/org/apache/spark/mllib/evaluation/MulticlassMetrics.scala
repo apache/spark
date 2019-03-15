@@ -22,17 +22,17 @@ import scala.collection.Map
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Evaluator for multiclass classification.
  *
- * @param predAndLabelsWithOptWeight an RDD of (prediction, label, weight) or
- *                         (prediction, label) pairs.
+ * @param predictionAndLabels an RDD of (prediction, label, weight) or
+ *                         (prediction, label) tuples.
  */
 @Since("1.1.0")
-class MulticlassMetrics @Since("1.1.0") (predAndLabelsWithOptWeight: RDD[_ <: Product]) {
-  val predLabelsWeight: RDD[(Double, Double, Double)] = predAndLabelsWithOptWeight.map {
+class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product]) {
+  val predLabelsWeight: RDD[(Double, Double, Double)] = predictionAndLabels.map {
     case (prediction: Double, label: Double, weight: Double) =>
       (prediction, label, weight)
     case (prediction: Double, label: Double) =>
@@ -46,7 +46,14 @@ class MulticlassMetrics @Since("1.1.0") (predAndLabelsWithOptWeight: RDD[_ <: Pr
    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndLabels.rdd.map {
+      case Row(prediction: Double, label: Double, weight: Double) =>
+        (prediction, label, weight)
+      case Row(prediction: Double, label: Double) =>
+        (prediction, label, 1.0)
+      case other =>
+        throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+    })
 
   private lazy val labelCountByClass: Map[Double, Double] =
     predLabelsWeight.map {

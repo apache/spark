@@ -26,12 +26,11 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatch
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, RateControlMicroBatchStream}
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchStream, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
-import org.apache.spark.sql.sources.v2.writer.streaming.SupportsOutputMode
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
 
@@ -96,9 +95,8 @@ class MicroBatchExecution(
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
           logInfo(s"Reading table [$table] from DataSourceV2 named '$dsName' [$ds]")
-          val dsOptions = new DataSourceOptions(options.asJava)
           // TODO: operator pushdown.
-          val scan = table.newScanBuilder(dsOptions).build()
+          val scan = table.newScanBuilder(options).build()
           val stream = scan.toMicroBatchStream(metadataPath)
           StreamingDataSourceV2Relation(output, scan, stream)
         })
@@ -123,7 +121,14 @@ class MicroBatchExecution(
       case r: StreamingDataSourceV2Relation => r.stream
     }
     uniqueSources = sources.distinct
-    _logicalPlan
+
+    sink match {
+      case s: SupportsStreamingWrite =>
+        val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
+        WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
+
+      case _ => _logicalPlan
+    }
   }
 
   /**
@@ -514,16 +519,8 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: SupportsStreamingWrite =>
-        // TODO: we should translate OutputMode to concrete write actions like truncate, but
-        // the truncate action is being developed in SPARK-26666.
-        val writeBuilder = s.newWriteBuilder(new DataSourceOptions(extraOptions.asJava))
-          .withQueryId(runId.toString)
-          .withInputDataSchema(newAttributePlan.schema)
-        val streamingWrite = writeBuilder.asInstanceOf[SupportsOutputMode]
-          .outputMode(outputMode)
-          .buildForStreaming()
-        WriteToDataSourceV2(new MicroBatchWrite(currentBatchId, streamingWrite), newAttributePlan)
+      case _: SupportsStreamingWrite =>
+        newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].createPlan(currentBatchId)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 

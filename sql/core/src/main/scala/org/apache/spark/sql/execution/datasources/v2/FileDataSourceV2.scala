@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.TableProvider
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A base interface for data source v2 implementations of the built-in file-based data sources.
@@ -35,4 +38,13 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   def fallBackFileFormat: Class[_ <: FileFormat]
 
   lazy val sparkSession = SparkSession.active
+
+  protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
+    val objectMapper = new ObjectMapper()
+    Option(map.get("paths")).map { pathStr =>
+      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+    }.getOrElse {
+      Option(map.get("path")).toSeq
+    }
+  }
 }

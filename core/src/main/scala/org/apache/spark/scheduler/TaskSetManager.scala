@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, BitSet, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
 
@@ -38,7 +38,8 @@ import org.apache.spark.util.collection.MedianHeap
  * each task, retries tasks if they fail (up to a limited number of times), and
  * handles locality-aware scheduling for this TaskSet via delay scheduling. The main interfaces
  * to it are resourceOffer, which asks the TaskSet whether it wants to run a task on one node,
- * and statusUpdate, which tells it that one of its tasks changed state (e.g. finished).
+ * and handleSuccessfulTask/handleFailedTask, which tells it that one of its tasks changed state
+ *  (e.g. finished/failed).
  *
  * THREADING: This class is designed to only be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
@@ -778,7 +779,11 @@ private[spark] class TaskSetManager(
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
-        isZombie = true
+        // clean up finished partitions for the stage when the active TaskSetManager succeed
+        if (!isZombie) {
+          sched.stageIdToFinishedPartitions -= stageId
+          isZombie = true
+        }
       }
     } else {
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
@@ -797,16 +802,21 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
+  private[scheduler] def markPartitionCompleted(
+      partitionId: Int,
+      taskInfo: Option[TaskInfo]): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
         if (speculationEnabled && !isZombie) {
-          successfulTaskDurations.insert(taskInfo.duration)
+          taskInfo.foreach { info => successfulTaskDurations.insert(info.duration) }
         }
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
-          isZombie = true
+          if (!isZombie) {
+            sched.stageIdToFinishedPartitions -= stageId
+            isZombie = true
+          }
         }
         maybeFinishTaskSet()
       }

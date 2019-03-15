@@ -44,6 +44,11 @@ grammar SqlBase;
       return true;
     }
   }
+
+  /**
+   * When true, ANSI SQL parsing mode is enabled.
+   */
+  public boolean ansi = false;
 }
 
 singleStatement
@@ -73,11 +78,11 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
-    | CREATE DATABASE (IF NOT EXISTS)? identifier
+    | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
-    | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
-    | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
+    | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitionColumnNames=identifierList) |
@@ -158,9 +163,10 @@ statement
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
+    | (DESC | DESCRIBE) QUERY? queryToDesc                             #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE tableIdentifier
@@ -250,6 +256,10 @@ query
     : ctes? queryNoWith
     ;
 
+queryToDesc
+    : queryTerm queryOrganization
+    ;
+
 insertInto
     : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?                              #insertOverwriteTable
     | INSERT INTO TABLE? tableIdentifier partitionSpec?                                                     #insertIntoTable
@@ -267,6 +277,11 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
+    ;
+
+database
+    : DATABASE
+    | SCHEMA
     ;
 
 describeFuncName
@@ -462,7 +477,7 @@ joinType
     : INNER?
     | CROSS
     | LEFT OUTER?
-    | LEFT SEMI
+    | LEFT? SEMI
     | RIGHT OUTER?
     | FULL OUTER?
     | LEFT? ANTI
@@ -588,7 +603,8 @@ valueExpression
     ;
 
 primaryExpression
-    : CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
@@ -639,16 +655,38 @@ booleanValue
     ;
 
 interval
-    : INTERVAL intervalField*
+    : {ansi}? INTERVAL? intervalField+
+    | {!ansi}? INTERVAL intervalField*
     ;
 
 intervalField
-    : value=intervalValue unit=identifier (TO to=identifier)?
+    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
     ;
 
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
+    ;
+
+intervalUnit
+    : DAY
+    | DAYS
+    | HOUR
+    | HOURS
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
+    | SECOND
+    | SECONDS
+    | WEEK
+    | WEEKS
+    | YEAR
+    | YEARS
     ;
 
 colPosition
@@ -720,14 +758,14 @@ qualifiedName
 
 identifier
     : strictIdentifier
-    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT | SETMINUS
+    | {!ansi}? defaultReserved
     ;
 
 strictIdentifier
-    : IDENTIFIER             #unquotedIdentifier
-    | quotedIdentifier       #quotedIdentifierAlternative
-    | nonReserved            #unquotedIdentifier
+    : IDENTIFIER              #unquotedIdentifier
+    | quotedIdentifier        #quotedIdentifierAlternative
+    | {ansi}? ansiNonReserved #unquotedIdentifier
+    | {!ansi}? nonReserved    #unquotedIdentifier
     ;
 
 quotedIdentifier
@@ -744,40 +782,437 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-nonReserved
-    : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | DATABASES
-    | ADD
-    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST | AFTER
-    | MAP | ARRAY | STRUCT
-    | PIVOT | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
-    | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
-    | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
-    | GROUPING | CUBE | ROLLUP
-    | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN | COST
-    | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
-    | SET | RESET
-    | VIEW | REPLACE
-    | IF
-    | POSITION
-    | EXTRACT
-    | NO | DATA
-    | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
-    | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
-    | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
-    | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
-    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | LIST
-    | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | RECOVER | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
-    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
-    | ASC | DESC | LIMIT | RENAME | SETS
-    | AT | NULLS | OVERWRITE | ALL | ANY | ALTER | AS | BETWEEN | BY | CREATE | DELETE
-    | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
-    | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
-    | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
-    | UNBOUNDED | WHEN
-    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
+// The list of the non-reserved keywords when `spark.sql.parser.ansi.enabled` is true.
+ansiNonReserved
+    : ADD
+    | AFTER
+    | ALTER
+    | ANALYZE
+    | ARCHIVE
+    | ARRAY
+    | ASC
+    | AT
+    | BETWEEN
+    | BUCKET
+    | BUCKETS
+    | BY
+    | CACHE
+    | CASCADE
+    | CHANGE
+    | CLEAR
+    | CLUSTER
+    | CLUSTERED
+    | CODEGEN
+    | COLLECTION
+    | COLUMNS
+    | COMMENT
+    | COMMIT
+    | COMPACT
+    | COMPACTIONS
+    | COMPUTE
+    | CONCATENATE
+    | COST
+    | CUBE
+    | CURRENT
+    | DATA
+    | DATABASE
+    | DATABASES
+    | DAYS
+    | DBPROPERTIES
+    | DEFINED
+    | DELETE
+    | DELIMITED
+    | DESC
+    | DESCRIBE
+    | DFS
+    | DIRECTORIES
     | DIRECTORY
-    | BOTH | LEADING | TRAILING
+    | DISTRIBUTE
+    | DIV
+    | DROP
+    | ESCAPED
+    | EXCHANGE
+    | EXISTS
+    | EXPLAIN
+    | EXPORT
+    | EXTENDED
+    | EXTERNAL
+    | EXTRACT
+    | FIELDS
+    | FILEFORMAT
+    | FIRST
+    | FOLLOWING
+    | FORMAT
+    | FORMATTED
+    | FUNCTION
+    | FUNCTIONS
+    | GLOBAL
+    | GROUPING
+    | HOURS
+    | IF
+    | IGNORE
+    | IMPORT
+    | INDEX
+    | INDEXES
+    | INPATH
+    | INPUTFORMAT
+    | INSERT
+    | INTERVAL
+    | ITEMS
+    | KEYS
+    | LAST
+    | LATERAL
+    | LAZY
+    | LIKE
+    | LIMIT
+    | LINES
+    | LIST
+    | LOAD
+    | LOCAL
+    | LOCATION
+    | LOCK
+    | LOCKS
+    | LOGICAL
+    | MACRO
+    | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTES
+    | MONTHS
+    | MSCK
+    | NO
+    | NULLS
+    | OF
+    | OPTION
+    | OPTIONS
+    | OUT
+    | OUTPUTFORMAT
+    | OVER
+    | OVERWRITE
+    | PARTITION
+    | PARTITIONED
+    | PARTITIONS
+    | PERCENT
+    | PERCENTLIT
+    | PIVOT
+    | PRECEDING
+    | PRINCIPALS
+    | PURGE
+    | QUERY
+    | RANGE
+    | RECORDREADER
+    | RECORDWRITER
+    | RECOVER
+    | REDUCE
+    | REFRESH
+    | RENAME
+    | REPAIR
+    | REPLACE
+    | RESET
+    | RESTRICT
+    | REVOKE
+    | RLIKE
+    | ROLE
+    | ROLES
+    | ROLLBACK
+    | ROLLUP
+    | ROW
+    | ROWS
+    | SCHEMA
+    | SECONDS
+    | SEPARATED
+    | SERDE
+    | SERDEPROPERTIES
+    | SET
+    | SETS
+    | SHOW
+    | SKEWED
+    | SORT
+    | SORTED
+    | START
+    | STATISTICS
+    | STORED
+    | STRATIFY
+    | STRUCT
+    | TABLES
+    | TABLESAMPLE
+    | TBLPROPERTIES
+    | TEMPORARY
+    | TERMINATED
+    | TOUCH
+    | TRANSACTION
+    | TRANSACTIONS
+    | TRANSFORM
+    | TRUE
+    | TRUNCATE
+    | UNARCHIVE
+    | UNBOUNDED
+    | UNCACHE
+    | UNLOCK
+    | UNSET
+    | USE
+    | VALUES
+    | VIEW
+    | WEEK
+    | WEEKS
+    | WINDOW
+    | YEARS
+    ;
+
+defaultReserved
+    : ANTI
+    | CROSS
+    | EXCEPT
+    | FULL
+    | INNER
+    | INTERSECT
+    | JOIN
+    | LEFT
+    | NATURAL
+    | ON
+    | RIGHT
+    | SEMI
+    | SETMINUS
+    | UNION
+    | USING
+    ;
+
+nonReserved
+    : ADD
+    | AFTER
+    | ALL
+    | ALTER
+    | ANALYZE
+    | AND
+    | ANY
+    | ARCHIVE
+    | ARRAY
+    | AS
+    | ASC
+    | AT
+    | AUTHORIZATION
+    | BETWEEN
+    | BOTH
+    | BUCKET
+    | BUCKETS
+    | BY
+    | CACHE
+    | CASCADE
+    | CASE
+    | CAST
+    | CHANGE
+    | CHECK
+    | CLEAR
+    | CLUSTER
+    | CLUSTERED
+    | CODEGEN
+    | COLLATE
+    | COLLECTION
+    | COLUMN
+    | COLUMNS
+    | COMMENT
+    | COMMIT
+    | COMPACT
+    | COMPACTIONS
+    | COMPUTE
+    | CONCATENATE
+    | CONSTRAINT
+    | COST
+    | CREATE
+    | CUBE
+    | CURRENT
+    | CURRENT_DATE
+    | CURRENT_TIME
+    | CURRENT_TIMESTAMP
+    | CURRENT_USER
+    | DATA
+    | DATABASE
+    | DATABASES
+    | DAY
+    | DAYS
+    | DBPROPERTIES
+    | DEFINED
+    | DELETE
+    | DELIMITED
+    | DESC
+    | DESCRIBE
+    | DFS
+    | DIRECTORIES
+    | DIRECTORY
+    | DISTINCT
+    | DISTRIBUTE
+    | DIV
+    | DROP
+    | ELSE
+    | END
+    | ESCAPED
+    | EXCHANGE
+    | EXISTS
+    | EXPLAIN
+    | EXPORT
+    | EXTENDED
+    | EXTERNAL
+    | EXTRACT
+    | FALSE
+    | FETCH
+    | FIELDS
+    | FILEFORMAT
+    | FIRST
+    | FOLLOWING
+    | FOR
+    | FOREIGN
+    | FORMAT
+    | FORMATTED
+    | FROM
+    | FUNCTION
+    | FUNCTIONS
+    | GLOBAL
+    | GRANT
+    | GROUP
+    | GROUPING
+    | HAVING
+    | HOUR
+    | HOURS
+    | IF
+    | IGNORE
+    | IMPORT
+    | IN
+    | INDEX
+    | INDEXES
+    | INPATH
+    | INPUTFORMAT
+    | INSERT
+    | INTERVAL
+    | INTO
+    | IS
+    | ITEMS
+    | KEYS
+    | LAST
+    | LATERAL
+    | LAZY
+    | LEADING
+    | LIKE
+    | LIMIT
+    | LINES
+    | LIST
+    | LOAD
+    | LOCAL
+    | LOCATION
+    | LOCK
+    | LOCKS
+    | LOGICAL
+    | MACRO
+    | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
+    | MSCK
+    | NO
+    | NOT
+    | NULL
+    | NULLS
+    | OF
+    | ONLY
+    | OPTION
+    | OPTIONS
+    | OR
+    | ORDER
+    | OUT
+    | OUTER
+    | OUTPUTFORMAT
+    | OVER
+    | OVERLAPS
+    | OVERWRITE
+    | PARTITION
+    | PARTITIONED
+    | PARTITIONS
+    | PERCENTLIT
+    | PIVOT
+    | POSITION
+    | PRECEDING
+    | PRIMARY
+    | PRINCIPALS
+    | PURGE
+    | QUERY
+    | RANGE
+    | RECORDREADER
+    | RECORDWRITER
+    | RECOVER
+    | REDUCE
+    | REFERENCES
+    | REFRESH
+    | RENAME
+    | REPAIR
+    | REPLACE
+    | RESET
+    | RESTRICT
+    | REVOKE
+    | RLIKE
+    | ROLE
+    | ROLES
+    | ROLLBACK
+    | ROLLUP
+    | ROW
+    | ROWS
+    | SECOND
+    | SECONDS
+    | SELECT
+    | SEPARATED
+    | SERDE
+    | SERDEPROPERTIES
+    | SESSION_USER
+    | SET
+    | SETS
+    | SHOW
+    | SKEWED
+    | SOME
+    | SORT
+    | SORTED
+    | START
+    | STATISTICS
+    | STORED
+    | STRATIFY
+    | STRUCT
+    | TABLE
+    | TABLES
+    | TABLESAMPLE
+    | TBLPROPERTIES
+    | TEMPORARY
+    | TERMINATED
+    | THEN
+    | TO
+    | TOUCH
+    | TRAILING
+    | TRANSACTION
+    | TRANSACTIONS
+    | TRANSFORM
+    | TRUE
+    | TRUNCATE
+    | UNARCHIVE
+    | UNBOUNDED
+    | UNCACHE
+    | UNIQUE
+    | UNLOCK
+    | UNSET
+    | USE
+    | USER
+    | VALUES
+    | VIEW
+    | WEEK
+    | WEEKS
+    | WHEN
+    | WHERE
+    | WINDOW
+    | WITH
+    | YEAR
+    | YEARS
     ;
 
 SELECT: 'SELECT';
@@ -816,6 +1251,24 @@ ASC: 'ASC';
 DESC: 'DESC';
 FOR: 'FOR';
 INTERVAL: 'INTERVAL';
+YEAR: 'YEAR';
+YEARS: 'YEARS';
+MONTH: 'MONTH';
+MONTHS: 'MONTHS';
+WEEK: 'WEEK';
+WEEKS: 'WEEKS';
+DAY: 'DAY';
+DAYS: 'DAYS';
+HOUR: 'HOUR';
+HOURS: 'HOURS';
+MINUTE: 'MINUTE';
+MINUTES: 'MINUTES';
+SECOND: 'SECOND';
+SECONDS: 'SECONDS';
+MILLISECOND: 'MILLISECOND';
+MILLISECONDS: 'MILLISECONDS';
+MICROSECOND: 'MICROSECOND';
+MICROSECONDS: 'MICROSECONDS';
 CASE: 'CASE';
 WHEN: 'WHEN';
 THEN: 'THEN';
@@ -850,6 +1303,7 @@ WITH: 'WITH';
 VALUES: 'VALUES';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
+QUERY: 'QUERY';
 DIRECTORY: 'DIRECTORY';
 VIEW: 'VIEW';
 REPLACE: 'REPLACE';
@@ -981,7 +1435,8 @@ SORTED: 'SORTED';
 PURGE: 'PURGE';
 INPUTFORMAT: 'INPUTFORMAT';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
-DATABASE: 'DATABASE' | 'SCHEMA';
+SCHEMA: 'SCHEMA';
+DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
@@ -1014,6 +1469,24 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
+AUTHORIZATION: 'AUTHORIZATION';
+CHECK: 'CHECK';
+COLLATE: 'COLLATE';
+CONSTRAINT: 'CONSTRAINT';
+CURRENT_DATE: 'CURRENT_DATE';
+CURRENT_TIME: 'CURRENT_TIME';
+CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
+CURRENT_USER: 'CURRENT_USER';
+FETCH: 'FETCH';
+FOREIGN: 'FOREIGN';
+ONLY: 'ONLY';
+OVERLAPS: 'OVERLAPS';
+PRIMARY: 'PRIMARY';
+REFERENCES: 'REFERENCES';
+SESSION_USER: 'SESSION_USER';
+SOME: 'SOME';
+UNIQUE: 'UNIQUE';
+USER: 'USER';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

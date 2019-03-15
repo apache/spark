@@ -335,7 +335,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       .set("spark.streaming.dynamicAllocation.enabled", "true")
       .set(DYN_ALLOCATION_ENABLED, true)
       .set(DYN_ALLOCATION_TESTING, true)
-    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled) === true)
+    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled))
     withStreamingContext(confWithBothDynamicAllocationEnabled) { ssc =>
       intercept[IllegalArgumentException] {
         ssc.start()
