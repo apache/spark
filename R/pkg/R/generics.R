@@ -889,10 +889,6 @@ setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 #' @name NULL
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
-#' @rdname column_misc_functions
-#' @name NULL
-setGeneric("xxhash64", function(x, ...) { standardGeneric("xxhash64") })
-
 #' @rdname column_window_functions
 #' @name NULL
 setGeneric("cume_dist", function(x = "missing") { standardGeneric("cume_dist") })
@@ -1397,6 +1393,10 @@ setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("window", function(x, ...) { standardGeneric("window") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("xxhash64", function(x, ...) { standardGeneric("xxhash64") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

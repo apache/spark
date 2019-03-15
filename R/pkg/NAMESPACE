@@ -245,7 +245,6 @@ exportMethods("%<=>%",
               "current_date",
               "current_timestamp",
               "hash",
-              "xxhash64",
               "cume_dist",
               "date_add",
               "date_format",
@@ -409,6 +408,7 @@ exportMethods("%<=>%",
               "weekofyear",
               "when",
               "window",
+              "xxhash64",
               "year")
 
 exportClasses("GroupedData")
