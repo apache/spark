@@ -966,12 +966,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val (c0, v1, v2) = (queryAttrs(0), queryAttrs(1), queryAttrs(2))
 
     // Analyzes one column in the query output
-    cacheManager.analyzeColumnCacheQuery(query(), v1 :: Nil)
+    cacheManager.analyzeColumnCacheQuery(spark, cachedData.get, v1 :: Nil)
     val queryStats2 = query().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats2.map(_._1.name).toSet === Set("v1"))
 
     // Analyzes two more columns
-    cacheManager.analyzeColumnCacheQuery(query(), c0 :: v2 :: Nil)
+    cacheManager.analyzeColumnCacheQuery(spark, cachedData.get, c0 :: v2 :: Nil)
     val queryStats3 = query().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats3.map(_._1.name).toSet === Set("c0", "v1", "v2"))
   }

@@ -472,33 +472,66 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  def getStatAttrNames(tableName: String): Set[String] = {
+    val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
+    queryStats.map(_._1.name).toSet
+  }
+
   test("analyzes column statistics in cached query") {
-    withTempView("cachedTempView", "tempView") {
-      spark.sql(
-        """CACHE TABLE cachedTempView AS
+    withTempView("cachedQuery") {
+      sql(
+        """CACHE TABLE cachedQuery AS
           |  SELECT c0, avg(c1) AS v1, avg(c2) AS v2
           |  FROM (SELECT id % 3 AS c0, id % 5 AS c1, 2 AS c2 FROM range(1, 30))
           |  GROUP BY c0
         """.stripMargin)
 
       // Analyzes one column in the cached logical plan
-      spark.sql("ANALYZE TABLE cachedTempView COMPUTE STATISTICS FOR COLUMNS v1")
-      val queryStats1 = spark.table("cachedTempView").queryExecution
-        .optimizedPlan.stats.attributeStats
-      assert(queryStats1.map(_._1.name).toSet === Set("v1"))
+      sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS v1")
+      assert(getStatAttrNames("cachedQuery") === Set("v1"))
 
       // Analyzes two more columns
-      spark.sql("ANALYZE TABLE cachedTempView COMPUTE STATISTICS FOR COLUMNS c0, v2")
-      val queryStats2 = spark.table("cachedTempView").queryExecution
-        .optimizedPlan.stats.attributeStats
-      assert(queryStats2.map(_._1.name).toSet === Set("c0", "v1", "v2"))
+      sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS c0, v2")
+      assert(getStatAttrNames("cachedQuery")  === Set("c0", "v1", "v2"))
+    }
+  }
 
-      // Analyzes in a temporary table
-      spark.sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
-      val errMsg = intercept[NoSuchTableException] {
-        spark.sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+  test("analyzes column statistics in cached local temporary view") {
+    withTempView("tempView") {
+      // Analyzes in a temporary view
+      sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
+      val errMsg = intercept[AnalysisException] {
+        sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg.contains("Table or view 'tempView' not found in database 'default'"))
+      assert(errMsg.contains("Can not analyze the view 'tempView' because it is not cached"))
+
+      // Cache the view then analyze it
+      sql("CACHE TABLE tempView")
+      assert(getStatAttrNames("tempView") !== Set("id"))
+      sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+      assert(getStatAttrNames("tempView") === Set("id"))
+    }
+  }
+
+  test("analyzes column statistics in cached global temporary view") {
+    withGlobalTempView("gTempView") {
+      val globalTempDB = spark.sharedState.globalTempViewManager.database
+      val errMsg1 = intercept[NoSuchTableException] {
+        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg1.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      // Analyzes in a global temporary view
+      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
+      val errMsg2 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg2.contains("Can not analyze the view 'gTempView' because it is not cached"))
+
+      // Cache the view then analyze it
+      sql(s"CACHE TABLE $globalTempDB.gTempView")
+      assert(getStatAttrNames(s"$globalTempDB.gTempView") !== Set("id"))
+      sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      assert(getStatAttrNames(s"$globalTempDB.gTempView") === Set("id"))
     }
   }
 }

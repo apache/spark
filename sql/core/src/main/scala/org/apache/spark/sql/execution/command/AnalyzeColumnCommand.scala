@@ -42,27 +42,34 @@ case class AnalyzeColumnCommand(
     val sessionState = sparkSession.sessionState
 
     tableIdent.database match {
+      case Some(db) if db == sparkSession.sharedState.globalTempViewManager.database =>
+        val plan = sessionState.catalog.getGlobalTempView(tableIdent.identifier).getOrElse {
+          throw new NoSuchTableException(db = db, table = tableIdent.identifier)
+        }
+        analyzeColumnInTempView(plan, sparkSession)
+      case Some(_) =>
+        analyzeColumnInCatalog(sparkSession)
       case None =>
         sessionState.catalog.getTempView(tableIdent.identifier) match {
-          case Some(tempView) =>
-            val cacheManager = sparkSession.sharedState.cacheManager
-            cacheManager.lookupCachedData(tempView) match {
-              case Some(cachedData) =>
-                val columnsToAnalyze = getColumnsToAnalyze(
-                  tableIdent, cachedData.plan, columnNames, allColumns)
-                cacheManager.analyzeColumn(sparkSession, tableIdent.identifier, columnsToAnalyze)
-              case _ =>
-                throw new NoSuchTableException(
-                  db = sessionState.catalog.getCurrentDatabase, table = tableIdent.identifier)
-            }
-          case _ =>
-            analyzeColumnInCatalog(sparkSession)
+          case Some(tempView) => analyzeColumnInTempView(tempView, sparkSession)
+          case _ => analyzeColumnInCatalog(sparkSession)
         }
-      case _ =>
-        analyzeColumnInCatalog(sparkSession)
     }
 
     Seq.empty[Row]
+  }
+
+  private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
+    val cacheManager = sparkSession.sharedState.cacheManager
+    cacheManager.lookupCachedData(plan) match {
+      case Some(cachedData) =>
+        val columnsToAnalyze = getColumnsToAnalyze(
+          tableIdent, cachedData.plan, columnNames, allColumns)
+        cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
+      case _ =>
+        throw new AnalysisException(s"Can not analyze the view '${tableIdent.identifier}' " +
+          "because it is not cached.")
+    }
   }
 
   private def getColumnsToAnalyze(

@@ -155,36 +155,20 @@ class CacheManager extends Logging {
     }
   }
 
+  // Analyzes column statistics in the given cache data
   private[sql] def analyzeColumnCacheQuery(
-      query: Dataset[_],
+      sparkSession: SparkSession,
+      cachedData: CachedData,
       column: Seq[Attribute]): Unit = writeLock {
-    val cachedData = lookupCachedData(query)
-    if (cachedData.isEmpty) {
-      logWarning("The cached data not found, so you need to cache the query first.")
-    } else {
-      cachedData.foreach { cachedData =>
-        val relation = cachedData.cachedRepresentation
-        val (rowCount, newColStats) =
-          CommandUtils.computeColumnStats(query.sparkSession, relation, column)
-        val oldStats = relation.statsOfPlanToCache
-        val newStats = oldStats.copy(
-          rowCount = Some(rowCount),
-          attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
-        )
-        relation.statsOfPlanToCache = newStats
-      }
-    }
-  }
-
-  /**
-   * Analyzes column statistics in an already-cached table.
-   *
-   * @param spark        The Spark session.
-   * @param tableName    The name of a cached table.
-   * @param columnNames  The names of columns to be analyzed for computing statistics.
-   */
-  def analyzeColumn(spark: SparkSession, tableName: String, columnNames: Seq[Attribute]): Unit = {
-    analyzeColumnCacheQuery(spark.table(tableName), columnNames)
+    val relation = cachedData.cachedRepresentation
+    val (rowCount, newColStats) =
+      CommandUtils.computeColumnStats(sparkSession, relation, column)
+    val oldStats = relation.statsOfPlanToCache
+    val newStats = oldStats.copy(
+      rowCount = Some(rowCount),
+      attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
+    )
+    relation.statsOfPlanToCache = newStats
   }
 
   /**
