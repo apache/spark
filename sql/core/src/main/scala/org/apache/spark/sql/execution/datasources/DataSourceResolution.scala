@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
 case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport  {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case sql.CreateTable(
-        table, schema, partitionCols, bucketSpec, properties, V1Provider(provider), options,
+        table, schema, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
         location, comment, ifNotExists) =>
 
       val tableDesc = buildCatalogTable(table, schema, partitionCols, bucketSpec, properties,
@@ -41,7 +41,7 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       CreateTable(tableDesc, mode, None)
 
     case sql.CreateTableAsSelect(
-        table, query, partitionCols, bucketSpec, properties, V1Provider(provider), options,
+        table, query, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
         location, comment, ifNotExists) =>
 
       val tableDesc = buildCatalogTable(table, new StructType, partitionCols, bucketSpec,
@@ -51,16 +51,20 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       CreateTable(tableDesc, mode, Some(query))
   }
 
-  object V1Provider {
+  object V1WriteProvider {
     def unapply(provider: String): Option[String] = {
-      lazy val providerClass = DataSource.lookupDataSource(provider, conf)
-      provider match {
-        case "hive" =>
-          None
-        case _ if classOf[TableProvider].isAssignableFrom(providerClass) =>
-          None
-        case _ =>
-          Some(provider)
+      if (conf.userV1SourceWriterList.contains(provider)) {
+        Some(provider)
+      } else {
+        lazy val providerClass = DataSource.lookupDataSource(provider, conf)
+        provider match {
+          case "hive" =>
+            None
+          case _ if classOf[TableProvider].isAssignableFrom(providerClass) =>
+            None
+          case _ =>
+            Some(provider)
+        }
       }
     }
   }
