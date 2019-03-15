@@ -21,9 +21,8 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.CharStreams
-import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SecurityManager, ShuffleSuite, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
 import org.apache.spark.network.shuffle.TestShuffleDataContext
 import org.apache.spark.util.Utils
@@ -33,7 +32,7 @@ import org.apache.spark.util.Utils
  * with #spark.shuffle.service.db.enabled = true or false
  * Note that failures in this suite may arise when#spark.shuffle.service.db.enabled = false
  */
-class ExternalShuffleServiceDbSuite extends ShuffleSuite with BeforeAndAfterAll {
+class ExternalShuffleServiceDbSuite extends SparkFunSuite {
   val sortBlock0 = "Hello!"
   val sortBlock1 = "World!"
   val SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager"
@@ -127,12 +126,9 @@ class ExternalShuffleServiceDbSuite extends ShuffleSuite with BeforeAndAfterAll 
       blockHandler = externalShuffleService.getBlockHandler
       blockResolver = blockHandler.getBlockResolver
 
-    val error = intercept[RuntimeException] {
-      val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
-      val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
-      block0Stream.close()
-      assert(sortBlock0 == block0)
-    }.getMessage
+      val error = intercept[RuntimeException] {
+        blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
+      }.getMessage
 
       assert(error.contains("not registered"))
     } finally {
