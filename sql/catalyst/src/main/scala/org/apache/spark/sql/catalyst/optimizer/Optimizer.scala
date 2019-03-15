@@ -647,8 +647,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases)
-        if SQLConf.get.nestedSchemaPruningEnabled =>
+    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases) =>
       NestedColumnAliasing.replaceToAliases(p, nestedFieldToAlias, attrToAliases)
 
     // for all other logical plans that inherits the output from it's children
