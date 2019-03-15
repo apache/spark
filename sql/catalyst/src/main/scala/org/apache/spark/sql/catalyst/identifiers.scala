@@ -116,4 +116,6 @@ case class CatalogIdentifier(space: CatalogIdentifier.Namespace, name: String)
 
 object CatalogIdentifier {
   type Namespace = Seq[String]
+
+  def apply(name: String): CatalogIdentifier = new CatalogIdentifier(Nil, name)
 }
