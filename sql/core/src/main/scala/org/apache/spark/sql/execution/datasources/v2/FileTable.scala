@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.{SupportsBatchRead, SupportsBatchWrite, Table}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.SchemaUtils
 
 abstract class FileTable(
     sparkSession: SparkSession,
@@ -50,10 +51,15 @@ abstract class FileTable(
       s"Unable to infer schema for $name. It must be specified manually.")
   }.asNullable
 
-  override def schema(): StructType = {
+  override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
+      "in the data schema", caseSensitive)
+    val partitionSchema = fileIndex.partitionSchema
+    SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
+      "in the partition schema", caseSensitive)
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      fileIndex.partitionSchema, caseSensitive)._1
+      partitionSchema, caseSensitive)._1
   }
 
   /**
