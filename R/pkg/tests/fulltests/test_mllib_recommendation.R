@@ -33,7 +33,7 @@ test_that("spark.als", {
   test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
   predictions <- collect(predict(model, test))
 
-  expect_equal(predictions$prediction, c(-0.1380762, 2.6258414, -1.5018409),
+  expect_equal(predictions$prediction, c(0.6929101, 3.4735692, -0.8991987),
   tolerance = 1e-4)
 
   # Test model save/load
