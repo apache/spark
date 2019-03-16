@@ -767,10 +767,19 @@ private[spark] class DAGScheduler(
       callSite: CallSite,
       timeout: Long,
       properties: Properties): PartialResult[R] = {
-    val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
-    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.length).toArray
     val jobId = nextJobId.getAndIncrement()
+    if (partitions.size == 0) {
+      val time = clock.getTimeMillis()
+      listenerBus.post(
+        SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
+      listenerBus.post(
+        SparkListenerJobEnd(jobId, time, JobSucceeded))
+      // Return immediately if the job is running 0 tasks
+      return new PartialResult(evaluator.currentResult(), true)
+    }
+    val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
+    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
@@ -1239,9 +1248,6 @@ private[spark] class DAGScheduler(
           markMapStageJobsAsFinished(stage)
         case stage : ResultStage =>
           logDebug(s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})")
-          val jobId = stage.activeJob.get.jobId
-          cleanupStateForJobAndIndependentStages(stage.activeJob.get)
-          listenerBus.post(SparkListenerJobEnd(jobId, clock.getTimeMillis(), JobSucceeded))
       }
       submitWaitingChildStages(stage)
     }
