@@ -67,8 +67,9 @@ case class AnalyzeColumnCommand(
           tableIdent, cachedData.plan, columnNames, allColumns)
         cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
       case _ =>
-        throw new AnalysisException(s"Can not analyze the view '${tableIdent.identifier}' " +
-          "because it is not cached.")
+        val catalog = sparkSession.sessionState.catalog
+        val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
+        throw new NoSuchTableException(db = db, table = tableIdent.identifier)
     }
   }
 

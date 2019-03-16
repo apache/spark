@@ -159,7 +159,7 @@ class CacheManager extends Logging {
   private[sql] def analyzeColumnCacheQuery(
       sparkSession: SparkSession,
       cachedData: CachedData,
-      column: Seq[Attribute]): Unit = writeLock {
+      column: Seq[Attribute]): Unit = {
     val relation = cachedData.cachedRepresentation
     val (rowCount, newColStats) =
       CommandUtils.computeColumnStats(sparkSession, relation, column)
