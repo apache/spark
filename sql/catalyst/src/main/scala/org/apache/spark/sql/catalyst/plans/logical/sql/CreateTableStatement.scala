@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.sql
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.logical.expressions.Transform
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.StructType
 
@@ -31,7 +32,7 @@ import org.apache.spark.sql.types.StructType
 case class CreateTableStatement(
     table: TableIdentifier,
     tableSchema: StructType,
-    partitioning: Seq[String],
+    partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
     provider: String,
@@ -51,7 +52,7 @@ case class CreateTableStatement(
 case class CreateTableAsSelectStatement(
     table: TableIdentifier,
     asSelect: LogicalPlan,
-    partitioning: Seq[String],
+    partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
     provider: String,
