@@ -58,8 +58,6 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       } else {
         lazy val providerClass = DataSource.lookupDataSource(provider, conf)
         provider match {
-          case "hive" =>
-            None
           case _ if classOf[TableProvider].isAssignableFrom(providerClass) =>
             None
           case _ =>
