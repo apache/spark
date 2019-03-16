@@ -167,7 +167,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
-//    df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
+    df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 
 }
