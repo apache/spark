@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
@@ -52,8 +54,11 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
   }
 
   object V1WriteProvider {
+    private val v1WriteOverrideSet =
+      conf.userV1SourceWriterList.toLowerCase(Locale.ROOT).split(",").toSet
+
     def unapply(provider: String): Option[String] = {
-      if (conf.userV1SourceWriterList.contains(provider)) {
+      if (v1WriteOverrideSet.contains(provider.toLowerCase(Locale.ROOT))) {
         Some(provider)
       } else {
         lazy val providerClass = DataSource.lookupDataSource(provider, conf)
