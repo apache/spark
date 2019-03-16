@@ -946,6 +946,11 @@
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
           </exclusion>
+          <!-- Hadoop-3.2 -->
+          <exclusion>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>jsr311-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
