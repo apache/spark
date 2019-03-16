@@ -18,10 +18,10 @@
 package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
+import java.util.concurrent.ForkJoinPool
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
-import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
