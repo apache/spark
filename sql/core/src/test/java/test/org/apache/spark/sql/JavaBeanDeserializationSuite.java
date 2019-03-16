@@ -154,7 +154,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<RecordSpark22000> records = dataset.collectAsList();
 
-    Assert.assertEquals(records, records);
+    Assert.assertEquals(expectedRecords, records);
   }
 
   @Test
@@ -211,7 +211,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     record.setDoubleField(String.valueOf(recordRow.getDouble(4)));
     record.setStringField(recordRow.getString(5));
     record.setBooleanField(String.valueOf(recordRow.getBoolean(6)));
-    record.setTimestampField(String.valueOf(recordRow.getTimestamp(7).getTime() * 1000));
+    record.setTimestampField(String.valueOf(recordRow.getTimestamp(7)));
     // This would figure out that null value will not become "null".
     record.setNullIntField(null);
     return record;
