@@ -2646,7 +2646,7 @@
     </profile>
 
     <profile>
-      <id>hadoop-3</id>
+      <id>hadoop-3.2</id>
       <properties>
         <hadoop.version>3.2.0</hadoop.version>
         <curator.version>2.13.0</curator.version>
