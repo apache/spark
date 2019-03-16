@@ -769,7 +769,7 @@ private[spark] class DAGScheduler(
       properties: Properties): PartialResult[R] = {
     val partitions = (0 until rdd.partitions.length).toArray
     val jobId = nextJobId.getAndIncrement()
-    if (partitions.size == 0) {
+    if (partitions.isEmpty) {
       val time = clock.getTimeMillis()
       listenerBus.post(
         SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
