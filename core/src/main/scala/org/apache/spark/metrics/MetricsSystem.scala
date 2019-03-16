@@ -94,11 +94,13 @@ private[spark] class MetricsSystem private (
 
   metricsConfig.initialize()
 
-  def start() {
+  def start(registerStaticSources: Boolean = true) {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
-    StaticSources.allSources.foreach(registerSource)
-    registerSources()
+    if (registerStaticSources) {
+      StaticSources.allSources.foreach(registerSource)
+      registerSources()
+    }
     registerSinks()
     sinks.foreach(_.start)
   }
@@ -128,7 +130,7 @@ private[spark] class MetricsSystem private (
   private[spark] def buildRegistryName(source: Source): String = {
     val metricsNamespace = conf.get(METRICS_NAMESPACE).orElse(conf.getOption("spark.app.id"))
 
-    val executorId = conf.getOption("spark.executor.id")
+    val executorId = conf.get(EXECUTOR_ID)
     val defaultName = MetricRegistry.name(source.sourceName)
 
     if (instance == "driver" || instance == "executor") {
@@ -179,7 +181,7 @@ private[spark] class MetricsSystem private (
     sourceConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
       try {
-        val source = Utils.classForName(classPath).newInstance()
+        val source = Utils.classForName(classPath).getConstructor().newInstance()
         registerSource(source.asInstanceOf[Source])
       } catch {
         case e: Exception => logError("Source class " + classPath + " cannot be instantiated", e)
@@ -232,4 +234,30 @@ private[spark] object MetricsSystem {
       instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
     new MetricsSystem(instance, conf, securityMgr)
   }
+}
+
+private[spark] object MetricsSystemInstances {
+  // The Spark standalone master process
+  val MASTER = "master"
+
+  // A component within the master which reports on various applications
+  val APPLICATIONS = "applications"
+
+  // A Spark standalone worker process
+  val WORKER = "worker"
+
+  // A Spark executor
+  val EXECUTOR = "executor"
+
+  // The Spark driver process (the process in which your SparkContext is created)
+  val DRIVER = "driver"
+
+  // The Spark shuffle service
+  val SHUFFLE_SERVICE = "shuffleService"
+
+  // The Spark ApplicationMaster when running on YARN
+  val APPLICATION_MASTER = "applicationMaster"
+
+  // The Spark cluster scheduler when running on Mesos
+  val MESOS_CLUSTER = "mesos_cluster"
 }

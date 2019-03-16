@@ -23,14 +23,13 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
-class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class BucketizerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -50,7 +49,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCol("result")
       .setSplits(splits)
 
-    bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
+    testTransformer[(Double, Double)](dataFrame, bucketizer, "result", "expected") {
       case Row(x: Double, y: Double) =>
         assert(x === y,
           s"The feature value is not correct after bucketing.  Expected $y but found $x")
@@ -84,7 +83,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCol("result")
       .setSplits(splits)
 
-    bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
+    testTransformer[(Double, Double)](dataFrame, bucketizer, "result", "expected") {
       case Row(x: Double, y: Double) =>
         assert(x === y,
           s"The feature value is not correct after bucketing.  Expected $y but found $x")
@@ -103,7 +102,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setSplits(splits)
 
     bucketizer.setHandleInvalid("keep")
-    bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
+    testTransformer[(Double, Double)](dataFrame, bucketizer, "result", "expected") {
       case Row(x: Double, y: Double) =>
         assert(x === y,
           s"The feature value is not correct after bucketing.  Expected $y but found $x")
@@ -121,6 +120,15 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
         bucketizer.transform(dataFrame).collect()
       }
     }
+  }
+
+  test("Bucketizer should only drop NaN in input columns, with handleInvalid=skip") {
+    val df = spark.createDataFrame(Seq((2.3, 3.0), (Double.NaN, 3.0), (6.7, Double.NaN)))
+      .toDF("a", "b")
+    val splits = Array(Double.NegativeInfinity, 3.0, Double.PositiveInfinity)
+    val bucketizer = new Bucketizer().setInputCol("a").setOutputCol("x").setSplits(splits)
+    bucketizer.setHandleInvalid("skip")
+    assert(bucketizer.transform(df).count() == 2)
   }
 
   test("Bucket continuous features, with NaN splits") {
@@ -163,7 +171,10 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setSplits(Array(0.1, 0.8, 0.9))
-    testDefaultReadWrite(t)
+
+    val bucketizer = testDefaultReadWrite(t)
+    val data = Seq((1.0, 2.0), (10.0, 100.0), (101.0, -1.0)).toDF("myInputCol", "myInputCol2")
+    bucketizer.transform(data)
   }
 
   test("Bucket numeric features") {
@@ -207,8 +218,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer1.isBucketizeMultipleColumns())
-
     bucketizer1.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
     BucketizerSuite.checkBucketResults(bucketizer1.transform(dataFrame),
       Seq("result1", "result2"),
@@ -223,8 +232,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature"))
       .setOutputCols(Array("result"))
       .setSplitsArray(Array(splits(0)))
-
-    assert(bucketizer2.isBucketizeMultipleColumns())
 
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
@@ -259,8 +266,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer.isBucketizeMultipleColumns())
-
     BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
       Seq("result1", "result2"),
       Seq("expected1", "expected2"))
@@ -285,8 +290,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
-
-    assert(bucketizer.isBucketizeMultipleColumns())
 
     bucketizer.setHandleInvalid("keep")
     BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
@@ -326,8 +329,12 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
       .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
-    assert(t.isBucketizeMultipleColumns())
-    testDefaultReadWrite(t)
+
+    val bucketizer = testDefaultReadWrite(t)
+    val data = Seq((1.0, 2.0), (10.0, 100.0), (101.0, -1.0)).toDF("myInputCol", "myInputCol2")
+    bucketizer.transform(data)
+    assert(t.hasDefault(t.outputCol))
+    assert(bucketizer.hasDefault(bucketizer.outputCol))
   }
 
   test("Bucketizer in a pipeline") {
@@ -338,8 +345,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5)))
-
-    assert(bucket.isBucketizeMultipleColumns())
 
     val pl = new Pipeline()
       .setStages(Array(bucket))
@@ -392,15 +397,27 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
   }
 
-  test("Both inputCol and inputCols are set") {
-    val bucket = new Bucketizer()
-      .setInputCol("feature1")
-      .setOutputCol("result")
-      .setSplits(Array(-0.5, 0.0, 0.5))
-      .setInputCols(Array("feature1", "feature2"))
+  test("assert exception is thrown if both multi-column and single-column params are set") {
+    val df = Seq((0.5, 0.3), (0.5, -0.4)).toDF("feature1", "feature2")
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("inputCols", Array("feature1", "feature2")))
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("splits", Array(-0.5, 0.0, 0.5)),
+      ("outputCols", Array("result1", "result2")))
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("splits", Array(-0.5, 0.0, 0.5)),
+      ("splitsArray", Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5))))
 
-    // When both are set, we ignore `inputCols` and just map the column specified by `inputCol`.
-    assert(bucket.isBucketizeMultipleColumns() == false)
+    // this should fail because at least one of inputCol and inputCols must be set
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("outputCol", "feature1"),
+      ("splits", Array(-0.5, 0.0, 0.5)))
+
+    // the following should fail because not all the params are set
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"))
+    ParamsSuite.testExclusiveParams(new Bucketizer, df,
+      ("inputCols", Array("feature1", "feature2")),
+      ("outputCols", Array("result1", "result2")))
   }
 }
 

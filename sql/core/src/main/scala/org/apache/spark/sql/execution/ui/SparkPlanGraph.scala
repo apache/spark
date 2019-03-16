@@ -184,7 +184,7 @@ private[ui] class SparkPlanGraphCluster(
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(duration(0).accumulatorId)) {
-        name + "\n\n" + metricsValue.get(id).get
+        name + "\n\n" + metricsValue(id)
       } else {
         name
       }
@@ -202,7 +202,7 @@ private[ui] class SparkPlanGraphCluster(
 
 
 /**
- * Represent an edge in the SparkPlan tree. `fromId` is the parent node id, and `toId` is the child
+ * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
  * node id.
  */
 private[ui] case class SparkPlanGraphEdge(fromId: Long, toId: Long) {

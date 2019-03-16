@@ -76,7 +76,15 @@ ntile(2) OVER w AS ntile,
 row_number() OVER w AS row_number,
 var_pop(val) OVER w AS var_pop,
 var_samp(val) OVER w AS var_samp,
-approx_count_distinct(val) OVER w AS approx_count_distinct
+approx_count_distinct(val) OVER w AS approx_count_distinct,
+covar_pop(val, val_long) OVER w AS covar_pop,
+corr(val, val_long) OVER w AS corr,
+stddev_samp(val) OVER w AS stddev_samp,
+stddev_pop(val) OVER w AS stddev_pop,
+collect_list(val) OVER w AS collect_list,
+collect_set(val) OVER w AS collect_set,
+skewness(val_double) OVER w AS skewness,
+kurtosis(val_double) OVER w AS kurtosis
 FROM testData
 WINDOW w AS (PARTITION BY cate ORDER BY val)
 ORDER BY cate, val;
@@ -101,3 +109,9 @@ last_value(false, false) OVER w AS last_value_contain_null
 FROM testData
 WINDOW w AS ()
 ORDER BY cate, val;
+
+-- parentheses around window reference
+SELECT cate, sum(val) OVER (w)
+FROM testData
+WHERE val is not null
+WINDOW w AS (PARTITION BY cate ORDER BY val);

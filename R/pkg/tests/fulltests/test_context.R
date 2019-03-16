@@ -54,15 +54,6 @@ test_that("Check masked functions", {
                sort(namesOfMaskedCompletely, na.last = TRUE))
 })
 
-test_that("repeatedly starting and stopping SparkR", {
-  for (i in 1:4) {
-    sc <- suppressWarnings(sparkR.init(master = sparkRTestMaster))
-    rdd <- parallelize(sc, 1:20, 2L)
-    expect_equal(countRDD(rdd), 20)
-    suppressWarnings(sparkR.stop())
-  }
-})
-
 test_that("repeatedly starting and stopping SparkSession", {
   for (i in 1:4) {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
@@ -100,11 +91,39 @@ test_that("job group functions can be called", {
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
-  setJobDescription("job description")
 
-  suppressWarnings(setJobGroup(sc, "groupId", "job description", TRUE))
-  suppressWarnings(cancelJobGroup(sc, "groupId"))
-  suppressWarnings(clearJobGroup(sc))
+  sparkR.session.stop()
+})
+
+test_that("job description and local properties can be set and got", {
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  setJobDescription("job description")
+  expect_equal(getLocalProperty("spark.job.description"), "job description")
+  setJobDescription(1234)
+  expect_equal(getLocalProperty("spark.job.description"), "1234")
+  setJobDescription(NULL)
+  expect_equal(getLocalProperty("spark.job.description"), NULL)
+  setJobDescription(NA)
+  expect_equal(getLocalProperty("spark.job.description"), NULL)
+
+  setLocalProperty("spark.scheduler.pool", "poolA")
+  expect_equal(getLocalProperty("spark.scheduler.pool"), "poolA")
+  setLocalProperty("spark.scheduler.pool", NULL)
+  expect_equal(getLocalProperty("spark.scheduler.pool"), NULL)
+  setLocalProperty("spark.scheduler.pool", NA)
+  expect_equal(getLocalProperty("spark.scheduler.pool"), NULL)
+
+  setLocalProperty(4321, 1234)
+  expect_equal(getLocalProperty(4321), "1234")
+  setLocalProperty(4321, NULL)
+  expect_equal(getLocalProperty(4321), NULL)
+  setLocalProperty(4321, NA)
+  expect_equal(getLocalProperty(4321), NULL)
+
+  expect_error(setLocalProperty(NULL, "should fail"), "key should not be NULL or NA")
+  expect_error(getLocalProperty(NULL), "key should not be NULL or NA")
+  expect_error(setLocalProperty(NA, "should fail"), "key should not be NULL or NA")
+  expect_error(getLocalProperty(NA), "key should not be NULL or NA")
   sparkR.session.stop()
 })
 
@@ -207,5 +226,12 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   download_path2 <- spark.getSparkFiles(paste0(dir_name, "/", "sub_hello/sub_hello.txt"))
   expect_equal(readLines(download_path2), sub_words)
   unlink(path, recursive = TRUE)
+  sparkR.session.stop()
+})
+
+test_that("SPARK-25234: parallelize should not have integer overflow", {
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  # 47000 * 47000 exceeds integer range
+  parallelize(sc, 1:47000, 47000)
   sparkR.session.stop()
 })

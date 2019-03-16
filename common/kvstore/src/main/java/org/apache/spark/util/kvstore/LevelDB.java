@@ -83,6 +83,7 @@ public class LevelDB implements KVStore {
     if (versionData != null) {
       long version = serializer.deserializeLong(versionData);
       if (version != STORE_VERSION) {
+        close();
         throw new UnsupportedStoreVersionException();
       }
     } else {
@@ -233,7 +234,7 @@ public class LevelDB implements KVStore {
    * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
    * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
    */
-  void closeIterator(LevelDBIterator it) throws IOException {
+  void closeIterator(LevelDBIterator<?> it) throws IOException {
     synchronized (this._db) {
       DB _db = this._db.get();
       if (_db != null) {

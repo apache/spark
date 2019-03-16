@@ -19,10 +19,13 @@ package org.apache.spark
 
 import java.io._
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import com.google.common.io.Files
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
@@ -32,7 +35,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.internal.config._
-import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
+import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -89,6 +92,14 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(compressedContent === Array.fill(10000)("a"))
 
     assert(compressedFile.length < normalFile.length)
+  }
+
+  test("text files do not allow null rows") {
+    sc = new SparkContext("local", "test")
+    val outputDir = new File(tempDir, "output").getAbsolutePath
+    val nums = sc.makeRDD((1 to 100) ++ Seq(null))
+    val exception = intercept[SparkException](nums.saveAsTextFile(outputDir))
+    assert(Utils.exceptionString(exception).contains("text files do not allow null rows"))
   }
 
   test("SequenceFiles") {
@@ -199,7 +210,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext("local", "test")
       val objs = sc.makeRDD(1 to 3).map { x =>
         val loader = Thread.currentThread().getContextClassLoader
-        Class.forName(className, true, loader).newInstance()
+        Class.forName(className, true, loader).getConstructor().newInstance()
       }
       val outputDir = new File(tempDir, "output").getAbsolutePath
       objs.saveAsObjectFile(outputDir)
@@ -244,7 +255,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     for (i <- 0 until testOutputCopies) {
       // Shift values by i so that they're different in the output
       val alteredOutput = testOutput.map(b => (b + i).toByte)
-      channel.write(ByteBuffer.wrap(alteredOutput))
+      val buffer = ByteBuffer.wrap(alteredOutput)
+      while (buffer.hasRemaining) {
+        channel.write(buffer)
+      }
     }
     channel.close()
     file.close()
@@ -295,6 +309,39 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-22357 test binaryFiles minPartitions") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set("spark.files.openCostInBytes", "0")
+      .set("spark.default.parallelism", "1"))
+
+    withTempDir { tempDir =>
+      val tempDirPath = tempDir.getAbsolutePath
+
+      for (i <- 0 until 8) {
+        val tempFile = new File(tempDir, s"part-0000$i")
+        Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", tempFile,
+          StandardCharsets.UTF_8)
+      }
+
+      for (p <- Seq(1, 2, 8)) {
+        assert(sc.binaryFiles(tempDirPath, minPartitions = p).getNumPartitions === p)
+      }
+    }
+  }
+
+  test("minimum split size per node and per rack should be less than or equal to maxSplitSize") {
+    sc = new SparkContext("local", "test")
+    val testOutput = Array[Byte](1, 2, 3, 4, 5)
+    val outFile = writeBinaryData(testOutput, 1)
+    sc.hadoopConfiguration.setLong(
+      "mapreduce.input.fileinputformat.split.minsize.per.node", 5123456)
+    sc.hadoopConfiguration.setLong(
+      "mapreduce.input.fileinputformat.split.minsize.per.rack", 5123456)
+
+    val (_, data) = sc.binaryFiles(outFile.getAbsolutePath).collect().head
+    assert(data.toArray === testOutput)
+  }
+
   test("fixed record length binary file as byte array") {
     sc = new SparkContext("local", "test")
     val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
@@ -341,7 +388,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/output/part-00000").exists())
     intercept[FileAlreadyExistsException] {
       randomRDD.saveAsTextFile(tempDir.getPath + "/output")
     }
@@ -353,9 +400,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
     val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/output/part-00000").exists())
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/output/part-00000").exists())
   }
 
   test ("prevent user from overwriting the empty directory (new Hadoop API)") {
@@ -373,7 +420,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
       tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-r-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/output/part-r-00000").exists())
     intercept[FileAlreadyExistsException] {
       randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](tempDir.getPath)
     }
@@ -387,10 +434,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
       tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-r-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/output/part-r-00000").exists())
     randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
       tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-r-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/output/part-r-00000").exists())
   }
 
   test ("save Hadoop Dataset through old Hadoop API") {
@@ -403,7 +450,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     job.set("mapred.output.format.class", classOf[TextOutputFormat[String, String]].getName)
     job.set("mapreduce.output.fileoutputformat.outputdir", tempDir.getPath + "/outputDataset_old")
     randomRDD.saveAsHadoopDataset(job)
-    assert(new File(tempDir.getPath + "/outputDataset_old/part-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/outputDataset_old/part-00000").exists())
   }
 
   test ("save Hadoop Dataset through new Hadoop API") {
@@ -418,7 +465,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     jobConfig.set("mapreduce.output.fileoutputformat.outputdir",
       tempDir.getPath + "/outputDataset_new")
     randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
-    assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists() === true)
+    assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists())
   }
 
   test("Get input files via old Hadoop API") {
@@ -525,7 +572,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       sc.parallelize(data, actualPartitionNum)
         .saveAsHadoopFile[TextOutputFormat[String, String]](output.getPath)
       for (i <- 0 until actualPartitionNum) {
-        assert(new File(output, s"part-0000$i").exists() === true)
+        assert(new File(output, s"part-0000$i").exists())
       }
       val hadoopRDD = sc.textFile(new File(output, "part-*").getPath)
       assert(hadoopRDD.partitions.length === expectedPartitionNum)
@@ -566,7 +613,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       sc.parallelize(data, actualPartitionNum)
         .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](output.getPath)
       for (i <- 0 until actualPartitionNum) {
-        assert(new File(output, s"part-r-0000$i").exists() === true)
+        assert(new File(output, s"part-r-0000$i").exists())
       }
       val hadoopRDD = sc.newAPIHadoopFile(new File(output, "part-r-*").getPath,
         classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
@@ -592,5 +639,71 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       data = Array(("1", "a"), ("2", "b")),
       actualPartitionNum = 5,
       expectedPartitionNum = 2)
+  }
+
+  test("spark.files.ignoreMissingFiles should work both HadoopRDD and NewHadoopRDD") {
+    // "file not found" can happen both when getPartitions or compute in HadoopRDD/NewHadoopRDD,
+    // We test both cases here.
+
+    val deletedPath = new Path(tempDir.getAbsolutePath, "test-data-1")
+    val fs = deletedPath.getFileSystem(new Configuration())
+    fs.delete(deletedPath, true)
+    intercept[FileNotFoundException](fs.open(deletedPath))
+
+    def collectRDDAndDeleteFileBeforeCompute(newApi: Boolean): Array[_] = {
+      val dataPath = new Path(tempDir.getAbsolutePath, "test-data-2")
+      val writer = new OutputStreamWriter(new FileOutputStream(new File(dataPath.toString)))
+      writer.write("hello\n")
+      writer.write("world\n")
+      writer.close()
+      val rdd = if (newApi) {
+        sc.newAPIHadoopFile(dataPath.toString, classOf[NewTextInputFormat],
+          classOf[LongWritable], classOf[Text])
+      } else {
+        sc.textFile(dataPath.toString)
+      }
+      rdd.partitions
+      fs.delete(dataPath, true)
+      // Exception happens when initialize record reader in HadoopRDD/NewHadoopRDD.compute
+      // because partitions' info already cached.
+      rdd.collect()
+    }
+
+    // collect HadoopRDD and NewHadoopRDD when spark.files.ignoreMissingFiles=false by default.
+    sc = new SparkContext("local", "test")
+    intercept[org.apache.hadoop.mapred.InvalidInputException] {
+      // Exception happens when HadoopRDD.getPartitions
+      sc.textFile(deletedPath.toString).collect()
+    }
+
+    var e = intercept[SparkException] {
+      collectRDDAndDeleteFileBeforeCompute(false)
+    }
+    assert(e.getCause.isInstanceOf[java.io.FileNotFoundException])
+
+    intercept[org.apache.hadoop.mapreduce.lib.input.InvalidInputException] {
+      // Exception happens when NewHadoopRDD.getPartitions
+      sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
+        classOf[LongWritable], classOf[Text]).collect
+    }
+
+    e = intercept[SparkException] {
+      collectRDDAndDeleteFileBeforeCompute(true)
+    }
+    assert(e.getCause.isInstanceOf[java.io.FileNotFoundException])
+
+    sc.stop()
+
+    // collect HadoopRDD and NewHadoopRDD when spark.files.ignoreMissingFiles=true.
+    val conf = new SparkConf().set(IGNORE_MISSING_FILES, true)
+    sc = new SparkContext("local", "test", conf)
+    assert(sc.textFile(deletedPath.toString).collect().isEmpty)
+
+    assert(collectRDDAndDeleteFileBeforeCompute(false).isEmpty)
+
+    assert(sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
+      classOf[LongWritable], classOf[Text]).collect().isEmpty)
+
+    assert(collectRDDAndDeleteFileBeforeCompute(true).isEmpty)
   }
 }

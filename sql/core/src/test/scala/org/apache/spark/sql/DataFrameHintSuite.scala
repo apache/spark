@@ -59,4 +59,14 @@ class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
       )
     )
   }
+
+  test("coalesce and repartition hint") {
+    check(
+      df.hint("COALESCE", 10),
+      UnresolvedHint("COALESCE", Seq(10), df.logicalPlan))
+
+    check(
+      df.hint("REPARTITION", 100),
+      UnresolvedHint("REPARTITION", Seq(100), df.logicalPlan))
+  }
 }

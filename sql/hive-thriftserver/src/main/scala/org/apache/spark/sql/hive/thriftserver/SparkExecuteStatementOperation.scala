@@ -32,10 +32,11 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -102,8 +103,8 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getAs[Timestamp](ordinal)
       case BinaryType =>
         to += from.getAs[Array[Byte]](ordinal)
-      case _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = HiveUtils.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
+        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
     }
   }
@@ -170,6 +171,7 @@ private[hive] class SparkExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
+              registerCurrentOperationLog()
               try {
                 execute()
               } catch {
@@ -203,7 +205,7 @@ private[hive] class SparkExecuteStatementOperation(
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(OperationState.ERROR)
-          throw e
+          throw new HiveSQLException(e)
       }
     }
   }
@@ -225,7 +227,7 @@ private[hive] class SparkExecuteStatementOperation(
     sqlContext.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
-      sqlContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
     }
     try {
       result = sqlContext.sql(statement)
@@ -233,7 +235,8 @@ private[hive] class SparkExecuteStatementOperation(
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
           sessionToActivePool.put(parentSession.getSessionHandle, value)
-          logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
+          logInfo(s"Setting ${SparkContext.SPARK_SCHEDULER_POOL}=$value for future statements " +
+            "in this session.")
         case _ =>
       }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())

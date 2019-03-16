@@ -61,14 +61,14 @@ object HypothesisTestingExample {
           LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5)
           )
         )
-      ) // (feature, label) pairs.
+      ) // (label, feature) pairs.
 
-    // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
+    // The contingency table is constructed from the raw (label, feature) pairs and used to conduct
     // the independence test. Returns an array containing the ChiSquaredTestResult for every feature
     // against the label.
     val featureTestResults: Array[ChiSqTestResult] = Statistics.chiSqTest(obs)
     featureTestResults.zipWithIndex.foreach { case (k, v) =>
-      println("Column " + (v + 1).toString + ":")
+      println(s"Column ${(v + 1)} :")
       println(k)
     }  // summary of the test
     // $example off$

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -34,8 +33,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   private def visitUnaryNode(p: UnaryNode): Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = p.child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = p.output.map(_.dataType.defaultSize).sum + 8
+    val childRowSize = EstimationUtils.getSizePerRow(p.child.output)
+    val outputRowSize = EstimationUtils.getSizePerRow(p.output)
     // Assume there will be the same number of rows as child has.
     var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {
@@ -45,12 +44,12 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
 
     // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, hints = p.child.stats.hints)
+    Statistics(sizeInBytes = sizeInBytes)
   }
 
   /**
-   * For leaf nodes, use its computeStats. For other nodes, we assume the size in bytes is the
-   * sum of all of the children's.
+   * For leaf nodes, use its `computeStats`. For other nodes, we assume the size in bytes is the
+   * product of all of the children's `computeStats`.
    */
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
@@ -61,8 +60,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     if (p.groupingExpressions.isEmpty) {
       Statistics(
         sizeInBytes = EstimationUtils.getOutputSize(p.output, outputRowCount = 1),
-        rowCount = Some(1),
-        hints = p.child.stats.hints)
+        rowCount = Some(1))
     } else {
       visitUnaryNode(p)
     }
@@ -88,19 +86,15 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     // Don't propagate column stats, because we don't know the distribution after limit
     Statistics(
       sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
-      rowCount = Some(rowCount),
-      hints = childStats.hints)
+      rowCount = Some(rowCount))
   }
-
-  override def visitHint(p: ResolvedHint): Statistics = p.child.stats.copy(hints = p.hints)
 
   override def visitIntersect(p: Intersect): Statistics = {
     val leftSize = p.left.stats.sizeInBytes
     val rightSize = p.right.stats.sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
     Statistics(
-      sizeInBytes = sizeInBytes,
-      hints = p.left.stats.hints.resetForJoin())
+      sizeInBytes = sizeInBytes)
   }
 
   override def visitJoin(p: Join): Statistics = {
@@ -109,10 +103,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
         // LeftSemi and LeftAnti won't ever be bigger than left
         p.left.stats
       case _ =>
-        // Make sure we don't propagate isBroadcastable in other joins, because
-        // they could explode the size.
-        val stats = default(p)
-        stats.copy(hints = stats.hints.resetForJoin())
+        default(p)
     }
   }
 
@@ -122,7 +113,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
-      Statistics(sizeInBytes = 1, rowCount = Some(0), hints = childStats.hints)
+      Statistics(sizeInBytes = 1, rowCount = Some(0))
     } else {
       // The output row count of LocalLimit should be the sum of row counts from each partition.
       // However, since the number of partitions is not available here, we just use statistics of
@@ -148,7 +139,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
     val sampleRows = p.child.stats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
     // Don't propagate column stats, because we don't know the distribution after a sample operation
-    Statistics(sizeInBytes, sampleRows, hints = p.child.stats.hints)
+    Statistics(sizeInBytes, sampleRows)
   }
 
   override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)

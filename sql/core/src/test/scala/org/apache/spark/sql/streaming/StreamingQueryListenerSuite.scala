@@ -33,6 +33,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.util.JsonProtocol
@@ -81,7 +82,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       testStream(df, OutputMode.Append)(
 
         // Start event generated when query started
-        StartStream(ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertOnQuery { query =>
           assert(listener.startEvent !== null)
           assert(listener.startEvent.id === query.id)
@@ -123,7 +124,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         },
 
         // Termination event generated with exception message when stopped with error
-        StartStream(ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertStreamExecThreadToWaitForClock(),
         AddData(inputData, 0),
         AdvanceManualClock(100), // process bad data
@@ -174,6 +175,31 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("continuous processing listeners should receive QueryTerminatedEvent") {
+    val df = spark.readStream.format("rate").load()
+    val listeners = (1 to 5).map(_ => new EventCollector)
+    try {
+      listeners.foreach(listener => spark.streams.addListener(listener))
+      testStream(df, OutputMode.Append, useV2Sink = true)(
+        StartStream(Trigger.Continuous(1000)),
+        StopStream,
+        AssertOnQuery { query =>
+          eventually(Timeout(streamingTimeout)) {
+            listeners.foreach(listener => assert(listener.terminationEvent !== null))
+            listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
+            listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
+            listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
+          }
+          listeners.foreach(listener => listener.checkAsyncErrors())
+          listeners.foreach(listener => listener.reset())
+          true
+        }
+      )
+    } finally {
+      listeners.foreach(spark.streams.removeListener)
+    }
+  }
+
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
       listener.reset()
@@ -189,14 +215,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       val listener2 = new EventCollector
 
       spark.streams.addListener(listener1)
-      assert(isListenerActive(listener1) === true)
+      assert(isListenerActive(listener1))
       assert(isListenerActive(listener2) === false)
       spark.streams.addListener(listener2)
-      assert(isListenerActive(listener1) === true)
-      assert(isListenerActive(listener2) === true)
+      assert(isListenerActive(listener1))
+      assert(isListenerActive(listener2))
       spark.streams.removeListener(listener1)
       assert(isListenerActive(listener1) === false)
-      assert(isListenerActive(listener2) === true)
+      assert(isListenerActive(listener2))
     } finally {
       addedListeners().foreach(spark.streams.removeListener)
     }
@@ -205,7 +231,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("event ordering") {
     val listener = new EventCollector
     withListenerAdded(listener) {
-      for (i <- 1 to 100) {
+      for (i <- 1 to 50) {
         listener.reset()
         require(listener.startEvent === null)
         testStream(MemoryStream[Int].toDS)(
@@ -273,14 +299,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       try {
         val input = new MemoryStream[Int](0, sqlContext) {
           @volatile var numTriggers = 0
-          override def getOffset: Option[Offset] = {
+          override def latestOffset(): OffsetV2 = {
             numTriggers += 1
-            super.getOffset
+            super.latestOffset()
           }
         }
         val clock = new StreamManualClock()
         val actions = mutable.ArrayBuffer[StreamAction]()
-        actions += StartStream(trigger = ProcessingTime(10), triggerClock = clock)
+        actions += StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock)
         for (_ <- 1 to 100) {
           actions += AdvanceManualClock(10)
         }

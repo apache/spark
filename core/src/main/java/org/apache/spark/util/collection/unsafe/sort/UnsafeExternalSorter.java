@@ -25,6 +25,7 @@ import java.util.Queue;
 import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -212,14 +213,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       spillWriters.size() > 1 ? " times" : " time");
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-    // We only write out contents of the inMemSorter if it is not empty.
-    if (inMemSorter.numRecords() > 0) {
-      final UnsafeSorterSpillWriter spillWriter =
-        new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
-          inMemSorter.numRecords());
-      spillWriters.add(spillWriter);
-      spillIterator(inMemSorter.getSortedIterator(), spillWriter);
-    }
+
+    final UnsafeSorterSpillWriter spillWriter =
+      new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
+        inMemSorter.numRecords());
+    spillWriters.add(spillWriter);
+    spillIterator(inMemSorter.getSortedIterator(), spillWriter);
 
     final long spillSize = freeMemory();
     // Note that this is more-or-less going to be a multiple of the page size, so wasted space in
@@ -349,7 +348,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         // The pointer array is too big to fix in a single page, spill.
         spill();
         return;
-      } catch (OutOfMemoryError e) {
+      } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
         if (!inMemSorter.hasSpaceForAnotherRecord()) {
           logger.error("Unable to grow the pointer array");
@@ -401,7 +400,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     growPointerArrayIfNecessary();
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
-    // Need 4 bytes to store the record length.
+    // Need 4 or 8 bytes to store the record length.
     final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 

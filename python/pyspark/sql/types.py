@@ -206,7 +206,7 @@ class DecimalType(FractionalType):
     and scale (the number of digits on the right of dot). For example, (5, 2) can
     support the value from [-999.99 to 999.99].
 
-    The precision can be up to 38, the scale must less or equal to precision.
+    The precision can be up to 38, the scale must be less or equal to precision.
 
     When create a DecimalType, the default precision and scale is (10, 0). When infer
     schema from decimal.Decimal objects, it will be DecimalType(38, 18).
@@ -289,7 +289,8 @@ class ArrayType(DataType):
         >>> ArrayType(StringType(), False) == ArrayType(StringType())
         False
         """
-        assert isinstance(elementType, DataType), "elementType should be DataType"
+        assert isinstance(elementType, DataType),\
+            "elementType %s should be an instance of %s" % (elementType, DataType)
         self.elementType = elementType
         self.containsNull = containsNull
 
@@ -343,8 +344,10 @@ class MapType(DataType):
         ...        == MapType(StringType(), FloatType()))
         False
         """
-        assert isinstance(keyType, DataType), "keyType should be DataType"
-        assert isinstance(valueType, DataType), "valueType should be DataType"
+        assert isinstance(keyType, DataType),\
+            "keyType %s should be an instance of %s" % (keyType, DataType)
+        assert isinstance(valueType, DataType),\
+            "valueType %s should be an instance of %s" % (valueType, DataType)
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
@@ -402,8 +405,9 @@ class StructField(DataType):
         ...      == StructField("f2", StringType(), True))
         False
         """
-        assert isinstance(dataType, DataType), "dataType should be DataType"
-        assert isinstance(name, basestring), "field name should be string"
+        assert isinstance(dataType, DataType),\
+            "dataType %s should be an instance of %s" % (dataType, DataType)
+        assert isinstance(name, basestring), "field name %s should be string" % (name)
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
@@ -453,9 +457,6 @@ class StructType(DataType):
 
     Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
     A contained :class:`StructField` can be accessed by name or position.
-
-    .. note:: `names` attribute is deprecated in 2.3. Use `fieldNames` method instead
-        to get a list of field names.
 
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
@@ -751,42 +752,7 @@ _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
 
 
-_FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
-
-
-_BRACKETS = {'(': ')', '[': ']', '{': '}'}
-
-
-def _ignore_brackets_split(s, separator):
-    """
-    Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
-    given "a,b" and separator ",", it will return ["a", "b"], but given "a<b,c>, d", it will return
-    ["a<b,c>", "d"].
-    """
-    parts = []
-    buf = ""
-    level = 0
-    for c in s:
-        if c in _BRACKETS.keys():
-            level += 1
-            buf += c
-        elif c in _BRACKETS.values():
-            if level == 0:
-                raise ValueError("Brackets are not correctly paired: %s" % s)
-            level -= 1
-            buf += c
-        elif c == separator and level > 0:
-            buf += c
-        elif c == separator:
-            parts.append(buf)
-            buf = ""
-        else:
-            buf += c
-
-    if len(buf) == 0:
-        raise ValueError("The %s cannot be the last char: %s" % (separator, s))
-    parts.append(buf)
-    return parts
+_FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 
 
 def _parse_datatype_string(s):
@@ -899,6 +865,8 @@ def _parse_datatype_json_string(json_string):
     >>> complex_maptype = MapType(complex_structtype,
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
+    >>> # Decimal with negative scale.
+    >>> check_datatype(DecimalType(1,-1))
     """
     return _parse_datatype_json_value(json.loads(json_string))
 
@@ -1052,14 +1020,12 @@ def _infer_type(obj):
         for key, value in obj.items():
             if key is not None and value is not None:
                 return MapType(_infer_type(key), _infer_type(value), True)
-        else:
-            return MapType(NullType(), NullType(), True)
+        return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
         for v in obj:
             if v is not None:
                 return ArrayType(_infer_type(obj[0]), True)
-        else:
-            return ArrayType(NullType(), True)
+        return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
             return ArrayType(_array_type_mappings[obj.typecode](), False)
@@ -1072,7 +1038,7 @@ def _infer_type(obj):
             raise TypeError("not supported type: %s" % type(obj))
 
 
-def _infer_schema(row):
+def _infer_schema(row, names=None):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
@@ -1083,7 +1049,10 @@ def _infer_schema(row):
         elif hasattr(row, "_fields"):  # namedtuple
             items = zip(row._fields, tuple(row))
         else:
-            names = ['_%d' % i for i in range(1, len(row) + 1)]
+            if names is None:
+                names = ['_%d' % i for i in range(1, len(row) + 1)]
+            elif len(names) < len(row):
+                names.extend('_%d' % i for i in range(len(names) + 1, len(row) + 1))
             items = zip(names, row)
 
     elif hasattr(row, "__dict__"):  # object
@@ -1108,19 +1077,27 @@ def _has_nulltype(dt):
         return isinstance(dt, NullType)
 
 
-def _merge_type(a, b):
+def _merge_type(a, b, name=None):
+    if name is None:
+        new_msg = lambda msg: msg
+        new_name = lambda n: "field %s" % n
+    else:
+        new_msg = lambda msg: "%s: %s" % (name, msg)
+        new_name = lambda n: "field %s in %s" % (n, name)
+
     if isinstance(a, NullType):
         return b
     elif isinstance(b, NullType):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
+        raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
 
     # same type
     if isinstance(a, StructType):
         nfs = dict((f.name, f.dataType) for f in b.fields)
-        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType())))
+        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()),
+                                                  name=new_name(f.name)))
                   for f in a.fields]
         names = set([f.name for f in fields])
         for n in nfs:
@@ -1129,11 +1106,12 @@ def _merge_type(a, b):
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(a.elementType, b.elementType), True)
+        return ArrayType(_merge_type(a.elementType, b.elementType,
+                                     name='element in array %s' % name), True)
 
     elif isinstance(a, MapType):
-        return MapType(_merge_type(a.keyType, b.keyType),
-                       _merge_type(a.valueType, b.valueType),
+        return MapType(_merge_type(a.keyType, b.keyType, name='key of map %s' % name),
+                       _merge_type(a.valueType, b.valueType, name='value of map %s' % name),
                        True)
     else:
         return a
@@ -1522,6 +1500,9 @@ class Row(tuple):
     # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
+        if len(args) > len(self):
+            raise ValueError("Can not create Row with fields %s, expected %d values "
+                             "but got %s" % (self, len(self), args))
         return _create_row(self, args)
 
     def __getitem__(self, item):
@@ -1600,6 +1581,7 @@ register_input_converter(DateConverter())
 def to_arrow_type(dt):
     """ Convert Spark data type to pyarrow type
     """
+    from distutils.version import LooseVersion
     import pyarrow as pa
     if type(dt) == BooleanType:
         arrow_type = pa.bool_()
@@ -1616,14 +1598,30 @@ def to_arrow_type(dt):
     elif type(dt) == DoubleType:
         arrow_type = pa.float64()
     elif type(dt) == DecimalType:
-        arrow_type = pa.decimal(dt.precision, dt.scale)
+        arrow_type = pa.decimal128(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
+    elif type(dt) == BinaryType:
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt) +
+                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
+        arrow_type = pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
     elif type(dt) == TimestampType:
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
+    elif type(dt) == ArrayType:
+        if type(dt.elementType) in [StructType, TimestampType]:
+            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+    elif type(dt) == StructType:
+        if any(type(field.dataType) == StructType for field in dt):
+            raise TypeError("Nested StructType not supported in conversion to Arrow")
+        fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+                  for field in dt]
+        arrow_type = pa.struct(fields)
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -1641,30 +1639,41 @@ def to_arrow_schema(schema):
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
-    # TODO: newer pyarrow has is_boolean(at) functions that would be better to check type
+    from distutils.version import LooseVersion
     import pyarrow as pa
-    if at == pa.bool_():
+    import pyarrow.types as types
+    if types.is_boolean(at):
         spark_type = BooleanType()
-    elif at == pa.int8():
+    elif types.is_int8(at):
         spark_type = ByteType()
-    elif at == pa.int16():
+    elif types.is_int16(at):
         spark_type = ShortType()
-    elif at == pa.int32():
+    elif types.is_int32(at):
         spark_type = IntegerType()
-    elif at == pa.int64():
+    elif types.is_int64(at):
         spark_type = LongType()
-    elif at == pa.float32():
+    elif types.is_float32(at):
         spark_type = FloatType()
-    elif at == pa.float64():
+    elif types.is_float64(at):
         spark_type = DoubleType()
-    elif type(at) == pa.DecimalType:
+    elif types.is_decimal(at):
         spark_type = DecimalType(precision=at.precision, scale=at.scale)
-    elif at == pa.string():
+    elif types.is_string(at):
         spark_type = StringType()
-    elif at == pa.date32():
+    elif types.is_binary(at):
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
+                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
+        spark_type = BinaryType()
+    elif types.is_date32(at):
         spark_type = DateType()
-    elif type(at) == pa.TimestampType:
+    elif types.is_timestamp(at):
         spark_type = TimestampType()
+    elif types.is_list(at):
+        if types.is_timestamp(at.value_type):
+            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+        spark_type = ArrayType(from_arrow_type(at.value_type))
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
@@ -1678,35 +1687,209 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _check_dataframe_localize_timestamps(pdf):
+def _arrow_column_to_pandas(column, data_type):
+    """ Convert Arrow Column to pandas Series.
+
+    :param series: pyarrow.lib.Column
+    :param data_type: a Spark data type for the column
     """
-    Convert timezone aware timestamps to timezone-naive in local time
+    import pandas as pd
+    import pyarrow as pa
+    from distutils.version import LooseVersion
+    # If the given column is a date type column, creates a series of datetime.date directly instead
+    # of creating datetime64[ns] as intermediate data to avoid overflow caused by datetime64[ns]
+    # type handling.
+    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+        if type(data_type) == DateType:
+            return pd.Series(column.to_pylist(), name=column.name)
+        else:
+            return column.to_pandas()
+    else:
+        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
+        # np.datetime64.
+        return column.to_pandas(date_as_object=True)
+
+
+def _arrow_table_to_pandas(table, schema):
+    """ Convert Arrow Table to pandas DataFrame.
+
+    Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
+    use datetime.date to match the behavior with when Arrow optimization is disabled.
+
+    :param table: pyarrow.lib.Table
+    :param schema: a Spark schema of the pyarrow.lib.Table
+    """
+    import pandas as pd
+    import pyarrow as pa
+    from distutils.version import LooseVersion
+    # If the given table contains a date type column, use `_arrow_column_to_pandas` for pyarrow<0.11
+    # or use `date_as_object` option for pyarrow>=0.11 to avoid creating datetime64[ns] as
+    # intermediate data.
+    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+        if any(type(field.dataType) == DateType for field in schema):
+            return pd.concat([_arrow_column_to_pandas(column, field.dataType)
+                              for column, field in zip(table.itercolumns(), schema)], axis=1)
+        else:
+            return table.to_pandas()
+    else:
+        return table.to_pandas(date_as_object=True)
+
+
+def _get_local_timezone():
+    """ Get local timezone using pytz with environment variable, or dateutil.
+
+    If there is a 'TZ' environment variable, pass it to pandas to use pytz and use it as timezone
+    string, otherwise use the special word 'dateutil/:' which means that pandas uses dateutil and
+    it reads system configuration to know the system local timezone.
+
+    See also:
+    - https://github.com/pandas-dev/pandas/blob/0.19.x/pandas/tslib.pyx#L1753
+    - https://github.com/dateutil/dateutil/blob/2.6.1/dateutil/tz/tz.py#L1338
+    """
+    import os
+    return os.environ.get('TZ', 'dateutil/:')
+
+
+def _check_series_localize_timestamps(s, timezone):
+    """
+    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
+
+    If the input series is not a timestamp series, then the same series is returned. If the input
+    series is a timestamp series, then a converted series is returned.
+
+    :param s: pandas.Series
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.Series that have been converted to tz-naive
+    """
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    from pandas.api.types import is_datetime64tz_dtype
+    tz = timezone or _get_local_timezone()
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert(tz).dt.tz_localize(None)
+    else:
+        return s
+
+
+def _check_dataframe_localize_timestamps(pdf, timezone):
+    """
+    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
 
     :param pdf: pandas.DataFrame
-    :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.DataFrame where any timezone aware columns have been converted to tz-naive
     """
-    from pandas.api.types import is_datetime64tz_dtype
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
     for column, series in pdf.iteritems():
-        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-        if is_datetime64tz_dtype(series.dtype):
-            pdf[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
+        pdf[column] = _check_series_localize_timestamps(series, timezone)
     return pdf
 
 
-def _check_series_convert_timestamps_internal(s):
+def _check_series_convert_timestamps_internal(s, timezone):
     """
-    Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
+    Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
+    Spark internal storage
+
     :param s: a pandas.Series
+    :param timezone: the timezone to convert. if None then use local timezone
     :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
     """
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
     from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
-        return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
+        # When tz_localize a tz-naive timestamp, the result is ambiguous if the tz-naive
+        # timestamp is during the hour when the clock is adjusted backward during due to
+        # daylight saving time (dst).
+        # E.g., for America/New_York, the clock is adjusted backward on 2015-11-01 2:00 to
+        # 2015-11-01 1:00 from dst-time to standard time, and therefore, when tz_localize
+        # a tz-naive timestamp 2015-11-01 1:30 with America/New_York timezone, it can be either
+        # dst time (2015-01-01 1:30-0400) or standard time (2015-11-01 1:30-0500).
+        #
+        # Here we explicit choose to use standard time. This matches the default behavior of
+        # pytz.
+        #
+        # Here are some code to help understand this behavior:
+        # >>> import datetime
+        # >>> import pandas as pd
+        # >>> import pytz
+        # >>>
+        # >>> t = datetime.datetime(2015, 11, 1, 1, 30)
+        # >>> ts = pd.Series([t])
+        # >>> tz = pytz.timezone('America/New_York')
+        # >>>
+        # >>> ts.dt.tz_localize(tz, ambiguous=True)
+        # 0   2015-11-01 01:30:00-04:00
+        # dtype: datetime64[ns, America/New_York]
+        # >>>
+        # >>> ts.dt.tz_localize(tz, ambiguous=False)
+        # 0   2015-11-01 01:30:00-05:00
+        # dtype: datetime64[ns, America/New_York]
+        # >>>
+        # >>> str(tz.localize(t))
+        # '2015-11-01 01:30:00-05:00'
+        tz = timezone or _get_local_timezone()
+        return s.dt.tz_localize(tz, ambiguous=False).dt.tz_convert('UTC')
     elif is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert('UTC')
     else:
         return s
+
+
+def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param from_timezone: the timezone to convert from. if None then use local timezone
+    :param to_timezone: the timezone to convert to. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    import pandas as pd
+    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+    from_tz = from_timezone or _get_local_timezone()
+    to_tz = to_timezone or _get_local_timezone()
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert(to_tz).dt.tz_localize(None)
+    elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
+        # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
+        return s.apply(
+            lambda ts: ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)
+            if ts is not pd.NaT else pd.NaT)
+    else:
+        return s
+
+
+def _check_series_convert_timestamps_local_tz(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert to. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, None, timezone)
+
+
+def _check_series_convert_timestamps_tz_local(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert from. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, timezone, None)
 
 
 def _test():
@@ -1720,7 +1903,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

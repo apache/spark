@@ -67,6 +67,31 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   }
 
   /**
+   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
+   * returns.
+   */
+  protected override def withTempDir(f: File => Unit): Unit = {
+    super.withTempDir { dir =>
+      f(dir)
+      waitForTasksToFinish()
+    }
+  }
+
+  /**
+   * A helper function for turning off/on codegen.
+   */
+  protected def testWithWholeStageCodegenOnAndOff(testName: String)(f: String => Unit): Unit = {
+    Seq("false", "true").foreach { codegenEnabled =>
+      val isTurnOn = if (codegenEnabled == "true") "on" else "off"
+      test(s"$testName (whole-stage-codegen ${isTurnOn})") {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+          f(codegenEnabled)
+        }
+      }
+    }
+  }
+
+  /**
    * Materialize the test data immediately after the `SQLContext` is set up.
    * This is necessary if the data is accessed by name but not through direct reference.
    */
@@ -76,7 +101,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
 
   /**
    * Disable stdout and stderr when running the test. To not output the logs to the console,
-   * ConsoleAppender's `follow` should be set to `true` so that it will honors reassignments of
+   * ConsoleAppender's `follow` should be set to `true` so that it will honor reassignments of
    * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
    * we change System.out and System.err.
    */
@@ -113,7 +138,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
       if (thread.isAlive) {
         thread.interrupt()
         // If this interrupt does not work, then this thread is most likely running something that
-        // is not interruptible. There is not much point to wait for the thread to termniate, and
+        // is not interruptible. There is not much point to wait for the thread to terminate, and
         // we rather let the JVM terminate the thread on exit.
         fail(
           s"Test '$name' running on o.a.s.util.UninterruptibleThread timed out after" +
@@ -127,6 +152,44 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
       testQuietly(name) { runOnThread() }
     } else {
       test(name) { runOnThread() }
+    }
+  }
+
+  /**
+   * Copy file in jar's resource to a temp file, then pass it to `f`.
+   * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
+   * path of jar's resource which starts with 'jar:file:/'
+   */
+  protected def withResourceTempPath(resourcePath: String)(f: File => Unit): Unit = {
+    val inputStream =
+      Thread.currentThread().getContextClassLoader.getResourceAsStream(resourcePath)
+    withTempDir { dir =>
+      val tmpFile = new File(dir, "tmp")
+      Files.copy(inputStream, tmpFile.toPath)
+      f(tmpFile)
+    }
+  }
+
+  /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
     }
   }
 }
@@ -168,71 +231,6 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
-   * a file/directory is created there by `f`, it will be delete after `f` returns.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
-
-  /**
-   * Copy file in jar's resource to a temp file, then pass it to `f`.
-   * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
-   * path of jar's resource which starts with 'jar:file:/'
-   */
-  protected def withResourceTempPath(resourcePath: String)(f: File => Unit): Unit = {
-    val inputStream =
-      Thread.currentThread().getContextClassLoader.getResourceAsStream(resourcePath)
-    withTempDir { dir =>
-      val tmpFile = new File(dir, "tmp")
-      Files.copy(inputStream, tmpFile.toPath)
-      f(tmpFile)
-    }
-  }
-
-  /**
-   * Waits for all tasks on all executors to be finished.
-   */
-  protected def waitForTasksToFinish(): Unit = {
-    eventually(timeout(10.seconds)) {
-      assert(spark.sparkContext.statusTracker
-        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
-    }
-  }
-
-  /**
-   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
-   * returns.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally {
-      // wait for all tasks to finish before deleting files
-      waitForTasksToFinish()
-      Utils.deleteRecursively(dir)
-    }
-  }
-
-  /**
-   * Creates the specified number of temporary directories, which is then passed to `f` and will be
-   * deleted after `f` returns.
-   */
-  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
-    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files) finally {
-      // wait for all tasks to finish before deleting files
-      waitForTasksToFinish()
-      files.foreach(Utils.deleteRecursively)
-    }
-  }
-
-  /**
    * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
    */
   protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
@@ -254,13 +252,26 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Drops temporary table `tableName` after calling `f`.
+   * Drops temporary view `viewNames` after calling `f`.
    */
-  protected def withTempView(tableNames: String*)(f: => Unit): Unit = {
+  protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp tables that never got created.
-      try tableNames.foreach(spark.catalog.dropTempView) catch {
+      // temp views that never got created.
+      try viewNames.foreach(spark.catalog.dropTempView) catch {
+        case _: NoSuchTableException =>
+      }
+    }
+  }
+
+  /**
+   * Drops global temporary view `viewNames` after calling `f`.
+   */
+  protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      // If the test failed part way, we don't want to mask the failure by failing to remove
+      // global temp views that never got created.
+      try viewNames.foreach(spark.catalog.dropGlobalTempView) catch {
         case _: NoSuchTableException =>
       }
     }
@@ -377,6 +388,13 @@ private[sql] trait SQLTestUtilsBase
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.makeQualified(hadoopPath).toUri
+  }
+
+  /**
+   * Returns full path to the given file in the resource folder
+   */
+  protected def testFile(fileName: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
   }
 }
 

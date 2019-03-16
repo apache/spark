@@ -22,6 +22,7 @@ import java.lang.Boolean
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -86,12 +87,14 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     message.clientSparkVersion = "1.2.3"
     message.appResource = "honey-walnut-cherry.jar"
     message.mainClass = "org.apache.spark.examples.SparkPie"
+    message.appArgs = Array("two slices")
+    message.environmentVariables = Map("PATH" -> "/dev/null")
     val conf = new SparkConf(false)
     conf.set("spark.app.name", "SparkPie")
     message.sparkProperties = conf.getAll.toMap
     message.validate()
     // optional fields
-    conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
+    conf.set(JARS, Seq("mayonnaise.jar", "ketchup.jar"))
     conf.set("spark.files", "fireball.png")
     conf.set("spark.driver.memory", s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
     conf.set("spark.driver.cores", "180")

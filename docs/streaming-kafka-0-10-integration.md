@@ -3,7 +3,10 @@ layout: global
 title: Spark Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
 ---
 
-The Spark Streaming integration for Kafka 0.10 is similar in design to the 0.8 [Direct Stream approach](streaming-kafka-0-8-integration.html#approach-2-direct-approach-no-receivers).  It provides simple parallelism,  1:1 correspondence between Kafka partitions and Spark partitions, and access to offsets and metadata. However, because the newer integration uses the [new Kafka consumer API](http://kafka.apache.org/documentation.html#newconsumerapi) instead of the simple API, there are notable differences in usage. This version of the integration is marked as experimental, so the API is potentially subject to change.
+The Spark Streaming integration for Kafka 0.10 provides simple parallelism, 1:1 correspondence between Kafka 
+partitions and Spark partitions, and access to offsets and metadata. However, because the newer integration uses 
+the [new Kafka consumer API](https://kafka.apache.org/documentation.html#newconsumerapi) instead of the simple API, 
+there are notable differences in usage.
 
 ### Linking
 For Scala/Java applications using SBT/Maven project definitions, link your streaming application with the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
@@ -93,7 +96,7 @@ In most cases, you should use `LocationStrategies.PreferConsistent` as shown abo
 
 The cache for consumers has a default maximum size of 64.  If you expect to be handling more than (64 * number of executors) Kafka partitions, you can change this setting via `spark.streaming.kafka.consumer.cache.maxCapacity`.
 
-If you would like to disable the caching for Kafka consumers, you can set `spark.streaming.kafka.consumer.cache.enabled` to `false`. Disabling the cache may be needed to workaround the problem described in SPARK-19185. This property may be removed in later versions of Spark, once SPARK-19185 is resolved.
+If you would like to disable the caching for Kafka consumers, you can set `spark.streaming.kafka.consumer.cache.enabled` to `false`.
 
 The cache is keyed by topicpartition and group.id, so use a **separate** `group.id` for each call to `createDirectStream`.
 
@@ -312,3 +315,10 @@ As with any Spark applications, `spark-submit` is used to launch your applicatio
 
 For Scala and Java applications, if you are using SBT or Maven for project management, then package `spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}` and its dependencies into the application JAR. Make sure `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` are marked as `provided` dependencies as those are already present in a Spark installation. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
+### Security
+
+See [Structured Streaming Security](structured-streaming-kafka-integration.html#security).
+
+##### Additional Caveats
+
+- Kafka native sink is not available so delegation token used only on consumer side.

@@ -80,7 +80,10 @@ The history server can be configured as follows:
   </tr>
 </table>
 
-### Spark configuration options
+### Spark History Server Configuration Options
+
+Security options for the Spark History Server are covered more detail in the
+[Security](security.html#web-ui) page.
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -118,7 +121,7 @@ The history server can be configured as follows:
     <td>
       The number of applications to retain UI data for in the cache. If this cap is exceeded, then
       the oldest applications will be removed from the cache. If an application is not in the cache,
-      it will have to be loaded from disk if its accessed from the UI.
+      it will have to be loaded from disk if it is accessed from the UI.
     </td>
   </tr>
   <tr>
@@ -161,41 +164,6 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.ui.acls.enable</td>
-    <td>false</td>
-    <td>
-      Specifies whether acls should be checked to authorize users viewing the applications.
-      If enabled, access control checks are made regardless of what the individual application had
-      set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
-      will always have authorization to view their own application and any users specified via
-      <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
-      when the application was run will also have authorization to view that application.
-      If disabled, no access control checks are made.
-    </td>
-  </tr>
-  <tr>
-    <td>spark.history.ui.admin.acls</td>
-    <td>empty</td>
-    <td>
-      Comma separated list of users/administrators that have view access to all the Spark applications in
-      history server. By default only the users permitted to view the application at run-time could
-      access the related application history, with this, configured users/administrators could also
-      have the permission to access it.
-      Putting a "*" in the list means any user can have the privilege of admin.
-    </td>
-  </tr>
-  <tr>
-    <td>spark.history.ui.admin.acls.groups</td>
-    <td>empty</td>
-    <td>
-      Comma separated list of groups that have view access to all the Spark applications in
-      history server. By default only the groups permitted to view the application at run-time could
-      access the related application history, with this, configured groups could also
-      have the permission to access it.
-      Putting a "*" in the list means any group can have the privilege of admin.
-    </td>
-  </tr>
-  <tr>
     <td>spark.history.fs.cleaner.enabled</td>
     <td>false</td>
     <td>
@@ -218,10 +186,57 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.fs.endEventReparseChunkSize</td>
+    <td>1m</td>
+    <td>
+      How many bytes to parse at the end of log files looking for the end event. 
+      This is used to speed up generation of application listings by skipping unnecessary
+      parts of event log files. It can be disabled by setting this config to 0.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.inProgressOptimization.enabled</td>
+    <td>true</td>
+    <td>
+      Enable optimized handling of in-progress logs. This option may leave finished
+      applications that fail to rename their event logs listed as in-progress.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.driverlog.cleaner.enabled</td>
+    <td><code>spark.history.fs.cleaner.enabled</code></td>
+    <td>
+      Specifies whether the History Server should periodically clean up driver logs from storage.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.driverlog.cleaner.interval</td>
+    <td><code>spark.history.fs.cleaner.interval</code></td>
+    <td>
+      How often the filesystem driver log cleaner checks for files to delete.
+      Files are only deleted if they are older than <code>spark.history.fs.driverlog.cleaner.maxAge</code>
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.driverlog.cleaner.maxAge</td>
+    <td><code>spark.history.fs.cleaner.maxAge</code></td>
+    <td>
+      Driver log files older than this will be deleted when the driver log cleaner runs.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.numReplayThreads</td>
     <td>25% of available cores</td>
     <td>
       Number of threads that will be used by history server to process event logs.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.store.maxDiskUsage</td>
+    <td>10g</td>
+    <td>
+      Maximum disk usage for the local directory where the cache application history information
+      are stored.
     </td>
   </tr>
   <tr>
@@ -233,6 +248,30 @@ The history server can be configured as follows:
         written to disk will be re-used in the event of a history server restart.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.custom.executor.log.url</td>
+    <td>(none)</td>
+    <td>
+        Specifies custom spark executor log URL for supporting external log service instead of using cluster
+        managers' application log URLs in the history server. Spark will support some path variables via patterns
+        which can vary on cluster manager. Please check the documentation for your cluster manager to
+        see which patterns are supported, if any. This configuration has no effect on a live application, it only
+        affects the history server.
+        <p/>
+        For now, only YARN mode supports this configuration
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.custom.executor.log.url.applyIncompleteApplication</td>
+    <td>false</td>
+    <td>
+        Specifies whether to apply custom spark executor log URL to incomplete applications as well.
+        If executor logs for running applications should be provided as origin log URLs, set this to `false`.
+        Please note that incomplete applications may include applications which didn't shutdown gracefully.
+        Even this is set to `true`, this configuration has no effect on a live application, it only affects the history server.
+    </td>
+  </tr>
+
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -246,7 +285,7 @@ incomplete attempt or the final successful attempt.
 
 2. Incomplete applications are only updated intermittently. The time between updates is defined
 by the interval between checks for changed files (`spark.history.fs.update.interval`).
-On larger clusters the update interval may be set to large values.
+On larger clusters, the update interval may be set to large values.
 The way to view a running application is actually to view its own web UI.
 
 3. Applications which exited without registering themselves as completed will be listed
@@ -348,6 +387,13 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>A list of all active executors for the given application.</td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/executors/[executor-id]/threads</code></td>
+    <td>
+      Stack traces of all the threads running within the given active executor.
+      Not available via the history server.
+    </td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/allexecutors</code></td>
     <td>A list of all(active and dead) executors for the given application.</td>
   </tr>
@@ -407,11 +453,163 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
 </table>
 
-The number of jobs and stages which can retrieved is constrained by the same retention
+The number of jobs and stages which can be retrieved is constrained by the same retention
 mechanism of the standalone Spark UI; `"spark.ui.retainedJobs"` defines the threshold
 value triggering garbage collection on jobs, and `spark.ui.retainedStages` that for stages.
 Note that the garbage collection takes place on playback: it is possible to retrieve
 more entries by increasing these values and restarting the history server.
+
+### Executor Task Metrics
+
+The REST API exposes the values of the Task Metrics collected by Spark executors with the granularity
+of task execution. The metrics can be used for performance troubleshooting and workload characterization.
+A list of the available metrics, with a short description:
+
+<table class="table">
+  <tr><th>Spark Executor Task Metric name</th>
+      <th>Short description</th>
+  </tr>
+  <tr>
+    <td>executorRunTime</td>
+    <td>Elapsed time the executor spent running this task. This includes time fetching shuffle data.
+    The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
+    <td>executorCpuTime</td>
+    <td>CPU time the executor spent running this task. This includes time fetching shuffle data.
+    The value is expressed in nanoseconds.</td>
+  </tr>
+  <tr>
+    <td>executorDeserializeTime</td>
+    <td>Elapsed time spent to deserialize this task. The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
+    <td>executorDeserializeCpuTime</td>
+    <td>CPU time taken on the executor to deserialize this task. The value is expressed
+    in nanoseconds.</td>
+  </tr>
+  <tr>
+    <td>resultSize</td>
+    <td>The number of bytes this task transmitted back to the driver as the TaskResult.</td>
+  </tr>
+  <tr>
+    <td>jvmGCTime</td>
+    <td>Elapsed time the JVM spent in garbage collection while executing this task.
+    The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
+    <td>resultSerializationTime</td>
+    <td>Elapsed time spent serializing the task result. The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
+    <td>memoryBytesSpilled</td>
+    <td>The number of in-memory bytes spilled by this task.</td>
+  </tr>
+  <tr>
+    <td>diskBytesSpilled</td>
+    <td>The number of on-disk bytes spilled by this task.</td>
+  </tr>
+  <tr>
+    <td>peakExecutionMemory</td>
+    <td>Peak memory used by internal data structures created during shuffles, aggregations and
+        joins. The value of this accumulator should be approximately the sum of the peak sizes
+        across all such data structures created in this task. For SQL jobs, this only tracks all
+         unsafe operators and ExternalSort.</td>
+  </tr>
+  <tr>
+    <td>inputMetrics.*</td>
+    <td>Metrics related to reading data from [[org.apache.spark.rdd.HadoopRDD]] 
+    or from persisted data.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.bytesRead</td>
+    <td>Total number of bytes read.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.recordsRead</td>
+    <td>Total number of records read.</td>
+  </tr>
+  <tr>
+    <td>outputMetrics.*</td>
+    <td>Metrics related to writing data externally (e.g. to a distributed filesystem),
+    defined only in tasks with output.</td>            
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.bytesWritten</td>
+    <td>Total number of bytes written</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.recordsWritten</td>
+    <td>Total number of records written</td>
+  </tr>
+  <tr>
+    <td>shuffleReadMetrics.*</td>
+    <td>Metrics related to shuffle read operations.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.recordsRead</td>
+    <td>Number of records read in shuffle operations</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.remoteBlocksFetched</td>
+    <td>Number of remote blocks fetched in shuffle operations</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.localBlocksFetched</td>
+    <td>Number of local (as opposed to read from a remote executor) blocks fetched
+    in shuffle operations</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.totalBlocksFetched</td>
+    <td>Number of blocks fetched in shuffle operations (both local and remote)</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.remoteBytesRead</td>
+    <td>Number of remote bytes read in shuffle operations</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.localBytesRead</td>
+    <td>Number of bytes read in shuffle operations from local disk (as opposed to
+    read from a remote executor)</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.totalBytesRead</td>
+    <td>Number of bytes read in shuffle operations (both local and remote)</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.remoteBytesReadToDisk</td>
+    <td>Number of remote bytes read to disk in shuffle operations.
+    Large blocks are fetched to disk in shuffle read operations, as opposed to 
+    being read into memory, which is the default behavior.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.fetchWaitTime</td>
+    <td>Time the task spent waiting for remote shuffle blocks. 
+        This only includes the time blocking on shuffle input data.
+        For instance if block B is being fetched while the task is still not finished 
+        processing block A, it is not considered to be blocking on block B.
+        The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
+    <td>shuffleWriteMetrics.*</td>
+    <td>Metrics related to operations writing shuffle data.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.bytesWritten</td>
+    <td>Number of bytes written in shuffle operations</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.recordsWritten</td>
+    <td>Number of records written in shuffle operations</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.writeTime</td>
+    <td>Time spent blocking on writes to disk or buffer cache. The value is expressed
+     in nanoseconds.</td>
+  </tr>
+</table>
+
+
 
 ### API Versioning Policy
 
@@ -422,10 +620,10 @@ These endpoints have been strongly versioned to make it easier to develop applic
 * Individual fields will never be removed for any given endpoint
 * New endpoints may be added
 * New fields may be added to existing endpoints
-* New versions of the api may be added in the future at a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
+* New versions of the api may be added in the future as a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
 * Api versions may be dropped, but only after at least one minor release of co-existing with a new api version.
 
-Note that even when examining the UI of a running applications, the `applications/[app-id]` portion is
+Note that even when examining the UI of running applications, the `applications/[app-id]` portion is
 still required, though there is only one application available.  Eg. to see the list of jobs for the
 running app, you would go to `http://localhost:4040/api/v1/applications/[app-id]/jobs`.  This is to
 keep the paths consistent in both modes.
@@ -435,9 +633,13 @@ keep the paths consistent in both modes.
 Spark has a configurable metrics system based on the
 [Dropwizard Metrics Library](http://metrics.dropwizard.io/).
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV
-files. The metrics system is configured via a configuration file that Spark expects to be present
+files. The metrics are generated by sources embedded in the Spark code base. They
+provide instrumentation for specific activities and Spark components.
+The metrics system is configured via a configuration file that Spark expects to be present
 at `$SPARK_HOME/conf/metrics.properties`. A custom file location can be specified via the
 `spark.metrics.conf` [configuration property](configuration.html#spark-properties).
+Instead of using the configuration file, a set of configuration parameters with prefix
+`spark.metrics.conf.` can be used.
 By default, the root namespace used for driver or executor metrics is 
 the value of `spark.app.id`. However, often times, users want to be able to track the metrics 
 across apps for driver and executors, which is hard to do with application ID 
@@ -447,7 +649,7 @@ configuration property.
 If, say, users wanted to set the metrics namespace to the name of the application, they
 can set the `spark.metrics.namespace` property to a value like `${spark.app.name}`. This value is
 then expanded appropriately by Spark and is used as the root namespace of the metrics system. 
-Non driver and executor metrics are never prefixed with `spark.app.id`, nor does the 
+Non-driver and executor metrics are never prefixed with `spark.app.id`, nor does the
 `spark.metrics.namespace` property have any such affect on such metrics.
 
 Spark's metrics are decoupled into different
@@ -460,6 +662,8 @@ set of sinks to which metrics are reported. The following instances are currentl
 * `executor`: A Spark executor.
 * `driver`: The Spark driver process (the process in which your SparkContext is created).
 * `shuffleService`: The Spark shuffle service.
+* `applicationMaster`: The Spark ApplicationMaster when running on YARN.
+* `mesos_cluster`: The Spark cluster scheduler when running on Mesos.
 
 Each instance can report to zero or more _sinks_. Sinks are contained in the
 `org.apache.spark.metrics.sink` package:
@@ -484,8 +688,261 @@ code in your Spark package**_. For sbt users, set the
 the `-Pspark-ganglia-lgpl` profile. In addition to modifying the cluster's Spark build
 user applications will need to link to the `spark-ganglia-lgpl` artifact.
 
-The syntax of the metrics configuration file is defined in an example configuration file,
+The syntax of the metrics configuration file and the parameters available for each sink are defined
+in an example configuration file,
 `$SPARK_HOME/conf/metrics.properties.template`.
+
+When using Spark configuration parameters instead of the metrics configuration file, the relevant
+parameter names are composed by the prefix `spark.metrics.conf.` followed by the configuration
+details, i.e. the parameters take the following form:
+`spark.metrics.conf.[instance|*].sink.[sink_name].[parameter_name]`.
+This example shows a list of Spark configuration parameters for a Graphite sink:
+```
+"spark.metrics.conf.*.sink.graphite.class"="org.apache.spark.metrics.sink.GraphiteSink"
+"spark.metrics.conf.*.sink.graphite.host"="graphiteEndPoint_hostName>"
+"spark.metrics.conf.*.sink.graphite.port"=<graphite_listening_port>
+"spark.metrics.conf.*.sink.graphite.period"=10
+"spark.metrics.conf.*.sink.graphite.unit"=seconds
+"spark.metrics.conf.*.sink.graphite.prefix"="optional_prefix"
+```
+
+Default values of the Spark metrics configuration are as follows:
+```
+"*.sink.servlet.class" = "org.apache.spark.metrics.sink.MetricsServlet"
+"*.sink.servlet.path" = "/metrics/json"
+"master.sink.servlet.path" = "/metrics/master/json"
+"applications.sink.servlet.path" = "/metrics/applications/json"
+```
+
+Additional sources can be configured using the metrics configuration file or the configuration
+parameter `spark.metrics.conf.[component_name].source.jvm.class=[source_name]`. At present the 
+JVM source is the only available optional source. For example the following configuration parameter
+activates the JVM source:
+`"spark.metrics.conf.*.source.jvm.class"="org.apache.spark.metrics.source.JvmSource"`
+
+## List of available metrics providers 
+
+Metrics used by Spark are of multiple types: gauge, counter, histogram, meter and timer, 
+see [Dropwizard library documentation for details](https://metrics.dropwizard.io/3.1.0/getting-started/).
+The following list of components and metrics reports the name and some details about the available metrics,
+grouped per component instance and source namespace.
+The most common time of metrics used in Spark instrumentation are gauges and counters. 
+Counters can be recognized as they have the `.count` suffix. Timers, meters and histograms are annotated
+in the list, the rest of the list elements are metrics of type gauge.
+The large majority of metrics are active as soon as their parent component instance is configured,
+some metrics require also to be enabled via an additional configuration parameter, the details are
+reported in the list.
+
+### Component instance = Driver
+This is the component with the largest amount of instrumented metrics
+
+- namespace=BlockManager
+  - disk.diskSpaceUsed_MB
+  - memory.maxMem_MB
+  - memory.maxOffHeapMem_MB
+  - memory.maxOnHeapMem_MB
+  - memory.memUsed_MB
+  - memory.offHeapMemUsed_MB
+  - memory.onHeapMemUsed_MB
+  - memory.remainingMem_MB
+  - memory.remainingOffHeapMem_MB
+  - memory.remainingOnHeapMem_MB
+
+- namespace=HiveExternalCatalog
+  - fileCacheHits.count
+  - filesDiscovered.count
+  - hiveClientCalls.count
+  - parallelListingJobCount.count
+  - partitionsFetched.count
+
+- namespace=CodeGenerator
+  - compilationTime (histogram)
+  - generatedClassSize (histogram)
+  - generatedMethodSize (histogram)
+  - hiveClientCalls.count
+  - sourceCodeSize (histogram)
+
+- namespace=DAGScheduler
+  - job.activeJobs 
+  - job.allJobs
+  - messageProcessingTime (timer)
+  - stage.failedStages
+  - stage.runningStages
+  - stage.waitingStages
+
+- namespace=LiveListenerBus
+  - listenerProcessingTime.org.apache.spark.HeartbeatReceiver (timer)
+  - listenerProcessingTime.org.apache.spark.scheduler.EventLoggingListener (timer)
+  - listenerProcessingTime.org.apache.spark.status.AppStatusListener (timer)
+  - numEventsPosted.count
+  - queue.appStatus.listenerProcessingTime (timer)
+  - queue.appStatus.numDroppedEvents.count
+  - queue.appStatus.size
+  - queue.eventLog.listenerProcessingTime (timer)
+  - queue.eventLog.numDroppedEvents.count
+  - queue.eventLog.size
+  - queue.executorManagement.listenerProcessingTime (timer)
+
+- namespace=appStatus (all metrics of type=counter)
+  - **note:** Introduced in Spark 3.0. Conditional to configuration parameter:  
+   `spark.app.status.metrics.enabled=true` (default is false)
+  - stages.failedStages.count
+  - stages.skippedStages.count
+  - tasks.blackListedExecutors.count
+  - tasks.completedTasks.count
+  - tasks.failedTasks.count
+  - tasks.killedTasks.count
+  - tasks.skippedTasks.count
+  - tasks.unblackListedExecutors.count
+  - jobs.succeededJobs
+  - jobs.failedJobs
+  - jobDuration
+  
+- namespace=AccumulatorSource  
+  - **note:** User-configurable sources to attach accumulators to metric system
+  - DoubleAccumulatorSource
+  - LongAccumulatorSource
+
+- namespace=spark.streaming
+  - **note** applies to Spark Structured Streaming only. Conditional to a configuration
+  parameter: `spark.sql.streaming.metricsEnabled=true` (default is false) 
+  - eventTime-watermark
+  - inputRate-total
+  - latency
+  - processingRate-total
+  - states-rowsTotal
+  - states-usedBytes
+
+- namespace=JVMCPU
+  - jvmCpuTime
+
+### Component instance = Executor
+These metrics are exposed by Spark executors. Note, currently they are not available
+when running in local mode.
+ 
+- namespace=executor (metrics are of type counter or gauge)
+  - bytesRead.count
+  - bytesWritten.count
+  - cpuTime.count
+  - deserializeCpuTime.count
+  - deserializeTime.count
+  - diskBytesSpilled.count
+  - filesystem.file.largeRead_ops
+  - filesystem.file.read_bytes
+  - filesystem.file.read_ops
+  - filesystem.file.write_bytes
+  - filesystem.file.write_ops
+  - filesystem.hdfs.largeRead_ops
+  - filesystem.hdfs.read_bytes
+  - filesystem.hdfs.read_ops
+  - filesystem.hdfs.write_bytes
+  - filesystem.hdfs.write_ops
+  - jvmGCTime.count
+  - memoryBytesSpilled.count
+  - recordsRead.count
+  - recordsWritten.count
+  - resultSerializationTime.count
+  - resultSize.count
+  - runTime.count
+  - shuffleBytesWritten.count
+  - shuffleFetchWaitTime.count
+  - shuffleLocalBlocksFetched.count
+  - shuffleLocalBytesRead.count
+  - shuffleRecordsRead.count
+  - shuffleRecordsWritten.count
+  - shuffleRemoteBlocksFetched.count
+  - shuffleRemoteBytesRead.count
+  - shuffleRemoteBytesReadToDisk.count
+  - shuffleTotalBytesRead.count
+  - shuffleWriteTime.count
+  - threadpool.activeTasks
+  - threadpool.completeTasks
+  - threadpool.currentPool_size
+  - threadpool.maxPool_size
+
+- namespace=JVMCPU
+  - jvmCpuTime
+
+- namespace=NettyBlockTransfer
+  - shuffle-client.usedDirectMemory
+  - shuffle-client.usedHeapMemory
+  - shuffle-server.usedDirectMemory
+  - shuffle-server.usedHeapMemory
+
+- namespace=HiveExternalCatalog
+  - fileCacheHits.count
+  - filesDiscovered.count
+  - hiveClientCalls.count
+  - parallelListingJobCount.count
+  - partitionsFetched.count
+
+- namespace=CodeGenerator
+  - compilationTime (histogram)
+  - generatedClassSize (histogram)
+  - generatedMethodSize (histogram)
+  - hiveClientCalls.count
+  - sourceCodeSize (histogram)
+
+### Source = JVM Source 
+Notes: 
+  - Activate this source by setting the relevant `metrics.properties` file entry or the 
+  configuration parameter:`spark.metrics.conf.*.source.jvm.class=org.apache.spark.metrics.source.JvmSource`  
+  - This source is available for driver and executor instances and is also available for other instances.  
+  - This source provides information on JVM metrics using the 
+  [Dropwizard/Codahale Metric Sets for JVM instrumentation](https://metrics.dropwizard.io/3.1.0/manual/jvm/)
+   and in particular the metric sets BufferPoolMetricSet, GarbageCollectorMetricSet and MemoryUsageGaugeSet. 
+
+### Component instance = applicationMaster
+Note: applies when running on YARN
+
+- numContainersPendingAllocate
+- numExecutorsFailed
+- numExecutorsRunning
+- numLocalityAwareTasks
+- numReleasedContainers
+
+### Component instance = mesos_cluster
+Note: applies when running on mesos
+
+- waitingDrivers
+- launchedDrivers
+- retryDrivers
+
+### Component instance = master
+Note: applies when running in Spark standalone as master
+
+- workers
+- aliveWorkers
+- apps
+- waitingApps
+
+### Component instance = ApplicationSource
+Note: applies when running in Spark standalone as master
+
+- status
+- runtime_ms
+- cores
+
+### Component instance = worker
+Note: applies when running in Spark standalone as worker
+
+- executors
+- coresUsed
+- memUsed_MB
+- coresFree
+- memFree_MB
+
+## Component instance = shuffleService
+Note: applies to the shuffle service
+
+- blockTransferRateBytes (meter)
+- numActiveConnections.count
+- numRegisteredConnections.count
+- openBlockRequestLatencyMillis (histogram)
+- registerExecutorRequestLatencyMillis (histogram)
+- registeredExecutorsSize
+- shuffle-server.usedDirectMemory
+- shuffle-server.usedHeapMemory
 
 # Advanced Instrumentation
 

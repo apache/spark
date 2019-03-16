@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import json
 
 if sys.version >= '3':
@@ -448,24 +447,72 @@ class Column(object):
 
     # order
     _asc_doc = """
-    Returns a sort expression based on the ascending order of the given column name
+    Returns a sort expression based on ascending order of the column.
 
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc()).collect()
     [Row(name=u'Alice'), Row(name=u'Tom')]
     """
-    _desc_doc = """
-    Returns a sort expression based on the descending order of the given column name.
+    _asc_nulls_first_doc = """
+    Returns a sort expression based on ascending order of the column, and null values
+    return before non-null values.
 
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')]
+
+    .. versionadded:: 2.4
+    """
+    _asc_nulls_last_doc = """
+    Returns a sort expression based on ascending order of the column, and null values
+    appear after non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_last()).collect()
+    [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)]
+
+    .. versionadded:: 2.4
+    """
+    _desc_doc = """
+    Returns a sort expression based on the descending order of the column.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc()).collect()
     [Row(name=u'Tom'), Row(name=u'Alice')]
     """
+    _desc_nulls_first_doc = """
+    Returns a sort expression based on the descending order of the column, and null values
+    appear before non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')]
+
+    .. versionadded:: 2.4
+    """
+    _desc_nulls_last_doc = """
+    Returns a sort expression based on the descending order of the column, and null values
+    appear after non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_last()).collect()
+    [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)]
+
+    .. versionadded:: 2.4
+    """
 
     asc = ignore_unicode_prefix(_unary_op("asc", _asc_doc))
+    asc_nulls_first = ignore_unicode_prefix(_unary_op("asc_nulls_first", _asc_nulls_first_doc))
+    asc_nulls_last = ignore_unicode_prefix(_unary_op("asc_nulls_last", _asc_nulls_last_doc))
     desc = ignore_unicode_prefix(_unary_op("desc", _desc_doc))
+    desc_nulls_first = ignore_unicode_prefix(_unary_op("desc_nulls_first", _desc_nulls_first_doc))
+    desc_nulls_last = ignore_unicode_prefix(_unary_op("desc_nulls_last", _desc_nulls_last_doc))
 
     _isNull_doc = """
     True if the current expression is null.
@@ -660,7 +707,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

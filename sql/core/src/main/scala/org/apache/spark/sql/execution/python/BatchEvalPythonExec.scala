@@ -25,8 +25,19 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructField, StructType}
+
+/**
+ * A logical plan that evaluates a [[PythonUDF]]
+ */
+case class BatchEvalPython(
+    udfs: Seq[PythonUDF],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def producedAttributes: AttributeSet = AttributeSet(output.drop(child.output.length))
+}
 
 /**
  * A physical plan that evaluates a [[PythonUDF]]
@@ -36,8 +47,6 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
-      bufferSize: Int,
-      reuseWorker: Boolean,
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
@@ -68,8 +77,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     }.grouped(100).map(x => pickle.dumps(x.toArray))
 
     // Output iterator for results from Python.
-    val outputIterator = new PythonUDFRunner(
-        funcs, bufferSize, reuseWorker, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
+    val outputIterator = new PythonUDFRunner(funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -79,16 +87,19 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     } else {
       StructType(udfs.map(u => StructField("", u.dataType, u.nullable)))
     }
+
+    val fromJava = EvaluatePython.makeFromJava(resultType)
+
     outputIterator.flatMap { pickedResult =>
       val unpickledBatch = unpickle.loads(pickedResult)
       unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
     }.map { result =>
       if (udfs.length == 1) {
         // fast path for single UDF
-        mutableRow(0) = EvaluatePython.fromJava(result, resultType)
+        mutableRow(0) = fromJava(result)
         mutableRow
       } else {
-        EvaluatePython.fromJava(result, resultType).asInstanceOf[InternalRow]
+        fromJava(result).asInstanceOf[InternalRow]
       }
     }
   }

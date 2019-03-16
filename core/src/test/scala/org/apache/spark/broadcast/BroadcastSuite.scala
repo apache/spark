@@ -24,6 +24,8 @@ import scala.util.Random
 import org.scalatest.Assertions
 
 import org.apache.spark._
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.SERIALIZER
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.EncryptionFunSuite
@@ -67,8 +69,8 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
 
   encryptionTest("Accessing TorrentBroadcast variables in a local cluster") { conf =>
     val numSlaves = 4
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.broadcast.compress", "true")
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    conf.set(config.BROADCAST_COMPRESS, true)
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
@@ -145,12 +147,44 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
   encryptionTest("Cache broadcast to disk") { conf =>
     conf.setMaster("local")
       .setAppName("test")
-      .set("spark.memory.useLegacyMode", "true")
-      .set("spark.storage.memoryFraction", "0.0")
+      .set(config.MEMORY_STORAGE_FRACTION, 0.0)
     sc = new SparkContext(conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     assert(broadcast.value.sum === 10)
+  }
+
+  test("One broadcast value instance per executor") {
+    val conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val list = List[Int](1, 2, 3, 4)
+    val broadcast = sc.broadcast(list)
+    val instances = sc.parallelize(1 to 10)
+      .map(x => System.identityHashCode(broadcast.value))
+      .collect()
+      .toSet
+
+    assert(instances.size === 1)
+  }
+
+  test("One broadcast value instance per executor when memory is constrained") {
+    val conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName("test")
+      .set(config.MEMORY_STORAGE_FRACTION, 0.0)
+
+    sc = new SparkContext(conf)
+    val list = List[Int](1, 2, 3, 4)
+    val broadcast = sc.broadcast(list)
+    val instances = sc.parallelize(1 to 10)
+      .map(x => System.identityHashCode(broadcast.value))
+      .collect()
+      .toSet
+
+    assert(instances.size === 1)
   }
 
   /**
@@ -224,7 +258,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
         new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
       // Wait until all salves are up
       try {
-        _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 60000)
+        TestUtils.waitUntilExecutorsUp(_sc, numSlaves, 60000)
         _sc
       } catch {
         case e: Throwable =>
@@ -262,7 +296,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
       // Using this variable on the executors crashes them, which hangs the test.
       // Instead, crash the driver by directly accessing the broadcast value.
       intercept[SparkException] { broadcast.value }
-      intercept[SparkException] { broadcast.unpersist() }
+      intercept[SparkException] { broadcast.unpersist(blocking = true) }
       intercept[SparkException] { broadcast.destroy(blocking = true) }
     } else {
       val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
@@ -275,7 +309,7 @@ package object testPackage extends Assertions {
 
   def runCallSiteTest(sc: SparkContext) {
     val broadcast = sc.broadcast(Array(1, 2, 3, 4))
-    broadcast.destroy()
+    broadcast.destroy(blocking = true)
     val thrown = intercept[SparkException] { broadcast.value }
     assert(thrown.getMessage.contains("BroadcastSuite.scala"))
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
@@ -64,11 +64,12 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
   val ttl = propertyToOption(GANGLIA_KEY_TTL).map(_.toInt).getOrElse(GANGLIA_DEFAULT_TTL)
   val dmax = propertyToOption(GANGLIA_KEY_DMAX).map(_.toInt).getOrElse(GANGLIA_DEFAULT_DMAX)
   val mode: UDPAddressingMode = propertyToOption(GANGLIA_KEY_MODE)
-    .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(GANGLIA_DEFAULT_MODE)
+    .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase(Locale.ROOT)))
+    .getOrElse(GANGLIA_DEFAULT_MODE)
   val pollPeriod = propertyToOption(GANGLIA_KEY_PERIOD).map(_.toInt)
     .getOrElse(GANGLIA_DEFAULT_PERIOD)
   val pollUnit: TimeUnit = propertyToOption(GANGLIA_KEY_UNIT)
-    .map(u => TimeUnit.valueOf(u.toUpperCase))
+    .map(u => TimeUnit.valueOf(u.toUpperCase(Locale.ROOT)))
     .getOrElse(GANGLIA_DEFAULT_UNIT)
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)

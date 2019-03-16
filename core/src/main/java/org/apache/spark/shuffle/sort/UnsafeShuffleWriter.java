@@ -20,7 +20,6 @@ package org.apache.spark.shuffle.sort;
 import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
-import static java.nio.file.StandardOpenOption.*;
 import java.util.Iterator;
 
 import scala.Option;
@@ -38,7 +37,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
-import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.NioBufferedFileInputStream;
@@ -48,6 +47,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
@@ -56,7 +56,6 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
-import org.apache.spark.internal.config.package$;
 
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -74,7 +73,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final TaskMemoryManager memoryManager;
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
-  private final ShuffleWriteMetrics writeMetrics;
+  private final ShuffleWriteMetricsReporter writeMetrics;
   private final int shuffleId;
   private final int mapId;
   private final TaskContext taskContext;
@@ -123,7 +122,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SerializedShuffleHandle<K, V> handle,
       int mapId,
       TaskContext taskContext,
-      SparkConf sparkConf) throws IOException {
+      SparkConf sparkConf,
+      ShuffleWriteMetricsReporter writeMetrics) throws IOException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
     if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE()) {
       throw new IllegalArgumentException(
@@ -139,12 +139,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleId = dep.shuffleId();
     this.serializer = dep.serializer().newInstance();
     this.partitioner = dep.partitioner();
-    this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
+    this.writeMetrics = writeMetrics;
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
-    this.initialSortBufferSize = sparkConf.getInt("spark.shuffle.sort.initialBufferSize",
-                                                  DEFAULT_INITIAL_SORT_BUFFER_SIZE);
+    this.initialSortBufferSize =
+      (int) sparkConf.get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE());
     this.inputBufferSizeInBytes =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.outputBufferSizeInBytes =
@@ -282,16 +282,16 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * @return the partition lengths in the merged file.
    */
   private long[] mergeSpills(SpillInfo[] spills, File outputFile) throws IOException {
-    final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
+    final boolean compressionEnabled = (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_COMPRESS());
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
-      sparkConf.getBoolean("spark.shuffle.unsafe.fastMergeEnabled", true);
+      (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_UNDAFE_FAST_MERGE_ENABLE());
     final boolean fastMergeIsSupported = !compressionEnabled ||
       CompressionCodec$.MODULE$.supportsConcatenationOfSerializedStreams(compressionCodec);
     final boolean encryptionEnabled = blockManager.serializerManager().encryptionEnabled();
     try {
       if (spills.length == 0) {
-        java.nio.file.Files.newOutputStream(outputFile.toPath()).close(); // Create an empty file
+        new FileOutputStream(outputFile).close(); // Create an empty file
         return new long[partitioner.numPartitions()];
       } else if (spills.length == 1) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
@@ -368,7 +368,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final InputStream[] spillInputStreams = new InputStream[spills.length];
 
     final OutputStream bos = new BufferedOutputStream(
-            java.nio.file.Files.newOutputStream(outputFile.toPath()),
+            new FileOutputStream(outputFile),
             outputBufferSizeInBytes);
     // Use a counting output stream to avoid having to close the underlying file and ask
     // the file system for its size after each partition is written.
@@ -443,11 +443,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     boolean threwException = true;
     try {
       for (int i = 0; i < spills.length; i++) {
-        spillInputChannels[i] = FileChannel.open(spills[i].file.toPath(), READ);
+        spillInputChannels[i] = new FileInputStream(spills[i].file).getChannel();
       }
       // This file needs to opened in append mode in order to work around a Linux kernel bug that
       // affects transferTo; see SPARK-3948 for more details.
-      mergedFileOutputChannel = FileChannel.open(outputFile.toPath(), WRITE, CREATE, APPEND);
+      mergedFileOutputChannel = new FileOutputStream(outputFile, true).getChannel();
 
       long bytesWrittenToMergedFile = 0;
       for (int partition = 0; partition < numPartitions; partition++) {

@@ -21,6 +21,7 @@ import java.io._
 import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
+import scala.tools.nsc.interpreter.SimpleReader
 
 import org.apache.log4j.{Level, LogManager}
 
@@ -84,6 +85,7 @@ class ReplSuite extends SparkFunSuite {
       settings = new scala.tools.nsc.Settings
       settings.usejavacp.value = true
       org.apache.spark.repl.Main.interp = this
+      in = SimpleReader()
     }
 
     val out = new StringWriter()
@@ -217,4 +219,77 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
+
+  test(":replay should work correctly") {
+   val output = runInterpreter("local",
+     """
+     |sc
+     |:replay
+     """.stripMargin)
+    assertDoesNotContain("error: not found: value sc", output)
+  }
+
+  test("spark-shell should find imported types in class constructors and extends clause") {
+    val output = runInterpreter("local",
+      """
+        |import org.apache.spark.Partition
+        |class P(p: Partition)
+        |class P(val index: Int) extends Partition
+      """.stripMargin)
+    assertDoesNotContain("error: not found: type Partition", output)
+  }
+
+  test("spark-shell should shadow val/def definitions correctly") {
+    val output1 = runInterpreter("local",
+      """
+        |def myMethod() = "first definition"
+        |val tmp = myMethod(); val out = tmp
+        |def myMethod() = "second definition"
+        |val tmp = myMethod(); val out = s"$tmp aabbcc"
+      """.stripMargin)
+    assertContains("second definition aabbcc", output1)
+
+    val output2 = runInterpreter("local",
+      """
+        |val a = 1
+        |val b = a; val c = b;
+        |val a = 2
+        |val b = a; val c = b;
+        |s"!!$b!!"
+      """.stripMargin)
+    assertContains("!!2!!", output2)
+  }
+
+  test("SPARK-26633: ExecutorClassLoader.getResourceAsStream find REPL classes") {
+    val output = runInterpreterInPasteMode("local-cluster[1,1,1024]",
+      """
+        |case class TestClass(value: Int)
+        |
+        |sc.parallelize(1 to 1).map { _ =>
+        |  val clz = classOf[TestClass]
+        |  val name = clz.getName.replace('.', '/') + ".class";
+        |  val stream = clz.getClassLoader.getResourceAsStream(name)
+        |  if (stream == null) {
+        |    "failed: stream is null"
+        |  } else {
+        |    val magic = new Array[Byte](4)
+        |    try {
+        |      stream.read(magic)
+        |      // the magic number of a Java Class file
+        |      val expected = Array[Byte](0xCA.toByte, 0xFE.toByte, 0xBA.toByte, 0xBE.toByte)
+        |      if (magic sameElements expected) {
+        |        "successful"
+        |      } else {
+        |        "failed: unexpected contents from stream"
+        |      }
+        |    } finally {
+        |      stream.close()
+        |    }
+        |  }
+        |}.collect()
+      """.stripMargin)
+    assertDoesNotContain("failed", output)
+    assertContains("successful", output)
+  }
+
 }

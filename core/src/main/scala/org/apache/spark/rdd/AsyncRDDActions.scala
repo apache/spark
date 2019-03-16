@@ -90,12 +90,12 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           // Otherwise, interpolate the number of partitions we need to try, but overestimate it
           // by 50%. We also cap the estimation in the end.
           if (results.size == 0) {
-            numPartsToTry = partsScanned * 4
+            numPartsToTry = partsScanned * 4L
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
             numPartsToTry = Math.max(1,
               (1.5 * num * partsScanned / results.size).toInt - partsScanned)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4L)
           }
         }
 

@@ -72,8 +72,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * left AND right AND joined is equivalent to full.
    *
    * Note that left and right do not necessarily contain *all* conjuncts which satisfy
-   * their condition. Any conjuncts after the first nondeterministic one are treated as
-   * nondeterministic for purposes of the split.
+   * their condition.
    *
    * @param leftSideOnly Deterministic conjuncts which reference only the left side of the join.
    * @param rightSideOnly Deterministic conjuncts which reference only the right side of the join.
@@ -111,7 +110,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           // Span rather than partition, because nondeterministic expressions don't commute
           // across AND.
           val (deterministicConjuncts, nonDeterministicConjuncts) =
-            splitConjunctivePredicates(condition.get).span(_.deterministic)
+            splitConjunctivePredicates(condition.get).partition(_.deterministic)
 
           val (leftConjuncts, nonLeftConjuncts) = deterministicConjuncts.partition { cond =>
             cond.references.subsetOf(left.outputSet)
@@ -145,7 +144,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
 
     // Join keys of both sides generate rows of the same fields, that is, same sequence of data
-    // types. If one side (say left side) has a column (say timestmap) that has a watermark on it,
+    // types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
     // then it will never consider joining keys that are < state key watermark (i.e. event time
     // watermark). On the other side (i.e. right side), even if there is no watermark defined,
     // there has to be an equivalent column (i.e., timestamp). And any right side data that has the
@@ -204,7 +203,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   /**
    * A custom RDD that allows partitions to be "zipped" together, while ensuring the tasks'
    * preferred location is based on which executors have the required join state stores already
-   * loaded. This is class is a modified verion of [[ZippedPartitionsRDD2]].
+   * loaded. This is class is a modified version of [[ZippedPartitionsRDD2]].
    */
   class StateStoreAwareZipPartitionsRDD[A: ClassTag, B: ClassTag, V: ClassTag](
       sc: SparkContext,

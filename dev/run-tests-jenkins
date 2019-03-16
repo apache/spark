@@ -20,7 +20,7 @@
 # Wrapper script that runs the Spark tests then reports QA results
 # to github via its API.
 # Environment variables are populated by the code here:
-#+ https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
+# https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
 
 FWDIR="$( cd "$( dirname "$0" )/.." && pwd )"
 cd "$FWDIR"

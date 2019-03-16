@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
-
-import org.eclipse.jetty.util.ConcurrentHashSet
 import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
@@ -48,7 +45,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
   }
 
   test("trigger timing") {
-    val triggerTimes = new ConcurrentHashSet[Int]
+    val triggerTimes = ConcurrentHashMap.newKeySet[Int]()
     val clock = new StreamManualClock()
     @volatile var continueExecuting = true
     @volatile var clockIncrementInTrigger = 0L
@@ -149,7 +146,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     eventually { assert(clock.isStreamWaitingFor(200)) }
     clock.advance(200)
     waitForThreadJoin(t)
-    assert(batchFallingBehindCalled === true)
+    assert(batchFallingBehindCalled)
   }
 
   private def eventually(body: => Unit): Unit = {

@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
@@ -68,7 +69,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   private float[] floatData;
   private double[] doubleData;
 
-  // Only set if type is Array.
+  // Only set if type is Array or Map.
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
@@ -77,15 +78,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
     reserveInternal(capacity);
     reset();
-  }
-
-  @Override
-  public long valuesNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
-  }
-  @Override
-  public long nullsNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
   }
 
   @Override
@@ -115,7 +107,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putNull(int rowId) {
     nulls[rowId] = (byte)1;
     ++numNulls;
-    anyNullsSet = true;
   }
 
   @Override
@@ -123,13 +114,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
-    anyNullsSet = true;
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!anyNullsSet) return;
+    if (!hasNull()) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }
@@ -212,6 +202,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     return array;
   }
 
+  @Override
+  protected UTF8String getBytesAsUTF8String(int rowId, int count) {
+    return UTF8String.fromBytes(byteData, rowId, count);
+  }
+
   //
   // APIs dealing with Shorts
   //
@@ -236,7 +231,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, shortData,
-      Platform.SHORT_ARRAY_OFFSET + rowId * 2, count * 2);
+      Platform.SHORT_ARRAY_OFFSET + rowId * 2L, count * 2L);
   }
 
   @Override
@@ -281,7 +276,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putInts(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, intData,
-      Platform.INT_ARRAY_OFFSET + rowId * 4, count * 4);
+      Platform.INT_ARRAY_OFFSET + rowId * 4L, count * 4L);
   }
 
   @Override
@@ -347,7 +342,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putLongs(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, longData,
-      Platform.LONG_ARRAY_OFFSET + rowId * 8, count * 8);
+      Platform.LONG_ARRAY_OFFSET + rowId * 8L, count * 8L);
   }
 
   @Override
@@ -399,7 +394,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
+          Platform.DOUBLE_ARRAY_OFFSET + rowId * 4L, count * 4L);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {
@@ -448,7 +443,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
+          Platform.DOUBLE_ARRAY_OFFSET + rowId * 8L, count * 8L);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {
@@ -493,12 +488,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     arrayLengths[rowId] = length;
   }
 
-  @Override
-  public void loadBytes(ColumnarArray array) {
-    array.byteArray = byteData;
-    array.byteArrayOffset = array.offset;
-  }
-
   //
   // APIs dealing with Byte Arrays
   //
@@ -514,7 +503,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
+    if (isArray() || type instanceof MapType) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
@@ -567,7 +556,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
         if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, capacity);
         doubleData = newData;
       }
-    } else if (resultStruct != null) {
+    } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);

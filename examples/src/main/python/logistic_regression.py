@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) != 3:
         print("Usage: logistic_regression <file> <iterations>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     print("""WARN: This is a naive implementation of Logistic Regression and is
       given as an example!

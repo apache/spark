@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Note:
  * Before flipping the filter condition of the right node, we should:
  * 1. Combine all it's [[Filter]].
- * 2. Apply InferFiltersFromConstraints rule (to take into account of NULL values in the condition).
+ * 2. Update the attribute references to the left node;
+ * 3. Add a Coalesce(condition, False) (to take into account of NULL values in the condition).
  */
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
@@ -46,18 +47,32 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     }
 
     plan.transform {
-      case Except(left, right) if isEligible(left, right) =>
-        Distinct(Filter(Not(transformCondition(left, skipProject(right))), left))
+      case e @ Except(left, right, false) if isEligible(left, right) =>
+        val filterCondition = combineFilters(skipProject(right)).asInstanceOf[Filter].condition
+        if (filterCondition.deterministic) {
+          transformCondition(left, filterCondition).map { c =>
+            Distinct(Filter(Not(c), left))
+          }.getOrElse {
+            e
+          }
+        } else {
+          e
+        }
     }
   }
 
-  private def transformCondition(left: LogicalPlan, right: LogicalPlan): Expression = {
-    val filterCondition =
-      InferFiltersFromConstraints(combineFilters(right)).asInstanceOf[Filter].condition
-
-    val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
-
-    filterCondition.transform { case a : AttributeReference => attributeNameMap(a.name) }
+  private def transformCondition(plan: LogicalPlan, condition: Expression): Option[Expression] = {
+    val attributeNameMap: Map[String, Attribute] = plan.output.map(x => (x.name, x)).toMap
+    if (condition.references.forall(r => attributeNameMap.contains(r.name))) {
+      val rewrittenCondition = condition.transform {
+        case a: AttributeReference => attributeNameMap(a.name)
+      }
+      // We need to consider as False when the condition is NULL, otherwise we do not return those
+      // rows containing NULL which are instead filtered in the Except right plan
+      Some(Coalesce(Seq(rewrittenCondition, Literal.FalseLiteral)))
+    } else {
+      None
+    }
   }
 
   // TODO: This can be further extended in the future.

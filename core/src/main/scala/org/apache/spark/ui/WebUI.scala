@@ -58,76 +58,79 @@ private[spark] abstract class WebUI(
   def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs
   def getHandlers: Seq[ServletContextHandler] = handlers
-  def getSecurityManager: SecurityManager = securityManager
 
-  /** Attach a tab to this UI, along with all of its attached pages. */
-  def attachTab(tab: WebUITab) {
+  /** Attaches a tab to this UI, along with all of its attached pages. */
+  def attachTab(tab: WebUITab): Unit = {
     tab.pages.foreach(attachPage)
     tabs += tab
   }
 
-  def detachTab(tab: WebUITab) {
+  /** Detaches a tab from this UI, along with all of its attached pages. */
+  def detachTab(tab: WebUITab): Unit = {
     tab.pages.foreach(detachPage)
     tabs -= tab
   }
 
-  def detachPage(page: WebUIPage) {
+  /** Detaches a page from this UI, along with all of its attached handlers. */
+  def detachPage(page: WebUIPage): Unit = {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
 
-  /** Attach a page to this UI. */
-  def attachPage(page: WebUIPage) {
+  /** Attaches a page to this UI. */
+  def attachPage(page: WebUIPage): Unit = {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
-      (request: HttpServletRequest) => page.render(request), securityManager, conf, basePath)
+      (request: HttpServletRequest) => page.render(request), conf, basePath)
     val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
-      (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
+      (request: HttpServletRequest) => page.renderJson(request), conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
     val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
     handlers += renderHandler
   }
 
-  /** Attach a handler to this UI. */
-  def attachHandler(handler: ServletContextHandler) {
+  /** Attaches a handler to this UI. */
+  def attachHandler(handler: ServletContextHandler): Unit = synchronized {
     handlers += handler
-    serverInfo.foreach(_.addHandler(handler))
+    serverInfo.foreach(_.addHandler(handler, securityManager))
   }
 
-  /** Detach a handler from this UI. */
-  def detachHandler(handler: ServletContextHandler) {
+  /** Detaches a handler from this UI. */
+  def detachHandler(handler: ServletContextHandler): Unit = synchronized {
     handlers -= handler
     serverInfo.foreach(_.removeHandler(handler))
   }
 
   /**
-   * Add a handler for static content.
+   * Detaches the content handler at `path` URI.
+   *
+   * @param path Path in UI to unmount.
+   */
+  def detachHandler(path: String): Unit = {
+    handlers.find(_.getContextPath() == path).foreach(detachHandler)
+  }
+
+  /**
+   * Adds a handler for static content.
    *
    * @param resourceBase Root of where to find resources to serve.
    * @param path Path in UI where to mount the resources.
    */
-  def addStaticHandler(resourceBase: String, path: String): Unit = {
+  def addStaticHandler(resourceBase: String, path: String = "/static"): Unit = {
     attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
   }
 
-  /**
-   * Remove a static content handler.
-   *
-   * @param path Path in UI to unmount.
-   */
-  def removeStaticHandler(path: String): Unit = {
-    handlers.find(_.getContextPath() == path).foreach(detachHandler)
-  }
-
-  /** Initialize all components of the server. */
+  /** A hook to initialize components of the UI */
   def initialize(): Unit
 
-  /** Bind to the HTTP server behind this web interface. */
+  /** Binds to the HTTP server behind this web interface. */
   def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-      serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
+      val server = startJettyServer(host, port, sslOptions, conf, name)
+      handlers.foreach(server.addHandler(_, securityManager))
+      serverInfo = Some(server)
       logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
       case e: Exception =>
@@ -136,17 +139,17 @@ private[spark] abstract class WebUI(
     }
   }
 
-  /** Return the url of web interface. Only valid after bind(). */
+  /** @return The url of web interface. Only valid after [[bind]]. */
   def webUrl: String = s"http://$publicHostName:$boundPort"
 
-  /** Return the actual port to which this server is bound. Only valid after bind(). */
+  /** @return The actual port to which this server is bound. Only valid after [[bind]]. */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
-  /** Stop the server behind this web interface. Only valid after bind(). */
+  /** Stops the server behind this web interface. Only valid after [[bind]]. */
   def stop(): Unit = {
     assert(serverInfo.isDefined,
       s"Attempted to stop $className before binding to a server!")
-    serverInfo.get.stop()
+    serverInfo.foreach(_.stop())
   }
 }
 

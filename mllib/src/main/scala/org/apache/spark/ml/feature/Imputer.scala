@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.HasInputCols
+import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 /**
  * Params for [[Imputer]] and [[ImputerModel]].
  */
-private[feature] trait ImputerParams extends Params with HasInputCols {
+private[feature] trait ImputerParams extends Params with HasInputCols with HasOutputCols {
 
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
@@ -62,16 +62,6 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
 
   /** @group getParam */
   def getMissingValue: Double = $(missingValue)
-
-  /**
-   * Param for output column names.
-   * @group param
-   */
-  final val outputCols: StringArrayParam = new StringArrayParam(this, "outputCols",
-    "output column names")
-
-  /** @group getParam */
-  final def getOutputCols: Array[String] = $(outputCols)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -272,7 +262,7 @@ object ImputerModel extends MLReadable[ImputerModel] {
       val dataPath = new Path(path, "data").toString
       val surrogateDF = sqlContext.read.parquet(dataPath)
       val model = new ImputerModel(metadata.uid, surrogateDF)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

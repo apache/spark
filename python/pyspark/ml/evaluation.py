@@ -15,13 +15,14 @@
 # limitations under the License.
 #
 
+import sys
 from abc import abstractmethod, ABCMeta
 
 from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol, \
-    HasFeaturesCol
+    HasFeaturesCol, HasWeightCol
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
@@ -105,7 +106,7 @@ class JavaEvaluator(JavaParams, Evaluator):
 
 
 @inherit_doc
-class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol,
+class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol, HasWeightCol,
                                     JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
@@ -129,6 +130,16 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     >>> evaluator2 = BinaryClassificationEvaluator.load(bce_path)
     >>> str(evaluator2.getRawPredictionCol())
     'raw'
+    >>> scoreAndLabelsAndWeight = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1], x[2]),
+    ...    [(0.1, 0.0, 1.0), (0.1, 1.0, 0.9), (0.4, 0.0, 0.7), (0.6, 0.0, 0.9),
+    ...     (0.6, 1.0, 1.0), (0.6, 1.0, 0.3), (0.8, 1.0, 1.0)])
+    >>> dataset = spark.createDataFrame(scoreAndLabelsAndWeight, ["raw", "label", "weight"])
+    ...
+    >>> evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw", weightCol="weight")
+    >>> evaluator.evaluate(dataset)
+    0.70...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
+    0.82...
 
     .. versionadded:: 1.4.0
     """
@@ -139,10 +150,10 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 
     @keyword_only
     def __init__(self, rawPredictionCol="rawPrediction", labelCol="label",
-                 metricName="areaUnderROC"):
+                 metricName="areaUnderROC", weightCol=None):
         """
         __init__(self, rawPredictionCol="rawPrediction", labelCol="label", \
-                 metricName="areaUnderROC")
+                 metricName="areaUnderROC", weightCol=None)
         """
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -168,10 +179,10 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     @keyword_only
     @since("1.4.0")
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
-                  metricName="areaUnderROC"):
+                  metricName="areaUnderROC", weightCol=None):
         """
         setParams(self, rawPredictionCol="rawPrediction", labelCol="label", \
-                  metricName="areaUnderROC")
+                  metricName="areaUnderROC", weightCol=None)
         Sets params for binary classification evaluator.
         """
         kwargs = self._input_kwargs
@@ -256,7 +267,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
 
 
 @inherit_doc
-class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
                                         JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
@@ -278,6 +289,17 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
     >>> str(evaluator2.getPredictionCol())
     'prediction'
+    >>> scoreAndLabelsAndWeight = [(0.0, 0.0, 1.0), (0.0, 1.0, 1.0), (0.0, 0.0, 1.0),
+    ...     (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0),
+    ...     (2.0, 2.0, 1.0), (2.0, 0.0, 1.0)]
+    >>> dataset = spark.createDataFrame(scoreAndLabelsAndWeight, ["prediction", "label", "weight"])
+    ...
+    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction",
+    ...     weightCol="weight")
+    >>> evaluator.evaluate(dataset)
+    0.66...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
+    0.66...
 
     .. versionadded:: 1.5.0
     """
@@ -288,10 +310,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="f1"):
+                 metricName="f1", weightCol=None):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="f1")
+                 metricName="f1", weightCol=None)
         """
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -317,10 +339,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     @keyword_only
     @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="f1"):
+                  metricName="f1", weightCol=None):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="f1")
+                  metricName="f1", weightCol=None)
         Sets params for multiclass classification evaluator.
         """
         kwargs = self._input_kwargs
@@ -334,7 +356,13 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     .. note:: Experimental
 
     Evaluator for Clustering results, which expects two input
-    columns: prediction and features.
+    columns: prediction and features. The metric computes the Silhouette
+    measure using the squared Euclidean distance.
+
+    The Silhouette is a measure for the validation of the consistency
+    within clusters. It ranges between 1 and -1, where a value close to
+    1 means that the points in a cluster are close to the other points
+    in the same cluster and far from the points of the other clusters.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
@@ -356,18 +384,21 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation (silhouette)",
                        typeConverter=TypeConverters.toString)
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "The distance measure. " +
+                            "Supported options: 'squaredEuclidean' and 'cosine'.",
+                            typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", featuresCol="features",
-                 metricName="silhouette"):
+                 metricName="silhouette", distanceMeasure="squaredEuclidean"):
         """
         __init__(self, predictionCol="prediction", featuresCol="features", \
-                 metricName="silhouette")
+                 metricName="silhouette", distanceMeasure="squaredEuclidean")
         """
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid)
-        self._setDefault(metricName="silhouette")
+        self._setDefault(metricName="silhouette", distanceMeasure="squaredEuclidean")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -388,14 +419,29 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     @keyword_only
     @since("2.3.0")
     def setParams(self, predictionCol="prediction", featuresCol="features",
-                  metricName="silhouette"):
+                  metricName="silhouette", distanceMeasure="squaredEuclidean"):
         """
         setParams(self, predictionCol="prediction", featuresCol="features", \
-                  metricName="silhouette")
+                  metricName="silhouette", distanceMeasure="squaredEuclidean")
         Sets params for clustering evaluator.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.4.0")
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    @since("2.4.0")
+    def getDistanceMeasure(self):
+        """
+        Gets the value of `distanceMeasure`
+        """
+        return self.getOrDefault(self.distanceMeasure)
+
 
 if __name__ == "__main__":
     import doctest
@@ -422,4 +468,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

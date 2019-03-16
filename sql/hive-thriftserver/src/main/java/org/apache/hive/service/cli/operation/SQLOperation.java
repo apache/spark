@@ -42,7 +42,6 @@ import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
-import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.SerDe;
@@ -271,18 +270,6 @@ public class SQLOperation extends ExecuteStatementOperation {
       return Hive.get();
     } catch (HiveException e) {
       throw new HiveSQLException("Failed to get ThreadLocal Hive object", e);
-    }
-  }
-
-  private void registerCurrentOperationLog() {
-    if (isOperationLogEnabled) {
-      if (operationLog == null) {
-        LOG.warn("Failed to get current OperationLog object of Operation: " +
-            getHandle().getHandleIdentifier());
-        isOperationLogEnabled = false;
-        return;
-      }
-      OperationLog.setCurrentOperationLog(operationLog);
     }
   }
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -65,7 +66,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val m3 = intercept[AnalysisException] {
       df.selectExpr("stack(2, 1, '2.2')")
     }.getMessage
-    assert(m3.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (StringType)"))
+    assert(m3.contains("data type mismatch: Argument 1 (int) != Argument 2 (string)"))
 
     // stack on column data
     val df2 = Seq((2, 1, 2, 3)).toDF("n", "a", "b", "c")
@@ -80,7 +81,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val m5 = intercept[AnalysisException] {
       df3.selectExpr("stack(2, a, b)")
     }.getMessage
-    assert(m5.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (DoubleType)"))
+    assert(m5.contains("data type mismatch: Argument 1 (int) != Argument 2 (double)"))
 
   }
 
@@ -315,6 +316,7 @@ case class EmptyGenerator() extends Generator {
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iteratorClass = classOf[Iterator[_]].getName
-    ev.copy(code = s"$iteratorClass<InternalRow> ${ev.value} = $iteratorClass$$.MODULE$$.empty();")
+    ev.copy(code =
+      code"$iteratorClass<InternalRow> ${ev.value} = $iteratorClass$$.MODULE$$.empty();")
   }
 }

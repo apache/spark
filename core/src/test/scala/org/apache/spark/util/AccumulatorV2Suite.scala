@@ -40,7 +40,7 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc.avg == 0.5)
 
     // Also test add using non-specialized add function
-    acc.add(new java.lang.Long(2))
+    acc.add(java.lang.Long.valueOf(2))
     assert(acc.count == 3)
     assert(acc.sum == 3)
     assert(acc.avg == 1.0)
@@ -73,7 +73,7 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc.avg == 0.5)
 
     // Also test add using non-specialized add function
-    acc.add(new java.lang.Double(2.0))
+    acc.add(java.lang.Double.valueOf(2.0))
     assert(acc.count == 3)
     assert(acc.sum == 3.0)
     assert(acc.avg == 1.0)
@@ -96,7 +96,7 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc.value.contains(0.0))
     assert(!acc.isZero)
 
-    acc.add(new java.lang.Double(1.0))
+    acc.add(java.lang.Double.valueOf(1.0))
 
     val acc2 = acc.copyAndReset()
     assert(acc2.value.isEmpty)
@@ -127,39 +127,6 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc3.value.isEmpty)
   }
 
-  test("LegacyAccumulatorWrapper") {
-    val acc = new LegacyAccumulatorWrapper("default", AccumulatorParam.StringAccumulatorParam)
-    assert(acc.value === "default")
-    assert(!acc.isZero)
-
-    acc.add("foo")
-    assert(acc.value === "foo")
-    assert(!acc.isZero)
-
-    acc.add(new java.lang.String("bar"))
-
-    val acc2 = acc.copyAndReset()
-    assert(acc2.value === "")
-    assert(acc2.isZero)
-
-    assert(acc.value === "bar")
-    assert(!acc.isZero)
-
-    acc2.add("baz")
-    assert(acc2.value === "baz")
-    assert(!acc2.isZero)
-
-    // Test merging
-    acc.merge(acc2)
-    assert(acc.value === "baz")
-    assert(!acc.isZero)
-
-    val acc3 = acc.copy()
-    assert(acc3.value === "baz")
-    assert(!acc3.isZero)
-
-    acc3.reset()
-    assert(acc3.isZero)
-    assert(acc3.value === "")
-  }
 }
+
+class MyData(val i: Int) extends Serializable

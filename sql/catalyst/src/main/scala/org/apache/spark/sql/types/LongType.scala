@@ -20,14 +20,14 @@ package org.apache.spark.sql.types
 import scala.math.{Integral, Numeric, Ordering}
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 
 /**
  * The data type representing `Long` values. Please use the singleton `DataTypes.LongType`.
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class LongType private() extends IntegralType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
@@ -51,5 +51,5 @@ class LongType private() extends IntegralType {
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case object LongType extends LongType

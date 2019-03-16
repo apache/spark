@@ -21,7 +21,6 @@ import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
@@ -29,6 +28,7 @@ import org.scalatest.Matchers
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
@@ -71,14 +71,10 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
   test("Yarn configuration override") {
     val key = "yarn.nodemanager.hostname"
-    val default = new YarnConfiguration()
-
     val sparkConf = new SparkConf()
       .set("spark.hadoop." + key, "someHostName")
-    val yarnConf = new YarnSparkHadoopUtil().newConfiguration(sparkConf)
-
-    yarnConf.getClass() should be (classOf[YarnConfiguration])
-    yarnConf.get(key) should not be default.get(key)
+    val yarnConf = new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(sparkConf))
+    yarnConf.get(key) should be ("someHostName")
   }
 
 
@@ -86,7 +82,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // spark acls on, just pick up default user
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
+    sparkConf.set(ACLS_ENABLE, true)
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
@@ -114,9 +110,9 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // default spark acls are on and specify acls
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
-    sparkConf.set("spark.ui.view.acls", "user1,user2")
-    sparkConf.set("spark.modify.acls", "user3,user4")
+    sparkConf.set(ACLS_ENABLE, true)
+    sparkConf.set(UI_VIEW_ACLS, Seq("user1", "user2"))
+    sparkConf.set(MODIFY_ACLS, Seq("user3", "user4"))
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
@@ -144,46 +140,4 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
     }
 
   }
-
-  test("check different hadoop utils based on env variable") {
-    try {
-      System.setProperty("SPARK_YARN_MODE", "true")
-      assert(SparkHadoopUtil.get.getClass === classOf[YarnSparkHadoopUtil])
-      System.setProperty("SPARK_YARN_MODE", "false")
-      assert(SparkHadoopUtil.get.getClass === classOf[SparkHadoopUtil])
-    } finally {
-      System.clearProperty("SPARK_YARN_MODE")
-    }
-  }
-
-
-
-  // This test needs to live here because it depends on isYarnMode returning true, which can only
-  // happen in the YARN module.
-  test("security manager token generation") {
-    try {
-      System.setProperty("SPARK_YARN_MODE", "true")
-      val initial = SparkHadoopUtil.get
-        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
-      assert(initial === null || initial.length === 0)
-
-      val conf = new SparkConf()
-        .set(SecurityManager.SPARK_AUTH_CONF, "true")
-        .set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
-      val sm = new SecurityManager(conf)
-
-      val generated = SparkHadoopUtil.get
-        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
-      assert(generated != null)
-      val genString = new Text(generated).toString()
-      assert(genString != "unused")
-      assert(sm.getSecretKey() === genString)
-    } finally {
-      // removeSecretKey() was only added in Hadoop 2.6, so instead we just set the secret
-      // to an empty string.
-      SparkHadoopUtil.get.addSecretKeyToUserCredentials(SecurityManager.SECRET_LOOKUP_KEY, "")
-      System.clearProperty("SPARK_YARN_MODE")
-    }
-  }
-
 }

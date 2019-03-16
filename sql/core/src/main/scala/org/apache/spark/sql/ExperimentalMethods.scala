@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * @since 1.3.0
  */
 @Experimental
-@InterfaceStability.Unstable
+@Unstable
 class ExperimentalMethods private[sql]() {
 
   /**

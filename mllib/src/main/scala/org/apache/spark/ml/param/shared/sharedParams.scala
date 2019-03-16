@@ -282,10 +282,10 @@ trait HasOutputCols extends Params {
 trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for set checkpoint interval (&gt;= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * Param for set checkpoint interval (&gt;= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
    * @group param
    */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations", (interval: Int) => interval == -1 || interval >= 1)
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext", (interval: Int) => interval == -1 || interval >= 1)
 
   /** @group getParam */
   final def getCheckpointInterval: Int = $(checkpointInterval)
@@ -470,19 +470,74 @@ trait HasAggregationDepth extends Params {
 }
 
 /**
- * Trait for shared param collectSubModels (default: false).
+ * Trait for shared param collectSubModels (default: false). This trait may be changed or
+ * removed between minor versions.
  */
-private[ml] trait HasCollectSubModels extends Params {
+@DeveloperApi
+trait HasCollectSubModels extends Params {
 
   /**
-   * Param for whether to collect a list of sub-models trained during tuning.
+   * Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
    * @group expertParam
    */
-  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect a list of sub-models trained during tuning")
+  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver")
 
   setDefault(collectSubModels, false)
 
   /** @group expertGetParam */
   final def getCollectSubModels: Boolean = $(collectSubModels)
+}
+
+/**
+ * Trait for shared param loss. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasLoss extends Params {
+
+  /**
+   * Param for the loss function to be optimized.
+   * @group param
+   */
+  val loss: Param[String] = new Param[String](this, "loss", "the loss function to be optimized")
+
+  /** @group getParam */
+  final def getLoss: String = $(loss)
+}
+
+/**
+ * Trait for shared param distanceMeasure (default: org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN). This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasDistanceMeasure extends Params {
+
+  /**
+   * Param for The distance measure. Supported options: 'euclidean' and 'cosine'.
+   * @group param
+   */
+  final val distanceMeasure: Param[String] = new Param[String](this, "distanceMeasure", "The distance measure. Supported options: 'euclidean' and 'cosine'", (value: String) => org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value))
+
+  setDefault(distanceMeasure, org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN)
+
+  /** @group getParam */
+  final def getDistanceMeasure: String = $(distanceMeasure)
+}
+
+/**
+ * Trait for shared param validationIndicatorCol. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasValidationIndicatorCol extends Params {
+
+  /**
+   * Param for name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation..
+   * @group param
+   */
+  final val validationIndicatorCol: Param[String] = new Param[String](this, "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.")
+
+  /** @group getParam */
+  final def getValidationIndicatorCol: String = $(validationIndicatorCol)
 }
 // scalastyle:on

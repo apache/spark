@@ -22,13 +22,13 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.sql.types.{BooleanType, LongType}
 
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
@@ -47,8 +47,7 @@ case class BroadcastHashJoinExec(
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildKeys)
@@ -62,13 +61,12 @@ case class BroadcastHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val avgHashProbe = longMetric("avgHashProbe")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashed = broadcastRelation.value.asReadOnlyCopy()
       TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-      join(streamedIter, hashed, numOutputRows, avgHashProbe)
+      join(streamedIter, hashed, numOutputRows)
     }
   }
 
@@ -76,19 +74,22 @@ case class BroadcastHashJoinExec(
     streamedPlan.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  override def needCopyResult: Boolean = joinType match {
+  private def multipleOutputForOneInput: Boolean = joinType match {
     case _: InnerLike | LeftOuter | RightOuter =>
       // For inner and outer joins, one row from the streamed side may produce multiple result rows,
-      // if the build side has duplicated keys. Then we need to copy the result rows before putting
-      // them in a buffer, because these result rows share one UnsafeRow instance. Note that here
-      // we wait for the broadcast to be finished, which is a no-op because it's already finished
-      // when we wait it in `doProduce`.
+      // if the build side has duplicated keys. Note that here we wait for the broadcast to be
+      // finished, which is a no-op because it's already finished when we wait it in `doProduce`.
       !buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
 
     // Other joins types(semi, anti, existence) can at most produce one result row for one input
-    // row from the streamed side, so no need to copy the result rows.
+    // row from the streamed side.
     case _ => false
   }
+
+  // If the streaming side needs to copy result, this join plan needs to copy too. Otherwise,
+  // this join plan only needs to copy result if it may output multiple rows for one input.
+  override def needCopyResult: Boolean =
+    streamedPlan.asInstanceOf[CodegenSupport].needCopyResult || multipleOutputForOneInput
 
   override def doProduce(ctx: CodegenContext): String = {
     streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
@@ -108,42 +109,20 @@ case class BroadcastHashJoinExec(
   }
 
   /**
-   * Returns the codes used to add a task completion listener to update avg hash probe
-   * at the end of the task.
-   */
-  private def genTaskListener(avgHashProbe: String, relationTerm: String): String = {
-    val listenerClass = classOf[TaskCompletionListener].getName
-    val taskContextClass = classOf[TaskContext].getName
-    s"""
-       | $taskContextClass$$.MODULE$$.get().addTaskCompletionListener(new $listenerClass() {
-       |   @Override
-       |   public void onTaskCompletion($taskContextClass context) {
-       |     $avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
-       |   }
-       | });
-     """.stripMargin
-  }
-
-  /**
    * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
    */
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
     // create a name for HashedRelation
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
-    val relationTerm = ctx.freshName("relation")
     val clsName = broadcastRelation.value.getClass.getName
 
-    // At the end of the task, we update the avg hash probe.
-    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
-    val addTaskListener = genTaskListener(avgHashProbe, relationTerm)
-
-    ctx.addMutableState(clsName, relationTerm,
-      s"""
-         | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
-         | incPeakExecutionMemory($relationTerm.estimatedSize());
-         | $addTaskListener
-       """.stripMargin)
+    // Inline mutable state since not many join operations in a task
+    val relationTerm = ctx.addMutableState(clsName, "relation",
+      v => s"""
+         | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
+         | incPeakExecutionMemory($v.estimatedSize());
+       """.stripMargin, forceInline = true)
     (broadcastRelation, relationTerm)
   }
 
@@ -180,16 +159,17 @@ case class BroadcastHashJoinExec(
         // the variables are needed even there is no matched rows
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
-        val code = s"""
+        val javaType = CodeGenerator.javaType(a.dataType)
+        val code = code"""
           |boolean $isNull = true;
-          |${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};
+          |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
           |if ($matched != null) {
           |  ${ev.code}
           |  $isNull = ${ev.isNull};
           |  $value = ${ev.value};
           |}
          """.stripMargin
-        ExprCode(code, isNull, value)
+        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
       }
     }
   }
@@ -316,7 +296,7 @@ case class BroadcastHashJoinExec(
          |if (!$conditionPassed) {
          |  $matched = null;
          |  // reset the variables those are already evaluated.
-         |  ${buildVars.filter(_.code == "").map(v => s"${v.isNull} = true;").mkString("\n")}
+         |  ${buildVars.filter(_.code.isEmpty).map(v => s"${v.isNull} = true;").mkString("\n")}
          |}
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
@@ -484,7 +464,8 @@ case class BroadcastHashJoinExec(
       s"$existsVar = true;"
     }
 
-    val resultVar = input ++ Seq(ExprCode("", "false", existsVar))
+    val resultVar = input ++ Seq(ExprCode.forNonNullValue(
+      JavaCode.variable(existsVar, BooleanType)))
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side

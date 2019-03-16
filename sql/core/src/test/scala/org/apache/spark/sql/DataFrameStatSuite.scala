@@ -23,7 +23,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -154,24 +154,24 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       val Array(d1, d2) = df.stat.approxQuantile("doubles", Array(q1, q2), epsilon)
       val Array(s1, s2) = df.stat.approxQuantile("singles", Array(q1, q2), epsilon)
 
-      val error_single = 2 * 1000 * epsilon
-      val error_double = 2 * 2000 * epsilon
+      val errorSingle = 1000 * epsilon
+      val errorDouble = 2.0 * errorSingle
 
-      assert(math.abs(single1 - q1 * n) < error_single)
-      assert(math.abs(double2 - 2 * q2 * n) < error_double)
-      assert(math.abs(s1 - q1 * n) < error_single)
-      assert(math.abs(s2 - q2 * n) < error_single)
-      assert(math.abs(d1 - 2 * q1 * n) < error_double)
-      assert(math.abs(d2 - 2 * q2 * n) < error_double)
+      assert(math.abs(single1 - q1 * n) <= errorSingle)
+      assert(math.abs(double2 - 2 * q2 * n) <= errorDouble)
+      assert(math.abs(s1 - q1 * n) <= errorSingle)
+      assert(math.abs(s2 - q2 * n) <= errorSingle)
+      assert(math.abs(d1 - 2 * q1 * n) <= errorDouble)
+      assert(math.abs(d2 - 2 * q2 * n) <= errorDouble)
 
       // Multiple columns
       val Array(Array(ms1, ms2), Array(md1, md2)) =
         df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), epsilon)
 
-      assert(math.abs(ms1 - q1 * n) < error_single)
-      assert(math.abs(ms2 - q2 * n) < error_single)
-      assert(math.abs(md1 - 2 * q1 * n) < error_double)
-      assert(math.abs(md2 - 2 * q2 * n) < error_double)
+      assert(math.abs(ms1 - q1 * n) <= errorSingle)
+      assert(math.abs(ms2 - q2 * n) <= errorSingle)
+      assert(math.abs(md1 - 2 * q1 * n) <= errorDouble)
+      assert(math.abs(md2 - 2 * q2 * n) <= errorDouble)
     }
 
     // quantile should be in the range [0.0, 1.0]
@@ -258,6 +258,14 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       .stat.approxQuantile(Array("input1", "input2"), Array(q1, q2), epsilon)
     assert(res2(0).isEmpty)
     assert(res2(1).isEmpty)
+  }
+
+  // SPARK-22957: check for 32bit overflow when computing rank.
+  // ignored - takes 4 minutes to run.
+  ignore("approx quantile 4: test for Int overflow") {
+    val res = spark.range(3000000000L).stat.approxQuantile("id", Array(0.8, 0.9), 0.05)
+    assert(res(0) > 2200000000.0)
+    assert(res(1) > 2200000000.0)
   }
 
   test("crosstab") {
@@ -361,6 +369,24 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   test("sampleBy") {
     val df = spark.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
+    checkAnswer(
+      sampled.groupBy("key").count().orderBy("key"),
+      Seq(Row(0, 6), Row(1, 11)))
+  }
+
+  test("sampleBy one column") {
+    val df = spark.range(0, 100).select((col("id") % 3).as("key"))
+    val sampled = df.stat.sampleBy($"key", Map(0 -> 0.1, 1 -> 0.2), 0L)
+    checkAnswer(
+      sampled.groupBy("key").count().orderBy("key"),
+      Seq(Row(0, 6), Row(1, 11)))
+  }
+
+  test("sampleBy multiple columns") {
+    val df = spark.range(0, 100)
+      .select(lit("Foo").as("name"), (col("id") % 3).as("key"))
+    val sampled = df.stat.sampleBy(
+      struct($"name", $"key"), Map(Row("Foo", 0) -> 0.1, Row("Foo", 1) -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
       Seq(Row(0, 6), Row(1, 11)))

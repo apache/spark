@@ -39,15 +39,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we donot need to
-      // worry about case sensitivity anymore.
-      val normalizedFilters = filters.map { e =>
-        e transform {
-          case a: AttributeReference =>
-            a.withName(logicalRelation.output.find(_.semanticEquals(a)).get.name)
-        }
-      }
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(
+        filters.filterNot(SubqueryExpression.hasSubquery), logicalRelation.output)
 
       val sparkSession = fsRelation.sparkSession
       val partitionColumns =
@@ -55,7 +48,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           partitionSchema, sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
-        ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
+        ExpressionSet(normalizedFilters
+          .filter(_.references.subsetOf(partitionSet)))
 
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)

@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
-import java.util.Properties
 import java.math.BigDecimal
+import java.sql.{Connection, Date, Timestamp}
+import java.util.{Properties, TimeZone}
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
-import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
+import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -77,12 +80,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.prepareStatement(
       "INSERT INTO ts_with_timezone VALUES " +
         "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
     conn.commit()
 
     conn.prepareStatement(
       "CREATE TABLE tableWithCustomSchema (id NUMBER, n1 NUMBER(1), n2 NUMBER(1))").executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO tableWithCustomSchema values(12312321321321312312312312123, 1, 0)").executeUpdate()
+      "INSERT INTO tableWithCustomSchema values(12312321321321312312312312123, 1, 0)")
+      .executeUpdate()
     conn.commit()
 
     sql(
@@ -104,15 +111,36 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate()
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))")
+      .executeUpdate()
     conn.prepareStatement(
       "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
     conn.commit()
 
-    conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)").executeUpdate()
+    conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)")
+      .executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE datetimePartitionTest (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(1, {d '2018-07-06'}, {ts '2018-07-06 05:50:00'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(2, {d '2018-07-06'}, {ts '2018-07-06 08:10:08'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(3, {d '2018-07-08'}, {ts '2018-07-08 13:32:01'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(4, {d '2018-07-12'}, {ts '2018-07-12 09:51:15'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
   }
-
 
   test("SPARK-16625 : Importing Oracle numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
@@ -126,7 +154,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // A value with fractions from DECIMAL(3, 2) is correct:
     assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
     // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999l)) == 0)
+    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
   }
 
 
@@ -235,6 +263,63 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(types(1).equals("class java.sql.Timestamp"))
   }
 
+  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+    val defaultJVMTimeZone = TimeZone.getDefault
+    // Pick the timezone different from the current default time zone of JVM
+    val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
+    val shanghaiTimeZone = TimeZone.getTimeZone("Asia/Shanghai")
+    val localSessionTimeZone =
+      if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
+      val e = intercept[java.sql.SQLException] {
+        val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+        dfRead.collect()
+      }.getMessage
+      assert(e.contains("Unrecognized SQL type -101"))
+    }
+  }
+
+  /**
+   * Change the Time Zone `timeZoneId` of JVM before executing `f`, then switches back to the
+   * original after `f` returns.
+   * @param timeZoneId the ID for a TimeZone, either an abbreviation such as "PST", a full name such
+   *                   as "America/Los_Angeles", or a custom ID such as "GMT-8:00".
+   */
+  private def withTimeZone(timeZoneId: String)(f: => Unit): Unit = {
+    val originalLocale = TimeZone.getDefault
+    try {
+      // Add Locale setting
+      TimeZone.setDefault(TimeZone.getTimeZone(timeZoneId))
+      f
+    } finally {
+      TimeZone.setDefault(originalLocale)
+    }
+  }
+
+  test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
+    def checkRow(row: Row, ts: String): Unit = {
+      assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
+      val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+      withTimeZone("PST") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
+      }
+
+      withTimeZone("UTC") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
+      }
+    }
+  }
+
   test("SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
     val props = new Properties()
     props.put("oracle.jdbc.mapDateToTimestamp", "false")
@@ -337,5 +422,64 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val values = rows(0)
     assert(values.getDouble(0) === 1.1)
     assert(values.getFloat(1) === 2.2f)
+  }
+
+  test("SPARK-22814 support date/timestamp types in partitionColumn") {
+    val expectedResult = Set(
+      (1, "2018-07-06", "2018-07-06 05:50:00"),
+      (2, "2018-07-06", "2018-07-06 08:10:08"),
+      (3, "2018-07-08", "2018-07-08 13:32:01"),
+      (4, "2018-07-12", "2018-07-12 09:51:15")
+    ).map { case (id, date, timestamp) =>
+      Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp))
+    }
+
+    // DateType partition column
+    val df1 = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetimePartitionTest")
+      .option("partitionColumn", "d")
+      .option("lowerBound", "2018-07-06")
+      .option("upperBound", "2018-07-20")
+      .option("numPartitions", 3)
+      // oracle.jdbc.mapDateToTimestamp defaults to true. If this flag is not disabled, column d
+      // (Oracle DATE) will be resolved as Catalyst Timestamp, which will fail bound evaluation of
+      // the partition column. E.g. 2018-07-06 cannot be evaluated as Timestamp, and the error
+      // message says: Timestamp format must be yyyy-mm-dd hh:mm:ss[.fffffffff].
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .option("sessionInitStatement", "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'")
+      .load()
+
+    df1.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"D" < '2018-07-10' or "D" is null""",
+          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
+          """"D" >= '2018-07-14'"""))
+    }
+    assert(df1.collect.toSet === expectedResult)
+
+    // TimestampType partition column
+    val df2 = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetimePartitionTest")
+      .option("partitionColumn", "t")
+      .option("lowerBound", "2018-07-04 03:30:00.0")
+      .option("upperBound", "2018-07-27 14:11:05.0")
+      .option("numPartitions", 2)
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .option("sessionInitStatement",
+        "ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS.FF'")
+      .load()
+
+    df2.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
+          """"T" >= '2018-07-15 20:50:32.5'"""))
+    }
+    assert(df2.collect.toSet === expectedResult)
   }
 }

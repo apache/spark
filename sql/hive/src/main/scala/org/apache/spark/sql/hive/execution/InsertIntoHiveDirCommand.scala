@@ -27,11 +27,14 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Command for writing the results of `query` to file system.
@@ -54,16 +57,21 @@ case class InsertIntoHiveDirCommand(
     isLocal: Boolean,
     storage: CatalogStorageFormat,
     query: LogicalPlan,
-    overwrite: Boolean) extends SaveAsHiveFile {
+    overwrite: Boolean,
+    outputColumnNames: Seq[String]) extends SaveAsHiveFile {
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(storage.locationUri.nonEmpty)
+    SchemaUtils.checkColumnNameDuplication(
+      outputColumnNames,
+      s"when inserting into ${storage.locationUri.get}",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
       identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),
       tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.VIEW,
       storage = storage,
-      schema = query.schema
+      schema = outputColumns.toStructType
     ))
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
@@ -98,7 +106,7 @@ case class InsertIntoHiveDirCommand(
     try {
       saveAsHiveFile(
         sparkSession = sparkSession,
-        queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+        plan = child,
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
         outputLocation = tmpPath.toString)

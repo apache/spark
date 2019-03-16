@@ -17,17 +17,30 @@
 
 package org.apache.spark.deploy.worker
 
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.function.Supplier
+
+import org.mockito.{Mock, MockitoAnnotations}
+import org.mockito.Answers.RETURNS_SMART_NULLS
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.{Command, ExecutorState}
+import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Worker._
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 
 class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   import org.apache.spark.deploy.DeployTestUtils._
+
+  @Mock(answer = RETURNS_SMART_NULLS) private var shuffleService: ExternalShuffleService = _
 
   def cmd(javaOpts: String*): Command = {
     Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq(javaOpts : _*))
@@ -36,13 +49,19 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   private var _worker: Worker = _
 
-  private def makeWorker(conf: SparkConf): Worker = {
+  private def makeWorker(
+      conf: SparkConf,
+      shuffleServiceSupplier: Supplier[ExternalShuffleService] = null): Worker = {
     assert(_worker === null, "Some Worker's RpcEnv is leaked in tests")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, securityMgr)
     _worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
-      "Worker", "/tmp", conf, securityMgr)
+      "Worker", "/tmp", conf, securityMgr, shuffleServiceSupplier)
     _worker
+  }
+
+  before {
+    MockitoAnnotations.initMocks(this)
   }
 
   after {
@@ -83,7 +102,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedExecutors (small number of executors)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedExecutors", 2.toString)
+    conf.set(WORKER_UI_RETAINED_EXECUTORS, 2)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 5) {
@@ -107,7 +126,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedExecutors (more executors)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedExecutors", 30.toString)
+    conf.set(WORKER_UI_RETAINED_EXECUTORS, 30)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 50) {
@@ -140,7 +159,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedDrivers (small number of drivers)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedDrivers", 2.toString)
+    conf.set(WORKER_UI_RETAINED_DRIVERS, 2)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 5) {
@@ -164,7 +183,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   test("test clearing of finishedDrivers (more drivers)") {
     val conf = new SparkConf()
-    conf.set("spark.worker.ui.retainedDrivers", 30.toString)
+    conf.set(WORKER_UI_RETAINED_DRIVERS, 30)
     val worker = makeWorker(conf)
     // initialize workers
     for (i <- 0 until 50) {
@@ -193,5 +212,37 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
       assert(worker.drivers.size === 49 - i)
       assert(worker.finishedDrivers.size === expectedValue)
     }
+  }
+
+  test("cleanup non-shuffle files after executor exits when config " +
+      "spark.storage.cleanupFilesAfterExecutorExit=true") {
+    testCleanupFilesWithConfig(true)
+  }
+
+  test("don't cleanup non-shuffle files after executor exits when config " +
+      "spark.storage.cleanupFilesAfterExecutorExit=false") {
+    testCleanupFilesWithConfig(false)
+  }
+
+  private def testCleanupFilesWithConfig(value: Boolean) = {
+    val conf = new SparkConf().set(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT, value)
+
+    val cleanupCalled = new AtomicBoolean(false)
+    when(shuffleService.executorRemoved(any[String], any[String])).thenAnswer(new Answer[Unit] {
+      override def answer(invocations: InvocationOnMock): Unit = {
+        cleanupCalled.set(true)
+      }
+    })
+    val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val worker = makeWorker(conf, externalShuffleServiceSupplier)
+    // initialize workers
+    for (i <- 0 until 10) {
+      worker.executors += s"app1/$i" -> createExecutorRunner(i)
+    }
+    worker.handleExecutorStateChanged(
+      ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
+    assert(cleanupCalled.get() == value)
   }
 }

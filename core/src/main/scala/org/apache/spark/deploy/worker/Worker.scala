@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.function.Supplier
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
@@ -35,8 +36,11 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.internal.config.Worker._
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
@@ -49,7 +53,8 @@ private[deploy] class Worker(
     endpointName: String,
     workDirPath: String = null,
     val conf: SparkConf,
-    val securityMgr: SecurityManager)
+    val securityMgr: SecurityManager,
+    externalShuffleServiceSupplier: Supplier[ExternalShuffleService] = null)
   extends ThreadSafeRpcEndpoint with Logging {
 
   private val host = rpcEnv.address.host
@@ -59,7 +64,7 @@ private[deploy] class Worker(
   assert (port > 0)
 
   // A scheduled executor used to send messages at the specified time.
-  private val forwordMessageScheduler =
+  private val forwardMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
 
   // A separated thread to clean up the workDir and the directories of finished applications.
@@ -70,7 +75,7 @@ private[deploy] class Worker(
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
-  private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
+  private val HEARTBEAT_MILLIS = conf.get(WORKER_TIMEOUT) * 1000 / 4
 
   // Model retries to connect to the master, after Hadoop's model.
   // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
@@ -89,23 +94,23 @@ private[deploy] class Worker(
   private val PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS = (math.round(60
     * REGISTRATION_RETRY_FUZZ_MULTIPLIER))
 
-  private val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
+  private val CLEANUP_ENABLED = conf.get(WORKER_CLEANUP_ENABLED)
   // How often worker will clean up old app folders
-  private val CLEANUP_INTERVAL_MILLIS =
-    conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
+  private val CLEANUP_INTERVAL_MILLIS = conf.get(WORKER_CLEANUP_INTERVAL) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
-  private val APP_DATA_RETENTION_SECONDS =
-    conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
+  private val APP_DATA_RETENTION_SECONDS = conf.get(APP_DATA_RETENTION)
 
-  private val testing: Boolean = sys.props.contains("spark.testing")
+  // Whether or not cleanup the non-shuffle files on executor exits.
+  private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
+    conf.get(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT)
+
   private var master: Option[RpcEndpointRef] = None
 
   /**
    * Whether to use the master address in `masterRpcAddresses` if possible. If it's disabled, Worker
    * will just use the address received from Master.
    */
-  private val preferConfiguredMasterAddress =
-    conf.getBoolean("spark.worker.preferConfiguredMasterAddress", false)
+  private val preferConfiguredMasterAddress = conf.get(PREFER_CONFIGURED_MASTER_ADDRESS)
   /**
    * The master address to connect in case of failure. When the connection is broken, worker will
    * use this address to connect. This is usually just one of `masterRpcAddresses`. However, when
@@ -121,11 +126,11 @@ private[deploy] class Worker(
   private var connected = false
   private val workerId = generateWorkerId()
   private val sparkHome =
-    if (testing) {
+    if (sys.props.contains(IS_TESTING.key)) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {
-      new File(sys.env.get("SPARK_HOME").getOrElse("."))
+      new File(sys.env.getOrElse("SPARK_HOME", "."))
     }
 
   var workDir: File = null
@@ -136,13 +141,15 @@ private[deploy] class Worker(
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
 
-  val retainedExecutors = conf.getInt("spark.worker.ui.retainedExecutors",
-    WorkerWebUI.DEFAULT_RETAINED_EXECUTORS)
-  val retainedDrivers = conf.getInt("spark.worker.ui.retainedDrivers",
-    WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
+  val retainedExecutors = conf.get(WORKER_UI_RETAINED_EXECUTORS)
+  val retainedDrivers = conf.get(WORKER_UI_RETAINED_DRIVERS)
 
   // The shuffle service is not actually started unless configured.
-  private val shuffleService = new ExternalShuffleService(conf, securityMgr)
+  private val shuffleService = if (externalShuffleServiceSupplier != null) {
+    externalShuffleServiceSupplier.get()
+  } else {
+    new ExternalShuffleService(conf, securityMgr)
+  }
 
   private val publicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
@@ -152,10 +159,11 @@ private[deploy] class Worker(
 
   private var connectionAttemptCount = 0
 
-  private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
+  private val metricsSystem =
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.WORKER, conf, securityMgr)
   private val workerSource = new WorkerSource(this)
 
-  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
+  val reverseProxy = conf.get(UI_REVERSE_PROXY)
 
   private var registerMasterFutures: Array[JFuture[_]] = null
   private var registrationRetryTimer: Option[JScheduledFuture[_]] = None
@@ -317,7 +325,7 @@ private[deploy] class Worker(
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel(true))
           registrationRetryTimer = Some(
-            forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+            forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
               override def run(): Unit = Utils.tryLogNonFatalError {
                 self.send(ReregisterWithMaster)
               }
@@ -352,7 +360,7 @@ private[deploy] class Worker(
         registered = false
         registerMasterFutures = tryRegisterAllMasters()
         connectionAttemptCount = 0
-        registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
+        registrationRetryTimer = Some(forwardMessageScheduler.scheduleAtFixedRate(
           new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               Option(self).foreach(_.send(ReregisterWithMaster))
@@ -399,7 +407,7 @@ private[deploy] class Worker(
         }
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
-        forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+        forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             self.send(SendHeartbeat)
           }
@@ -407,7 +415,7 @@ private[deploy] class Worker(
         if (CLEANUP_ENABLED) {
           logInfo(
             s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
-          forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+          forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               self.send(WorkDirCleanup)
             }
@@ -441,7 +449,7 @@ private[deploy] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
-      val appIds = executors.values.map(_.appId).toSet
+      val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
       val cleanupFuture = concurrent.Future {
         val appDirs = workDir.listFiles()
         if (appDirs == null) {
@@ -660,7 +668,7 @@ private[deploy] class Worker(
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()
-    forwordMessageScheduler.shutdownNow()
+    forwardMessageScheduler.shutdownNow()
     registerMasterThreadPool.shutdownNow()
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
@@ -732,6 +740,9 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
+          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED) {
+            shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
+          }
         case None =>
           logInfo("Unknown Executor " + fullId + " finished with state " + state +
             message.map(" message " + _).getOrElse("") +
@@ -745,6 +756,7 @@ private[deploy] class Worker(
 private[deploy] object Worker extends Logging {
   val SYSTEM_NAME = "sparkWorker"
   val ENDPOINT_NAME = "Worker"
+  private val SSL_NODE_LOCAL_CONFIG_PATTERN = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
 
   def main(argStrings: Array[String]) {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
@@ -759,7 +771,7 @@ private[deploy] object Worker extends Logging {
     // bound, we may launch no more than one external shuffle service on each host.
     // When this happens, we should give explicit reason of failure instead of fail silently. For
     // more detail see SPARK-20989.
-    val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+    val externalShuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     val sparkWorkerInstances = scala.sys.env.getOrElse("SPARK_WORKER_INSTANCES", "1").toInt
     require(externalShuffleServiceEnabled == false || sparkWorkerInstances <= 1,
       "Starting multiple workers on one host is failed because we may launch no more than one " +
@@ -790,9 +802,8 @@ private[deploy] object Worker extends Logging {
   }
 
   def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
-    val pattern = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
     val result = cmd.javaOpts.collectFirst {
-      case pattern(_result) => _result.toBoolean
+      case SSL_NODE_LOCAL_CONFIG_PATTERN(_result) => _result.toBoolean
     }
     result.getOrElse(false)
   }

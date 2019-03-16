@@ -15,13 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-import sys
-
-from functools import reduce
-from pyspark.sql import SparkSession
-
 """
 Read data file users.avro in local Spark distro:
 
@@ -50,6 +43,13 @@ $ ./bin/spark-submit --driver-class-path /path/to/example/jar \
 {u'favorite_color': None, u'name': u'Alyssa'}
 {u'favorite_color': u'red', u'name': u'Ben'}
 """
+from __future__ import print_function
+
+import sys
+
+from functools import reduce
+from pyspark.sql import SparkSession
+
 if __name__ == "__main__":
     if len(sys.argv) != 2 and len(sys.argv) != 3:
         print("""
@@ -61,7 +61,7 @@ if __name__ == "__main__":
         Assumes you have Avro data stored in <data_file>. Reader schema can be optionally specified
         in [reader_schema_file].
         """, file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     path = sys.argv[1]
 

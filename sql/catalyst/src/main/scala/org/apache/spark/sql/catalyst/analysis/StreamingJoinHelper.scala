@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, AttributeSet, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, PreciseTimestampConversion, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
@@ -41,7 +41,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    */
   def isWatermarkInJoinKeys(plan: LogicalPlan): Boolean = {
     plan match {
-      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _) =>
         (leftKeys ++ rightKeys).exists {
           case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
           case _ => false
@@ -237,6 +237,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case UnaryMinus(child) =>
           collect(child, !negate)
         case CheckOverflow(child, _) =>
+          collect(child, negate)
+        case PromotePrecision(child) =>
           collect(child, negate)
         case Cast(child, dataType, _) =>
           dataType match {

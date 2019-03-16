@@ -32,7 +32,11 @@ public class ByteArrayMethods {
   }
 
   public static int roundNumberOfBytesToNearestWord(int numBytes) {
-    int remainder = numBytes & 0x07;  // This is equivalent to `numBytes % 8`
+    return (int)roundNumberOfBytesToNearestWord((long)numBytes);
+  }
+
+  public static long roundNumberOfBytesToNearestWord(long numBytes) {
+    long remainder = numBytes & 0x07;  // This is equivalent to `numBytes % 8`
     if (remainder == 0) {
       return numBytes;
     } else {
@@ -66,7 +70,7 @@ public class ByteArrayMethods {
         i += 1;
       }
     }
-    // for architectures that suport unaligned accesses, chew it up 8 bytes at a time
+    // for architectures that support unaligned accesses, chew it up 8 bytes at a time
     if (unaligned || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
       while (i <= length - 8) {
         if (Platform.getLong(leftBase, leftOffset + i) !=

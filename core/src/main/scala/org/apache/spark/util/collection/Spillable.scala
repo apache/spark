@@ -19,6 +19,7 @@ package org.apache.spark.util.collection
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 
 /**
@@ -41,7 +42,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   protected def forceSpill(): Boolean
 
   // Number of elements read from input since last spill
-  protected def elementsRead: Long = _elementsRead
+  protected def elementsRead: Int = _elementsRead
 
   // Called by subclasses every time a record is read
   // It's used for checking spilling frequency
@@ -50,19 +51,19 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   // Initial threshold for the size of a collection before we start tracking its memory usage
   // For testing only
   private[this] val initialMemoryThreshold: Long =
-    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
+    SparkEnv.get.conf.get(SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD)
 
   // Force this collection to spill when there are this many elements in memory
   // For testing only
-  private[this] val numElementsForceSpillThreshold: Long =
-    SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MaxValue)
+  private[this] val numElementsForceSpillThreshold: Int =
+    SparkEnv.get.conf.get(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD)
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
   @volatile private[this] var myMemoryThreshold = initialMemoryThreshold
 
   // Number of elements read from input since last spill
-  private[this] var _elementsRead = 0L
+  private[this] var _elementsRead = 0
 
   // Number of bytes spilled in total
   @volatile private[this] var _memoryBytesSpilled = 0L

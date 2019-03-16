@@ -29,11 +29,11 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Quali
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -131,7 +131,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     projectList
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
@@ -139,7 +139,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
-      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query)
+      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
         parts, query, overwrite, false) if parts.isEmpty =>
@@ -208,7 +208,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         actualQuery,
         mode,
         table,
-        Some(t.location))
+        Some(t.location),
+        actualQuery.output.map(_.name))
   }
 }
 
@@ -243,27 +244,19 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     })
   }
 
-  private def readHiveTable(table: CatalogTable): LogicalPlan = {
-    HiveTableRelation(
-      table,
-      // Hive table columns are always nullable.
-      table.dataSchema.asNullable.toAttributes,
-      table.partitionSchema.asNullable.toAttributes)
-  }
-
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta))
 
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
-      i.copy(table = readHiveTable(tableMeta))
+      i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta)
 
     case UnresolvedCatalogRelation(tableMeta) =>
-      readHiveTable(tableMeta)
+      DDLUtils.readHiveTable(tableMeta)
   }
 }
 
@@ -309,18 +302,6 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         None) :: Nil
 
     case _ => Nil
-  }
-
-  // Get the bucket ID based on the bucketing values.
-  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
-  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
-    mutableRow(0) = cast(Literal(value), bucketColumn.dataType).eval(null)
-    val bucketIdGeneration = UnsafeProjection.create(
-      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
-      bucketColumn :: Nil)
-
-    bucketIdGeneration(mutableRow).getInt(0)
   }
 
   // Based on Public API.
@@ -427,7 +408,10 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
+      val converters = RowEncoder(StructType.fromAttributes(output))
+      rdd.mapPartitions { iterator =>
+        iterator.map(converters.toRow)
+      }
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
     }
@@ -442,6 +426,22 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 }
 
 object DataSourceStrategy {
+  /**
+   * The attribute name of predicate could be different than the one in schema in case of
+   * case insensitive, we should change them to match the one in schema, so we do not need to
+   * worry about case sensitivity anymore.
+   */
+  protected[sql] def normalizeFilters(
+      filters: Seq[Expression],
+      attributes: Seq[AttributeReference]): Seq[Expression] = {
+    filters.map { e =>
+      e transform {
+        case a: AttributeReference =>
+          a.withName(attributes.find(_.semanticEquals(a)).get.name)
+      }
+    }
+  }
+
   /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
@@ -497,7 +497,19 @@ object DataSourceStrategy {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
-        (translateFilter(left) ++ translateFilter(right)).reduceOption(sources.And)
+        // See SPARK-12218 for detailed discussion
+        // It is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have (a = 2 AND trim(b) = 'blah') OR (c > 0)
+        // and we do not understand how to convert trim(b) = 'blah'.
+        // If we only convert a = 2, we will end up with
+        // (a = 2) OR (c > 0), which will generate wrong results.
+        // Pushing one leg of AND down is only safe to do at the top level.
+        // You can see ParquetFilters' createFilter for more details.
+        for {
+          leftFilter <- translateFilter(left)
+          rightFilter <- translateFilter(right)
+        } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
@@ -516,6 +528,12 @@ object DataSourceStrategy {
 
       case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
         Some(sources.StringContains(a.name, v.toString))
+
+      case expressions.Literal(true, BooleanType) =>
+        Some(sources.AlwaysTrue)
+
+      case expressions.Literal(false, BooleanType) =>
+        Some(sources.AlwaysFalse)
 
       case _ => None
     }

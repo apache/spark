@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.expressions.scalalang
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate._
 
@@ -29,8 +28,7 @@ import org.apache.spark.sql.execution.aggregate._
  *
  * @since 2.0.0
  */
-@Experimental
-@InterfaceStability.Evolving
+@deprecated("please use untyped builtin aggregate functions.", "3.0.0")
 // scalastyle:off
 object typed {
   // scalastyle:on
@@ -76,15 +74,4 @@ object typed {
    * @since 2.0.0
    */
   def sumLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedSumLong[IN](f).toColumn
-
-  // TODO:
-  // stddevOf: Double
-  // varianceOf: Double
-  // approxCountDistinct: Long
-
-  // minOf: T
-  // maxOf: T
-
-  // firstOf: T
-  // lastOf: T
 }

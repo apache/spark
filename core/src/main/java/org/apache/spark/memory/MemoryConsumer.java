@@ -83,12 +83,12 @@ public abstract class MemoryConsumer {
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 
   /**
-   * Allocates a LongArray of `size`. Note that this method may throw `OutOfMemoryError` if Spark
-   * doesn't have enough memory for this allocation, or throw `TooLargePageException` if this
-   * `LongArray` is too large to fit in a single page. The caller side should take care of these
-   * two exceptions, or make sure the `size` is small enough that won't trigger exceptions.
+   * Allocates a LongArray of `size`. Note that this method may throw `SparkOutOfMemoryError`
+   * if Spark doesn't have enough memory for this allocation, or throw `TooLargePageException`
+   * if this `LongArray` is too large to fit in a single page. The caller side should take care of
+   * these two exceptions, or make sure the `size` is small enough that won't trigger exceptions.
    *
-   * @throws OutOfMemoryError
+   * @throws SparkOutOfMemoryError
    * @throws TooLargePageException
    */
   public LongArray allocateArray(long size) {
@@ -111,7 +111,7 @@ public abstract class MemoryConsumer {
   /**
    * Allocate a memory block with at least `required` bytes.
    *
-   * @throws OutOfMemoryError
+   * @throws SparkOutOfMemoryError
    */
   protected MemoryBlock allocatePage(long required) {
     MemoryBlock page = taskMemoryManager.allocatePage(Math.max(pageSize, required), this);
@@ -154,6 +154,9 @@ public abstract class MemoryConsumer {
       taskMemoryManager.freePage(page, this);
     }
     taskMemoryManager.showMemoryUsage();
-    throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
+    // checkstyle.off: RegexpSinglelineJava
+    throw new SparkOutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " +
+      got);
+    // checkstyle.on: RegexpSinglelineJava
   }
 }

@@ -18,13 +18,14 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
-import java.util.Locale
+import java.lang.{Iterable => JIterable}
+import java.util.{Locale, Map => JMap}
+import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -82,8 +83,9 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  */
 private[hive] class HiveClientImpl(
     override val version: HiveVersion,
+    warehouseDir: Option[String],
     sparkConf: SparkConf,
-    hadoopConf: Configuration,
+    hadoopConf: JIterable[JMap.Entry[String, String]],
     extraConfig: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
@@ -102,6 +104,9 @@ private[hive] class HiveClientImpl(
     case hive.v1_2 => new Shim_v1_2()
     case hive.v2_0 => new Shim_v2_0()
     case hive.v2_1 => new Shim_v2_1()
+    case hive.v2_2 => new Shim_v2_2()
+    case hive.v2_3 => new Shim_v2_3()
+    case hive.v3_1 => new Shim_v3_1()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -130,7 +135,7 @@ private[hive] class HiveClientImpl(
       if (ret != null) {
         // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
         // instance constructed, we need to follow that change here.
-        Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
+        warehouseDir.foreach { dir =>
           ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
         }
         ret
@@ -186,7 +191,7 @@ private[hive] class HiveClientImpl(
   /** Returns the configuration for the current session. */
   def conf: HiveConf = state.getConf
 
-  private val userName = state.getAuthenticator.getUserName
+  private val userName = conf.getUser
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
@@ -289,12 +294,18 @@ private[hive] class HiveClientImpl(
     state.err = stream
   }
 
-  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    if (databaseExists(databaseName)) {
-      state.setCurrentDatabase(databaseName)
-    } else {
-      throw new NoSuchDatabaseException(databaseName)
+  private def setCurrentDatabaseRaw(db: String): Unit = {
+    if (state.getCurrentDatabase != db) {
+      if (databaseExists(db)) {
+        state.setCurrentDatabase(db)
+      } else {
+        throw new NoSuchDatabaseException(db)
+      }
     }
+  }
+
+  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
+    setCurrentDatabaseRaw(databaseName)
   }
 
   override def createDatabase(
@@ -330,7 +341,7 @@ private[hive] class HiveClientImpl(
     Option(client.getDatabase(dbName)).map { d =>
       CatalogDatabase(
         name = d.getName,
-        description = d.getDescription,
+        description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
@@ -344,15 +355,19 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala
   }
 
+  private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
+    Option(client.getTable(dbName, tableName, false /* do not throw exception */))
+  }
+
   override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
-    Option(client.getTable(dbName, tableName, false /* do not throw exception */)).nonEmpty
+    getRawTableOption(dbName, tableName).nonEmpty
   }
 
   override def getTableOption(
       dbName: String,
       tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
-    Option(client.getTable(dbName, tableName, false)).map { h =>
+    getRawTableOption(dbName, tableName).map { h =>
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
       val cols = h.getCols.asScala.map(fromHiveColumn)
@@ -414,38 +429,15 @@ private[hive] class HiveClientImpl(
       }
       val comment = properties.get("comment")
 
-      // Here we are reading statistics from Hive.
-      // Note that this statistics could be overridden by Spark's statistics if that's available.
-      val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
-      val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
-      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)).filter(_ >= 0)
-      // TODO: check if this estimate is valid for tables after partition pruning.
-      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
-      // relatively cheap if parameters for the table are populated into the metastore.
-      // Currently, only totalSize, rawDataSize, and rowCount are used to build the field `stats`
-      // TODO: stats should include all the other two fields (`numFiles` and `numPartitions`).
-      // (see StatsSetupConst in Hive)
-      val stats =
-        // When table is external, `totalSize` is always zero, which will influence join strategy
-        // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
-        // return None. Later, we will use the other ways to estimate the statistics.
-        if (totalSize.isDefined && totalSize.get > 0L) {
-          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount))
-        } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
-          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount))
-        } else {
-          // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
-          None
-        }
-
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
-          case HiveTableType.INDEX_TABLE =>
-            throw new AnalysisException("Hive index table is not supported.")
+          case unsupportedType =>
+            val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
+            throw new AnalysisException(s"Hive $tableTypeStr is not supported.")
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
@@ -476,11 +468,14 @@ private[hive] class HiveClientImpl(
         // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
         // in the function toHiveTable.
         properties = filteredProperties,
-        stats = stats,
+        stats = readHiveStats(properties),
         comment = comment,
-        // In older versions of Spark(before 2.2.0), we expand the view original text and store
-        // that into `viewExpandedText`, and that should be used in view resolution. So we get
-        // `viewExpandedText` instead of `viewOriginalText` for viewText here.
+        // In older versions of Spark(before 2.2.0), we expand the view original text and
+        // store that into `viewExpandedText`, that should be used in view resolution.
+        // We get `viewExpandedText` as viewText, and also get `viewOriginalText` in order to
+        // display the original view text in `DESC [EXTENDED|FORMATTED] table` command for views
+        // that created by older versions of Spark.
+        viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures,
         ignoredProperties = ignoredProperties.toMap)
@@ -488,6 +483,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
+    verifyColumnDataType(table.dataSchema)
     client.createTable(toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
@@ -507,6 +503,7 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
+    verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
@@ -520,6 +517,7 @@ private[hive] class HiveClientImpl(
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = client.getTable(dbName, tableName)
+    verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
@@ -617,8 +615,18 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
-    val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
+    // Note: Before altering table partitions in Hive, you *must* set the current database
+    // to the one that contains the table of interest. Otherwise you will end up with the
+    // most helpful error message ever: "Unable to alter partition. alter is not possible."
+    // See HIVE-2742 for more detail.
+    val original = state.getCurrentDatabase
+    try {
+      setCurrentDatabaseRaw(db)
+      val hiveTable = toHiveTable(getTable(db, table), Some(userName))
+      shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
+    } finally {
+      state.setCurrentDatabase(original)
+    }
   }
 
   /**
@@ -845,19 +853,25 @@ private[hive] class HiveClientImpl(
 
   def reset(): Unit = withHiveState {
     client.getAllTables("default").asScala.foreach { t =>
-        logDebug(s"Deleting table $t")
-        val table = client.getTable("default", t)
+      logDebug(s"Deleting table $t")
+      val table = client.getTable("default", t)
+      try {
         client.getIndexes("default", t, 255).asScala.foreach { index =>
           shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
           client.dropTable("default", t)
         }
+      } catch {
+        case _: NoSuchMethodError =>
+          // HIVE-18448 Hive 3.0 remove index APIs
+          client.dropTable("default", t)
       }
-      client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
-        logDebug(s"Dropping Database: $db")
-        client.dropDatabase(db, true, false, true)
-      }
+    }
+    client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
+      logDebug(s"Dropping Database: $db")
+      client.dropDatabase(db, true, false, true)
+    }
   }
 }
 
@@ -872,15 +886,19 @@ private[hive] object HiveClientImpl {
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
-  /** Builds the native StructField from Hive's FieldSchema. */
-  def fromHiveColumn(hc: FieldSchema): StructField = {
-    val columnType = try {
+  /** Get the Spark SQL native DataType from Hive's FieldSchema. */
+  private def getSparkSQLDataType(hc: FieldSchema): DataType = {
+    try {
       CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
     }
+  }
 
+  /** Builds the native StructField from Hive's FieldSchema. */
+  def fromHiveColumn(hc: FieldSchema): StructField = {
+    val columnType = getSparkSQLDataType(hc)
     val metadata = if (hc.getType != columnType.catalogString) {
       new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
     } else {
@@ -893,6 +911,10 @@ private[hive] object HiveClientImpl {
       nullable = true,
       metadata = metadata)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
+  }
+
+  private def verifyColumnDataType(schema: StructType): Unit = {
+    schema.foreach(col => getSparkSQLDataType(toHiveColumn(col)))
   }
 
   private def toInputFormat(name: String) =
@@ -917,6 +939,9 @@ private[hive] object HiveClientImpl {
       case CatalogTableType.MANAGED =>
         HiveTableType.MANAGED_TABLE
       case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at toHiveTable: $t")
     })
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
@@ -925,8 +950,8 @@ private[hive] object HiveClientImpl {
     hiveTable.setFields(schema.asJava)
     hiveTable.setPartCols(partCols.asJava)
     userName.foreach(hiveTable.setOwner)
-    hiveTable.setCreateTime((table.createTime / 1000).toInt)
-    hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
+    hiveTable.setCreateTime(MILLISECONDS.toSeconds(table.createTime).toInt)
+    hiveTable.setLastAccessTime(MILLISECONDS.toSeconds(table.lastAccessTime).toInt)
     table.storage.locationUri.map(CatalogUtils.URIToString).foreach { loc =>
       hiveTable.getTTable.getSd.setLocation(loc)}
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
@@ -972,10 +997,8 @@ private[hive] object HiveClientImpl {
       ht: HiveTable): HivePartition = {
     val tpart = new org.apache.hadoop.hive.metastore.api.Partition
     val partValues = ht.getPartCols.asScala.map { hc =>
-      p.spec.get(hc.getName).getOrElse {
-        throw new IllegalArgumentException(
-          s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}")
-      }
+      p.spec.getOrElse(hc.getName, throw new IllegalArgumentException(
+        s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}"))
     }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
@@ -989,6 +1012,8 @@ private[hive] object HiveClientImpl {
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
+    tpart.setCreateTime(MILLISECONDS.toSeconds(p.createTime).toInt)
+    tpart.setLastAccessTime(MILLISECONDS.toSeconds(p.lastAccessTime).toInt)
     tpart.setParameters(mutable.Map(p.parameters.toSeq: _*).asJava)
     new HivePartition(ht, tpart)
   }
@@ -998,6 +1023,11 @@ private[hive] object HiveClientImpl {
    */
   def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
     val apiPartition = hp.getTPartition
+    val properties: Map[String, String] = if (hp.getParameters != null) {
+      hp.getParameters.asScala.toMap
+    } else {
+      Map.empty
+    }
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
@@ -1008,8 +1038,39 @@ private[hive] object HiveClientImpl {
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
-        parameters =
-          if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
+      createTime = apiPartition.getCreateTime.toLong * 1000,
+      lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
+      parameters = properties,
+      stats = readHiveStats(properties))
+  }
+
+  /**
+   * Reads statistics from Hive.
+   * Note that this statistics could be overridden by Spark's statistics if that's available.
+   */
+  private def readHiveStats(properties: Map[String, String]): Option[CatalogStatistics] = {
+    val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
+    val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
+    val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))
+    // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
+    // relatively cheap if parameters for the table are populated into the metastore.
+    // Currently, only totalSize, rawDataSize, and rowCount are used to build the field `stats`
+    // TODO: stats should include all the other two fields (`numFiles` and `numPartitions`).
+    // (see StatsSetupConst in Hive)
+
+    // When table is external, `totalSize` is always zero, which will influence join strategy.
+    // So when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
+    // return None.
+    // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
+    // zero after INSERT command. So they are used here only if they are larger than zero.
+    if (totalSize.isDefined && totalSize.get > 0L) {
+      Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount.filter(_ > 0)))
+    } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+      Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount.filter(_ > 0)))
+    } else {
+      // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
+      None
+    }
   }
 
   // Below is the key of table properties for storing Hive-generated statistics

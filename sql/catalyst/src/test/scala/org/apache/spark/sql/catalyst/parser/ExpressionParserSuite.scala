@@ -17,12 +17,15 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -54,6 +57,13 @@ class ExpressionParserSuite extends PlanTest {
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
+  }
+
+  def assertEval(
+      sqlCommand: String,
+      expect: Any,
+      parser: ParserInterface = defaultParser): Unit = {
+    assert(parser.parseExpression(sqlCommand).eval() === expect)
   }
 
   test("star expressions") {
@@ -154,7 +164,19 @@ class ExpressionParserSuite extends PlanTest {
   test("in sub-query") {
     assertEqual(
       "a in (select b from c)",
-      In('a, Seq(ListQuery(table("c").select('b)))))
+      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+
+    assertEqual(
+      "(a, b, c) in (select d, e, f from g)",
+      InSubquery(Seq('a, 'b, 'c), ListQuery(table("g").select('d, 'e, 'f))))
+
+    assertEqual(
+      "(a, b) in (select c from d)",
+      InSubquery(Seq('a, 'b), ListQuery(table("d").select('c))))
+
+    assertEqual(
+      "(a) in (select b from c)",
+      InSubquery(Seq('a), ListQuery(table("c").select('b))))
   }
 
   test("like expressions") {
@@ -191,7 +213,7 @@ class ExpressionParserSuite extends PlanTest {
     // Simple operations
     assertEqual("a * b", 'a * 'b)
     assertEqual("a / b", 'a / 'b)
-    assertEqual("a DIV b", ('a / 'b).cast(LongType))
+    assertEqual("a DIV b", 'a div 'b)
     assertEqual("a % b", 'a % 'b)
     assertEqual("a + b", 'a + 'b)
     assertEqual("a - b", 'a - 'b)
@@ -202,7 +224,7 @@ class ExpressionParserSuite extends PlanTest {
     // Check precedences
     assertEqual(
       "a * t | b ^ c & d - e + f % g DIV h / i * k",
-      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g / 'h).cast(LongType) / 'i * 'k)))))
+      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g div 'h) / 'i * 'k)))))
   }
 
   test("unary arithmetic expressions") {
@@ -234,6 +256,13 @@ class ExpressionParserSuite extends PlanTest {
     intercept("foo(a x)", "extraneous input 'x'")
   }
 
+  private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
+
+  test("lambda functions") {
+    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
+    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
+  }
+
   test("window function expressions") {
     val func = 'foo.function(star())
     def windowed(
@@ -249,8 +278,8 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
     assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
     assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
+    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
     assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
     assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
 
@@ -263,21 +292,62 @@ class ExpressionParserSuite extends PlanTest {
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
       WindowExpression('sum.function('product + 1),
         WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+  }
 
-    // Range/Row
+  test("range/rows window function expressions") {
+    val func = 'foo.function(star())
+    def windowed(
+        partitioning: Seq[Expression] = Seq.empty,
+        ordering: Seq[SortOrder] = Seq.empty,
+        frame: WindowFrame = UnspecifiedFrame): Expression = {
+      WindowExpression(func, WindowSpecDefinition(partitioning, ordering, frame))
+    }
+
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
-      ("10 preceding", -Literal(10), CurrentRow),
-      ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
-      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow),
+      // No between combinations
       ("unbounded preceding", UnboundedPreceding, CurrentRow),
+      ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
+      ("10 preceding", -Literal(10), CurrentRow),
+      ("3 + 1 preceding", -Add(Literal(3), Literal(1)), CurrentRow),
+      ("0 preceding", -Literal(0), CurrentRow),
+      ("current row", CurrentRow, CurrentRow),
+      ("0 following", Literal(0), CurrentRow),
+      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow),
+      ("10 following", Literal(10), CurrentRow),
+      ("2147483649 following", Literal(2147483649L), CurrentRow),
       ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
+
+      // Between combinations
+      ("between unbounded preceding and 5 following",
+        UnboundedPreceding, Literal(5)),
+      ("between unbounded preceding and 3 + 1 following",
+        UnboundedPreceding, Add(Literal(3), Literal(1))),
+      ("between unbounded preceding and 2147483649 following",
+        UnboundedPreceding, Literal(2147483649L)),
       ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
-      ("between unbounded preceding and unbounded following",
-        UnboundedPreceding, UnboundedFollowing),
+      ("between 2147483648 preceding and current row", -Literal(2147483648L), CurrentRow),
       ("between 10 preceding and current row", -Literal(10), CurrentRow),
+      ("between 3 + 1 preceding and current row", -Add(Literal(3), Literal(1)), CurrentRow),
+      ("between 0 preceding and current row", -Literal(0), CurrentRow),
+      ("between current row and current row", CurrentRow, CurrentRow),
+      ("between current row and 0 following", CurrentRow, Literal(0)),
       ("between current row and 5 following", CurrentRow, Literal(5)),
-      ("between 10 preceding and 5 following", -Literal(10), Literal(5))
+      ("between current row and 3 + 1 following", CurrentRow, Add(Literal(3), Literal(1))),
+      ("between current row and 2147483649 following", CurrentRow, Literal(2147483649L)),
+      ("between current row and unbounded following", CurrentRow, UnboundedFollowing),
+      ("between 2147483648 preceding and unbounded following",
+        -Literal(2147483648L), UnboundedFollowing),
+      ("between 10 preceding and unbounded following",
+        -Literal(10), UnboundedFollowing),
+      ("between 3 + 1 preceding and unbounded following",
+        -Add(Literal(3), Literal(1)), UnboundedFollowing),
+      ("between 0 preceding and unbounded following", -Literal(0), UnboundedFollowing),
+
+      // Between partial and full range
+      ("between 10 preceding and 5 following", -Literal(10), Literal(5)),
+      ("between unbounded preceding and unbounded following",
+        UnboundedPreceding, UnboundedFollowing)
     )
     frameTypes.foreach {
       case (frameTypeSql, frameType) =>
@@ -428,7 +498,7 @@ class ExpressionParserSuite extends PlanTest {
       Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
-    intercept("1.20E-38BD", "DecimalType can only support precision up to 38")
+    intercept("1.20E-38BD", "decimal can only support precision up to 38")
   }
 
   test("strings") {
@@ -619,5 +689,37 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+  }
+
+  test("timestamp literals") {
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
+        def toMicros(time: LocalDateTime): Long = {
+          val seconds = time.atZone(timeZone.toZoneId).toInstant.getEpochSecond
+          TimeUnit.SECONDS.toMicros(seconds)
+        }
+        assertEval(
+          sqlCommand = "TIMESTAMP '2019-01-14 20:54:00.000'",
+          expect = toMicros(LocalDateTime.of(2019, 1, 14, 20, 54)))
+        assertEval(
+          sqlCommand = "Timestamp '2000-01-01T00:55:00'",
+          expect = toMicros(LocalDateTime.of(2000, 1, 1, 0, 55)))
+        // Parsing of the string does not depend on the SQL config because the string contains
+        // time zone offset already.
+        assertEval(
+          sqlCommand = "TIMESTAMP '2019-01-16 20:50:00.567000+01:00'",
+          expect = 1547668200567000L)
+      }
+    }
+  }
+
+  test("date literals") {
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        assertEval("DATE '2019-01-14'", 17910)
+        assertEval("DATE '2019-01'", 17897)
+        assertEval("DATE '2019'", 17897)
+      }
+    }
   }
 }

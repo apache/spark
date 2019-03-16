@@ -261,7 +261,8 @@ private[ml] class FeatureEncoder(numFeatures: Array[Int]) extends Serializable {
    */
   def foreachNonzeroOutput(value: Any, f: (Int, Double) => Unit): Unit = value match {
     case d: Double =>
-      assert(numFeatures.length == 1, "DoubleType columns should only contain one feature.")
+      assert(numFeatures.length == 1,
+        s"${DoubleType.catalogString} columns should only contain one feature.")
       val numOutputCols = numFeatures.head
       if (numOutputCols > 1) {
         assert(

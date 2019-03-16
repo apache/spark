@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
+ * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
@@ -61,7 +61,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(e.getMessage)
+          u.failAnalysis(e.getMessage, e)
       }
   }
 }
@@ -73,7 +73,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
   private def catalog = sparkSession.sessionState.catalog
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
     // bucketing information is specified, as we can't infer bucketing from data files currently.
     // Since the runtime inferred partition columns could be different from what user specified,
@@ -108,14 +108,23 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       }
 
       // Check if the specified data source match the data source of the existing table.
-      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
-      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
+      val conf = sparkSession.sessionState.conf
+      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get, conf)
+      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
       if (existingProvider != specifiedProvider) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
+      }
+      tableDesc.storage.locationUri match {
+        case Some(location) if location.getPath != existingTable.location.getPath =>
+          throw new AnalysisException(
+            s"The location of the existing table ${tableIdentWithDB.quotedString} is " +
+              s"`${existingTable.location}`. It doesn't match the specified location " +
+              s"`${tableDesc.location}`.")
+        case _ =>
       }
 
       if (query.schema.length != existingTable.schema.length) {
@@ -177,7 +186,8 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
       c.copy(
         tableDesc = existingTable,
-        query = Some(newQuery))
+        query = Some(DDLPreprocessingUtils.castAndRenameQueryOutput(
+          newQuery, existingTable.schema.toAttributes, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -271,7 +281,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
       case _: AtomicType => // OK
-      case other => failAnalysis(s"Cannot use ${other.simpleString} for partition column")
+      case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
     }
 
     normalizedPartitionCols
@@ -297,7 +307,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
-          case other => failAnalysis(s"Cannot use ${other.simpleString} for sorting column")
+          case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
 
         Some(normalizedBucketSpec)
@@ -315,7 +325,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
+case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -335,6 +345,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
+    val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
+      insert.query, expectedColumns, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -345,41 +357,15 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
            """.stripMargin)
       }
 
-      castAndRenameChildOutput(insert.copy(partition = normalizedPartSpec), expectedColumns)
+      insert.copy(query = newQuery, partition = normalizedPartSpec)
     } else {
       // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      castAndRenameChildOutput(insert, expectedColumns)
-        .copy(partition = partColNames.map(_ -> None).toMap)
+      insert.copy(query = newQuery, partition = partColNames.map(_ -> None).toMap)
     }
   }
 
-  private def castAndRenameChildOutput(
-      insert: InsertIntoTable,
-      expectedOutput: Seq[Attribute]): InsertIntoTable = {
-    val newChildOutput = expectedOutput.zip(insert.query.output).map {
-      case (expected, actual) =>
-        if (expected.dataType.sameType(actual.dataType) &&
-            expected.name == actual.name &&
-            expected.metadata == actual.metadata) {
-          actual
-        } else {
-          // Renaming is needed for handling the following cases like
-          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-          // 2) Target tables have column metadata
-          Alias(cast(actual, expected.dataType), expected.name)(
-            explicitMetadata = Option(expected.metadata))
-        }
-    }
-
-    if (newChildOutput == insert.query.output) {
-      insert
-    } else {
-      insert.copy(query = Project(newChildOutput, insert.query))
-    }
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
@@ -487,6 +473,39 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 
       case _ => // OK
+    }
+  }
+}
+
+object DDLPreprocessingUtils {
+
+  /**
+   * Adjusts the name and data type of the input query output columns, to match the expectation.
+   */
+  def castAndRenameQueryOutput(
+      query: LogicalPlan,
+      expectedOutput: Seq[Attribute],
+      conf: SQLConf): LogicalPlan = {
+    val newChildOutput = expectedOutput.zip(query.output).map {
+      case (expected, actual) =>
+        if (expected.dataType.sameType(actual.dataType) &&
+          expected.name == actual.name &&
+          expected.metadata == actual.metadata) {
+          actual
+        } else {
+          // Renaming is needed for handling the following cases like
+          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
+          // 2) Target tables have column metadata
+          Alias(
+            Cast(actual, expected.dataType, Option(conf.sessionLocalTimeZone)),
+            expected.name)(explicitMetadata = Option(expected.metadata))
+        }
+    }
+
+    if (newChildOutput == query.output) {
+      query
+    } else {
+      Project(newChildOutput, query)
     }
   }
 }

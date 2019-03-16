@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.types.StringType
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -99,12 +100,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // invalid escaping
     val invalidEscape = intercept[AnalysisException] {
-      evaluate("""a""" like """\a""")
+      evaluateWithoutCodegen("""a""" like """\a""")
     }
     assert(invalidEscape.getMessage.contains("pattern"))
 
     val endEscape = intercept[AnalysisException] {
-      evaluate("""a""" like """a\""")
+      evaluateWithoutCodegen("""a""" like """a\""")
     }
     assert(endEscape.getMessage.contains("pattern"))
 
@@ -146,11 +147,11 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("abc"  rlike _, "^bc", false)
 
     intercept[java.util.regex.PatternSyntaxException] {
-      evaluate("abbbbc" rlike "**")
+      evaluateWithoutCodegen("abbbbc" rlike "**")
     }
     intercept[java.util.regex.PatternSyntaxException] {
       val regex = 'a.string.at(0)
-      evaluate("abbbbc" rlike regex, create_row("**"))
+      evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
     }
   }
 
@@ -176,6 +177,15 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
+  }
+
+  test("SPARK-22570: RegExpReplace should not create a lot of global variables") {
+    val ctx = new CodegenContext
+    RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
+    // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
+    // are always required, which are allocated in type-based global array
+    assert(ctx.inlinedMutableStates.length == 0)
+    assert(ctx.mutableStateInitCode.length == 4)
   }
 
   test("RegexExtract") {
@@ -215,11 +225,18 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row3 = create_row("aa2bb3cc", null)
 
     checkEvaluation(
-      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+")), Seq("aa", "bb", "cc"), row1)
+      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(
-      StringSplit(s1, s2), Seq("aa", "bb", "cc"), row1)
-    checkEvaluation(StringSplit(s1, s2), null, row2)
-    checkEvaluation(StringSplit(s1, s2), null, row3)
+      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), 2), Seq("aa", "bb3cc"), row1)
+    // limit = 0 should behave just like limit = -1
+    checkEvaluation(
+      StringSplit(Literal("aacbbcddc"), Literal("c"), 0), Seq("aa", "bb", "dd", ""), row1)
+    checkEvaluation(
+      StringSplit(Literal("aacbbcddc"), Literal("c"), -1), Seq("aa", "bb", "dd", ""), row1)
+    checkEvaluation(
+      StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
+    checkEvaluation(StringSplit(s1, s2, -1), null, row2)
+    checkEvaluation(StringSplit(s1, s2, -1), null, row3)
   }
 
 }

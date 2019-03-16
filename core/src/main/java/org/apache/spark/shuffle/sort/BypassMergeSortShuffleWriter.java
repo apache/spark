@@ -18,9 +18,9 @@
 package org.apache.spark.shuffle.sort;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import static java.nio.file.StandardOpenOption.*;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -34,15 +34,15 @@ import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
-import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
@@ -59,9 +59,8 @@ import org.apache.spark.util.Utils;
  * simultaneously opens separate serializers and file streams for all partitions. As a result,
  * {@link SortShuffleManager} only selects this write path when
  * <ul>
- *    <li>no Ordering is specified,</li>
- *    <li>no Aggregator is specified, and</li>
- *    <li>the number of partitions is less than
+ *    <li>no map-side combine is specified, and</li>
+ *    <li>the number of partitions is less than or equal to
  *      <code>spark.shuffle.sort.bypassMergeThreshold</code>.</li>
  * </ul>
  *
@@ -75,10 +74,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
+  private final boolean transferToEnabled;
   private final int numPartitions;
   private final BlockManager blockManager;
   private final Partitioner partitioner;
-  private final ShuffleWriteMetrics writeMetrics;
+  private final ShuffleWriteMetricsReporter writeMetrics;
   private final int shuffleId;
   private final int mapId;
   private final Serializer serializer;
@@ -102,17 +102,18 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       IndexShuffleBlockResolver shuffleBlockResolver,
       BypassMergeSortShuffleHandle<K, V> handle,
       int mapId,
-      TaskContext taskContext,
-      SparkConf conf) {
+      SparkConf conf,
+      ShuffleWriteMetricsReporter writeMetrics) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
-    this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
+    this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
     this.shuffleId = dep.shuffleId();
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
-    this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
+    this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleBlockResolver = shuffleBlockResolver;
   }
@@ -150,9 +151,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
 
     for (int i = 0; i < numPartitions; i++) {
-      final DiskBlockObjectWriter writer = partitionWriters[i];
-      partitionWriterSegments[i] = writer.commitAndGet();
-      writer.close();
+      try (DiskBlockObjectWriter writer = partitionWriters[i]) {
+        partitionWriterSegments[i] = writer.commitAndGet();
+      }
     }
 
     File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
@@ -186,21 +187,17 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       return lengths;
     }
 
-    // This file needs to opened in append mode in order to work around a Linux kernel bug that
-    // affects transferTo; see SPARK-3948 for more details.
-    final FileChannel out = FileChannel.open(outputFile.toPath(), WRITE, APPEND, CREATE);
+    final FileOutputStream out = new FileOutputStream(outputFile, true);
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
         final File file = partitionWriterSegments[i].file();
         if (file.exists()) {
-          final FileChannel in = FileChannel.open(file.toPath(), READ);
+          final FileInputStream in = new FileInputStream(file);
           boolean copyThrewException = true;
           try {
-            long size = in.size();
-            Utils.copyFileStreamNIO(in, out, 0, size);
-            lengths[i] = size;
+            lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
             copyThrewException = false;
           } finally {
             Closeables.close(in, copyThrewException);

@@ -65,8 +65,8 @@ object PCAExample {
     val MSE = valuesAndPreds.map { case (v, p) => math.pow((v - p), 2) }.mean()
     val MSE_pca = valuesAndPreds_pca.map { case (v, p) => math.pow((v - p), 2) }.mean()
 
-    println("Mean Squared Error = " + MSE)
-    println("PCA Mean Squared Error = " + MSE_pca)
+    println(s"Mean Squared Error = $MSE")
+    println(s"PCA Mean Squared Error = $MSE_pca")
     // $example off$
 
     sc.stop()

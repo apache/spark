@@ -27,6 +27,7 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest._
+import org.apache.spark.internal.config
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.util.Utils
 
@@ -67,6 +68,10 @@ private[mesos] class MesosSubmitRequestServlet(
   private def newDriverId(submitDate: Date): String =
     f"driver-${createDateFormat.format(submitDate)}-${nextDriverNumber.incrementAndGet()}%04d"
 
+  // These defaults copied from YARN
+  private val MEMORY_OVERHEAD_FACTOR = 0.10
+  private val MEMORY_OVERHEAD_MIN = 384
+
   /**
    * Build a driver description from the fields specified in the submit request.
    *
@@ -77,22 +82,28 @@ private[mesos] class MesosSubmitRequestServlet(
   private def buildDriverDescription(request: CreateSubmissionRequest): MesosDriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
-      throw new SubmitRestMissingFieldException("Application jar is missing.")
+      throw new SubmitRestMissingFieldException("Application jar 'appResource' is missing.")
     }
     val mainClass = Option(request.mainClass).getOrElse {
-      throw new SubmitRestMissingFieldException("Main class is missing.")
+      throw new SubmitRestMissingFieldException("Main class 'mainClass' is missing.")
+    }
+    val appArgs = Option(request.appArgs).getOrElse {
+      throw new SubmitRestMissingFieldException("Application arguments 'appArgs' are missing.")
+    }
+    val environmentVariables = Option(request.environmentVariables).getOrElse {
+      throw new SubmitRestMissingFieldException("Environment variables 'environmentVariables' " +
+        "are missing.")
     }
 
     // Optional fields
     val sparkProperties = request.sparkProperties
-    val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")
-    val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
-    val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
-    val superviseDriver = sparkProperties.get("spark.driver.supervise")
-    val driverMemory = sparkProperties.get("spark.driver.memory")
-    val driverCores = sparkProperties.get("spark.driver.cores")
-    val appArgs = request.appArgs
-    val environmentVariables = request.environmentVariables
+    val driverExtraJavaOptions = sparkProperties.get(config.DRIVER_JAVA_OPTIONS.key)
+    val driverExtraClassPath = sparkProperties.get(config.DRIVER_CLASS_PATH.key)
+    val driverExtraLibraryPath = sparkProperties.get(config.DRIVER_LIBRARY_PATH.key)
+    val superviseDriver = sparkProperties.get(config.DRIVER_SUPERVISE.key)
+    val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
+    val driverMemoryOverhead = sparkProperties.get(config.DRIVER_MEMORY_OVERHEAD.key)
+    val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
     val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
 
     // Construct driver description
@@ -106,13 +117,15 @@ private[mesos] class MesosSubmitRequestServlet(
       mainClass, appArgs, environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
+    val actualDriverMemoryOverhead = driverMemoryOverhead.map(_.toInt).getOrElse(
+      math.max((MEMORY_OVERHEAD_FACTOR * actualDriverMemory).toInt, MEMORY_OVERHEAD_MIN))
     val actualDriverCores = driverCores.map(_.toDouble).getOrElse(DEFAULT_CORES)
     val submitDate = new Date()
     val submissionId = newDriverId(submitDate)
 
     new MesosDriverDescription(
-      name, appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver,
-      command, request.sparkProperties, submissionId, submitDate)
+      name, appResource, actualDriverMemory + actualDriverMemoryOverhead, actualDriverCores,
+      actualSuperviseDriver, command, request.sparkProperties, submissionId, submitDate)
   }
 
   protected override def handleSubmit(

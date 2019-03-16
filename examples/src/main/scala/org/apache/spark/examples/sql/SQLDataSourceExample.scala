@@ -56,6 +56,13 @@ object SQLDataSourceExample {
       .option("header", "true")
       .load("examples/src/main/resources/people.csv")
     // $example off:manual_load_options_csv$
+    // $example on:manual_save_options_orc$
+    usersDF.write.format("orc")
+      .option("orc.bloom.filter.columns", "favorite_color")
+      .option("orc.dictionary.key.threshold", "1.0")
+      .option("orc.column.encoding.direct", "name")
+      .save("users_with_options.orc")
+    // $example off:manual_save_options_orc$
 
     // $example on:direct_sql$
     val sqlDF = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
@@ -67,15 +74,15 @@ object SQLDataSourceExample {
     usersDF.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     // $example off:write_partitioning$
     // $example on:write_partition_and_bucket$
-    peopleDF
+    usersDF
       .write
       .partitionBy("favorite_color")
       .bucketBy(42, "name")
-      .saveAsTable("people_partitioned_bucketed")
+      .saveAsTable("users_partitioned_bucketed")
     // $example off:write_partition_and_bucket$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
   }
 
   private def runBasicParquetExample(spark: SparkSession): Unit = {

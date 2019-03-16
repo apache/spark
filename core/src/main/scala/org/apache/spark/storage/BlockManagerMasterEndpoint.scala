@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.IOException
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.JavaConverters._
@@ -26,7 +27,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
@@ -53,12 +54,13 @@ class BlockManagerMasterEndpoint(
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
-  private val askThreadPool = ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool")
+  private val askThreadPool =
+    ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
   private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
 
   private val topologyMapper = {
     val topologyMapperClassName = conf.get(
-      "spark.storage.replication.topologyMapper", classOf[DefaultTopologyMapper].getName)
+      config.STORAGE_REPLICATION_TOPOLOGY_MAPPER)
     val clazz = Utils.classForName(topologyMapperClassName)
     val mapper =
       clazz.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[TopologyMapper]
@@ -66,7 +68,7 @@ class BlockManagerMasterEndpoint(
     mapper
   }
 
-  val proactivelyReplicate = conf.get("spark.storage.replication.proactive", "false").toBoolean
+  val proactivelyReplicate = conf.get(config.STORAGE_REPLICATION_PROACTIVE)
 
   logInfo("BlockManagerMasterEndpoint up")
 
@@ -159,11 +161,17 @@ class BlockManagerMasterEndpoint(
     // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
     // The dispatcher is used as an implicit argument into the Future sequence construction.
     val removeMsg = RemoveRdd(rddId)
-    Future.sequence(
-      blockManagerInfo.values.map { bm =>
-        bm.slaveEndpoint.ask[Int](removeMsg)
-      }.toSeq
-    )
+
+    val futures = blockManagerInfo.values.map { bm =>
+      bm.slaveEndpoint.ask[Int](removeMsg).recover {
+        case e: IOException =>
+          logWarning(s"Error trying to remove RDD $rddId from block manager ${bm.blockManagerId}",
+            e)
+          0 // zero blocks were removed
+      }
+    }.toSeq
+
+    Future.sequence(futures)
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
@@ -186,11 +194,16 @@ class BlockManagerMasterEndpoint(
     val requiredBlockManagers = blockManagerInfo.values.filter { info =>
       removeFromDriver || !info.blockManagerId.isDriver
     }
-    Future.sequence(
-      requiredBlockManagers.map { bm =>
-        bm.slaveEndpoint.ask[Int](removeMsg)
-      }.toSeq
-    )
+    val futures = requiredBlockManagers.map { bm =>
+      bm.slaveEndpoint.ask[Int](removeMsg).recover {
+        case e: IOException =>
+          logWarning(s"Error trying to remove broadcast $broadcastId from block manager " +
+            s"${bm.blockManagerId}", e)
+          0 // zero blocks were removed
+      }
+    }.toSeq
+
+    Future.sequence(futures)
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {

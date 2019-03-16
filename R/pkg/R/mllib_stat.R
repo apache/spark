@@ -20,7 +20,6 @@
 #' S4 class that represents an KSTest
 #'
 #' @param jobj a Java object reference to the backing Scala KSTestWrapper
-#' @export
 #' @note KSTest since 2.1.0
 setClass("KSTest", representation(jobj = "jobj"))
 
@@ -52,7 +51,6 @@ setClass("KSTest", representation(jobj = "jobj"))
 #' @name spark.kstest
 #' @seealso \href{http://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
 #'          MLlib: Hypothesis Testing}
-#' @export
 #' @examples
 #' \dontrun{
 #' data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25))
@@ -94,7 +92,6 @@ setMethod("spark.kstest", signature(data = "SparkDataFrame"),
 #'         parameters tested against) and \code{degreesOfFreedom} (degrees of freedom of the test).
 #' @rdname spark.kstest
 #' @aliases summary,KSTest-method
-#' @export
 #' @note summary(KSTest) since 2.1.0
 setMethod("summary", signature(object = "KSTest"),
           function(object) {
@@ -117,7 +114,6 @@ setMethod("summary", signature(object = "KSTest"),
 
 #' @rdname spark.kstest
 #' @param x summary object of KSTest returned by \code{summary}.
-#' @export
 #' @note print.summary.KSTest since 2.1.0
 print.summary.KSTest <- function(x, ...) {
   jobj <- x$jobj

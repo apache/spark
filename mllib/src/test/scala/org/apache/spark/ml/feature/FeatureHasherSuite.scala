@@ -17,26 +17,24 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
-class FeatureHasherSuite extends SparkFunSuite
-  with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class FeatureHasherSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
-  import HashingTFSuite.murmur3FeatureIdx
+  import FeatureHasherSuite.murmur3FeatureIdx
 
-  implicit private val vectorEncoder = ExpressionEncoder[Vector]()
+  implicit private val vectorEncoder: ExpressionEncoder[Vector] = ExpressionEncoder[Vector]()
 
   test("params") {
     ParamsSuite.checkParams(new FeatureHasher)
@@ -51,29 +49,54 @@ class FeatureHasherSuite extends SparkFunSuite
   }
 
   test("feature hashing") {
-    val df = Seq(
-      (2.0, true, "1", "foo"),
-      (3.0, false, "2", "bar")
-    ).toDF("real", "bool", "stringNum", "string")
+    val numFeatures = 100
+    // Assume perfect hash on field names in computing expected results
+    def idx: Any => Int = murmur3FeatureIdx(numFeatures)
 
-    val n = 100
+    val df = Seq(
+      (2.0, true, "1", "foo",
+        Vectors.sparse(numFeatures, Seq((idx("real"), 2.0), (idx("bool=true"), 1.0),
+          (idx("stringNum=1"), 1.0), (idx("string=foo"), 1.0)))),
+      (3.0, false, "2", "bar",
+        Vectors.sparse(numFeatures, Seq((idx("real"), 3.0), (idx("bool=false"), 1.0),
+          (idx("stringNum=2"), 1.0), (idx("string=bar"), 1.0))))
+    ).toDF("real", "bool", "stringNum", "string", "expected")
+
     val hasher = new FeatureHasher()
       .setInputCols("real", "bool", "stringNum", "string")
       .setOutputCol("features")
-      .setNumFeatures(n)
+      .setNumFeatures(numFeatures)
     val output = hasher.transform(df)
     val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
-    assert(attrGroup.numAttributes === Some(n))
+    assert(attrGroup.numAttributes === Some(numFeatures))
+
+    testTransformer[(Double, Boolean, String, String, Vector)](df, hasher, "features", "expected") {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14 )
+    }
+  }
+
+  test("setting explicit numerical columns to treat as categorical") {
+    val df = Seq(
+      (2.0, 1, "foo"),
+      (3.0, 2, "bar")
+    ).toDF("real", "int", "string")
+
+    val n = 100
+    val hasher = new FeatureHasher()
+      .setInputCols("real", "int", "string")
+      .setCategoricalCols(Array("real"))
+      .setOutputCol("features")
+      .setNumFeatures(n)
+    val output = hasher.transform(df)
 
     val features = output.select("features").as[Vector].collect()
     // Assume perfect hash on field names
     def idx: Any => Int = murmur3FeatureIdx(n)
     // check expected indices
     val expected = Seq(
-      Vectors.sparse(n, Seq((idx("real"), 2.0), (idx("bool=true"), 1.0),
-        (idx("stringNum=1"), 1.0), (idx("string=foo"), 1.0))),
-      Vectors.sparse(n, Seq((idx("real"), 3.0), (idx("bool=false"), 1.0),
-        (idx("stringNum=2"), 1.0), (idx("string=bar"), 1.0)))
+      Vectors.sparse(n, Seq((idx("real=2.0"), 1.0), (idx("int"), 1.0), (idx("string=foo"), 1.0))),
+      Vectors.sparse(n, Seq((idx("real=3.0"), 1.0), (idx("int"), 2.0), (idx("string=bar"), 1.0)))
     )
     assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
   }
@@ -190,4 +213,12 @@ class FeatureHasherSuite extends SparkFunSuite
       .setNumFeatures(10)
     testDefaultReadWrite(t)
   }
+}
+
+object FeatureHasherSuite {
+
+  private[feature] def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
+    Utils.nonNegativeMod(FeatureHasher.murmur3Hash(term), numFeatures)
+  }
+
 }

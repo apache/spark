@@ -24,7 +24,6 @@ import scala.util.Random
 
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.services.kinesis.AmazonKinesisClient
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.PutRecordRequest
 import org.apache.log4j.{Level, Logger}
 
@@ -33,8 +32,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.streaming.dstream.DStream.toPairDStreamFunctions
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.Latest
 import org.apache.spark.streaming.kinesis.KinesisInputDStream
-
 
 /**
  * Consumes messages from a Amazon Kinesis streams and does wordcount.
@@ -139,7 +138,7 @@ object KinesisWordCountASL extends Logging {
         .streamName(streamName)
         .endpointUrl(endpointUrl)
         .regionName(regionName)
-        .initialPositionInStream(InitialPositionInStream.LATEST)
+        .initialPosition(new Latest())
         .checkpointAppName(appName)
         .checkpointInterval(kinesisCheckpointInterval)
         .storageLevel(StorageLevel.MEMORY_AND_DISK_2)

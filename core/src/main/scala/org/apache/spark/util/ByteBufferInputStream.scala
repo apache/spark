@@ -54,7 +54,7 @@ class ByteBufferInputStream(private var buffer: ByteBuffer)
   override def skip(bytes: Long): Long = {
     if (buffer != null) {
       val amountToSkip = math.min(bytes, buffer.remaining).toInt
-      buffer.position(buffer.position + amountToSkip)
+      buffer.position(buffer.position() + amountToSkip)
       if (buffer.remaining() == 0) {
         cleanUp()
       }

@@ -54,7 +54,7 @@ object TallSkinnyPCA {
     // Compute principal components.
     val pc = mat.computePrincipalComponents(mat.numCols().toInt)
 
-    println("Principal components are:\n" + pc)
+    println(s"Principal components are:\n $pc")
 
     sc.stop()
   }

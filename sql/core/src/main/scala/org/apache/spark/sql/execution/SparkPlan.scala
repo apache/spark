@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.JaninoRuntimeException
+import org.codehaus.janino.InternalCompilerException
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -47,17 +47,15 @@ import org.apache.spark.util.ThreadUtils
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
   /**
-   * A handle to the SQL Context that was used to create this plan.   Since many operators need
+   * A handle to the SQL Context that was used to create this plan. Since many operators need
    * access to the sqlContext for RDD operations or configuration this field is automatically
    * populated by the query planning infrastructure.
    */
-  @transient
-  final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
+  @transient final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
 
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when SparkPlan nodes are created without the active sessions.
-  // So far, this only happens in the test cases.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
   } else {
@@ -69,7 +67,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
-    SparkSession.setActiveSession(sqlContext.sparkSession)
+    if (sqlContext != null) {
+      SparkSession.setActiveSession(sqlContext.sparkSession)
+    }
     super.makeCopy(newArgs)
   }
 
@@ -94,7 +94,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
-  /** Specifies any partition requirements on the input data for this operator. */
+  /**
+   * Specifies the data distribution requirements of all the children for this operator. By default
+   * it's [[UnspecifiedDistribution]] for each child, which means each child can have any
+   * distribution.
+   *
+   * If an operator overwrites this method, and specifies distribution requirements(excluding
+   * [[UnspecifiedDistribution]] and [[BroadcastDistribution]]) for more than one child, Spark
+   * guarantees that the outputs of these children will have same number of partitions, so that the
+   * operator can safely zip partitions of these children's result RDDs. Some operators can leverage
+   * this guarantee to satisfy some interesting requirement, e.g., non-broadcast joins can specify
+   * HashClusteredDistribution(a,b) for its left child, and specify HashClusteredDistribution(c,d)
+   * for its right child, then it's guaranteed that left and right child are co-partitioned by
+   * a,b/c,d, which means tuples of same value are in the partitions of same index, e.g.,
+   * (a=1,b=2) and (c=1,d=2) are both in the second partition of left and right child.
+   */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
@@ -236,7 +250,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
       val bos = new ByteArrayOutputStream()
       val out = new DataOutputStream(codec.compressedOutputStream(bos))
-      while (iter.hasNext && (n < 0 || count < n)) {
+      // `iter.hasNext` may produce one row and buffer it, we should only call it when the limit is
+      // not hit.
+      while ((n < 0 || count < n) && iter.hasNext) {
         val row = iter.next().asInstanceOf[UnsafeRow]
         out.writeInt(row.getSizeInBytes)
         row.writeToStream(out, buffer)
@@ -337,8 +353,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
-          // the left side of max is >=1 whenever partsScanned >= 2
-          numPartsToTry = Math.max((1.5 * n * partsScanned / buf.size).toInt - partsScanned, 1)
+          val left = n - buf.size
+          // As left > 0, numPartsToTry is always >= 1
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.size).toInt
           numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }
@@ -365,7 +382,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       inputSchema: Seq[Attribute],
       useSubexprElimination: Boolean = false): MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
+    MutableProjection.create(expressions, inputSchema)
   }
 
   private def genInterpretedPredicate(
@@ -385,7 +402,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     try {
       GeneratePredicate.generate(expression, inputSchema)
     } catch {
-      case _ @ (_: JaninoRuntimeException | _: CompileException) if codeGenFallBack =>
+      case _ @ (_: InternalCompilerException | _: CompileException) if codeGenFallBack =>
         genInterpretedPredicate(expression, inputSchema)
     }
   }
@@ -404,11 +421,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
-}
-
-object SparkPlan {
-  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 trait LeafExecNode extends SparkPlan {

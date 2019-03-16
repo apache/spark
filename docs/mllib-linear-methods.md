@@ -272,7 +272,7 @@ In `spark.mllib`, the first class $0$ is chosen as the "pivot" class.
 See Section 4.4 of
 [The Elements of Statistical Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
 references.
-Here is an
+Here is a
 [detailed mathematical derivation](http://www.slideshare.net/dbtsai/2014-0620-mlor-36132297).
 
 For multiclass classification problems, the algorithm will output a multinomial logistic regression
@@ -350,7 +350,7 @@ known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_erro
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
+The following example demonstrates how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label
 values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
@@ -425,7 +425,7 @@ We create our model by initializing the weights to zero and register the streams
 testing then start the job. Printing predictions alongside true labels lets us easily see the
 result.
 
-Finally we can save text files with data to the training or testing folders.
+Finally, we can save text files with data to the training or testing folders.
 Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
 and `x1,x2,x3` are the features. Anytime a text file is placed in `args(0)`
 the model will update. Anytime a text file is placed in `args(1)` you will see predictions.

@@ -17,7 +17,9 @@
 
 package org.apache.spark.storage
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.util.Utils
 
@@ -56,7 +58,16 @@ private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
     val parentIds = rdd.dependencies.map(_.rdd.id)
+    val callsiteLongForm = Option(SparkEnv.get)
+      .map(_.conf.get(EVENT_LOG_CALLSITE_LONG_FORM))
+      .getOrElse(false)
+
+    val callSite = if (callsiteLongForm) {
+      rdd.creationSite.longForm
+    } else {
+      rdd.creationSite.shortForm
+    }
     new RDDInfo(rdd.id, rddName, rdd.partitions.length,
-      rdd.getStorageLevel, parentIds, rdd.creationSite.shortForm, rdd.scope)
+      rdd.getStorageLevel, parentIds, callSite, rdd.scope)
   }
 }

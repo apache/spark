@@ -67,20 +67,22 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
     withUserDefinedFunction(tempFunctionName -> true) {
       sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
-      withView("view1", "tempView1") {
-        withTable("tab1") {
-          (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
+      withView("view1") {
+        withTempView("tempView1") {
+          withTable("tab1") {
+            (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
 
-          // temporary view
-          sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
-          checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
+            // temporary view
+            sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
+            checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
 
-          // permanent view
-          val e = intercept[AnalysisException] {
-            sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
-            s"a temporary function `$tempFunctionName`"))
+            // permanent view
+            val e = intercept[AnalysisException] {
+              sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
+            }.getMessage
+            assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
+              s"a temporary function `$tempFunctionName`"))
+          }
         }
       }
     }

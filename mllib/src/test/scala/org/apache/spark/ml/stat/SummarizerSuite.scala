@@ -17,16 +17,13 @@
 
 package org.apache.spark.ml.stat
 
-import org.scalatest.exceptions.TestFailedException
-
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, Statistics}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.Row
 
 class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -35,237 +32,262 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import SummaryBuilderImpl._
 
   private case class ExpectedMetrics(
-      mean: Seq[Double],
-      variance: Seq[Double],
+      mean: Vector,
+      variance: Vector,
       count: Long,
-      numNonZeros: Seq[Long],
-      max: Seq[Double],
-      min: Seq[Double],
-      normL2: Seq[Double],
-      normL1: Seq[Double])
+      numNonZeros: Vector,
+      max: Vector,
+      min: Vector,
+      normL2: Vector,
+      normL1: Vector)
 
   /**
-   * The input is expected to be either a sparse vector, a dense vector or an array of doubles
-   * (which will be converted to a dense vector)
-   * The expected is the list of all the known metrics.
+   * The input is expected to be either a sparse vector, a dense vector.
    *
-   * The tests take an list of input vectors and a list of all the summary values that
-   * are expected for this input. They currently test against some fixed subset of the
-   * metrics, but should be made fuzzy in the future.
+   * The tests take an list of input vectors, and compare results with
+   * `mllib.stat.MultivariateOnlineSummarizer`. They currently test against some fixed subset
+   * of the metrics, but should be made fuzzy in the future.
    */
-  private def testExample(name: String, input: Seq[Any], exp: ExpectedMetrics): Unit = {
-
-    def inputVec: Seq[Vector] = input.map {
-      case x: Array[Double @unchecked] => Vectors.dense(x)
-      case x: Seq[Double @unchecked] => Vectors.dense(x.toArray)
-      case x: Vector => x
-      case x => throw new Exception(x.toString)
-    }
+  private def testExample(name: String, inputVec: Seq[(Vector, Double)],
+      exp: ExpectedMetrics, expWithoutWeight: ExpectedMetrics): Unit = {
 
     val summarizer = {
       val _summarizer = new MultivariateOnlineSummarizer
-      inputVec.foreach(v => _summarizer.add(OldVectors.fromML(v)))
+      inputVec.foreach(v => _summarizer.add(OldVectors.fromML(v._1), v._2))
+      _summarizer
+    }
+
+    val summarizerWithoutWeight = {
+      val _summarizer = new MultivariateOnlineSummarizer
+      inputVec.foreach(v => _summarizer.add(OldVectors.fromML(v._1)))
       _summarizer
     }
 
     // Because the Spark context is reset between tests, we cannot hold a reference onto it.
     def wrappedInit() = {
-      val df = inputVec.map(Tuple1.apply).toDF("features")
-      val col = df.col("features")
-      (df, col)
+      val df = inputVec.toDF("features", "weight")
+      val featuresCol = df.col("features")
+      val weightCol = df.col("weight")
+      (df, featuresCol, weightCol)
     }
 
     registerTest(s"$name - mean only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("mean").summary(c), mean(c)), Seq(Row(exp.mean), summarizer.mean))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("mean").summary(c, w), mean(c, w)).first(),
+        Row(Row(summarizer.mean), exp.mean))
     }
 
-    registerTest(s"$name - mean only (direct)") {
-      val (df, c) = wrappedInit()
-      compare(df.select(mean(c)), Seq(exp.mean))
+    registerTest(s"$name - mean only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("mean").summary(c), mean(c)).first(),
+        Row(Row(summarizerWithoutWeight.mean), expWithoutWeight.mean))
     }
 
     registerTest(s"$name - variance only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("variance").summary(c), variance(c)),
-        Seq(Row(exp.variance), summarizer.variance))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("variance").summary(c, w), variance(c, w)).first(),
+        Row(Row(summarizer.variance), exp.variance))
     }
 
-    registerTest(s"$name - variance only (direct)") {
-      val (df, c) = wrappedInit()
-      compare(df.select(variance(c)), Seq(summarizer.variance))
+    registerTest(s"$name - variance only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("variance").summary(c), variance(c)).first(),
+        Row(Row(summarizerWithoutWeight.variance), expWithoutWeight.variance))
     }
 
     registerTest(s"$name - count only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("count").summary(c), count(c)),
-        Seq(Row(exp.count), exp.count))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("count").summary(c, w), count(c, w)).first(),
+        Row(Row(summarizer.count), exp.count))
     }
 
-    registerTest(s"$name - count only (direct)") {
-      val (df, c) = wrappedInit()
-      compare(df.select(count(c)),
-        Seq(exp.count))
+    registerTest(s"$name - count only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("count").summary(c), count(c)).first(),
+        Row(Row(summarizerWithoutWeight.count), expWithoutWeight.count))
     }
 
     registerTest(s"$name - numNonZeros only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
-        Seq(Row(exp.numNonZeros), exp.numNonZeros))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("numNonZeros").summary(c, w), numNonZeros(c, w)).first(),
+        Row(Row(summarizer.numNonzeros), exp.numNonZeros))
     }
 
-    registerTest(s"$name - numNonZeros only (direct)") {
-      val (df, c) = wrappedInit()
-      compare(df.select(numNonZeros(c)),
-        Seq(exp.numNonZeros))
+    registerTest(s"$name - numNonZeros only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)).first(),
+        Row(Row(summarizerWithoutWeight.numNonzeros), expWithoutWeight.numNonZeros))
     }
 
     registerTest(s"$name - min only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("min").summary(c), min(c)),
-        Seq(Row(exp.min), exp.min))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("min").summary(c, w), min(c, w)).first(),
+        Row(Row(summarizer.min), exp.min))
+    }
+
+    registerTest(s"$name - min only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("min").summary(c), min(c)).first(),
+        Row(Row(summarizerWithoutWeight.min), expWithoutWeight.min))
     }
 
     registerTest(s"$name - max only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("max").summary(c), max(c)),
-        Seq(Row(exp.max), exp.max))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("max").summary(c, w), max(c, w)).first(),
+        Row(Row(summarizer.max), exp.max))
+    }
+
+    registerTest(s"$name - max only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("max").summary(c), max(c)).first(),
+        Row(Row(summarizerWithoutWeight.max), expWithoutWeight.max))
     }
 
     registerTest(s"$name - normL1 only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("normL1").summary(c), normL1(c)),
-        Seq(Row(exp.normL1), exp.normL1))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("normL1").summary(c, w), normL1(c, w)).first(),
+        Row(Row(summarizer.normL1), exp.normL1))
+    }
+
+    registerTest(s"$name - normL1 only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("normL1").summary(c), normL1(c)).first(),
+        Row(Row(summarizerWithoutWeight.normL1), expWithoutWeight.normL1))
     }
 
     registerTest(s"$name - normL2 only") {
-      val (df, c) = wrappedInit()
-      compare(df.select(metrics("normL2").summary(c), normL2(c)),
-        Seq(Row(exp.normL2), exp.normL2))
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("normL2").summary(c, w), normL2(c, w)).first(),
+        Row(Row(summarizer.normL2), exp.normL2))
     }
 
-    registerTest(s"$name - all metrics at once") {
-      val (df, c) = wrappedInit()
-      compare(df.select(
-        metrics("mean", "variance", "count", "numNonZeros").summary(c),
-        mean(c), variance(c), count(c), numNonZeros(c)),
-        Seq(Row(exp.mean, exp.variance, exp.count, exp.numNonZeros),
-          exp.mean, exp.variance, exp.count, exp.numNonZeros))
+    registerTest(s"$name - normL2 only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("normL2").summary(c), normL2(c)).first(),
+        Row(Row(summarizerWithoutWeight.normL2), expWithoutWeight.normL2))
     }
-  }
 
-  private def denseData(input: Seq[Seq[Double]]): DataFrame = {
-    input.map(_.toArray).map(Vectors.dense).map(Tuple1.apply).toDF("features")
-  }
-
-  private def compare(df: DataFrame, exp: Seq[Any]): Unit = {
-    val coll = df.collect().toSeq
-    val Seq(row) = coll
-    val res = row.toSeq
-    val names = df.schema.fieldNames.zipWithIndex.map { case (n, idx) => s"$n ($idx)" }
-    assert(res.size === exp.size, (res.size, exp.size))
-    for (((x1, x2), name) <- res.zip(exp).zip(names)) {
-      compareStructures(x1, x2, name)
+    registerTest(s"$name - multiple metrics at once") {
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(
+        metrics("mean", "variance", "count", "numNonZeros").summary(c, w)).first(),
+        Row(Row(exp.mean, exp.variance, exp.count, exp.numNonZeros))
+      )
     }
-  }
 
-  // Compares structured content.
-  private def compareStructures(x1: Any, x2: Any, name: String): Unit = (x1, x2) match {
-    case (y1: Seq[Double @unchecked], v1: OldVector) =>
-      compareStructures(y1, v1.toArray.toSeq, name)
-    case (d1: Double, d2: Double) =>
-      assert2(Vectors.dense(d1) ~== Vectors.dense(d2) absTol 1e-4, name)
-    case (r1: GenericRowWithSchema, r2: Row) =>
-      assert(r1.size === r2.size, (r1, r2))
-      for (((fname, x1), x2) <- r1.schema.fieldNames.zip(r1.toSeq).zip(r2.toSeq)) {
-        compareStructures(x1, x2, s"$name.$fname")
-      }
-    case (r1: Row, r2: Row) =>
-      assert(r1.size === r2.size, (r1, r2))
-      for ((x1, x2) <- r1.toSeq.zip(r2.toSeq)) { compareStructures(x1, x2, name) }
-    case (v1: Vector, v2: Vector) =>
-      assert2(v1 ~== v2 absTol 1e-4, name)
-    case (l1: Long, l2: Long) => assert(l1 === l2)
-    case (s1: Seq[_], s2: Seq[_]) =>
-      assert(s1.size === s2.size, s"$name ${(s1, s2)}")
-      for (((x1, idx), x2) <- s1.zipWithIndex.zip(s2)) {
-        compareStructures(x1, x2, s"$name.$idx")
-      }
-    case (arr1: Array[_], arr2: Array[_]) =>
-      assert(arr1.toSeq === arr2.toSeq)
-    case _ => throw new Exception(s"$name: ${x1.getClass} ${x2.getClass} $x1 $x2")
-  }
-
-  private def assert2(x: => Boolean, hint: String): Unit = {
-    try {
-      assert(x, hint)
-    } catch {
-      case tfe: TestFailedException =>
-        throw new TestFailedException(Some(s"Failure with hint $hint"), Some(tfe), 1)
+    registerTest(s"$name - multiple metrics at once w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(
+        metrics("mean", "variance", "count", "numNonZeros").summary(c)).first(),
+        Row(Row(expWithoutWeight.mean, expWithoutWeight.variance,
+          expWithoutWeight.count, expWithoutWeight.numNonZeros))
+      )
     }
   }
 
-  test("debugging test") {
-    val df = denseData(Nil)
+  private def compareRow(r1: Row, r2: Row): Unit = {
+    assert(r1.size === r2.size, (r1, r2))
+    r1.toSeq.zip(r2.toSeq).foreach {
+      case (v1: Vector, v2: Vector) =>
+        assert(v1 ~== v2 absTol 1e-4)
+      case (v1: Vector, v2: OldVector) =>
+        assert(v1 ~== v2.asML absTol 1e-4)
+      case (l1: Long, l2: Long) =>
+        assert(l1 === l2)
+      case (r1: Row, r2: Row) =>
+        compareRow(r1, r2)
+      case (x1: Any, x2: Any) =>
+        throw new Exception(s"type mismatch: ${x1.getClass} ${x2.getClass} $x1 $x2")
+    }
+  }
+
+  test("no element") {
+    val df = Seq[Tuple1[Vector]]().toDF("features")
     val c = df.col("features")
-    val c1 = metrics("mean").summary(c)
-    val res = df.select(c1)
     intercept[SparkException] {
-      compare(res, Seq.empty)
+      df.select(metrics("mean").summary(c), mean(c)).first()
     }
+    compareRow(df.select(metrics("count").summary(c), count(c)).first(),
+      Row(Row(0L), 0L))
   }
 
-  test("basic error handling") {
-    val df = denseData(Nil)
-    val c = df.col("features")
-    val res = df.select(metrics("mean").summary(c), mean(c))
-    intercept[SparkException] {
-      compare(res, Seq.empty)
-    }
-  }
-
-  test("no element, working metrics") {
-    val df = denseData(Nil)
-    val c = df.col("features")
-    val res = df.select(metrics("count").summary(c), count(c))
-    compare(res, Seq(Row(0L), 0L))
-  }
-
-  val singleElem = Seq(0.0, 1.0, 2.0)
-  testExample("single element", Seq(singleElem), ExpectedMetrics(
-    mean = singleElem,
-    variance = Seq(0.0, 0.0, 0.0),
-    count = 1,
-    numNonZeros = Seq(0, 1, 1),
-    max = singleElem,
-    min = singleElem,
-    normL1 = singleElem,
-    normL2 = singleElem
-  ))
-
-  testExample("two elements", Seq(Seq(0.0, 1.0, 2.0), Seq(0.0, -1.0, -2.0)), ExpectedMetrics(
-    mean = Seq(0.0, 0.0, 0.0),
-    // TODO: I have a doubt about these values, they are not normalized.
-    variance = Seq(0.0, 2.0, 8.0),
-    count = 2,
-    numNonZeros = Seq(0, 2, 2),
-    max = Seq(0.0, 1.0, 2.0),
-    min = Seq(0.0, -1.0, -2.0),
-    normL1 = Seq(0.0, 2.0, 4.0),
-    normL2 = Seq(0.0, math.sqrt(2.0), math.sqrt(2.0) * 2.0)
-  ))
-
-  testExample("dense vector input",
-    Seq(Seq(-1.0, 0.0, 6.0), Seq(3.0, -3.0, 0.0)),
+  val singleElem = Vectors.dense(0.0, 1.0, 2.0)
+  testExample("single element", Seq((singleElem, 2.0)),
     ExpectedMetrics(
-      mean = Seq(1.0, -1.5, 3.0),
-      variance = Seq(8.0, 4.5, 18.0),
-      count = 2,
-      numNonZeros = Seq(2, 1, 1),
-      max = Seq(3.0, 0.0, 6.0),
-      min = Seq(-1.0, -3, 0.0),
-      normL1 = Seq(4.0, 3.0, 6.0),
-      normL2 = Seq(math.sqrt(10), 3, 6.0)
+      mean = singleElem,
+      variance = Vectors.dense(0.0, 0.0, 0.0),
+      count = 1L,
+      numNonZeros = Vectors.dense(0.0, 1.0, 1.0),
+      max = singleElem,
+      min = singleElem,
+      normL1 = Vectors.dense(0.0, 2.0, 4.0),
+      normL2 = Vectors.dense(0.0, 1.414213, 2.828427)
+    ),
+    ExpectedMetrics(
+      mean = singleElem,
+      variance = Vectors.dense(0.0, 0.0, 0.0),
+      count = 1L,
+      numNonZeros = Vectors.dense(0.0, 1.0, 1.0),
+      max = singleElem,
+      min = singleElem,
+      normL1 = singleElem,
+      normL2 = singleElem
+    )
+  )
+
+  testExample("multiple elements (dense)",
+    Seq(
+      (Vectors.dense(-1.0, 0.0, 6.0), 0.5),
+      (Vectors.dense(3.0, -3.0, 0.0), 2.8),
+      (Vectors.dense(1.0, -3.0, 0.0), 0.0)
+    ),
+    ExpectedMetrics(
+      mean = Vectors.dense(2.393939, -2.545454, 0.909090),
+      variance = Vectors.dense(8.0, 4.5, 18.0),
+      count = 2L,
+      numNonZeros = Vectors.dense(2.0, 1.0, 1.0),
+      max = Vectors.dense(3.0, 0.0, 6.0),
+      min = Vectors.dense(-1.0, -3.0, 0.0),
+      normL1 = Vectors.dense(8.9, 8.4, 3.0),
+      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640)
+    ),
+    ExpectedMetrics(
+      mean = Vectors.dense(1.0, -2.0, 2.0),
+      variance = Vectors.dense(4.0, 3.0, 12.0),
+      count = 3L,
+      numNonZeros = Vectors.dense(3.0, 2.0, 1.0),
+      max = Vectors.dense(3.0, 0.0, 6.0),
+      min = Vectors.dense(-1.0, -3.0, 0.0),
+      normL1 = Vectors.dense(5.0, 6.0, 6.0),
+      normL2 = Vectors.dense(3.316624, 4.242640, 6.0)
+    )
+  )
+
+  testExample("multiple elements (sparse)",
+    Seq(
+      (Vectors.dense(-1.0, 0.0, 6.0).toSparse, 0.5),
+      (Vectors.dense(3.0, -3.0, 0.0).toSparse, 2.8),
+      (Vectors.dense(1.0, -3.0, 0.0).toSparse, 0.0)
+    ),
+    ExpectedMetrics(
+      mean = Vectors.dense(2.393939, -2.545454, 0.909090),
+      variance = Vectors.dense(8.0, 4.5, 18.0),
+      count = 2L,
+      numNonZeros = Vectors.dense(2.0, 1.0, 1.0),
+      max = Vectors.dense(3.0, 0.0, 6.0),
+      min = Vectors.dense(-1.0, -3.0, 0.0),
+      normL1 = Vectors.dense(8.9, 8.4, 3.0),
+      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640)
+    ),
+    ExpectedMetrics(
+      mean = Vectors.dense(1.0, -2.0, 2.0),
+      variance = Vectors.dense(4.0, 3.0, 12.0),
+      count = 3L,
+      numNonZeros = Vectors.dense(3.0, 2.0, 1.0),
+      max = Vectors.dense(3.0, 0.0, 6.0),
+      min = Vectors.dense(-1.0, -3.0, 0.0),
+      normL1 = Vectors.dense(5.0, 6.0, 6.0),
+      normL2 = Vectors.dense(3.316624, 4.242640, 6.0)
     )
   )
 

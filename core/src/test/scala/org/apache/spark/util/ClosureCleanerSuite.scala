@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
+import scala.language.reflectiveCalls
+
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator
@@ -121,6 +123,7 @@ class ClosureCleanerSuite extends SparkFunSuite {
   }
 
   test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 1") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val concreteObject = new TestAbstractClass {
       val n2 = 222
       val s2 = "bbb"
@@ -141,6 +144,7 @@ class ClosureCleanerSuite extends SparkFunSuite {
   }
 
   test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 2") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val concreteObject = new TestAbstractClass2 {
       val n2 = 222
       val s2 = "bbb"
@@ -154,6 +158,7 @@ class ClosureCleanerSuite extends SparkFunSuite {
   }
 
   test("SPARK-22328: multiple outer classes have the same parent class") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val concreteObject = new TestAbstractClass2 {
 
       val innerObject = new TestAbstractClass2 {

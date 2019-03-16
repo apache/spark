@@ -42,8 +42,8 @@ import org.apache.spark.util.random.XORShiftRandom
  * <blockquote>
  *    $$
  *    \begin{align}
- *     c_t+1 &= [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t] \\
- *     n_t+t &= n_t * a + m_t
+ *     c_{t+1} &= [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t] \\
+ *     n_{t+1} &= n_t * a + m_t
  *    \end{align}
  *    $$
  * </blockquote>
@@ -227,7 +227,7 @@ class StreamingKMeans @Since("1.2.0") (
     require(centers.size == k,
       s"Number of initial centers must be ${k} but got ${centers.size}")
     require(weights.forall(_ >= 0),
-      s"Weight for each inital center must be nonnegative but got [${weights.mkString(" ")}]")
+      s"Weight for each initial center must be nonnegative but got [${weights.mkString(" ")}]")
     model = new StreamingKMeansModel(centers, weights)
     this
   }

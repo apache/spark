@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
+import java.util.function.Supplier;
 
 import scala.collection.AbstractIterator;
 import scala.collection.Iterator;
@@ -39,7 +40,6 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
 public final class UnsafeExternalRowSorter {
 
-  static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
   /**
    * If positive, forces records to be spilled to disk at the given frequency (measured in numbers
    * of records). This is only intended to be used in tests.
@@ -49,33 +49,57 @@ public final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final PrefixComputer prefixComputer;
+  private final UnsafeExternalRowSorter.PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
   public abstract static class PrefixComputer {
 
     public static class Prefix {
       /** Key prefix value, or the null prefix value if isNull = true. **/
-      long value;
+      public long value;
 
       /** Whether the key is null. */
-      boolean isNull;
+      public boolean isNull;
     }
 
     /**
      * Computes prefix for the given row. For efficiency, the returned object may be reused in
      * further calls to a given PrefixComputer.
      */
-    abstract Prefix computePrefix(InternalRow row);
+    public abstract Prefix computePrefix(InternalRow row);
   }
 
-  public UnsafeExternalRowSorter(
+  public static UnsafeExternalRowSorter createWithRecordComparator(
+      StructType schema,
+      Supplier<RecordComparator> recordComparatorSupplier,
+      PrefixComparator prefixComparator,
+      UnsafeExternalRowSorter.PrefixComputer prefixComputer,
+      long pageSizeBytes,
+      boolean canUseRadixSort) throws IOException {
+    return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
+      prefixComputer, pageSizeBytes, canUseRadixSort);
+  }
+
+  public static UnsafeExternalRowSorter create(
       StructType schema,
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer,
+      UnsafeExternalRowSorter.PrefixComputer prefixComputer,
       long pageSizeBytes,
       boolean canUseRadixSort) throws IOException {
+    Supplier<RecordComparator> recordComparatorSupplier =
+      () -> new RowComparator(ordering, schema.length());
+    return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
+      prefixComputer, pageSizeBytes, canUseRadixSort);
+  }
+
+  private UnsafeExternalRowSorter(
+      StructType schema,
+      Supplier<RecordComparator> recordComparatorSupplier,
+      PrefixComparator prefixComparator,
+      UnsafeExternalRowSorter.PrefixComputer prefixComputer,
+      long pageSizeBytes,
+      boolean canUseRadixSort) {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
@@ -85,10 +109,9 @@ public final class UnsafeExternalRowSorter {
       sparkEnv.blockManager(),
       sparkEnv.serializerManager(),
       taskContext,
-      () -> new RowComparator(ordering, schema.length()),
+      recordComparatorSupplier,
       prefixComparator,
-      sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
-                             DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+      (int) sparkEnv.conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
       pageSizeBytes,
       (int) SparkEnv.get().conf().get(
         package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD()),
@@ -206,7 +229,13 @@ public final class UnsafeExternalRowSorter {
     }
 
     @Override
-    public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
+    public int compare(
+        Object baseObj1,
+        long baseOff1,
+        int baseLen1,
+        Object baseObj2,
+        long baseOff2,
+        int baseLen2) {
       // Note that since ordering doesn't need the total length of the record, we just pass 0
       // into the row.
       row1.pointTo(baseObj1, baseOff1, 0);
