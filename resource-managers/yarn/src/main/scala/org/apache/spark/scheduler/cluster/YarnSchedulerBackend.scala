@@ -173,7 +173,9 @@ private[spark] abstract class YarnSchedulerBackend(
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
       conf.set("spark.ui.filters", filterName)
       filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
-      scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
+      scheduler.sc.ui.foreach { ui =>
+        ui.getDelegatingHandlers.foreach(_.addFilter(filterName, filterName, filterParams))
+      }
     }
   }
 
