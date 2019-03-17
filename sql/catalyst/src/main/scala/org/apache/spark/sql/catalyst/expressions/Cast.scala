@@ -44,10 +44,7 @@ object Cast {
     case (_, StringType) => true
 
     case (StringType, BinaryType) => true
-    case (ByteType, BinaryType) => true
-    case (ShortType, BinaryType) => true
-    case (IntegerType, BinaryType) => true
-    case (LongType, BinaryType) => true
+    case (_: IntegralType, BinaryType) => true
 
     case (StringType, BooleanType) => true
     case (DateType, BooleanType) => true
