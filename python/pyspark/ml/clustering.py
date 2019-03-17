@@ -1193,7 +1193,7 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
     ...         (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1),
     ...         (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
-    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
+    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight").repartition(1)
     >>> pic = PowerIterationClustering(k=2, maxIter=40, weightCol="weight")
     >>> assignments = pic.assignClusters(df)
     >>> assignments.sort(assignments.id).show(truncate=False)
@@ -1204,8 +1204,8 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     |1  |0      |
     |2  |0      |
     |3  |0      |
-    |4  |1      |
-    |5  |0      |
+    |4  |0      |
+    |5  |1      |
     +---+-------+
     ...
     >>> pic_path = temp_path + "/pic"
