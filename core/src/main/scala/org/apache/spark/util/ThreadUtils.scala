@@ -180,7 +180,7 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
+   * Construct a new ForkJoinPool with a specified max parallelism and name prefix.
    */
   def newForkJoinPool(prefix: String, maxThreadNumber: Int): ForkJoinPool = {
     // Custom factory to set thread names
