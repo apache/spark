@@ -2646,11 +2646,11 @@
     </profile>
 
     <profile>
-      <id>hadoop-3.1</id>
+      <id>hadoop-3.2</id>
       <properties>
-        <hadoop.version>3.1.0</hadoop.version>
-        <curator.version>2.12.0</curator.version>
-        <zookeeper.version>3.4.9</zookeeper.version>
+        <hadoop.version>3.2.0</hadoop.version>
+        <curator.version>2.13.0</curator.version>
+        <zookeeper.version>3.4.13</zookeeper.version>
       </properties>
     </profile>
 
