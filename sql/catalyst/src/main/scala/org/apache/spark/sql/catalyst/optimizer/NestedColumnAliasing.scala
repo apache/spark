@@ -32,9 +32,9 @@ object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan)
     : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = plan match {
-    case Project(_, child)
+    case Project(projectList, child)
         if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
-      getAliasSubMap(plan, child)
+      getAliasSubMap(projectList)
     case _ => None
   }
 
@@ -88,13 +88,10 @@ object NestedColumnAliasing {
   /**
    * Return root references that are individually accessed as a whole, and `GetStructField`s.
    */
-  private def collectRootReferenceAndGetStructField(plan: LogicalPlan): Seq[Expression] = {
-    def doCollectFunc(e: Expression): Seq[Expression] = e match {
-      case _: AttributeReference | _: GetStructField => Seq(e)
-      case es if es.children.nonEmpty => es.children.flatMap(doCollectFunc)
-      case _ => Seq.empty
-    }
-    plan.expressions.flatMap(doCollectFunc)
+  private def collectRootReferenceAndGetStructField(e: Expression): Seq[Expression] = e match {
+    case _: AttributeReference | _: GetStructField => Seq(e)
+    case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndGetStructField)
+    case _ => Seq.empty
   }
 
   /**
@@ -103,10 +100,10 @@ object NestedColumnAliasing {
    * 1. GetStructField -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  private def getAliasSubMap(plans: LogicalPlan*)
+  private def getAliasSubMap(projectList: Seq[NamedExpression])
     : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = {
-    val (nestedFieldReferences, otherRootReferences) = plans
-      .map(collectRootReferenceAndGetStructField).reduce(_ ++ _).partition {
+    val (nestedFieldReferences, otherRootReferences) =
+      projectList.flatMap(collectRootReferenceAndGetStructField).partition {
         case _: GetStructField => true
         case _ => false
       }
