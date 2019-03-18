@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.reader.Scan;
-import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
+import org.apache.spark.sql.internal.SQLConf
 
-/**
- * An empty mix-in interface for {@link Table}, to indicate this table supports batch scan.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsRead#newScanBuilder(DataSourceOptions)} must return a {@link ScanBuilder} that
- * builds {@link Scan} with {@link Scan#toBatch()} implemented.
- * </p>
- */
-@Evolving
-public interface SupportsBatchRead extends SupportsRead { }
+class OrcSchemaPruningSuite extends SchemaPruningSuite {
+  override protected val dataSourceName: String = "orc"
+  override protected val vectorizedReaderEnabledKey: String =
+    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
+}

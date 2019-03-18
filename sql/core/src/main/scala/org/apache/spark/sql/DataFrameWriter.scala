@@ -33,8 +33,10 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, Logi
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -260,19 +262,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, session.sessionState.conf)
-      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "false"
-      val options = sessionOptions ++ extraOptions + checkFilesExistsOption
-      val dsOptions = new DataSourceOptions(options.asJava)
+      val options = sessionOptions ++ extraOptions
+      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       provider.getTable(dsOptions) match {
-        case table: SupportsBatchWrite =>
-          lazy val relation = DataSourceV2Relation.create(table, options)
+        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
           mode match {
             case SaveMode.Append =>
               runCommand(df.sparkSession, "save") {
                 AppendData.byName(relation, df.logicalPlan)
               }
 
-            case SaveMode.Overwrite =>
+            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
               // truncate the table
               runCommand(df.sparkSession, "save") {
                 OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))

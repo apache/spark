@@ -1000,8 +1000,9 @@ class DataFrame(object):
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
-            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
-            ``left_semi``, and ``left_anti``.
+            ``full``, ``fullouter``, ``full_outer``, ``left``, ``leftouter``, ``left_outer``,
+            ``right``, ``rightouter``, ``right_outer``, ``semi``, ``leftsemi``, ``left_semi``,
+            ``anti``, ``leftanti`` and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 

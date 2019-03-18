@@ -15,18 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
-
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
+package org.apache.spark.sql.catalyst.plans.logical
 
 /**
- * An empty mix-in interface for {@link Table}, to indicate this table supports batch write.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsWrite#newWriteBuilder(DataSourceOptions)} must return a {@link WriteBuilder}
- * with {@link WriteBuilder#buildForBatch()} implemented.
- * </p>
+ * A [[LogicalPlan]] operator that does not use the cached results stored in CacheManager
  */
-@Evolving
-public interface SupportsBatchWrite extends SupportsWrite {}
+trait IgnoreCachedData extends LogicalPlan {}

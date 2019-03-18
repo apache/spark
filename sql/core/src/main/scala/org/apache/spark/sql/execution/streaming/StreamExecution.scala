@@ -40,10 +40,11 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsStreamingWrite}
+import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
 import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /** States for [[StreamExecution]]'s lifecycle. */
@@ -584,8 +585,8 @@ abstract class StreamExecution(
       table: SupportsStreamingWrite,
       options: Map[String, String],
       inputPlan: LogicalPlan): StreamingWrite = {
-    val writeBuilder = table.newWriteBuilder(new DataSourceOptions(options.asJava))
-      .withQueryId(runId.toString)
+    val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
+      .withQueryId(id.toString)
       .withInputDataSchema(inputPlan.schema)
     outputMode match {
       case Append =>

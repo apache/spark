@@ -477,7 +477,7 @@ joinType
     : INNER?
     | CROSS
     | LEFT OUTER?
-    | LEFT SEMI
+    | LEFT? SEMI
     | RIGHT OUTER?
     | FULL OUTER?
     | LEFT? ANTI
@@ -603,7 +603,8 @@ valueExpression
     ;
 
 primaryExpression
-    : CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
@@ -654,16 +655,38 @@ booleanValue
     ;
 
 interval
-    : INTERVAL intervalField*
+    : {ansi}? INTERVAL? intervalField+
+    | {!ansi}? INTERVAL intervalField*
     ;
 
 intervalField
-    : value=intervalValue unit=identifier (TO to=identifier)?
+    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
     ;
 
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
+    ;
+
+intervalUnit
+    : DAY
+    | DAYS
+    | HOUR
+    | HOURS
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
+    | SECOND
+    | SECONDS
+    | WEEK
+    | WEEKS
+    | YEAR
+    | YEARS
     ;
 
 colPosition
@@ -735,8 +758,7 @@ qualifiedName
 
 identifier
     : strictIdentifier
-    | {ansi}? ansiReserved
-    | {!ansi}? defaultReserved
+    | {!ansi}? strictNonReserved
     ;
 
 strictIdentifier
@@ -760,69 +782,460 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// NOTE: You must follow a rule below when you add a new ANTLR token in this file:
-//  - All the ANTLR tokens = UNION(`ansiReserved`, `ansiNonReserved`) = UNION(`defaultReserved`, `nonReserved`)
-//
-// Let's say you add a new token `NEWTOKEN` and this is not reserved regardless of a `spark.sql.parser.ansi.enabled`
-// value. In this case, you must add a token `NEWTOKEN` in both `ansiNonReserved` and `nonReserved`.
-
-// The list of the reserved keywords when `spark.sql.parser.ansi.enabled` is true. Currently, we only reserve
-// the ANSI keywords that almost all the ANSI SQL standards (SQL-92, SQL-99, SQL-2003, SQL-2008, SQL-2011,
-// and SQL-2016) and PostgreSQL reserve.
-ansiReserved
-    : ALL | AND | ANTI | ANY | AS | AUTHORIZATION | BOTH | CASE | CAST | CHECK | COLLATE | COLUMN | CONSTRAINT | CREATE
-    | CROSS | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP | CURRENT_USER | DISTINCT | ELSE | END | EXCEPT | FALSE
-    | FETCH | FOR | FOREIGN | FROM | FULL | GRANT | GROUP | HAVING | IN | INNER | INTERSECT | INTO | JOIN | IS
-    | LEADING | LEFT | NATURAL | NOT | NULL | ON | ONLY | OR | ORDER | OUTER | OVERLAPS | PRIMARY | REFERENCES | RIGHT
-    | SELECT | SEMI | SESSION_USER | SETMINUS | SOME | TABLE | THEN | TO | TRAILING | UNION | UNIQUE | USER | USING
-    | WHEN | WHERE | WITH
-    ;
-
-
-// The list of the non-reserved keywords when `spark.sql.parser.ansi.enabled` is true.
+// When `spark.sql.parser.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// - Reserved keywords:
+//     Keywords that are reserved and can't be used as identifiers for table, view, column,
+//     function, alias, etc.
+// - Non-reserved keywords:
+//     Keywords that have a special meaning only in particular contexts and can be used as
+//     identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK
+//     can be used as identifiers in other places.
+// You can find the full keywords list by searching "Start of the keywords list" in this file.
+// The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
-    : ADD | AFTER | ALTER | ANALYZE | ARCHIVE | ARRAY | ASC | AT | BETWEEN | BUCKET | BUCKETS | BY | CACHE | CASCADE
-    | CHANGE | CLEAR | CLUSTER | CLUSTERED | CODEGEN | COLLECTION | COLUMNS | COMMENT | COMMIT | COMPACT | COMPACTIONS
-    | COMPUTE | CONCATENATE | COST | CUBE | CURRENT | DATA | DATABASE | DATABASES | DBPROPERTIES | DEFINED | DELETE
-    | DELIMITED | DESC | DESCRIBE | DFS | DIRECTORIES | DIRECTORY | DISTRIBUTE | DIV | DROP | ESCAPED | EXCHANGE
-    | EXISTS | EXPLAIN | EXPORT | EXTENDED | EXTERNAL | EXTRACT | FIELDS | FILEFORMAT | FIRST | FOLLOWING | FORMAT
-    | FORMATTED | FUNCTION | FUNCTIONS | GLOBAL | GROUPING | IF | IGNORE | IMPORT | INDEX | INDEXES | INPATH
-    | INPUTFORMAT | INSERT | INTERVAL | ITEMS | KEYS | LAST | LATERAL | LAZY | LIKE | LIMIT | LINES | LIST | LOAD
-    | LOCAL | LOCATION | LOCK | LOCKS | LOGICAL | MACRO | MAP | MSCK | NO | NULLS | OF | OPTION | OPTIONS | OUT
-    | OUTPUTFORMAT | OVER | OVERWRITE | PARTITION | PARTITIONED | PARTITIONS | PERCENT | PERCENTLIT | PIVOT | PRECEDING
-    | PRINCIPALS | PURGE | QUERY | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFRESH | RENAME | REPAIR | REPLACE
-    | RESET | RESTRICT | REVOKE | RLIKE | ROLE | ROLES | ROLLBACK | ROLLUP | ROW | ROWS | SCHEMA | SEPARATED | SERDE
-    | SERDEPROPERTIES | SET | SETS | SHOW | SKEWED | SORT | SORTED | START | STATISTICS | STORED | STRATIFY | STRUCT
-    | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY | TERMINATED | TOUCH | TRANSACTION | TRANSACTIONS | TRANSFORM
-    | TRUE | TRUNCATE | UNARCHIVE | UNBOUNDED | UNCACHE | UNLOCK | UNSET | USE | VALUES | VIEW | WINDOW
+    : ADD
+    | AFTER
+    | ALTER
+    | ANALYZE
+    | ARCHIVE
+    | ARRAY
+    | ASC
+    | AT
+    | BETWEEN
+    | BUCKET
+    | BUCKETS
+    | BY
+    | CACHE
+    | CASCADE
+    | CHANGE
+    | CLEAR
+    | CLUSTER
+    | CLUSTERED
+    | CODEGEN
+    | COLLECTION
+    | COLUMNS
+    | COMMENT
+    | COMMIT
+    | COMPACT
+    | COMPACTIONS
+    | COMPUTE
+    | CONCATENATE
+    | COST
+    | CUBE
+    | CURRENT
+    | DATA
+    | DATABASE
+    | DATABASES
+    | DAYS
+    | DBPROPERTIES
+    | DEFINED
+    | DELETE
+    | DELIMITED
+    | DESC
+    | DESCRIBE
+    | DFS
+    | DIRECTORIES
+    | DIRECTORY
+    | DISTRIBUTE
+    | DIV
+    | DROP
+    | ESCAPED
+    | EXCHANGE
+    | EXISTS
+    | EXPLAIN
+    | EXPORT
+    | EXTENDED
+    | EXTERNAL
+    | EXTRACT
+    | FIELDS
+    | FILEFORMAT
+    | FIRST
+    | FOLLOWING
+    | FORMAT
+    | FORMATTED
+    | FUNCTION
+    | FUNCTIONS
+    | GLOBAL
+    | GROUPING
+    | HOURS
+    | IF
+    | IGNORE
+    | IMPORT
+    | INDEX
+    | INDEXES
+    | INPATH
+    | INPUTFORMAT
+    | INSERT
+    | INTERVAL
+    | ITEMS
+    | KEYS
+    | LAST
+    | LATERAL
+    | LAZY
+    | LIKE
+    | LIMIT
+    | LINES
+    | LIST
+    | LOAD
+    | LOCAL
+    | LOCATION
+    | LOCK
+    | LOCKS
+    | LOGICAL
+    | MACRO
+    | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTES
+    | MONTHS
+    | MSCK
+    | NO
+    | NULLS
+    | OF
+    | OPTION
+    | OPTIONS
+    | OUT
+    | OUTPUTFORMAT
+    | OVER
+    | OVERWRITE
+    | PARTITION
+    | PARTITIONED
+    | PARTITIONS
+    | PERCENT
+    | PERCENTLIT
+    | PIVOT
+    | PRECEDING
+    | PRINCIPALS
+    | PURGE
+    | QUERY
+    | RANGE
+    | RECORDREADER
+    | RECORDWRITER
+    | RECOVER
+    | REDUCE
+    | REFRESH
+    | RENAME
+    | REPAIR
+    | REPLACE
+    | RESET
+    | RESTRICT
+    | REVOKE
+    | RLIKE
+    | ROLE
+    | ROLES
+    | ROLLBACK
+    | ROLLUP
+    | ROW
+    | ROWS
+    | SCHEMA
+    | SECONDS
+    | SEPARATED
+    | SERDE
+    | SERDEPROPERTIES
+    | SET
+    | SETS
+    | SHOW
+    | SKEWED
+    | SORT
+    | SORTED
+    | START
+    | STATISTICS
+    | STORED
+    | STRATIFY
+    | STRUCT
+    | TABLES
+    | TABLESAMPLE
+    | TBLPROPERTIES
+    | TEMPORARY
+    | TERMINATED
+    | TOUCH
+    | TRANSACTION
+    | TRANSACTIONS
+    | TRANSFORM
+    | TRUE
+    | TRUNCATE
+    | UNARCHIVE
+    | UNBOUNDED
+    | UNCACHE
+    | UNLOCK
+    | UNSET
+    | USE
+    | VALUES
+    | VIEW
+    | WEEK
+    | WEEKS
+    | WINDOW
+    | YEARS
     ;
 
-defaultReserved
-    : ANTI | CROSS | EXCEPT | FULL | INNER | INTERSECT | JOIN | LEFT | NATURAL | ON | RIGHT | SEMI | SETMINUS | UNION
+// When `spark.sql.parser.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// - Non-reserved keywords:
+//     Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
+// - Strict-non-reserved keywords:
+//     A strict version of non-reserved keywords, which can not be used as table alias.
+// You can find the full keywords list by searching "Start of the keywords list" in this file.
+// The strict-non-reserved keywords are listed in `strictNonReserved`.
+// The non-reserved keywords are listed in `nonReserved`.
+// These 2 together contain all the keywords.
+strictNonReserved
+    : ANTI
+    | CROSS
+    | EXCEPT
+    | FULL
+    | INNER
+    | INTERSECT
+    | JOIN
+    | LEFT
+    | NATURAL
+    | ON
+    | RIGHT
+    | SEMI
+    | SETMINUS
+    | UNION
     | USING
     ;
 
 nonReserved
-    : ADD | AFTER | ALL | ALTER | ANALYZE | AND | ANY | ARCHIVE | ARRAY | AS | ASC | AT | AUTHORIZATION | BETWEEN
-    | BOTH | BUCKET | BUCKETS | BY | CACHE | CASCADE | CASE | CAST | CHANGE | CHECK | CLEAR | CLUSTER | CLUSTERED
-    | CODEGEN | COLLATE | COLLECTION | COLUMN | COLUMNS | COMMENT | COMMIT | COMPACT | COMPACTIONS | COMPUTE
-    | CONCATENATE | CONSTRAINT | COST | CREATE | CUBE | CURRENT | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP
-    | CURRENT_USER | DATA | DATABASE | DATABASES | DBPROPERTIES | DEFINED | DELETE | DELIMITED | DESC | DESCRIBE | DFS
-    | DIRECTORIES | DIRECTORY | DISTINCT | DISTRIBUTE | DIV | DROP | ELSE | END | ESCAPED | EXCHANGE | EXISTS | EXPLAIN
-    | EXPORT | EXTENDED | EXTERNAL | EXTRACT | FALSE | FETCH | FIELDS | FILEFORMAT | FIRST | FOLLOWING | FOR | FOREIGN
-    | FORMAT | FORMATTED | FROM | FUNCTION | FUNCTIONS | GLOBAL | GRANT | GROUP | GROUPING | HAVING | IF | IGNORE
-    | IMPORT | IN | INDEX | INDEXES | INPATH | INPUTFORMAT | INSERT | INTERVAL | INTO | IS | ITEMS | KEYS | LAST
-    | LATERAL | LAZY | LEADING | LIKE | LIMIT | LINES | LIST | LOAD | LOCAL | LOCATION | LOCK | LOCKS | LOGICAL | MACRO
-    | MAP | MSCK | NO | NOT | NULL | NULLS | OF | ONLY | OPTION | OPTIONS | OR | ORDER | OUT | OUTER | OUTPUTFORMAT
-    | OVER | OVERLAPS | OVERWRITE | PARTITION | PARTITIONED | PARTITIONS | PERCENTLIT | PIVOT | POSITION | PRECEDING
-    | PRIMARY | PRINCIPALS | PURGE | QUERY | RANGE | RECORDREADER | RECORDWRITER | RECOVER | REDUCE | REFERENCES | REFRESH
-    | RENAME | REPAIR | REPLACE | RESET | RESTRICT | REVOKE | RLIKE | ROLE | ROLES | ROLLBACK | ROLLUP | ROW | ROWS
-    | SELECT | SEPARATED | SERDE | SERDEPROPERTIES | SESSION_USER | SET | SETS | SHOW | SKEWED | SOME | SORT | SORTED
-    | START | STATISTICS | STORED | STRATIFY | STRUCT | TABLE | TABLES | TABLESAMPLE | TBLPROPERTIES | TEMPORARY
-    | TERMINATED | THEN | TO | TOUCH | TRAILING | TRANSACTION | TRANSACTIONS | TRANSFORM | TRUE | TRUNCATE | UNARCHIVE
-    | UNBOUNDED | UNCACHE | UNLOCK | UNIQUE | UNSET | USE | USER | VALUES | VIEW | WHEN | WHERE | WINDOW | WITH
+    : ADD
+    | AFTER
+    | ALL
+    | ALTER
+    | ANALYZE
+    | AND
+    | ANY
+    | ARCHIVE
+    | ARRAY
+    | AS
+    | ASC
+    | AT
+    | AUTHORIZATION
+    | BETWEEN
+    | BOTH
+    | BUCKET
+    | BUCKETS
+    | BY
+    | CACHE
+    | CASCADE
+    | CASE
+    | CAST
+    | CHANGE
+    | CHECK
+    | CLEAR
+    | CLUSTER
+    | CLUSTERED
+    | CODEGEN
+    | COLLATE
+    | COLLECTION
+    | COLUMN
+    | COLUMNS
+    | COMMENT
+    | COMMIT
+    | COMPACT
+    | COMPACTIONS
+    | COMPUTE
+    | CONCATENATE
+    | CONSTRAINT
+    | COST
+    | CREATE
+    | CUBE
+    | CURRENT
+    | CURRENT_DATE
+    | CURRENT_TIME
+    | CURRENT_TIMESTAMP
+    | CURRENT_USER
+    | DATA
+    | DATABASE
+    | DATABASES
+    | DAY
+    | DAYS
+    | DBPROPERTIES
+    | DEFINED
+    | DELETE
+    | DELIMITED
+    | DESC
+    | DESCRIBE
+    | DFS
+    | DIRECTORIES
+    | DIRECTORY
+    | DISTINCT
+    | DISTRIBUTE
+    | DIV
+    | DROP
+    | ELSE
+    | END
+    | ESCAPED
+    | EXCHANGE
+    | EXISTS
+    | EXPLAIN
+    | EXPORT
+    | EXTENDED
+    | EXTERNAL
+    | EXTRACT
+    | FALSE
+    | FETCH
+    | FIELDS
+    | FILEFORMAT
+    | FIRST
+    | FOLLOWING
+    | FOR
+    | FOREIGN
+    | FORMAT
+    | FORMATTED
+    | FROM
+    | FUNCTION
+    | FUNCTIONS
+    | GLOBAL
+    | GRANT
+    | GROUP
+    | GROUPING
+    | HAVING
+    | HOUR
+    | HOURS
+    | IF
+    | IGNORE
+    | IMPORT
+    | IN
+    | INDEX
+    | INDEXES
+    | INPATH
+    | INPUTFORMAT
+    | INSERT
+    | INTERVAL
+    | INTO
+    | IS
+    | ITEMS
+    | KEYS
+    | LAST
+    | LATERAL
+    | LAZY
+    | LEADING
+    | LIKE
+    | LIMIT
+    | LINES
+    | LIST
+    | LOAD
+    | LOCAL
+    | LOCATION
+    | LOCK
+    | LOCKS
+    | LOGICAL
+    | MACRO
+    | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
+    | MSCK
+    | NO
+    | NOT
+    | NULL
+    | NULLS
+    | OF
+    | ONLY
+    | OPTION
+    | OPTIONS
+    | OR
+    | ORDER
+    | OUT
+    | OUTER
+    | OUTPUTFORMAT
+    | OVER
+    | OVERLAPS
+    | OVERWRITE
+    | PARTITION
+    | PARTITIONED
+    | PARTITIONS
+    | PERCENTLIT
+    | PIVOT
+    | POSITION
+    | PRECEDING
+    | PRIMARY
+    | PRINCIPALS
+    | PURGE
+    | QUERY
+    | RANGE
+    | RECORDREADER
+    | RECORDWRITER
+    | RECOVER
+    | REDUCE
+    | REFERENCES
+    | REFRESH
+    | RENAME
+    | REPAIR
+    | REPLACE
+    | RESET
+    | RESTRICT
+    | REVOKE
+    | RLIKE
+    | ROLE
+    | ROLES
+    | ROLLBACK
+    | ROLLUP
+    | ROW
+    | ROWS
+    | SECOND
+    | SECONDS
+    | SELECT
+    | SEPARATED
+    | SERDE
+    | SERDEPROPERTIES
+    | SESSION_USER
+    | SET
+    | SETS
+    | SHOW
+    | SKEWED
+    | SOME
+    | SORT
+    | SORTED
+    | START
+    | STATISTICS
+    | STORED
+    | STRATIFY
+    | STRUCT
+    | TABLE
+    | TABLES
+    | TABLESAMPLE
+    | TBLPROPERTIES
+    | TEMPORARY
+    | TERMINATED
+    | THEN
+    | TO
+    | TOUCH
+    | TRAILING
+    | TRANSACTION
+    | TRANSACTIONS
+    | TRANSFORM
+    | TRUE
+    | TRUNCATE
+    | UNARCHIVE
+    | UNBOUNDED
+    | UNCACHE
+    | UNIQUE
+    | UNLOCK
+    | UNSET
+    | USE
+    | USER
+    | VALUES
+    | VIEW
+    | WEEK
+    | WEEKS
+    | WHEN
+    | WHERE
+    | WINDOW
+    | WITH
+    | YEAR
+    | YEARS
     ;
 
+//============================
+// Start of the keywords list
+//============================
 SELECT: 'SELECT';
 FROM: 'FROM';
 ADD: 'ADD';
@@ -859,6 +1272,24 @@ ASC: 'ASC';
 DESC: 'DESC';
 FOR: 'FOR';
 INTERVAL: 'INTERVAL';
+YEAR: 'YEAR';
+YEARS: 'YEARS';
+MONTH: 'MONTH';
+MONTHS: 'MONTHS';
+WEEK: 'WEEK';
+WEEKS: 'WEEKS';
+DAY: 'DAY';
+DAYS: 'DAYS';
+HOUR: 'HOUR';
+HOURS: 'HOURS';
+MINUTE: 'MINUTE';
+MINUTES: 'MINUTES';
+SECOND: 'SECOND';
+SECONDS: 'SECONDS';
+MILLISECOND: 'MILLISECOND';
+MILLISECONDS: 'MILLISECONDS';
+MICROSECOND: 'MICROSECOND';
+MICROSECONDS: 'MICROSECONDS';
 CASE: 'CASE';
 WHEN: 'WHEN';
 THEN: 'THEN';
@@ -940,37 +1371,13 @@ IGNORE: 'IGNORE';
 BOTH: 'BOTH';
 LEADING: 'LEADING';
 TRAILING: 'TRAILING';
-
 IF: 'IF';
 POSITION: 'POSITION';
 EXTRACT: 'EXTRACT';
-
-EQ  : '=' | '==';
-NSEQ: '<=>';
-NEQ : '<>';
-NEQJ: '!=';
-LT  : '<';
-LTE : '<=' | '!>';
-GT  : '>';
-GTE : '>=' | '!<';
-
-PLUS: '+';
-MINUS: '-';
-ASTERISK: '*';
-SLASH: '/';
-PERCENT: '%';
-DIV: 'DIV';
-TILDE: '~';
-AMPERSAND: '&';
-PIPE: '|';
-CONCAT_PIPE: '||';
-HAT: '^';
-
 PERCENTLIT: 'PERCENT';
 BUCKET: 'BUCKET';
 OUT: 'OUT';
 OF: 'OF';
-
 SORT: 'SORT';
 CLUSTER: 'CLUSTER';
 DISTRIBUTE: 'DISTRIBUTE';
@@ -1077,6 +1484,30 @@ SESSION_USER: 'SESSION_USER';
 SOME: 'SOME';
 UNIQUE: 'UNIQUE';
 USER: 'USER';
+//============================
+// End of the keywords list
+//============================
+
+EQ  : '=' | '==';
+NSEQ: '<=>';
+NEQ : '<>';
+NEQJ: '!=';
+LT  : '<';
+LTE : '<=' | '!>';
+GT  : '>';
+GTE : '>=' | '!<';
+
+PLUS: '+';
+MINUS: '-';
+ASTERISK: '*';
+SLASH: '/';
+PERCENT: '%';
+DIV: 'DIV';
+TILDE: '~';
+AMPERSAND: '&';
+PIPE: '|';
+CONCAT_PIPE: '||';
+HAT: '^';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

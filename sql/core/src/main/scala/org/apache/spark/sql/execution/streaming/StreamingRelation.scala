@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Stati
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.sources.v2.{Table, TableProvider}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -95,7 +96,7 @@ case class StreamingRelationV2(
     source: TableProvider,
     sourceName: String,
     table: Table,
-    extraOptions: Map[String, String],
+    extraOptions: CaseInsensitiveStringMap,
     output: Seq[Attribute],
     v1Relation: Option[StreamingRelation])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
