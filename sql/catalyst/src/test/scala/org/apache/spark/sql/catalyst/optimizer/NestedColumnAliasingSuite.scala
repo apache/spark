@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -47,6 +47,14 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     'employer.struct(employer))
 
   test("Pushing a single nested field projection") {
+    def testSingleFieldPushDown(op: LogicalPlan => LogicalPlan): Unit = {
+      val middle = GetStructField('name, 1, Some("middle"))
+      val query = op(contact).select(middle).analyze
+      val optimized = Optimize.execute(query)
+      val expected = op(contact.select(middle)).analyze
+      comparePlans(optimized, expected)
+    }
+
     testSingleFieldPushDown((input: LogicalPlan) => input.limit(5))
     testSingleFieldPushDown((input: LogicalPlan) => input.repartition(1))
     testSingleFieldPushDown((input: LogicalPlan) => Sample(0.0, 0.6, false, 11L, input))
@@ -205,18 +213,6 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select(GetStructField('a, 0, Some("b")))
       .limit(5)
       .analyze
-
-    comparePlans(optimized, expected)
-  }
-
-  private def testSingleFieldPushDown(op: LogicalPlan => LogicalPlan): Unit = {
-    val middle = GetStructField('name, 1, Some("middle"))
-
-    val query = op(contact).select(middle).analyze
-
-    val optimized = Optimize.execute(query)
-
-    val expected = op(contact.select(middle)).analyze
 
     comparePlans(optimized, expected)
   }

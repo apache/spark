@@ -64,7 +64,7 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Return a plan with new childen replaced with aliases.
+   * Return a plan with new children replaced with aliases.
    */
   private def replaceChildrenWithAliases(
       plan: LogicalPlan,
