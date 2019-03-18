@@ -714,11 +714,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("Kryo encoder: check the schema mismatch when converting DataFrame to Dataset") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
-    val df = Seq((1)).toDF("a")
+    val df = Seq((1.0)).toDF("a")
     val e = intercept[AnalysisException] {
       df.as[KryoData]
     }.message
-    assert(e.contains("cannot cast int to binary"))
+    assert(e.contains("cannot cast double to binary"))
   }
 
   test("Java encoder") {
