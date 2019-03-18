@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 private[sql] abstract class ParsedLogicalPlan extends LogicalPlan {
   // Redact properties and options when parsed nodes are used by generic methods like toString
   override def productIterator: Iterator[Any] = super.productIterator.map {
-    case mapArg: Map[String, String] => conf.redactOptions(mapArg)
+    case mapArg: Map[_, _] => conf.redactOptions(mapArg.asInstanceOf[Map[String, String]])
     case other => other
   }
 
