@@ -22,7 +22,7 @@ package org.apache.spark.util;
  */
 public class ParentClassLoader extends ClassLoader {
 
-  {
+  static {
     ClassLoader.registerAsParallelCapable();
   }
 
