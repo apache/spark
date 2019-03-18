@@ -26,7 +26,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mcr.microsoft.com/mssql/server"
+    override val imageName = "mcr.microsoft.com/mssql/server:2017-GA-ubuntu"
     override val env = Map(
       "SA_PASSWORD" -> "Sapass123",
       "ACCEPT_EULA" -> "Y"
