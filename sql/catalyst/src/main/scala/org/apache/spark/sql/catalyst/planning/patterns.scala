@@ -63,10 +63,27 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) if condition.deterministic || condition.isInstanceOf[And] =>
-        val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedCondition = substitute(aliases)(condition)
-        (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
+      case filter: Filter if filter.condition.deterministic || filter.condition.isInstanceOf[And] =>
+        val condition = filter.condition
+        val determinedCondition = if (condition.deterministic) {
+          Some(condition)
+        } else {
+          val andCondition = condition.asInstanceOf[And]
+          if (andCondition.left.deterministic) {
+            Some(andCondition.left)
+          } else if (andCondition.right.deterministic) {
+            Some(andCondition.right)
+          } else {
+            None
+          }
+        }
+        if (determinedCondition.isDefined) {
+          val (fields, filters, other, aliases) = collectProjectsAndFilters(filter.child)
+          val substitutedCondition = substitute(aliases)(determinedCondition.get)
+          (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
+        } else {
+          (None, Nil, filter, Map.empty)
+        }
 
       case h: ResolvedHint =>
         collectProjectsAndFilters(h.child)
