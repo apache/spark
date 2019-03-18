@@ -183,6 +183,8 @@ private[spark] object ThreadUtils {
   /**
    * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
    */
+  // We keep using deprecated Scala ForkJoinPool to support both versions of Scala 2.11 and 2.12.
+  // Please refer the PR https://github.com/apache/spark/pull/24113 for more details.
   def newForkJoinPool(prefix: String, maxThreadNumber: Int): SForkJoinPool = {
     // Custom factory to set thread names
     val factory = new SForkJoinPool.ForkJoinWorkerThreadFactory {
