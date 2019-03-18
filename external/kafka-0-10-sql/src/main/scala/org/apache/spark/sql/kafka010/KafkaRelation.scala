@@ -94,10 +94,9 @@ private[kafka010] class KafkaRelation(
     // Calculate offset ranges
     val offsetRanges = untilPartitionOffsets.keySet.map { tp =>
       val fromOffset = fromPartitionOffsets.getOrElse(tp,
-          // This should not happen since topicPartitions contains all partitions not in
-          // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a from offset")
-      }
+        // This should not happen since topicPartitions contains all partitions not in
+        // fromPartitionOffsets
+        throw new IllegalStateException(s"$tp doesn't have a from offset"))
       var untilOffset = untilPartitionOffsets(tp)
       untilOffset = if (areOffsetsInLine(fromOffset, untilOffset)) untilOffset else fromOffset
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, None)
