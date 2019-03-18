@@ -190,14 +190,15 @@ private[spark] class TaskSetManager(
 
   private def addPendingTasks(): Unit = {
     val (_, duration) = Utils.timeTakenMs {
-      val array = new ArrayBuffer[(String, Int)]() // Array(preferredLocation, task index)
+      val hostToIndices = new HashMap[String, ArrayBuffer[Int]]()
       for (i <- (0 until numTasks).reverse) {
-        addPendingTask(i, Some(array))
+        addPendingTask(i, Option(hostToIndices))
       }
-      // Convert preferred locations to racks in one invocation and zip with the origin indices
-      sched.getRacksForHosts(array.map(_._1).toList).zip(array.map(_._2)) foreach {
-        case (Some(rack), index) =>
-          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+      // Convert preferred locations to racks in one invocation and zip with the origin indices.
+      // We de-duping the hosts to reduce this invocation further.
+      sched.getRacksForHosts(hostToIndices.keySet.toList).zip(hostToIndices.values) foreach {
+        case (Some(rack), indices) =>
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) ++= indices
         case _ =>
       }
     }
@@ -229,7 +230,7 @@ private[spark] class TaskSetManager(
 
   /** Add a task to all the pending-task lists that it should be on. */
   private[spark] def addPendingTask(index: Int,
-      initializingTaskArray: Option[ArrayBuffer[(String, Int)]] = None) {
+      initializingHostToIndices: Option[HashMap[String, ArrayBuffer[Int]]] = None) {
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -250,8 +251,10 @@ private[spark] class TaskSetManager(
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
 
-      initializingTaskArray match {
-        case Some(array) => array += ((loc.host, index))
+      initializingHostToIndices match {
+        case Some(hostToIndices) =>
+          // when TaskSetManager initializing, preferredLocation -> task indices
+          hostToIndices.getOrElseUpdate(loc.host, new ArrayBuffer) += index
         case None =>
           for (rack <- sched.getRackForHost(loc.host)) {
             pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
