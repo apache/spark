@@ -21,11 +21,7 @@ import org.apache.spark.annotation.Experimental;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Case-insensitive map of string keys to string values.
@@ -175,6 +171,6 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
    * Returns the original case-sensitive map.
    */
   public Map<String, String> asCaseSensitiveMap() {
-    return original;
+    return Collections.unmodifiableMap(original);
   }
 }

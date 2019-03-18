@@ -98,6 +98,11 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     }
 
     val options = new CaseInsensitiveStringMap(originalMap)
-    assert(options.asCaseSensitiveMap.equals(originalMap))
+    val caseSensitiveMap = options.asCaseSensitiveMap
+    assert(caseSensitiveMap.equals(originalMap))
+    // The result of `asCaseSensitiveMap` is read-only.
+    intercept[UnsupportedOperationException] {
+      caseSensitiveMap.put("kEy", "valUE")
+    }
   }
 }
