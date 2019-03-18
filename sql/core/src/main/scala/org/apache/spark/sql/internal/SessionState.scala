@@ -98,11 +98,6 @@ private[sql] class SessionState(
     hadoopConf
   }
 
-  def newHadoopConfWithCaseInsensitiveOptions(options: CaseInsensitiveStringMap): Configuration = {
-    // Hadoop configurations are case sensitive.
-    newHadoopConfWithOptions(options.getOriginalMap.asScala.toMap)
-  }
-
   /**
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */

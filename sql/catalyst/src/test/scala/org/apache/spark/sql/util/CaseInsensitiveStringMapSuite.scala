@@ -27,9 +27,16 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
 
   test("put and get") {
     val options = CaseInsensitiveStringMap.empty()
-    options.put("kEy", "valUE")
-    assert(options.get("key") == "valUE")
-    assert(options.get("KEY") == "valUE")
+    intercept[UnsupportedOperationException] {
+      options.put("kEy", "valUE")
+    }
+  }
+
+  test("clear") {
+    val options = new CaseInsensitiveStringMap(Map("kEy" -> "valUE").asJava)
+    intercept[UnsupportedOperationException] {
+      options.clear()
+    }
   }
 
   test("key and value set") {
@@ -83,7 +90,7 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     }
   }
 
-  test("getOriginalMap") {
+  test("asCaseSensitiveMap") {
     val originalMap = new util.HashMap[String, String] {
       put("Foo", "Bar")
       put("OFO", "ABR")
@@ -91,21 +98,6 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     }
 
     val options = new CaseInsensitiveStringMap(originalMap)
-    assert(options.getOriginalMap.equals(originalMap))
-
-    val key = "Key"
-    val value = "value"
-    originalMap.put(key, value)
-    options.put(key, value)
-    originalMap.put(key, value)
-    assert(options.getOriginalMap.equals(originalMap))
-
-    val removedKey = "OFO"
-    originalMap.remove(removedKey)
-    options.remove(removedKey)
-    assert(options.getOriginalMap.equals(originalMap))
-
-    options.clear()
-    assert(options.getOriginalMap.isEmpty)
+    assert(options.asCaseSensitiveMap.equals(originalMap))
   }
 }

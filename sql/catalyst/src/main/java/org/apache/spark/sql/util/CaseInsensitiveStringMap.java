@@ -45,9 +45,11 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
   private final Map<String, String> delegate;
 
   public CaseInsensitiveStringMap(Map<String, String> originalMap) {
-    this.original = new HashMap<>(originalMap.size());
-    this.delegate = new HashMap<>(originalMap.size());
-    putAll(originalMap);
+    original = new HashMap<>(originalMap);
+    delegate = new HashMap<>(originalMap.size());
+    for (Map.Entry<? extends String, ? extends String> entry : originalMap.entrySet()) {
+      delegate.put(toLowerCase(entry.getKey()), entry.getValue());
+    }
   }
 
   @Override
@@ -81,27 +83,22 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   @Override
   public String put(String key, String value) {
-    original.put(key, value);
-    return delegate.put(toLowerCase(key), value);
+    throw new UnsupportedOperationException();
   }
 
   @Override
   public String remove(Object key) {
-    original.remove(key);
-    return delegate.remove(toLowerCase(key));
+    throw new UnsupportedOperationException();
   }
 
   @Override
   public void putAll(Map<? extends String, ? extends String> m) {
-    for (Map.Entry<? extends String, ? extends String> entry : m.entrySet()) {
-      put(entry.getKey(), entry.getValue());
-    }
+    throw new UnsupportedOperationException();
   }
 
   @Override
   public void clear() {
-    original.clear();
-    delegate.clear();
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -167,7 +164,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
   /**
    * Returns the original case-sensitive map.
    */
-  public Map<String, String> getOriginalMap() {
+  public Map<String, String> asCaseSensitiveMap() {
     return original;
   }
 }
