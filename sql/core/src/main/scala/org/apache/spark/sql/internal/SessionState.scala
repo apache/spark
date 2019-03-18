@@ -19,8 +19,6 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
