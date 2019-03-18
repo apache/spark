@@ -163,7 +163,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
 }
 
-private[csv] class CsvOutputWriter(
+class CsvOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
