@@ -1,16 +1,20 @@
 ---
 layout: global
-title: SQL Reserved/Non-Reserved Keywords
-displayTitle: SQL Reserved/Non-Reserved Keywords
+title: Spark SQL Keywords
+displayTitle: Spark SQL Keywords
 ---
 
-In Spark SQL, there are 2 kinds of keywords: non-reserved and reserved. Non-reserved keywords have a
-special meaning only in particular contexts and can be used as identifiers (e.g., table names, view names,
-column names, column aliases, table aliases) in other contexts. Reserved keywords can't be used as
-table alias, but can be used as other identifiers.
+When `spark.sql.parser.ansi.enabled` is true, Spark SQL has two kinds of keywords:
+* Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
+* Non-reserved keywords: Keywords that have a special meaning only in particular contexts and can be used as identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK can be used as identifiers in other places.
 
-The list of reserved and non-reserved keywords can change according to the config
-`spark.sql.parser.ansi.enabled`, which is false by default.
+When `spark.sql.parser.ansi.enabled` is false, Spark SQL has two kinds of keywords:
+* Non-reserved keywords: Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
+* Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
+
+By default `spark.sql.parser.ansi.enabled` is false.
+
+Below is a list of all the keywords in Spark SQL.
 
 <table class="table">
   <tr><th rowspan="2" style="vertical-align: middle;"><b>Keyword</b></th><th colspan="2"><b>Spark SQL</b></th><th rowspan="2" style="vertical-align: middle;"><b>SQL-2011</b></th></tr>
@@ -26,7 +30,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>ALTER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ANALYZE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>AND</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ANTI</td><td>reserved</td><td>reserved</td><td>non-reserved</td></tr>
+  <tr><td>ANTI</td><td>reserved</td><td>strict-non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ANY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ARE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ARCHIVE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -116,7 +120,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>COVAR_POP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>COVAR_SAMP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CREATE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CROSS</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>CROSS</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>CUBE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CUME_DIST</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CURRENT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -185,7 +189,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>ESCAPE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ESCAPED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EVERY</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>EXCEPT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>EXCEPT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>EXCEPTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EXCHANGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EXEC</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -215,7 +219,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>FRAME_ROW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FREE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FROM</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FULL</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>FULL</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>FUNCTION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FUNCTIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FUSION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -244,7 +248,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>INDEXES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>INITIAL</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>INITIALLY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>INNER</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>INNER</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>INOUT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INPATH</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>INPUT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -253,7 +257,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>INSERT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INTEGER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>INTERSECT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>INTERSECT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>INTERSECTION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INTERVAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>INTO</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -261,7 +265,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>ISOLATION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ITEMS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ITERATE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>JOIN</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>JOIN</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>JSON_ARRAY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>JSON_ARRAYAGG</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>JSON_EXISTS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -283,7 +287,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>LEAD</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LEADING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LEAVE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>LEFT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>LEFT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>LEVEL</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>LIKE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LIKE_REGEX</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -332,7 +336,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>MULTISET</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>NAMES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>NATIONAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>NATURAL</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>NATURAL</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>NCHAR</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>NCLOB</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>NEW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -354,7 +358,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>OFFSET</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>OLD</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>OMIT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ON</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>ON</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>ONE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ONLY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>OPEN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -440,7 +444,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>RETURN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>RETURNS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>REVOKE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>RIGHT</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>RIGHT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>RLIKE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ROLE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>ROLES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -461,7 +465,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>SECTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SEEK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SELECT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SEMI</td><td>reserved</td><td>reserved</td><td>non-reserved</td></tr>
+  <tr><td>SEMI</td><td>reserved</td><td>strict-non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SENSITIVE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SEPARATED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SERDE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -545,7 +549,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>UNCACHE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>UNDER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>UNDO</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>UNION</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>UNION</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>UNIQUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>UNKNOWN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>UNLOCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -557,7 +561,7 @@ The list of reserved and non-reserved keywords can change according to the confi
   <tr><td>USAGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>USE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>USER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>USING</td><td>reserved</td><td>reserved</td><td>reserved</td></tr>
+  <tr><td>USING</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>VALUE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VALUES</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VALUE_OF</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
