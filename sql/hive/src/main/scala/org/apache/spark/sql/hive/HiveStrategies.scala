@@ -151,7 +151,6 @@ object HiveAnalysis extends Rule[LogicalPlan] {
         ifPartitionNotExists, query.output.map(_.name))
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
-      DDLUtils.checkDataColNames(tableDesc)
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
@@ -209,7 +208,6 @@ case class RelationConversions(
       case CreateTable(tableDesc, mode, Some(query))
           if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
             isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
-        DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
     }
