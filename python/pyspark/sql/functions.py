@@ -38,7 +38,7 @@ from pyspark.sql.types import StringType, DataType
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
-# Namely, if columns are referred as arguments, they can be always both Column or string.
+# Namely, if columns are referred as arguments, they can be always both Column or string,
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
 # since it requires to make every single overridden definition.
