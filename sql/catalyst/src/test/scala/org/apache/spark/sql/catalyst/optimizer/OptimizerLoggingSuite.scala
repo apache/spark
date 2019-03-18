@@ -32,17 +32,20 @@ import org.apache.spark.sql.internal.SQLConf
 class OptimizerLoggingSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Optimizer Batch", FixedPoint(100),
-      PushDownPredicate,
-      ColumnPruning,
-      CollapseProject) :: Nil
+    val batches =
+      Batch("Optimizer Batch", FixedPoint(100),
+        PushDownPredicate, ColumnPruning, CollapseProject) ::
+      Batch("Batch Has No Effect", Once,
+        ColumnPruning) :: Nil
   }
 
   class MockAppender extends AppenderSkeleton {
     val loggingEvents = new ArrayBuffer[LoggingEvent]()
 
     override def append(loggingEvent: LoggingEvent): Unit = {
-      if (loggingEvent.getRenderedMessage().contains("Applying Rule")) {
+      if (loggingEvent.getRenderedMessage().contains("Applying Rule") ||
+        loggingEvent.getRenderedMessage().contains("Result of Batch") ||
+        loggingEvent.getRenderedMessage().contains("has no effect")) {
         loggingEvents.append(loggingEvent)
       }
     }
@@ -62,7 +65,7 @@ class OptimizerLoggingSuite extends PlanTest {
     }
   }
 
-  private def verifyLog(expectedLevel: Level, expectedRules: Seq[String]): Unit = {
+  private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
     val logAppender = new MockAppender()
     withLogLevelAndAppender(Level.TRACE, logAppender) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
@@ -71,7 +74,8 @@ class OptimizerLoggingSuite extends PlanTest {
       comparePlans(Optimize.execute(query), expected)
     }
     val logMessages = logAppender.loggingEvents.map(_.getRenderedMessage)
-    assert(expectedRules.forall(rule => logMessages.exists(_.contains(rule))))
+    assert(expectedRulesOrBatches.forall
+    (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
     assert(logAppender.loggingEvents.forall(_.getLevel == expectedLevel))
   }
 
@@ -143,6 +147,22 @@ class OptimizerLoggingSuite extends PlanTest {
         SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
         verifyLog(Level.INFO, expectedRules)
       }
+    }
+  }
+
+  test("test log batches which change the plan") {
+    withSQLConf(
+      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_BATCHES.key -> "Optimizer Batch",
+      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+      verifyLog(Level.INFO, Seq("Optimizer Batch"))
+    }
+  }
+
+  test("test log batches which do not change the plan") {
+    withSQLConf(
+      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_BATCHES.key -> "Batch Has No Effect",
+      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+      verifyLog(Level.INFO, Seq("Batch Has No Effect"))
     }
   }
 }
