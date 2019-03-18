@@ -99,7 +99,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * - Broadcast hash join (BHJ):
    *     BHJ is not supported for full outer join. For right outer join, we only can broadcast the
    *     left side. For left outer, left semi, left anti and the internal join type ExistenceJoin,
-   *     we only can broadcast the right side. For inner like join, we can broadcast both sides.
+   *     we only can broadcast the right side. For inner join, we can broadcast both sides.
    *     Normally, BHJ can perform faster than the other join algorithms when the broadcast side is
    *     small. However, broadcasting tables is a network-intensive operation. It could cause OOM
    *     or perform worse than the other join algorithms, especially when the build/broadcast side
