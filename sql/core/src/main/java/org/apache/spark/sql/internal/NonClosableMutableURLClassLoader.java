@@ -27,7 +27,7 @@ import java.net.URL;
  */
 public class NonClosableMutableURLClassLoader extends MutableURLClassLoader {
 
-  {
+  static {
     ClassLoader.registerAsParallelCapable();
   }
 

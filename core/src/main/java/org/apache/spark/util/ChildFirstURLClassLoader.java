@@ -30,7 +30,7 @@ import java.util.Enumeration;
  */
 public class ChildFirstURLClassLoader extends MutableURLClassLoader {
 
-  {
+  static {
     ClassLoader.registerAsParallelCapable();
   }
 
