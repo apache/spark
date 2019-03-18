@@ -170,7 +170,7 @@ class CollapseProjectSuite extends PlanTest {
     val expected = Sample(0.0, 0.6, false, 11L, relation.select('a as 'c)).analyze
     comparePlans(optimized, expected)
   }
-  
+
   test("ensure oversize aliases are not repeatedly substituted") {
     var query: LogicalPlan = testRelation
     for( a <- 1 to 100) {
