@@ -439,7 +439,7 @@ private[yarn] class YarnAllocator(
                 remainingAfterRackMatches)
             }
           } catch {
-            case NonFatal(e) =>
+            case e: Throwable =>
               exception = Some(e)
           }
         }
