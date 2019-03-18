@@ -23,6 +23,7 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -96,7 +97,7 @@ public class Catalogs {
     Map<String, String> allConfs = mapAsJavaMapConverter(conf.getAllConfs()).asJava();
     Pattern prefix = Pattern.compile("^spark\\.sql\\.catalog\\." + name + "\\.(.+)");
 
-    CaseInsensitiveStringMap options = CaseInsensitiveStringMap.empty();
+    HashMap<String, String> options = new HashMap<>();
     for (Map.Entry<String, String> entry : allConfs.entrySet()) {
       Matcher matcher = prefix.matcher(entry.getKey());
       if (matcher.matches() && matcher.groupCount() > 0) {
@@ -104,6 +105,6 @@ public class Catalogs {
       }
     }
 
-    return options;
+    return new CaseInsensitiveStringMap(options);
   }
 }
