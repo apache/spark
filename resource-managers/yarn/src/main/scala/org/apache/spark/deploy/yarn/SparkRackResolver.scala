@@ -31,7 +31,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.internal.Logging
 
 /**
- * Wrapper around YARN's [[RackResolver]]. This allows Spark tests to easily override the
+ * Re-implement YARN's [[RackResolver]]. This allows Spark tests to easily override the
  * default behavior, since YARN's class self-initializes the first time it's called, and
  * future calls all use the initial configuration.
  */
@@ -43,7 +43,7 @@ private[spark] class SparkRackResolver {
   }
 
   def resolve(conf: Configuration, hostName: String): String = {
-    RackResolver.resolve(conf, hostName).getNetworkLocation()
+    SparkRackResolver.coreResolve(conf, List(hostName)).head.getNetworkLocation
   }
 
   /**
@@ -70,19 +70,12 @@ object SparkRackResolver extends Logging {
   private var dnsToSwitchMapping: DNSToSwitchMapping = _
   private var initCalled = false
 
-  private def init(conf: Configuration): Unit = {
+  def coreResolve(conf: Configuration, hostNames: List[String]): List[Node] = {
     if (!initCalled) {
       initCalled = true
       val dnsToSwitchMappingClass =
         conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
           classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
-      if (classOf[ScriptBasedMapping].isAssignableFrom(dnsToSwitchMappingClass)) {
-        val numArgs = conf.getInt(CommonConfigurationKeysPublic.NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_KEY,
-          CommonConfigurationKeysPublic.NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_DEFAULT)
-        logInfo(s"Setting spark.hadoop.net.topology.script.number.args with a higher value " +
-          s"may reduce the time of rack resolving when submits a stage with a mass of tasks. " +
-          s"Current number is $numArgs")
-      }
       val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
         .asInstanceOf[DNSToSwitchMapping]
       dnsToSwitchMapping = newInstance match {
@@ -90,10 +83,7 @@ object SparkRackResolver extends Logging {
         case _ => new CachedDNSToSwitchMapping(newInstance)
       }
     }
-  }
 
-  def coreResolve(conf: Configuration, hostNames: List[String]): List[Node] = {
-    init(conf)
     val nodes = new ArrayBuffer[Node]
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
     if (rNameList == null || rNameList.isEmpty) {

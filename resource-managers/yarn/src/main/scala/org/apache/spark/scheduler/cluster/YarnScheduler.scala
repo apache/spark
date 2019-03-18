@@ -18,11 +18,9 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.net.NetworkTopology
-import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.SparkRackResolver
-import org.apache.spark.internal.config.LOCALITY_WAIT_RACK
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
@@ -30,34 +28,18 @@ private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(s
 
   private[spark] val resolver = new SparkRackResolver
 
-  // Add a on-off switch to save time for rack resolving
-  val skipRackResolving: Boolean = sc.conf.get(LOCALITY_WAIT_RACK) == 0L
-
-  // By default, rack is unknown
-  override def getRackForHost(hostPort: String): Option[String] = {
-    if (skipRackResolving) {
-      Option(NetworkTopology.DEFAULT_RACK)
-    } else {
-      val host = Utils.parseHostPort(hostPort)._1
-      Option(resolver.resolve(sc.hadoopConfiguration, host))
-    }
-  }
+  override def defaultRackValue: Option[String] = Option(NetworkTopology.DEFAULT_RACK)
 
   /**
    * Get racks info for a list of host.
-   * Use [[SparkRackResolver]] to resolve racks instead of [[RackResolver]]
-   * before the dependency Hadoop applied YARN-9332
-   * @param hostPorts host list to resolve
-   * @return rack list
+   * Use [[SparkRackResolver]] to resolve racks before the dependency Hadoop applied YARN-9332
+   * @param hostPorts a list of task preferred locations to be resolved.
+   * @return resolved rack list.
    */
   override def getRacksForHosts(hostPorts: List[String]): List[Option[String]] = {
     val hosts = hostPorts.map(Utils.parseHostPort(_)._1)
-    if (skipRackResolving) {
-      hosts.map(_ => Option(NetworkTopology.DEFAULT_RACK))
-    } else {
-      resolver.resolve(sc.hadoopConfiguration, hosts).map { node =>
-        Option(node.getNetworkLocation)
-      }
+    resolver.resolve(sc.hadoopConfiguration, hosts).map { node =>
+      Option(node.getNetworkLocation)
     }
   }
 }

@@ -22,8 +22,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.net.NetworkTopology
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
+import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -70,47 +69,22 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
 // Get the rack for a given host
 object FakeRackUtil {
   private val hostToRack = new mutable.HashMap[String, String]()
-  var loopCount = 0
+  var numBatchInvocation = 0
 
   def cleanUp() {
     hostToRack.clear()
-    loopCount = 0
+    numBatchInvocation = 0
   }
 
   def assignHostToRack(host: String, rack: String) {
     hostToRack(host) = rack
   }
 
-  def getRackForHost(host: String): Option[String] = {
-    loopCount = simulateRunResolveCommand(Seq(host))
-    hostToRack.get(host)
-  }
-
   def getRacksForHosts(hosts: List[String]): List[Option[String]] = {
-    loopCount = simulateRunResolveCommand(hosts)
-    hosts.map(hostToRack.get)
-  }
-
-  /**
-   * This is a simulation of building and executing the resolution command.
-   * Simulate function `runResolveCommand()` in [[org.apache.hadoop.net.ScriptBasedMapping]].
-   * If Seq has 100 elements, it returns 4. If Seq has 1 elements, it returns 1.
-   * @param args a list of arguments
-   * @return script execution times
-   */
-  private def simulateRunResolveCommand(args: Seq[String]): Int = {
-    val maxArgs = 30 // Simulate NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_DEFAULT
-    var numProcessed = 0
-    var loopCount = 0
-    while (numProcessed != args.size) {
-      var start = maxArgs * loopCount
-      numProcessed = start
-      while (numProcessed < (start + maxArgs) && numProcessed < args.size) {
-        numProcessed += 1
-      }
-      loopCount += 1
+    if (hosts.nonEmpty && hosts.length != 1) {
+      numBatchInvocation += 1
     }
-    loopCount
+    hosts.map(hostToRack.get)
   }
 }
 
@@ -130,8 +104,6 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   val speculativeTasks = new ArrayBuffer[Int]
 
   val executors = new mutable.HashMap[String, String]
-
-  val skipRackResolving = sc.conf.get(config.LOCALITY_WAIT_RACK) == 0L
 
   for ((execId, host) <- liveExecutors) {
     addExecutor(execId, host)
@@ -178,20 +150,11 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     }
   }
 
-  override def getRackForHost(value: String): Option[String] =
-    if (skipRackResolving) {
-      Option(NetworkTopology.DEFAULT_RACK)
-    } else {
-      FakeRackUtil.getRackForHost(value)
-    }
+  override def defaultRackValue: Option[String] = Option("None")
 
-
-  override def getRacksForHosts(values: List[String]): List[Option[String]] =
-    if (skipRackResolving) {
-      values.map(_ => Option(NetworkTopology.DEFAULT_RACK))
-    } else {
-      FakeRackUtil.getRacksForHosts(values)
-    }
+  override def doGetRacksForHosts(values: List[String]): List[Option[String]] = {
+    FakeRackUtil.getRacksForHosts(values)
+  }
 }
 
 /**
@@ -1671,7 +1634,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     assert(sched.skipRackResolving === false)
     assert(total === 100) // verify the total number not changed with SPARK-27038
-    assert(FakeRackUtil.loopCount === 4) // verify script execution loop count decreased
+    assert(FakeRackUtil.numBatchInvocation === 1)
   }
 
   test("SPARK-27038 Verify the rack resolving time when spark.locality.wait is zero") {
@@ -1691,7 +1654,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     assert(sched.skipRackResolving === true)
     // verify the total number not changed with SPARK-27038
-    assert(manager.getPendingTasksForRack(NetworkTopology.DEFAULT_RACK).length === 100)
-    assert(FakeRackUtil.loopCount === 0) // verify no invocation of FakeRackUtil.getRacksForHosts()
+    assert(manager.getPendingTasksForRack(sched.defaultRackValue.get).length === 100)
+    assert(FakeRackUtil.numBatchInvocation === 0)
   }
 }

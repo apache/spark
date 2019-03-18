@@ -811,10 +811,36 @@ private[spark] class TaskSchedulerImpl(
     blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
   }
 
-  // By default, rack is unknown
-  def getRackForHost(value: String): Option[String] = None
+  // Add a on-off switch to save time for rack resolving
+  def skipRackResolving: Boolean = sc.conf.get(LOCALITY_WAIT_RACK) == 0L
 
-  def getRacksForHosts(values: List[String]): List[Option[String]] = values.map(getRackForHost)
+  /**
+   * Rack is unknown by default.
+   * It can be override in different TaskScheduler, like Yarn.
+   */
+  def defaultRackValue: Option[String] = None
+
+  def doGetRacksForHosts(preferredLocation: List[String]): List[Option[String]] = Nil
+
+  def getRackForHost(value: String): Option[String] = {
+    if (skipRackResolving) {
+      defaultRackValue
+    } else {
+      doGetRacksForHosts(List(value)) match {
+        case Nil => None
+        case h :: Nil => h
+        case _ => None
+      }
+    }
+  }
+
+  def getRacksForHosts(values: List[String]): List[Option[String]] = {
+    if (skipRackResolving) {
+      values.map(_ => defaultRackValue)
+    } else {
+      doGetRacksForHosts(values)
+    }
+  }
 
   private def waitBackendReady(): Unit = {
     if (backend.isReady) {
