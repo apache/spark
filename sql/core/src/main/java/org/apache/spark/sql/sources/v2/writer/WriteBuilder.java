@@ -22,6 +22,7 @@ import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.TableCapability;
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.sources.v2.TableCapability;
 
 /**
  * An interface for building the {@link BatchWrite}. Implementations can mix in some interfaces to
@@ -70,6 +71,12 @@ public interface WriteBuilder {
       " does not support batch write");
   }
 
+  /**
+   * Returns a {@link StreamingWrite} to write data to streaming source. By default this method
+   * throws exception, data sources must overwrite this method to provide an implementation, if the
+   * {@link Table} that creates this write returns {@link TableCapability#STREAMING_WRITE} support
+   * in its {@link Table#capabilities()}.
+   */
   default StreamingWrite buildForStreaming() {
     throw new UnsupportedOperationException(getClass().getName() +
       " does not support streaming write");

@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util
-import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
@@ -92,14 +92,15 @@ object MemoryStreamTableProvider extends TableProvider {
   }
 }
 
-class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table
-  with SupportsMicroBatchRead with SupportsContinuousRead {
+class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table with SupportsRead {
 
   override def name(): String = "MemoryStreamDataSource"
 
   override def schema(): StructType = stream.fullSchema()
 
-  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new MemoryStreamScanBuilder(stream)

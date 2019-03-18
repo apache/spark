@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Set;
@@ -27,11 +28,11 @@ import java.util.Set;
  * implementation can be a directory on the file system, a topic of Kafka, or a table in the
  * catalog, etc.
  * <p>
- * This interface can mixin the following interfaces to support different operations, like
- * {@code SupportsRead}.
+ * This interface can mixin {@link SupportsRead} and {@link SupportsWrite} to provide data reading
+ * and writing ability.
  */
 @Evolving
-public interface Table {
+public interface Table extends BaseStreamingSink {
 
   /**
    * A name to identify this table. Implementations should provide a meaningful name, like the
