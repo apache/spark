@@ -140,7 +140,7 @@
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.1.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
-    <parquet.version>1.12.0-palantir.4</parquet.version>
+    <parquet.version>1.12.0-palantir.6</parquet.version>
     <okhttp3.version>3.11.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.15.0</okio.version>
