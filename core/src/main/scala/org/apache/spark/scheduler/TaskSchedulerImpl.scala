@@ -812,7 +812,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   // Add a on-off switch to save time for rack resolving
-  def skipRackResolving: Boolean = sc.conf.get(LOCALITY_WAIT_RACK) == 0L
+  lazy val skipRackResolving: Boolean = sc.conf.get(LOCALITY_WAIT_RACK) == 0L
 
   /**
    * Rack is unknown by default.

@@ -150,7 +150,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     }
   }
 
-  override def defaultRackValue: Option[String] = Option("None")
+  override def defaultRackValue: Option[String] = Option("default")
 
   override def doGetRacksForHosts(values: List[String]): List[Option[String]] = {
     FakeRackUtil.getRacksForHosts(values)
