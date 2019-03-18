@@ -44,11 +44,11 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     math.exp(-dist2 / 2.0)
   }
 
-  ignore("power iteration clustering") {
+  test("power iteration clustering") {
     // Generate two circles following the example in the PIC paper.
     val r1 = 1.0
     val n1 = 10
-    val r2 = 4.0
+    val r2 = 14.0
     val n2 = 10
     val n = n1 + n2
     val points = genCircle(r1, n1) ++ genCircle(r2, n2)
@@ -78,11 +78,11 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
   }
 
-  ignore("power iteration clustering on graph") {
+  test("power iteration clustering on graph") {
     // Generate two circles following the example in the PIC paper.
     val r1 = 1.0
     val n1 = 10
-    val r2 = 4.0
+    val r2 = 14.0
     val n2 = 10
     val n = n1 + n2
     val points = genCircle(r1, n1) ++ genCircle(r2, n2)

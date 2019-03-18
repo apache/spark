@@ -35,7 +35,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
   @transient var data: Dataset[_] = _
   final val r1 = 1.0
   final val n1 = 10
-  final val r2 = 4.0
+  final val r2 = 100.0
   final val n2 = 40
 
   override def beforeAll(): Unit = {
@@ -70,7 +70,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     }
   }
 
-  ignore("power iteration clustering") {
+  test("power iteration clustering") {
     val n = n1 + n2
 
     val assignments = new PowerIterationClustering()
@@ -184,7 +184,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(localAssignments === localAssignments2)
   }
 
-  ignore("power iteration clustering gives incorrect results due to failed to converge") {
+  test("power iteration clustering gives incorrect results due to failed to converge") {
     /*
          Graph:
             1
@@ -222,7 +222,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       (0, 1),
       (0, 2),
       (3, 4)
-    )).toDF("src", "dst")
+    )).toDF("src", "dst").repartition(1)
 
     var assignments2 = new PowerIterationClustering()
       .setInitMode("random")
