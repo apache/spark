@@ -58,9 +58,9 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   }
 
   /** Creates a multi-part identifier for a given SQL string */
-  override def parseMultiPartIdentifier(sqlText: String): Seq[String] = {
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
     parse(sqlText) { parser =>
-      astBuilder.visitSingleMultiPartIdentifier(parser.singleMultiPartIdentifier())
+      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
     }
   }
 

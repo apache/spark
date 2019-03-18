@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin}
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, LookupCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -97,8 +97,8 @@ class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
     maxIterations: Int,
-    lookupCatalog: Option[(String) => CatalogPlugin] = None)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
+    override val lookupCatalog: Option[(String) => CatalogPlugin] = None)
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
@@ -107,27 +107,6 @@ class Analyzer(
   def this(lookupCatalog: Option[(String) => CatalogPlugin], catalog: SessionCatalog,
       conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations, lookupCatalog)
-  }
-
-  object CatalogRef {
-    def unapply(parts: Seq[String]): Option[(Option[CatalogPlugin], CatalogIdentifier)] =
-      lookupCatalog match {
-        case None =>
-          None
-        case Some(lookupCatalogFunc) =>
-          parts match {
-            case Seq(name) =>
-              Some((None, CatalogIdentifier(Nil, name)))
-            case Seq(catalogName, tail@_*) =>
-              try {
-                val catalog = lookupCatalogFunc(catalogName)
-                Some((Some(catalog), CatalogIdentifier(tail.init, tail.last)))
-              } catch {
-                case e: CatalogNotFoundException =>
-                  Some((None, CatalogIdentifier(parts.init, parts.last)))
-              }
-          }
-      }
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {

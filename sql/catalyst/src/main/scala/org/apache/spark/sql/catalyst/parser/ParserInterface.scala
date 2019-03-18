@@ -56,7 +56,7 @@ trait ParserInterface {
    * Parse a string to a multi-part identifier.
    */
   @throws[ParseException]("Text cannot be parsed to a multi-part identifier")
-  def parseMultiPartIdentifier(sqlText: String): Seq[String]
+  def parseMultipartIdentifier(sqlText: String): Seq[String]
 
   /**
    * Parse a string to a [[StructType]]. The passed SQL string should be a comma separated list

@@ -63,8 +63,8 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
-singleMultiPartIdentifier
-    : multiPartIdentifier EOF
+singleMultipartIdentifier
+    : multipartIdentifier EOF
     ;
 
 singleFunctionIdentifier
@@ -558,7 +558,7 @@ rowFormat
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
     ;
 
-multiPartIdentifier
+multipartIdentifier
     : parts+=identifier ('.' parts+=identifier)*
     ;
 
