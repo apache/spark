@@ -55,7 +55,7 @@ def _create_function(name, doc=""):
     return _
 
 
-def _create_function_with_column(name, doc=""):
+def _create_function_over_column(name, doc=""):
     """Similar with `_create_function` but creates a PySpark function that takes a column
     (as string as well). This is mainly for PySpark functions to take strings as
     column names.
@@ -128,7 +128,7 @@ _functions = {
     'desc': 'Returns a sort expression based on the descending order of the given column name.',
 }
 
-_functions_with_column = {
+_functions_over_column = {
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
 
@@ -141,7 +141,7 @@ _functions_with_column = {
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 
-_functions_1_4_with_column = {
+_functions_1_4_over_column = {
     # unary math functions
     'acos': ':return: inverse cosine of `col`, as if computed by `java.lang.Math.acos()`',
     'asin': ':return: inverse sine of `col`, as if computed by `java.lang.Math.asin()`',
@@ -207,7 +207,7 @@ _collect_set_doc = """
     >>> df2.agg(collect_set('age')).collect()
     [Row(collect_set(age)=[5, 2])]
     """
-_functions_1_6_with_column = {
+_functions_1_6_over_column = {
     # unary math functions
     'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
               ' the expression in a group.',
@@ -224,7 +224,7 @@ _functions_1_6_with_column = {
     'collect_set': _collect_set_doc
 }
 
-_functions_2_1_with_column = {
+_functions_2_1_over_column = {
     # unary math functions
     'degrees': """
                Converts an angle measured in radians to an approximately equivalent angle
@@ -291,18 +291,18 @@ _functions_deprecated = {
 
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
-for _name, _doc in _functions_with_column.items():
-    globals()[_name] = since(1.3)(_create_function_with_column(_name, _doc))
-for _name, _doc in _functions_1_4_with_column.items():
-    globals()[_name] = since(1.4)(_create_function_with_column(_name, _doc))
+for _name, _doc in _functions_over_column.items():
+    globals()[_name] = since(1.3)(_create_function_over_column(_name, _doc))
+for _name, _doc in _functions_1_4_over_column.items():
+    globals()[_name] = since(1.4)(_create_function_over_column(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
-for _name, _doc in _functions_1_6_with_column.items():
-    globals()[_name] = since(1.6)(_create_function_with_column(_name, _doc))
-for _name, _doc in _functions_2_1_with_column.items():
-    globals()[_name] = since(2.1)(_create_function_with_column(_name, _doc))
+for _name, _doc in _functions_1_6_over_column.items():
+    globals()[_name] = since(1.6)(_create_function_over_column(_name, _doc))
+for _name, _doc in _functions_2_1_over_column.items():
+    globals()[_name] = since(2.1)(_create_function_over_column(_name, _doc))
 for _name, _message in _functions_deprecated.items():
     globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
 for _name, _doc in _functions_2_4.items():
@@ -1483,7 +1483,7 @@ _string_functions = {
 
 
 for _name, _doc in _string_functions.items():
-    globals()[_name] = since(1.5)(_create_function_with_column(_name, _doc))
+    globals()[_name] = since(1.5)(_create_function_over_column(_name, _doc))
 del _name, _doc
 
 
