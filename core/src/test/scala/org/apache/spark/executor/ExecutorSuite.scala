@@ -126,7 +126,8 @@ class ExecutorSuite extends SparkFunSuite
       }
 
       // `testFailedReason` should be `TaskKilled`; `taskState` should be `KILLED`
-      assert(executorSuiteHelper.testFailedReason === TaskKilled("test"))
+      assert(executorSuiteHelper.testFailedReason.isInstanceOf[TaskKilled])
+      assert(executorSuiteHelper.testFailedReason.toErrorString === "TaskKilled (test)")
       assert(executorSuiteHelper.taskState === TaskState.KILLED)
     }
     finally {

@@ -27,7 +27,7 @@ import java.util.concurrent._
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map, WrappedArray}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
@@ -590,7 +590,8 @@ private[spark] class Executor(
           logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums))
+          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums, metricPeaks))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case _: InterruptedException | NonFatal(_) if
@@ -599,7 +600,8 @@ private[spark] class Executor(
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates, accums))
+          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates, accums, metricPeaks))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
@@ -634,14 +636,19 @@ private[spark] class Executor(
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
+            val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
 
             val serializedTaskEndReason = {
               try {
-                ser.serialize(new ExceptionFailure(t, accUpdates).withAccums(accums))
+                val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
+                  .withMetricPeaks(metricPeaks)
+                ser.serialize(ef)
               } catch {
                 case _: NotSerializableException =>
                   // t is not serializable so just send the stacktrace
-                  ser.serialize(new ExceptionFailure(t, accUpdates, false).withAccums(accums))
+                  val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
+                    .withMetricPeaks(metricPeaks)
+                  ser.serialize(ef)
               }
             }
             setTaskFinishedAndClearInterruptStatus()
