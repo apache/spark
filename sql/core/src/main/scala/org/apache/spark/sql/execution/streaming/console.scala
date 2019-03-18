@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util
+import java.util.Collections
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
@@ -62,6 +65,8 @@ object ConsoleTable extends Table with SupportsStreamingWrite {
   override def name(): String = "console"
 
   override def schema(): StructType = StructType(Nil)
+
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {

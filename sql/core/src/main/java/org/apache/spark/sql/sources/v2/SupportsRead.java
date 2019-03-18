@@ -26,7 +26,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * {@link #newScanBuilder(CaseInsensitiveStringMap)} that is used to create a scan for batch,
  * micro-batch, or continuous processing.
  */
-interface SupportsRead extends Table {
+public interface SupportsRead extends Table {
 
   /**
    * Returns a {@link ScanBuilder} which can be used to build a {@link Scan}. Spark will call this
