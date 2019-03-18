@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.v2.V2WriteSupportCheck
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
@@ -86,6 +87,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
         PreReadCheck +:
+        V2WriteSupportCheck +:
         customCheckRules
   }
 
