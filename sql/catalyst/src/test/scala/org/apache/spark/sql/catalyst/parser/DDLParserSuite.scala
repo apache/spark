@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.net.URI
-
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTable, CreateTableAsSelect}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -33,6 +31,33 @@ class DDLParserSuite extends AnalysisTest {
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
+  }
+
+  test("create table using - schema") {
+    val sql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
+
+    parsePlan(sql) match {
+      case create: CreateTable =>
+        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableSchema == new StructType()
+            .add("a", IntegerType, nullable = true, "test")
+            .add("b", StringType))
+        assert(create.partitioning.isEmpty)
+        assert(create.bucketSpec.isEmpty)
+        assert(create.properties.isEmpty)
+        assert(create.provider == "parquet")
+        assert(create.options.isEmpty)
+        assert(create.location.isEmpty)
+        assert(create.comment.isEmpty)
+        assert(!create.ifNotExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
+    }
+
+    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
+      "no viable alternative at input")
   }
 
   test("create table - with IF NOT EXISTS") {
