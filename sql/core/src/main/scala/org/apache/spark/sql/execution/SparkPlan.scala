@@ -318,7 +318,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     getByteArrayRdd().mapPartitionsInternal(iter => {
       iter.flatMap(row => decodeUnsafeRows(row._2))
     }).toLocalIterator
-//    getByteArrayRdd().map(_._2).toLocalIterator.flatMap(decodeUnsafeRows)
   }
 
   /**
