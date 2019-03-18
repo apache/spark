@@ -739,7 +739,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         val dist = new BinomialDistribution(trials, p)
         val q = dist.cumulativeProbability(actual)
         withClue(s"p = $p: trials = $trials") {
-          assert(0.0 <= q && q <= 1.0)
+          assert(0.0 < q && q < 1.0)
         }
       }
     }
