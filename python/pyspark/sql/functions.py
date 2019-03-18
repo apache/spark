@@ -1472,7 +1472,7 @@ def hash(*cols):
 
 _string_functions = {
     'upper': 'Converts a string expression to upper case.',
-    'lower': 'Converts a string expression to upper case.',
+    'lower': 'Converts a string expression to lower case.',
     'ascii': 'Computes the numeric value of the first character of the string column.',
     'base64': 'Computes the BASE64 encoding of a binary column and returns it as a string column.',
     'unbase64': 'Decodes a BASE64 encoded string column and returns it as a binary column.',
