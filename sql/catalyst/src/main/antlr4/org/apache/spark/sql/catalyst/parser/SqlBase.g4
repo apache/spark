@@ -1234,8 +1234,9 @@ nonReserved
     | YEARS
     ;
 
-// NOTE: If you add a new token in the list below, you should update
-// a list of keywords in `docs/sql-keywords.md`, too.
+// NOTE: If you add a new token in the list below, you should update the list of keywords
+// in `docs/sql-keywords.md`. If the token is a non-reserved keyword,
+// please update `ansiNonReserved` and `nonReserved` as well.
 
 //============================
 // Start of the keywords list
