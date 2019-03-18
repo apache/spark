@@ -49,6 +49,14 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
+
+    if (!records.hasNext) {
+      val partitionLengths = new Array[Long](dep.partitioner.numPartitions)
+      shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, null)
+      mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+      return
+    }
+
     sorter = if (dep.mapSideCombine) {
       new ExternalSorter[K, V, C](
         context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
