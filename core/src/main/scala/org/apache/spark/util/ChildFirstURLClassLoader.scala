@@ -23,22 +23,6 @@ import java.util.Enumeration
 import scala.collection.JavaConverters._
 
 /**
- * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
- */
-private[spark] class MutableURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends URLClassLoader(urls, parent) {
-
-  override def addURL(url: URL): Unit = {
-    super.addURL(url)
-  }
-
-  override def getURLs(): Array[URL] = {
-    super.getURLs()
-  }
-
-}
-
-/**
  * A mutable class loader that gives preference to its own URLs over the parent class loader
  * when loading classes and resources.
  */
