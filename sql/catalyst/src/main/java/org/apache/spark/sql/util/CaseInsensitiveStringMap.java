@@ -18,6 +18,8 @@
 package org.apache.spark.sql.util;
 
 import org.apache.spark.annotation.Experimental;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -35,6 +37,9 @@ import java.util.Set;
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
+  private final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
+
+  private String unsupportedOperationMsg = "CaseInsensitiveStringMap is read-only.";
 
   public static CaseInsensitiveStringMap empty() {
     return new CaseInsensitiveStringMap(new HashMap<>(0));
@@ -47,8 +52,13 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
   public CaseInsensitiveStringMap(Map<String, String> originalMap) {
     original = new HashMap<>(originalMap);
     delegate = new HashMap<>(originalMap.size());
-    for (Map.Entry<? extends String, ? extends String> entry : originalMap.entrySet()) {
-      delegate.put(toLowerCase(entry.getKey()), entry.getValue());
+    for (Map.Entry<String, String> entry : originalMap.entrySet()) {
+      String key = toLowerCase(entry.getKey());
+      if (delegate.containsKey(key)) {
+        logger.warn("Converting duplicated key " + entry.getKey() +
+                " into CaseInsensitiveStringMap.");
+      }
+      delegate.put(key, entry.getValue());
     }
   }
 
@@ -83,22 +93,22 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   @Override
   public String put(String key, String value) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override
   public String remove(Object key) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override
   public void putAll(Map<? extends String, ? extends String> m) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override
   public void clear() {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override

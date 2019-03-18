@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, ExecutionListenerManager, QueryExecutionListener}
+import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
