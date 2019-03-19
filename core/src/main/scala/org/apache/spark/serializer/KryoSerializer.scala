@@ -159,8 +159,9 @@ class KryoSerializer(conf: SparkConf)
     Utils.withContextClassLoader(classLoader) {
       try {
         // Register classes given through spark.kryo.classesToRegister.
-        classesToRegister
-          .foreach { className => kryo.register(Utils.classForName(className, noSparkClassLoader = true)) }
+        classesToRegister.foreach { className =>
+          kryo.register(Utils.classForName(className, noSparkClassLoader = true))
+        }
         // Allow the user to register their own classes by setting spark.kryo.registrator.
         userRegistrators
           .map(Utils.classForName(_, noSparkClassLoader = true).getConstructor().
