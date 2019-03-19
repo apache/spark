@@ -66,7 +66,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       "d nvarchar(10), e binary(4), f varbinary(4), g text, h ntext, i image)").executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', 123456," +
       " 123456, 'the', 'lazy', 'dog')").executeUpdate()
-
   }
 
   test("Basic test") {
@@ -77,7 +76,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types.length == 2)
     assert(types(0).equals("class java.lang.Integer"))
     assert(types(1).equals("class java.lang.String"))
-
   }
 
   test("Numeric types") {
@@ -130,7 +128,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getAs[Timestamp](5).equals(Timestamp.valueOf("1900-01-01 13:31:24.0")))
   }
 
-
   test("String types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
@@ -159,15 +156,12 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](8), Array[Byte](100, 111, 103)))
   }
 
-
   test("Basic write test") {
     val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
-
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
-
 }
