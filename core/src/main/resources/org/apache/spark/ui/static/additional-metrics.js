@@ -83,7 +83,7 @@ $(function() {
         $(this).parent().find('input[type="checkbox"]').trigger('click');
     });
 
-    // Trigger a double click on the span to show full job description.
+    // Show/hide full job description on click event.
     $(".description-input").click(function() {
         $(this).toggleClass("description-input-full");
     });
