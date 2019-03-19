@@ -618,6 +618,8 @@ abstract class OrcQueryTest extends OrcTest {
         ).write.orc(path)
         val df = spark.read.orc(path)
         checkAnswer(df.filter("x >= 0.1"), Seq(Row(0.1), Row(0.2)))
+        checkAnswer(df.filter("x > 0.1"), Seq(Row(0.2)))
+        checkAnswer(df.filter("x <= 0.15"), Seq(Row(0.1), Row(-0.3)))
         checkAnswer(df.filter("x < 0.1"), Seq(Row(-0.3)))
         checkAnswer(df.filter("x == 0.2"), Seq(Row(0.2)))
       }
