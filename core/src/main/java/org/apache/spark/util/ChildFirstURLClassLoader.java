@@ -18,10 +18,10 @@
 
 package org.apache.spark.util;
 
-import com.google.common.collect.Iterators;
-
 import java.io.IOException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 
 /**
@@ -52,9 +52,9 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
 
   @Override
   public Enumeration<URL> getResources(String name) throws IOException {
-    return Iterators.asEnumeration(Iterators.concat(
-            Iterators.forEnumeration(super.getResources(name)),
-            Iterators.forEnumeration(parentClassLoader.getResources(name))));
+    ArrayList<URL> urls = Collections.list(super.getResources(name));
+    urls.addAll(Collections.list(parentClassLoader.getResources(name)));
+    return Collections.enumeration(urls);
   }
 
   @Override
