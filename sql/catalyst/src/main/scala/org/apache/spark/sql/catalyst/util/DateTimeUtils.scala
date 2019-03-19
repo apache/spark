@@ -70,9 +70,9 @@ object DateTimeUtils {
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
+  def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
   def getTimeZone(timeZoneId: String): TimeZone = {
-    val zoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
-    TimeZone.getTimeZone(zoneId)
+    TimeZone.getTimeZone(getZoneId(timeZoneId))
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -211,7 +211,7 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
-  def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
+  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
@@ -320,7 +320,7 @@ object DateTimeUtils {
     }
     try {
       val zoneId = if (tz.isEmpty) {
-        timeZone.toZoneId
+        timeZoneId
       } else {
         val sign = if (tz.get.toChar == '-') -1 else 1
         ZoneId.ofOffset("GMT", ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8)))

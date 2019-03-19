@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -1580,8 +1580,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       valueType match {
         case "DATE" => toLiteral(stringToDate, DateType)
         case "TIMESTAMP" =>
-          val timeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
-          toLiteral(stringToTimestamp(_, timeZone), TimestampType)
+          val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
+          toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))

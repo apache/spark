@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -49,6 +49,7 @@ trait TimeZoneAwareExpression extends Expression {
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
   @transient lazy val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId.get)
+  @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 }
 
 /**
