@@ -253,9 +253,10 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     dir
   }
 
+  // HIVE-14259 removed FileUtils.isSubDir(). Adapted it from Hive 1.2's FileUtils.isSubDir().
   private def isSubDir(p1: Path, p2: Path, fs: FileSystem): Boolean = {
-    val path1 = fs.makeQualified(p1).toString
-    val path2 = fs.makeQualified(p2).toString
+    val path1 = fs.makeQualified(p1).toString + Path.SEPARATOR
+    val path2 = fs.makeQualified(p2).toString + Path.SEPARATOR
     path1.startsWith(path2)
   }
 

@@ -175,8 +175,8 @@ private[spark] class Executor(
 
   /**
    * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
-   * times, it should kill itself. The default value is 60. It means we will retry to send
-   * heartbeats about 10 minutes because the heartbeat interval is 10s.
+   * times, it should kill itself. The default value is 60. For example, if max failures is 60 and
+   * heartbeat interval is 10s, then it will try to send heartbeats for up to 600s (10 minutes).
    */
   private val HEARTBEAT_MAX_FAILURES = conf.get(EXECUTOR_HEARTBEAT_MAX_FAILURES)
 

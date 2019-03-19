@@ -148,8 +148,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      AppendDataExec(
-        r.table.asBatchWritable, r.options.toDataSourceOptions, planLater(query)) :: Nil
+      AppendDataExec(r.table.asWritable, r.options, planLater(query)) :: Nil
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
@@ -159,11 +158,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }.toArray
 
       OverwriteByExpressionExec(
-        r.table.asBatchWritable, filters, r.options.toDataSourceOptions, planLater(query)) :: Nil
+        r.table.asWritable, filters, r.options, planLater(query)) :: Nil
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
-      OverwritePartitionsDynamicExec(r.table.asBatchWritable,
-        r.options.toDataSourceOptions, planLater(query)) :: Nil
+      OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil

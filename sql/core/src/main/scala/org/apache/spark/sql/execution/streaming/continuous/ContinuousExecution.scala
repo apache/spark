@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.UnaryOperator
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
@@ -33,7 +32,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsContinuousRead, SupportsStreamingWrite}
+import org.apache.spark.sql.sources.v2.{SupportsContinuousRead, SupportsStreamingWrite}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
@@ -61,7 +60,7 @@ class ContinuousExecution(
   // Throwable that caused the execution to fail
   private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
 
-  override val logicalPlan: LogicalPlan = {
+  override val logicalPlan: WriteToContinuousDataSource = {
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
     var nextSourceId = 0
     val _logicalPlan = analyzedPlan.transform {
@@ -71,9 +70,8 @@ class ContinuousExecution(
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
           logInfo(s"Reading table [$table] from DataSourceV2 named '$dsName' [$ds]")
-          val dsOptions = new DataSourceOptions(options.asJava)
           // TODO: operator pushdown.
-          val scan = table.newScanBuilder(dsOptions).build()
+          val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)
           StreamingDataSourceV2Relation(output, scan, stream)
         })
@@ -88,7 +86,8 @@ class ContinuousExecution(
     }
     uniqueSources = sources.distinct
 
-    _logicalPlan
+    WriteToContinuousDataSource(
+      createStreamingWrite(sink, extraOptions, _logicalPlan), _logicalPlan)
   }
 
   private val triggerExecutor = trigger match {
@@ -178,13 +177,10 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val streamingWrite = createStreamingWrite(sink, extraOptions, withNewSources)
-    val planWithSink = WriteToContinuousDataSource(streamingWrite, withNewSources)
-
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSessionForQuery,
-        planWithSink,
+        withNewSources,
         outputMode,
         checkpointFile("state"),
         id,
@@ -194,7 +190,7 @@ class ContinuousExecution(
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
-    val stream = planWithSink.collect {
+    val stream = withNewSources.collect {
       case relation: StreamingDataSourceV2Relation =>
         relation.stream.asInstanceOf[ContinuousStream]
     }.head
@@ -215,7 +211,13 @@ class ContinuousExecution(
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint = EpochCoordinatorRef.create(
-      streamingWrite, stream, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+      logicalPlan.write,
+      stream,
+      this,
+      epochCoordinatorId,
+      currentBatchId,
+      sparkSession,
+      SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {

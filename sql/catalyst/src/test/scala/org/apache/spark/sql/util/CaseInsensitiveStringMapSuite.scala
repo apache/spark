@@ -15,31 +15,38 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2
+package org.apache.spark.sql.util
+
+import java.util
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 
-/**
- * A simple test suite to verify `DataSourceOptions`.
- */
-class DataSourceOptionsSuite extends SparkFunSuite {
+class CaseInsensitiveStringMapSuite extends SparkFunSuite {
 
-  test("key is case-insensitive") {
-    val options = new DataSourceOptions(Map("foo" -> "bar").asJava)
-    assert(options.get("foo").get() == "bar")
-    assert(options.get("FoO").get() == "bar")
-    assert(!options.get("abc").isPresent)
+  test("put and get") {
+    val options = CaseInsensitiveStringMap.empty()
+    intercept[UnsupportedOperationException] {
+      options.put("kEy", "valUE")
+    }
   }
 
-  test("value is case-sensitive") {
-    val options = new DataSourceOptions(Map("foo" -> "bAr").asJava)
-    assert(options.get("foo").get == "bAr")
+  test("clear") {
+    val options = new CaseInsensitiveStringMap(Map("kEy" -> "valUE").asJava)
+    intercept[UnsupportedOperationException] {
+      options.clear()
+    }
+  }
+
+  test("key and value set") {
+    val options = new CaseInsensitiveStringMap(Map("kEy" -> "valUE").asJava)
+    assert(options.keySet().asScala == Set("key"))
+    assert(options.values().asScala.toSeq == Seq("valUE"))
   }
 
   test("getInt") {
-    val options = new DataSourceOptions(Map("numFOo" -> "1", "foo" -> "bar").asJava)
+    val options = new CaseInsensitiveStringMap(Map("numFOo" -> "1", "foo" -> "bar").asJava)
     assert(options.getInt("numFOO", 10) == 1)
     assert(options.getInt("numFOO2", 10) == 10)
 
@@ -49,17 +56,20 @@ class DataSourceOptionsSuite extends SparkFunSuite {
   }
 
   test("getBoolean") {
-    val options = new DataSourceOptions(
+    val options = new CaseInsensitiveStringMap(
       Map("isFoo" -> "true", "isFOO2" -> "false", "foo" -> "bar").asJava)
     assert(options.getBoolean("isFoo", false))
     assert(!options.getBoolean("isFoo2", true))
     assert(options.getBoolean("isBar", true))
     assert(!options.getBoolean("isBar", false))
-    assert(!options.getBoolean("FOO", true))
+
+    intercept[IllegalArgumentException] {
+      options.getBoolean("FOO", true)
+    }
   }
 
   test("getLong") {
-    val options = new DataSourceOptions(Map("numFoo" -> "9223372036854775807",
+    val options = new CaseInsensitiveStringMap(Map("numFoo" -> "9223372036854775807",
       "foo" -> "bar").asJava)
     assert(options.getLong("numFOO", 0L) == 9223372036854775807L)
     assert(options.getLong("numFoo2", -1L) == -1L)
@@ -70,7 +80,7 @@ class DataSourceOptionsSuite extends SparkFunSuite {
   }
 
   test("getDouble") {
-    val options = new DataSourceOptions(Map("numFoo" -> "922337.1",
+    val options = new CaseInsensitiveStringMap(Map("numFoo" -> "922337.1",
       "foo" -> "bar").asJava)
     assert(options.getDouble("numFOO", 0d) == 922337.1d)
     assert(options.getDouble("numFoo2", -1.02d) == -1.02d)
@@ -80,28 +90,19 @@ class DataSourceOptionsSuite extends SparkFunSuite {
     }
   }
 
-  test("standard options") {
-    val options = new DataSourceOptions(Map(
-      DataSourceOptions.PATH_KEY -> "abc",
-      DataSourceOptions.TABLE_KEY -> "tbl").asJava)
+  test("asCaseSensitiveMap") {
+    val originalMap = new util.HashMap[String, String] {
+      put("Foo", "Bar")
+      put("OFO", "ABR")
+      put("OoF", "bar")
+    }
 
-    assert(options.paths().toSeq == Seq("abc"))
-    assert(options.tableName().get() == "tbl")
-    assert(!options.databaseName().isPresent)
-  }
-
-  test("standard options with both singular path and multi-paths") {
-    val options = new DataSourceOptions(Map(
-      DataSourceOptions.PATH_KEY -> "abc",
-      DataSourceOptions.PATHS_KEY -> """["c", "d"]""").asJava)
-
-    assert(options.paths().toSeq == Seq("abc", "c", "d"))
-  }
-
-  test("standard options with only multi-paths") {
-    val options = new DataSourceOptions(Map(
-      DataSourceOptions.PATHS_KEY -> """["c", "d\"e"]""").asJava)
-
-    assert(options.paths().toSeq == Seq("c", "d\"e"))
+    val options = new CaseInsensitiveStringMap(originalMap)
+    val caseSensitiveMap = options.asCaseSensitiveMap
+    assert(caseSensitiveMap.equals(originalMap))
+    // The result of `asCaseSensitiveMap` is read-only.
+    intercept[UnsupportedOperationException] {
+      caseSensitiveMap.put("kEy", "valUE")
+    }
   }
 }

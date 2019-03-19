@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.collection.mutable.ListBuffer
 
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
@@ -43,11 +44,22 @@ import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
-class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTestUtils {
+class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTestUtils
+  with BeforeAndAfter {
+
   import testImplicits._
 
   override protected def sparkConf = {
     super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L).set(ASYNC_TRACKING_ENABLED, false)
+  }
+
+  private var kvstore: ElementTrackingStore = _
+
+  after {
+    if (kvstore != null) {
+      kvstore.close()
+      kvstore = null
+    }
   }
 
   private def createTestDataFrame: DataFrame = {
@@ -126,9 +138,9 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
 
   private def createStatusStore(): SQLAppStatusStore = {
     val conf = sparkContext.conf
-    val store = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, store, live = true)
-    new SQLAppStatusStore(store, Some(listener))
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
   }
 
   test("basic") {
@@ -548,9 +560,9 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
 
   test("eviction should respect execution completion time") {
     val conf = sparkContext.conf.clone().set(UI_RETAINED_EXECUTIONS.key, "2")
-    val store = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, store, live = true)
-    val statusStore = new SQLAppStatusStore(store, Some(listener))
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    val statusStore = new SQLAppStatusStore(kvstore, Some(listener))
 
     var time = 0
     val df = createTestDataFrame

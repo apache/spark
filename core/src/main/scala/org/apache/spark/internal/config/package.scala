@@ -301,6 +301,7 @@ package object config {
       .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
         "hashing Block files into.")
       .intConf
+      .checkValue(_ > 0, "The number of subdirectories must be positive.")
       .createWithDefault(64)
 
   private[spark] val BLOCK_FAILURES_BEFORE_LOCATION_REFRESH =
@@ -927,6 +928,15 @@ package object config {
       .doc("Whether to detect any corruption in fetched blocks.")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val SHUFFLE_DETECT_CORRUPT_MEMORY =
+    ConfigBuilder("spark.shuffle.detectCorrupt.useExtraMemory")
+      .doc("If enabled, part of a compressed/encrypted stream will be de-compressed/de-crypted " +
+        "by using extra memory to detect early corruption. Any IOException thrown will cause " +
+        "the task to be retried once and if it fails again with same exception, then " +
+        "FetchFailedException will be thrown to retry previous stage")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")

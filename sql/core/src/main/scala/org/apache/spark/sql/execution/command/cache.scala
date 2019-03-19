@@ -23,7 +23,7 @@ import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.storage.StorageLevel
 
@@ -83,13 +83,10 @@ case class UncacheTableCommand(
 /**
  * Clear all cached data from the in-memory cache.
  */
-case class ClearCacheCommand() extends RunnableCommand {
+case object ClearCacheCommand extends RunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
-
-  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): ClearCacheCommand = ClearCacheCommand()
 }

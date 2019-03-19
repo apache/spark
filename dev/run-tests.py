@@ -280,7 +280,7 @@ def get_hadoop_profiles(hadoop_version):
 
     sbt_maven_hadoop_profiles = {
         "hadoop2.7": ["-Phadoop-2.7"],
-        "hadoop3.1": ["-Phadoop-3.1"],
+        "hadoop3.2": ["-Phadoop-3.2"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -587,7 +587,6 @@ def main():
     if not changed_files or any(f.endswith(".scala")
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
-        modules.hadoop_version
         build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
         run_scala_style_checks(build_profiles)
     should_run_java_style_checks = False

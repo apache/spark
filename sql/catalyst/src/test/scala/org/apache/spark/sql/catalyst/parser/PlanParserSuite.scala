@@ -370,6 +370,7 @@ class PlanParserSuite extends AnalysisTest {
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
     test("left semi join", LeftSemi, testExistence)
+    test("semi join", LeftSemi, testExistence)
     test("left anti join", LeftAnti, testExistence)
     test("anti join", LeftAnti, testExistence)
 

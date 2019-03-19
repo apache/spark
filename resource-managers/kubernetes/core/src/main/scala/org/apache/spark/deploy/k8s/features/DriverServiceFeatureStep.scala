@@ -54,6 +54,7 @@ private[spark] class DriverServiceFeatureStep(
     config.DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
   private val driverBlockManagerPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+  private val  driverUIPort = kubernetesConf.get(config.UI.UI_PORT)
 
   override def configurePod(pod: SparkPod): SparkPod = pod
 
@@ -81,6 +82,11 @@ private[spark] class DriverServiceFeatureStep(
           .withName(BLOCK_MANAGER_PORT_NAME)
           .withPort(driverBlockManagerPort)
           .withNewTargetPort(driverBlockManagerPort)
+          .endPort()
+        .addNewPort()
+          .withName(UI_PORT_NAME)
+          .withPort(driverUIPort)
+          .withNewTargetPort(driverUIPort)
           .endPort()
         .endSpec()
       .build()
