@@ -208,6 +208,8 @@ case class RelationConversions(
       case CreateTable(tableDesc, mode, Some(query))
           if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
             isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
+        // validation is required to be done here before relation conversion.
+        DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
     }
