@@ -81,7 +81,8 @@ object SinkFileStatus {
 class FileStreamSinkLog(
     metadataLogVersion: Int,
     sparkSession: SparkSession,
-    path: String)
+    path: String,
+    outputTimeToLiveMs: Option[Long] = None)
   extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
 
   private implicit val formats = Serialization.formats(NoTypeHints)
@@ -96,6 +97,19 @@ class FileStreamSinkLog(
   require(defaultCompactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +
       "to a positive value.")
+
+  private val ttlMs = outputTimeToLiveMs.getOrElse(Long.MaxValue)
+
+  override def shouldRetain(log: SinkFileStatus): Boolean = {
+    val curTime = System.currentTimeMillis()
+    if (curTime - log.modificationTime > ttlMs) {
+      logDebug(s"${log.path} excluded by retention - current time: $curTime / " +
+        s"modification time: ${log.modificationTime} / TTL: $ttlMs.")
+      false
+    } else {
+      true
+    }
+  }
 }
 
 object FileStreamSinkLog {
