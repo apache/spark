@@ -17,27 +17,29 @@
 
 package org.apache.spark.sql.catalog.v2;
 
-public class IdentifierImpl implements Identifier {
+import org.apache.spark.annotation.Experimental;
 
-  static Identifier of(String[] namespace, String name) {
-    return new IdentifierImpl(namespace, name);
-  }
+/**
+ *  An [[Identifier]] implementation.
+ */
+@Experimental
+class IdentifierImpl implements Identifier {
 
   private String[] namespace;
   private String name;
 
-  private IdentifierImpl(String[] namespace, String name) {
+  IdentifierImpl(String[] namespace, String name) {
     this.namespace = namespace;
     this.name = name;
   }
 
   @Override
   public String[] namespace() {
-    return new String[0];
+    return namespace;
   }
 
   @Override
   public String name() {
-    return null;
+    return name;
   }
 }

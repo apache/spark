@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog.v2
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
@@ -56,6 +57,18 @@ class ResolveMultipartIdentifierSuite extends AnalysisTest {
     ident.name shouldEqual expectedName
   }
 
+  private def checkTableResolution(sqlText: String,
+      expectedIdent: Option[TableIdentifier]): Unit = {
+
+    import analyzer.AsTableIdentifier
+    parseMultipartIdentifier(sqlText) match {
+      case AsTableIdentifier(ident) =>
+        assert(Some(ident) === expectedIdent)
+      case _ =>
+        assert(None === expectedIdent)
+    }
+  }
+
   test("resolve multipart identifier") {
     checkResolution("tbl", None, Array.empty, "tbl")
     checkResolution("db.tbl", None, Array("db"), "tbl")
@@ -65,5 +78,13 @@ class ResolveMultipartIdentifierSuite extends AnalysisTest {
     checkResolution("test.db.tbl", catalogs.get("test"), Array("db"), "tbl")
     checkResolution("test.ns1.ns2.ns3.tbl",
       catalogs.get("test"), Array("ns1", "ns2", "ns3"), "tbl")
+  }
+
+  test("resolve table identifier") {
+    checkTableResolution("tbl", Some(TableIdentifier("tbl")))
+    checkTableResolution("db.tbl", Some(TableIdentifier("tbl", Some("db"))))
+    checkTableResolution("prod.func", None)
+    checkTableResolution("ns1.ns2.tbl", None)
+    checkTableResolution("prod.db.tbl", None)
   }
 }

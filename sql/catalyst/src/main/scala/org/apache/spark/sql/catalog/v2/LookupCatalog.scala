@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,28 +17,46 @@
 
 package org.apache.spark.sql.catalog.v2
 
-import org.apache.spark.sql.catalyst.CatalogIdentifier
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.TableIdentifier
 
+@Experimental
 trait LookupCatalog {
 
   def lookupCatalog: Option[(String) => CatalogPlugin] = None
 
-  type CatalogObjectIdentifier = (Option[CatalogPlugin], CatalogIdentifier)
+  type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
 
   object CatalogObjectIdentifier {
     def unapply(parts: Seq[String]): Option[CatalogObjectIdentifier] = lookupCatalog.map { lookup =>
       parts match {
         case Seq(name) =>
-          (None, CatalogIdentifier(Array.empty, name))
+          (None, Identifier.of(Array.empty, name))
         case Seq(catalogName, tail @ _*) =>
           try {
             val catalog = lookup(catalogName)
-            (Some(catalog), CatalogIdentifier(tail.init.toArray, tail.last))
+            (Some(catalog), Identifier.of(tail.init.toArray, tail.last))
           } catch {
             case _: CatalogNotFoundException =>
-              (None, CatalogIdentifier(parts.init.toArray, parts.last))
+              (None, Identifier.of(parts.init.toArray, parts.last))
           }
       }
+    }
+  }
+
+  object AsTableIdentifier {
+    def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
+      case CatalogObjectIdentifier(None, ident) =>
+        ident.namespace match {
+          case Array() =>
+            Some(TableIdentifier(ident.name))
+          case Array(database) =>
+            Some(TableIdentifier(ident.name, Some(database)))
+          case _ =>
+            None
+        }
+      case _ =>
+        None
     }
   }
 }

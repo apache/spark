@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.catalog.v2;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Experimental;
 
 /**
  * Identifies an object in a catalog.
  */
-@Evolving
+@Experimental
 public interface Identifier {
+
+  static Identifier of(String[] namespace, String name) {
+    return new IdentifierImpl(namespace, name);
+  }
 
   /**
    * @return the namespace in the catalog

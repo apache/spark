@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalog.v2.Identifier
-
 /**
  * An identifier that optionally specifies a database.
  *
@@ -107,11 +105,3 @@ case class FunctionIdentifier(funcName: String, database: Option[String])
 object FunctionIdentifier {
   def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
 }
-
-/**
- * Identifies an object in a catalog.
-
- * @param namespace the namespace in the catalog
- * @param name the object name
- */
-case class CatalogIdentifier(namespace: Array[String], name: String) extends Identifier
