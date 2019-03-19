@@ -36,6 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
  *     -> ParquetReadSchemaSuite
  *     -> VectorizedParquetReadSchemaSuite
  *     -> MergedParquetReadSchemaSuite
+ *
+ *     -> AvroReadSchemaSuite
  */
 
 /**
