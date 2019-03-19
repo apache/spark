@@ -68,23 +68,26 @@ private[spark] class SparkRackResolver {
  */
 object SparkRackResolver extends Logging {
   private var dnsToSwitchMapping: DNSToSwitchMapping = _
-  private var initCalled = false
+  @volatile private var initCalled = false
 
   def coreResolve(conf: Configuration, hostNames: Seq[String]): Seq[Node] = {
     if (!initCalled) {
-      initCalled = true
-      val dnsToSwitchMappingClass =
-        conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-          classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
-      val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
-        .asInstanceOf[DNSToSwitchMapping]
-      dnsToSwitchMapping = newInstance match {
-        case _: CachedDNSToSwitchMapping => newInstance
-        case _ => new CachedDNSToSwitchMapping(newInstance)
+      synchronized {
+        initCalled = true
+        val dnsToSwitchMappingClass =
+          conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
+        val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
+          .asInstanceOf[DNSToSwitchMapping]
+        dnsToSwitchMapping = newInstance match {
+          case _: CachedDNSToSwitchMapping => newInstance
+          case _ => new CachedDNSToSwitchMapping(newInstance)
+        }
       }
     }
 
     val nodes = new ArrayBuffer[Node]
+    // dnsToSwitchMapping is thread-safe
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
     if (rNameList == null || rNameList.isEmpty) {
       hostNames.foreach(nodes += new NodeBase(_, NetworkTopology.DEFAULT_RACK))
