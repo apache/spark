@@ -43,9 +43,9 @@ sealed trait TimestampFormatter extends Serializable {
 }
 
 class Iso8601TimestampFormatter(
-     pattern: String,
-     zoneId: ZoneId,
-     locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
+    pattern: String,
+    zoneId: ZoneId,
+    locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
