@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalog.v2;
 import org.apache.spark.annotation.Experimental;
 
 /**
- *  An [[Identifier]] implementation.
+ *  An {@link Identifier} implementation.
  */
 @Experimental
 class IdentifierImpl implements Identifier {
