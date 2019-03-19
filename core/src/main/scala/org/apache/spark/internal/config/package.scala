@@ -1129,7 +1129,7 @@ package object config {
   private[spark] val LOCALITY_WAIT_RACK = ConfigBuilder("spark.locality.wait.rack")
     .fallbackConf(LOCALITY_WAIT)
 
-  private[spark] val REDUCER_MAX_SIZE_IN_FLIGHT = ConfigBuilder("spark.reducer.maxSizeInFlight")
+    private[spark] val REDUCER_MAX_SIZE_IN_FLIGHT = ConfigBuilder("spark.reducer.maxSizeInFlight")
     .doc("Maximum size of map outputs to fetch simultaneously from each reduce task, " +
       "in MiB unless otherwise specified. Since each output requires us to create a " +
       "buffer to receive it, this represents a fixed memory overhead per reduce task, " +

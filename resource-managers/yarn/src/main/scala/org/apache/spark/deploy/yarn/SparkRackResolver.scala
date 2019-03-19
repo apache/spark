@@ -43,7 +43,7 @@ private[spark] class SparkRackResolver {
   }
 
   def resolve(conf: Configuration, hostName: String): String = {
-    SparkRackResolver.coreResolve(conf, List(hostName)).head.getNetworkLocation
+    SparkRackResolver.coreResolve(conf, Seq(hostName)).head.getNetworkLocation
   }
 
   /**
@@ -51,7 +51,7 @@ private[spark] class SparkRackResolver {
    * This should be changed to `RackResolver.resolve(conf, hostNames)`
    * in hadoop releases with YARN-9332.
    */
-  def resolve(conf: Configuration, hostNames: List[String]): List[Node] = {
+  def resolve(conf: Configuration, hostNames: Seq[String]): Seq[Node] = {
     SparkRackResolver.coreResolve(conf, hostNames)
   }
 }
@@ -70,7 +70,7 @@ object SparkRackResolver extends Logging {
   private var dnsToSwitchMapping: DNSToSwitchMapping = _
   private var initCalled = false
 
-  def coreResolve(conf: Configuration, hostNames: List[String]): List[Node] = {
+  def coreResolve(conf: Configuration, hostNames: Seq[String]): Seq[Node] = {
     if (!initCalled) {
       initCalled = true
       val dnsToSwitchMappingClass =

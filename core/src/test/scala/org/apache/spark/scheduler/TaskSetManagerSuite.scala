@@ -80,11 +80,12 @@ object FakeRackUtil {
     hostToRack(host) = rack
   }
 
-  def getRacksForHosts(hosts: List[String]): List[Option[String]] = {
+  def getRacksForHosts(hosts: Seq[String]): Seq[String] = {
+    assert(hosts.toSet.size == hosts.size) // no dups in hosts
     if (hosts.nonEmpty && hosts.length != 1) {
       numBatchInvocation += 1
     }
-    hosts.map(hostToRack.get)
+    hosts.map(hostToRack.getOrElse(_, null))
   }
 }
 
@@ -109,8 +110,8 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     addExecutor(execId, host)
   }
 
-  for ((execId, host) <- liveExecutors; rack <- getRackForHost(host)) {
-    hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += host
+  for ((execId, host) <- liveExecutors) {
+    hostsByRack.getOrElseUpdate(getRackForHost(host), new mutable.HashSet[String]()) += host
   }
 
   dagScheduler = new FakeDAGScheduler(sc, this)
@@ -122,7 +123,8 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     val hostId = host.get
     val executorsOnHost = hostToExecutors(hostId)
     executorsOnHost -= execId
-    for (rack <- getRackForHost(hostId); hosts <- hostsByRack.get(rack)) {
+    val rack = getRackForHost(hostId)
+    for (hosts <- hostsByRack.get(rack)) {
       hosts -= hostId
       if (hosts.isEmpty) {
         hostsByRack -= rack
@@ -145,15 +147,13 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     val executorsOnHost = hostToExecutors.getOrElseUpdate(host, new mutable.HashSet[String])
     executorsOnHost += execId
     executorIdToHost += execId -> host
-    for (rack <- getRackForHost(host)) {
-      hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += host
-    }
+    hostsByRack.getOrElseUpdate(getRackForHost(host), new mutable.HashSet[String]()) += host
   }
 
-  override def defaultRackValue: Option[String] = Option("default")
+  override val defaultRackValue: String = "default"
 
-  override def doGetRacksForHosts(values: List[String]): List[Option[String]] = {
-    FakeRackUtil.getRacksForHosts(values)
+  override def doGetRacksForHosts(hosts: Seq[String]): Seq[String] = {
+    FakeRackUtil.getRacksForHosts(hosts)
   }
 }
 
@@ -1612,7 +1612,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       result.accumUpdates, info3)
   }
 
-  test("SPARK-27038 Verify the rack resolving time has been reduced") {
+  test("SPARK-27038 Rack Resolution is done with a batch of de-duped hosts") {
     sc = new SparkContext("local", "test")
     for (i <- 0 to 99) {
       FakeRackUtil.assignHostToRack("host" + i, "rack" + (i % 20))
@@ -1626,18 +1626,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(100, locations: _*)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    var total = 0
     for (i <- 0 until 20) {
       val numTaskInRack = manager.getPendingTasksForRack("rack" + i).length
       assert(numTaskInRack === 5) // check rack assignment is still done correctly
-      total += numTaskInRack
     }
-    assert(sched.skipRackResolving === false)
-    assert(total === 100) // verify the total number not changed with SPARK-27038
     assert(FakeRackUtil.numBatchInvocation === 1)
   }
 
-  test("SPARK-27038 Verify the rack resolving time when spark.locality.wait is zero") {
+  test("SPARK-27038 Rack resolving is skipped when spark.locality.wait is zero") {
     val conf = new SparkConf().set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "test", conf)
     for (i <- 0 to 99) {
@@ -1652,9 +1648,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(100, locations: _*)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    assert(sched.skipRackResolving === true)
     // verify the total number not changed with SPARK-27038
-    assert(manager.getPendingTasksForRack(sched.defaultRackValue.get).length === 100)
+    assert(manager.getPendingTasksForRack(sched.defaultRackValue).length === 100)
     assert(FakeRackUtil.numBatchInvocation === 0)
   }
 }

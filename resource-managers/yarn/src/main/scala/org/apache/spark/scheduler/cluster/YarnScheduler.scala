@@ -28,18 +28,16 @@ private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(s
 
   private[spark] val resolver = new SparkRackResolver
 
-  override def defaultRackValue: Option[String] = Option(NetworkTopology.DEFAULT_RACK)
+  override val defaultRackValue: String = NetworkTopology.DEFAULT_RACK
 
   /**
-   * Get racks info for a list of host.
+   * Get racks info for a host list.
    * Use [[SparkRackResolver]] to resolve racks before the dependency Hadoop applied YARN-9332
    * @param hostPorts a list of task preferred locations to be resolved.
    * @return resolved rack list.
    */
-  override def doGetRacksForHosts(hostPorts: List[String]): List[Option[String]] = {
+  override def doGetRacksForHosts(hostPorts: Seq[String]): Seq[String] = {
     val hosts = hostPorts.map(Utils.parseHostPort(_)._1)
-    resolver.resolve(sc.hadoopConfiguration, hosts).map { node =>
-      Option(node.getNetworkLocation)
-    }
+    resolver.resolve(sc.hadoopConfiguration, hosts).map(_.getNetworkLocation)
   }
 }
