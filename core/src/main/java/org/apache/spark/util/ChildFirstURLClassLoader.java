@@ -56,7 +56,7 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
     Enumeration<URL> childUrls = super.getResources(name);
     Enumeration<URL> parentUrls = parentClassLoader.getResources(name);
     Enumeration<URL>[] enumerations =
-         (Enumeration<URL>[]) new Enumeration<?>[]{childUrls, parentUrls};
+        (Enumeration<URL>[]) new Enumeration<?>[]{childUrls, parentUrls};
     return new CompoundEnumeration<>(enumerations);
   }
 
