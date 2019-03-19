@@ -68,9 +68,4 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
       return parentClassLoader.getResource(name);
     }
   }
-
-  @Override
-  public void addURL(URL url) {
-    super.addURL(url);
-  }
 }
