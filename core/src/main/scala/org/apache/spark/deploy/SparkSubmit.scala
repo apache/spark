@@ -833,7 +833,8 @@ private[spark] class SparkSubmit extends Logging {
       // Users will pass in childMainClass which will delegate all invocations to childMainClass$
       // but it's childMainClass$ that subclasses scala.App and we should check for.
       Try {
-        if (classOf[scala.App].isAssignableFrom(Utils.classForName(s"$childMainClass$$"))) {
+        if (classOf[scala.App].isAssignableFrom(
+          Utils.classForName(s"$childMainClass$$", initialize = false))) {
           logWarning("Subclasses of scala.App may not work correctly. " +
             "Use a main() method instead.")
         }
