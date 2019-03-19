@@ -1613,12 +1613,17 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("SPARK-27038 Rack Resolution is done with a batch of de-duped hosts") {
-    sc = new SparkContext("local", "test")
-    for (i <- 0 to 99) {
+    val conf = new SparkConf()
+      .set(config.LOCALITY_WAIT.key, "0")
+      .set(config.LOCALITY_WAIT_RACK.key, "1s")
+    sc = new SparkContext("local", "test", conf)
+    // Create a cluster with 20 racks, with hosts spread out among them
+    val execAndHost = (0 to 199).map { i =>
       FakeRackUtil.assignHostToRack("host" + i, "rack" + (i % 20))
+      ("exec" + i, "host" + i)
     }
-    sched = new FakeTaskScheduler(sc,
-      ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
+    sched = new FakeTaskScheduler(sc, execAndHost: _*)
+    // make a taskset with preferred locations on the first 100 hosts in our cluster
     val locations = new ArrayBuffer[Seq[TaskLocation]]()
     for (i <- 0 to 99) {
       locations += Seq(TaskLocation("host" + i))
@@ -1626,9 +1631,19 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(100, locations: _*)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    for (i <- 0 until 20) {
-      val numTaskInRack = manager.getPendingTasksForRack("rack" + i).length
-      assert(numTaskInRack === 5) // check rack assignment is still done correctly
+    // with rack locality, reject an offer on a host with an unknown rack
+    assert(manager.resourceOffer("otherExec", "otherHost", TaskLocality.RACK_LOCAL).isEmpty)
+    (0 until 20).foreach { rackIdx =>
+      (0 until 5).foreach { offerIdx =>
+        // if we offer hosts which are not in preferred locations,
+        // we'll reject them at NODE_LOCAL level,
+        // but accept them at RACK_LOCAL level if they're on OK racks
+        val hostIdx = 100 + rackIdx
+        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.NODE_LOCAL)
+          .isEmpty)
+        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.RACK_LOCAL)
+          .isDefined)
+      }
     }
     assert(FakeRackUtil.numBatchInvocation === 1)
   }
