@@ -79,6 +79,13 @@ private[spark] object History {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
+  val DISK_BACKGROUND_CACHE_ENABLED = ConfigBuilder("spark.history.fs.disk.backgroundCache.enabled")
+    .doc("If enabled, when the store is disk, it will replay the eventLog of the completed" +
+      "applications in background once finished and create the cache. So, the first time loading" +
+      " of the application page would be faster")
+    .booleanConf
+    .createWithDefault(true)
+
   val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
     .fallbackConf(CLEANER_ENABLED)
 

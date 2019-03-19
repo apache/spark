@@ -260,6 +260,10 @@ private class HistoryServerDiskManager(
     }
   }
 
+  def isActiveStore(appId: String, attempId: Option[String]): Boolean = {
+    active.synchronized(active.contains(appId -> attempId))
+  }
+
   /** Visible for testing. Return the size of a directory. */
   private[history] def sizeOf(path: File): Long = FileUtils.sizeOf(path)
 
