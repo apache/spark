@@ -112,18 +112,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val query = plan(ctx.queryNoWith)
 
     // Apply CTEs
-    query.optional(ctx.ctes) {
-      val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
-        val namedQuery = visitNamedQuery(nCtx)
-        (namedQuery.alias, namedQuery)
-      }
-      // Check for duplicate names.
-      checkDuplicateKeys(ctes, ctx)
-      With(query, ctes)
+    query.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
+    val ctes = ctx.namedQuery.asScala.map { nCtx =>
+      val namedQuery = visitNamedQuery(nCtx)
+      (namedQuery.alias, namedQuery)
     }
+    // Check for duplicate names.
+    checkDuplicateKeys(ctes, ctx)
+    With(plan, ctes)
   }
 
   override def visitQueryToDesc(ctx: QueryToDescContext): LogicalPlan = withOrigin(ctx) {
+    plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
+  }
+
+  override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
+    val from = visitFromClause(ctx.fromClause)
+    validate(ctx.querySpecification.fromClause == null,
+      "Script transformation queries cannot have a FROM clause in their" +
+        " individual SELECT statements", ctx)
+    withQuerySpecification(ctx.querySpecification, from).
+      // Add organization statements.
+      optionalMap(ctx.queryOrganization)(withQueryResultClauses)
+  }
+
+  override def visitNoWithQuery(ctx: NoWithQueryContext): LogicalPlan = withOrigin(ctx) {
     plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
   }
 
@@ -170,10 +186,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
-    inserts match {
+    val insertPlan = inserts match {
       case Seq(query) => query
       case queries => Union(queries)
     }
+    // Apply CTEs
+    insertPlan.optionalMap(ctx.ctes)(withCTE)
   }
 
   /**
@@ -181,11 +199,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryTerm).
-      // Add organization statements.
-      optionalMap(ctx.queryOrganization)(withQueryResultClauses).
-      // Add insert.
-      optionalMap(ctx.insertInto())(withInsertInto)
+    val insertPlan = withInsertInto(ctx.insertInto(),
+        plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses))
+    // Apply CTEs
+    insertPlan.optionalMap(ctx.ctes)(withCTE)
   }
 
   /**

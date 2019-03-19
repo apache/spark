@@ -754,4 +754,29 @@ class PlanParserSuite extends AnalysisTest {
       assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
     }
   }
+
+  test("create/alter view as insert into table") {
+    intercept[ParseException](parsePlan("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)"))
+    val sql1 =
+      """
+        |CREATE VIEW testView AS FROM jt
+        |INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
+        |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+      """.stripMargin
+    intercept[ParseException](parsePlan(sql1))
+    intercept[ParseException](parsePlan("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)"))
+    // Multiinsert query
+    val sql2 =
+      """
+        |ALTER VIEW testView AS FROM jt
+        |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
+        |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+      """.stripMargin
+    intercept[ParseException](parsePlan(sql2))
+  }
+
+  test("Invalid insert constructs in the query") {
+    intercept[ParseException](parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))"))
+    intercept[ParseException](parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))"))
+  }
 }

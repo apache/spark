@@ -81,6 +81,7 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
+    | insertStatement                                                  #insertStatementDefault
     | USE db=identifier                                                #use
     | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
@@ -358,9 +359,14 @@ resource
     : identifier STRING
     ;
 
+insertStatement
+    : (ctes)? insertInto queryTerm queryOrganization                                       #singleInsertQuery
+    | (ctes)? fromClause multiInsertQueryBody+                                             #multiInsertQuery
+    ;
+
 queryNoWith
-    : insertInto? queryTerm queryOrganization                                              #singleInsertQuery
-    | fromClause multiInsertQueryBody+                                                     #multiInsertQuery
+    : queryTerm queryOrganization                                               #noWithQuery
+    | fromClause querySpecification queryOrganization                           #queryWithFrom
     ;
 
 queryOrganization
