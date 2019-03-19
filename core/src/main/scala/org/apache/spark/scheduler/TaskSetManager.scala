@@ -194,8 +194,8 @@ private[spark] class TaskSetManager(
       for (i <- (0 until numTasks).reverse) {
         addPendingTask(i, Some(hostToIndices))
       }
-      // Convert preferred locations to racks in one invocation and zip with the origin indices.
-      // We de-duping the hosts to reduce this invocation further.
+      // Resolve the rack for each host. This can be somehow slow, so de-dupe the list of hosts,
+      // and assign the rack to all relevant task indices.
       for (
         (rack, indices) <- sched.getRacksForHosts(hostToIndices.keySet.toSeq)
           .zip(hostToIndices.values)) {
