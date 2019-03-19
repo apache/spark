@@ -34,7 +34,7 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
     ClassLoader.registerAsParallelCapable();
   }
 
-  ParentClassLoader parentClassLoader;
+  private ParentClassLoader parentClassLoader;
 
   public ChildFirstURLClassLoader(URL[] urls, ClassLoader parent) {
     super(urls, null);
@@ -51,6 +51,7 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
   }
 
   @Override
+  @SuppressWarnings("unchecked")
   public Enumeration<URL> getResources(String name) throws IOException {
     Enumeration<URL> childUrls = super.getResources(name);
     Enumeration<URL> parentUrls = parentClassLoader.getResources(name);

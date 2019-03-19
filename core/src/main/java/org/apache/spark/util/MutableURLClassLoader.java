@@ -21,7 +21,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 
 /**
- * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
+ * URL class loader that exposes the `addURL` method in URLClassLoader.
  */
 public class MutableURLClassLoader extends URLClassLoader {
 
@@ -36,10 +36,5 @@ public class MutableURLClassLoader extends URLClassLoader {
   @Override
   public void addURL(URL url) {
     super.addURL(url);
-  }
-
-  @Override
-  public URL[] getURLs() {
-    return super.getURLs();
   }
 }

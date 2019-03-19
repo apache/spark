@@ -22,7 +22,6 @@ import org.apache.spark.util.MutableURLClassLoader;
 import java.net.URL;
 
 /**
- * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
  * This class loader cannot be closed (its `close` method is a no-op).
  */
 public class NonClosableMutableURLClassLoader extends MutableURLClassLoader {
