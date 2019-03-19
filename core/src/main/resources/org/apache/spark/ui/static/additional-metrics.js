@@ -84,7 +84,7 @@ $(function() {
     });
 
     // Trigger a double click on the span to show full job description.
-    $(".description-input").dblclick(function() {
-        $(this).removeClass("description-input").addClass("description-input-full");
+    $(".description-input").click(function() {
+        $(this).toggleClass("description-input-full");
     });
 });
