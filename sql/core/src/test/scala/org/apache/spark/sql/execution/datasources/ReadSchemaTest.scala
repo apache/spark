@@ -46,6 +46,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
  *   | JSON         | 1, 2, 3, 4   |                                                        |
  *   | ORC          | 1, 2, 3, 4   | Native vectorized ORC reader has the widest coverage.  |
  *   | PARQUET      | 1, 2, 3      |                                                        |
+ *   | AVRO         | 1, 2, 3      |                                                        |
  *
  * This aims to provide an explicit test coverage for reader schema change on file-based data
  * sources. Since a file format has its own coverage, we need a test suite for each file-based
@@ -55,9 +56,12 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
  *
  *   ReadSchemaTest
  *     -> AddColumnTest
- *     -> HideColumnTest
+ *     -> AddColumnIntoTheMiddleTest
+ *     -> HideColumnAtTheEndTest
+ *     -> HideColumnInTheMiddleTest
  *     -> ChangePositionTest
  *     -> BooleanTypeTest
+ *     -> ToStringTypeTest
  *     -> IntegralTypeTest
  *     -> ToDoubleTypeTest
  *     -> ToDecimalTypeTest
