@@ -82,7 +82,7 @@ def _create_binary_mathfunction(name, doc=""):
     def _(col1, col2):
         sc = SparkContext._active_spark_context
         # For legacy reasons, the arguments here can be implicitly converted into floats,
-        # if they are not columns.
+        # if they are not columns or strings.
         if isinstance(col1, Column):
             arg1 = col1._jc
         elif isinstance(col1, basestring):
