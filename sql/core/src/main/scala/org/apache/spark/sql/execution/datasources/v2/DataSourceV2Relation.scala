@@ -49,7 +49,7 @@ case class DataSourceV2Relation(
   }
 
   def newScanBuilder(): ScanBuilder = {
-    table.asBatchReadable.newScanBuilder(options)
+    table.asReadable.newScanBuilder(options)
   }
 
   override def computeStats(): Statistics = {

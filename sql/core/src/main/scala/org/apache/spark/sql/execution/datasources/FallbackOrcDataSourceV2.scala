@@ -40,7 +40,7 @@ class FallbackOrcDataSourceV2(sparkSession: SparkSession) extends Rule[LogicalPl
       val relation = HadoopFsRelation(
         table.fileIndex,
         table.fileIndex.partitionSchema,
-        table.schema(),
+        table.schema,
         None,
         v1FileFormat,
         d.options.asScala.toMap)(sparkSession)

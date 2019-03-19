@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.SerializableConfiguration
 
 abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
@@ -60,10 +61,11 @@ abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[St
   }
 
   override def buildForBatch(): BatchWrite = {
-    validateInputs()
-    val path = new Path(paths.head)
     val sparkSession = SparkSession.active
+    validateInputs(sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    val path = new Path(paths.head)
     val optionsAsScala = options.asScala.toMap
+
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
@@ -122,12 +124,20 @@ abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[St
    */
   def formatName: String
 
-  private def validateInputs(): Unit = {
+  private def validateInputs(caseSensitiveAnalysis: Boolean): Unit = {
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
     assert(mode != null, "Missing save mode")
-    assert(paths.length == 1)
+
+    if (paths.length != 1) {
+      throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
+        s"got: ${paths.mkString(", ")}")
+    }
+    val pathName = paths.head
+    SchemaUtils.checkColumnNameDuplication(schema.fields.map(_.name),
+      s"when inserting into $pathName", caseSensitiveAnalysis)
     DataSource.validateSchema(schema)
+
     schema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
         throw new AnalysisException(

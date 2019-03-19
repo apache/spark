@@ -45,6 +45,7 @@ import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.rpc._
@@ -100,7 +101,9 @@ private[spark] class ApplicationMaster(
 
   private val maxNumExecutorFailures = {
     val effectiveNumExecutors =
-      if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+      if (Utils.isStreamingDynamicAllocationEnabled(sparkConf)) {
+        sparkConf.get(STREAMING_DYN_ALLOCATION_MAX_EXECUTORS)
+      } else if (Utils.isDynamicAllocationEnabled(sparkConf)) {
         sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       } else {
         sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)

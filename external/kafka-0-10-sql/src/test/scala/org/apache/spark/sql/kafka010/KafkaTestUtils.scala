@@ -20,20 +20,19 @@ package org.apache.spark.sql.kafka010
 import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.{Map => JMap, Properties, UUID}
+import java.util.{Collections, Map => JMap, Properties, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.language.postfixOps
 import scala.util.Random
 
-import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.ZkUtils
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions}
+import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions, NewTopic}
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -195,7 +194,8 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     var created = false
     while (!created) {
       try {
-        AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+        val newTopic = new NewTopic(topic, partitions, 1)
+        adminClient.createTopics(Collections.singleton(newTopic))
         created = true
       } catch {
         // Workaround fact that TopicExistsException is in kafka.common in 0.10.0 and
@@ -222,7 +222,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   /** Delete a Kafka topic and wait until it is propagated to the whole cluster */
   def deleteTopic(topic: String): Unit = {
     val partitions = zkUtils.getPartitionsForTopics(Seq(topic))(topic).size
-    AdminUtils.deleteTopic(zkUtils, topic)
+    adminClient.deleteTopics(Collections.singleton(topic))
     verifyTopicDeletionWithRetries(zkUtils, topic, partitions, List(this.server))
   }
 
@@ -422,7 +422,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
           // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
           // chance that a topic will be recreated after deletion due to the asynchronous update.
           // Hence, delete the topic and retry.
-          AdminUtils.deleteTopic(zkUtils, topic)
+          adminClient.deleteTopics(Collections.singleton(topic))
           throw e
       }
     }

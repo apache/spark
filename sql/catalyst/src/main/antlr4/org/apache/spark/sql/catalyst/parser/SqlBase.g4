@@ -758,7 +758,7 @@ qualifiedName
 
 identifier
     : strictIdentifier
-    | {!ansi}? defaultReserved
+    | {!ansi}? strictNonReserved
     ;
 
 strictIdentifier
@@ -782,7 +782,16 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// The list of the non-reserved keywords when `spark.sql.parser.ansi.enabled` is true.
+// When `spark.sql.parser.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// - Reserved keywords:
+//     Keywords that are reserved and can't be used as identifiers for table, view, column,
+//     function, alias, etc.
+// - Non-reserved keywords:
+//     Keywords that have a special meaning only in particular contexts and can be used as
+//     identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK
+//     can be used as identifiers in other places.
+// You can find the full keywords list by searching "Start of the keywords list" in this file.
+// The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
     : ADD
     | AFTER
@@ -961,7 +970,16 @@ ansiNonReserved
     | YEARS
     ;
 
-defaultReserved
+// When `spark.sql.parser.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// - Non-reserved keywords:
+//     Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
+// - Strict-non-reserved keywords:
+//     A strict version of non-reserved keywords, which can not be used as table alias.
+// You can find the full keywords list by searching "Start of the keywords list" in this file.
+// The strict-non-reserved keywords are listed in `strictNonReserved`.
+// The non-reserved keywords are listed in `nonReserved`.
+// These 2 together contain all the keywords.
+strictNonReserved
     : ANTI
     | CROSS
     | EXCEPT
@@ -1215,6 +1233,9 @@ nonReserved
     | YEARS
     ;
 
+//============================
+// Start of the keywords list
+//============================
 SELECT: 'SELECT';
 FROM: 'FROM';
 ADD: 'ADD';
@@ -1350,37 +1371,13 @@ IGNORE: 'IGNORE';
 BOTH: 'BOTH';
 LEADING: 'LEADING';
 TRAILING: 'TRAILING';
-
 IF: 'IF';
 POSITION: 'POSITION';
 EXTRACT: 'EXTRACT';
-
-EQ  : '=' | '==';
-NSEQ: '<=>';
-NEQ : '<>';
-NEQJ: '!=';
-LT  : '<';
-LTE : '<=' | '!>';
-GT  : '>';
-GTE : '>=' | '!<';
-
-PLUS: '+';
-MINUS: '-';
-ASTERISK: '*';
-SLASH: '/';
-PERCENT: '%';
-DIV: 'DIV';
-TILDE: '~';
-AMPERSAND: '&';
-PIPE: '|';
-CONCAT_PIPE: '||';
-HAT: '^';
-
 PERCENTLIT: 'PERCENT';
 BUCKET: 'BUCKET';
 OUT: 'OUT';
 OF: 'OF';
-
 SORT: 'SORT';
 CLUSTER: 'CLUSTER';
 DISTRIBUTE: 'DISTRIBUTE';
@@ -1487,6 +1484,30 @@ SESSION_USER: 'SESSION_USER';
 SOME: 'SOME';
 UNIQUE: 'UNIQUE';
 USER: 'USER';
+//============================
+// End of the keywords list
+//============================
+
+EQ  : '=' | '==';
+NSEQ: '<=>';
+NEQ : '<>';
+NEQJ: '!=';
+LT  : '<';
+LTE : '<=' | '!>';
+GT  : '>';
+GTE : '>=' | '!<';
+
+PLUS: '+';
+MINUS: '-';
+ASTERISK: '*';
+SLASH: '/';
+PERCENT: '%';
+DIV: 'DIV';
+TILDE: '~';
+AMPERSAND: '&';
+PIPE: '|';
+CONCAT_PIPE: '||';
+HAT: '^';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

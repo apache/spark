@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2.writer;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.SupportsBatchWrite;
 import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite;
 import org.apache.spark.sql.types.StructType;
@@ -58,7 +57,8 @@ public interface WriteBuilder {
   /**
    * Returns a {@link BatchWrite} to write data to batch source. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
-   * {@link Table} that creates this scan implements {@link SupportsBatchWrite}.
+   * {@link Table} that creates this write returns BATCH_WRITE support in its
+   * {@link Table#capabilities()}.
    *
    * Note that, the returned {@link BatchWrite} can be null if the implementation supports SaveMode,
    * to indicate that no writing is needed. We can clean it up after removing

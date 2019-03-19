@@ -22,24 +22,24 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.{SupportsBatchRead, SupportsBatchWrite, Table}
+import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.SchemaUtils
 
 abstract class FileTable(
     sparkSession: SparkSession,
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
-  extends Table with SupportsBatchRead with SupportsBatchWrite {
+  extends Table with SupportsRead with SupportsWrite {
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val scalaMap = options.asScala.toMap
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(scalaMap)
-    // This is an internal config so must be present.
-    val checkFilesExist = options.get("check_files_exist").toBoolean
     val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-      checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
+      checkEmptyGlobPath = true, checkFilesExist = true)
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
     new InMemoryFileIndex(
       sparkSession, rootPathsSpecified, scalaMap, userSpecifiedSchema, fileStatusCache)
@@ -52,11 +52,18 @@ abstract class FileTable(
       s"Unable to infer schema for $name. It must be specified manually.")
   }.asNullable
 
-  override def schema(): StructType = {
+  override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
+      "in the data schema", caseSensitive)
+    val partitionSchema = fileIndex.partitionSchema
+    SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
+      "in the partition schema", caseSensitive)
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      fileIndex.partitionSchema, caseSensitive)._1
+      partitionSchema, caseSensitive)._1
   }
+
+  override def capabilities(): java.util.Set[TableCapability] = FileTable.CAPABILITIES
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
@@ -64,4 +71,8 @@ abstract class FileTable(
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
+}
+
+object FileTable {
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
 }

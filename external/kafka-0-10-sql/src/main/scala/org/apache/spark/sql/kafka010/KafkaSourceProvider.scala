@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.{Locale, UUID}
+import java.util.{Collections, Locale, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -358,6 +358,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def name(): String = s"Kafka $strategy"
 
     override def schema(): StructType = KafkaOffsetReader.kafkaSchema
+
+    override def capabilities(): ju.Set[TableCapability] = Collections.emptySet()
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
       override def build(): Scan = new KafkaScan(options)

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
+import java.util
 
 import scala.collection.JavaConverters._
 
@@ -27,6 +28,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.StructType
@@ -142,7 +144,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
   }
 
   class MyTable(options: CaseInsensitiveStringMap)
-    extends SimpleBatchTable with SupportsBatchWrite {
+    extends SimpleBatchTable with SupportsWrite {
 
     private val path = options.get("path")
     private val conf = SparkContext.getActive.get.hadoopConfiguration
@@ -156,6 +158,9 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
       new MyWriteBuilder(path)
     }
+
+    override def capabilities(): util.Set[TableCapability] =
+      Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
