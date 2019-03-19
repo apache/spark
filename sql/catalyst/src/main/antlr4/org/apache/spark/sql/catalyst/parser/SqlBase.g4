@@ -903,9 +903,9 @@ ansiNonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
-    | PERCENT
     | PERCENTLIT
     | PIVOT
+    | POSITION
     | PRECEDING
     | PRINCIPALS
     | PURGE
