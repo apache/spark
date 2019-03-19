@@ -525,13 +525,23 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val errMsg2 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg1.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      assert(errMsg2.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")
       assert(getStatAttrNames(s"$globalTempDB.gTempView") !== Set("id"))
       sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       assert(getStatAttrNames(s"$globalTempDB.gTempView") === Set("id"))
+    }
+  }
+
+  test("analyzes column statistics in cached catalog view") {
+    withTempDatabase { database =>
+      sql(s"CREATE VIEW $database.v AS SELECT 1 c")
+      sql(s"CACHE TABLE $database.v")
+      assert(getStatAttrNames(s"$database.v") !== Set("id"))
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS FOR COLUMNS c")
+      assert(getStatAttrNames(s"$database.v") !== Set("id"))
     }
   }
 }

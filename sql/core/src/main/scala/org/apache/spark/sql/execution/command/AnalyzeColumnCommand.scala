@@ -101,29 +101,40 @@ case class AnalyzeColumnCommand(
     val sessionState = sparkSession.sessionState
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdent)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      // Analyzes a catalog view if the view is cached
+      val cacheManager = sparkSession.sharedState.cacheManager
+      val plan = sparkSession.table(tableIdent.quotedString).logicalPlan
+      cacheManager.lookupCachedData(plan) match {
+        case Some(cachedData) =>
+          val columnsToAnalyze = getColumnsToAnalyze(
+            tableIdent, cachedData.plan, columnNames, allColumns)
+          cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
+        case _ =>
+          throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      }
+    } else {
+      val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val relation = sparkSession.table(tableIdent).logicalPlan
+      val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
+
+      // Compute stats for the computed list of columns.
+      val (rowCount, newColStats) =
+        CommandUtils.computeColumnStats(sparkSession, relation, columnsToAnalyze)
+
+      val newColCatalogStats = newColStats.map {
+        case (attr, columnStat) =>
+          attr.name -> columnStat.toCatalogColumnStat(attr.name, attr.dataType)
+      }
+
+      // We also update table-level stats in order to keep them consistent with column-level stats.
+      val statistics = CatalogStatistics(
+        sizeInBytes = sizeInBytes,
+        rowCount = Some(rowCount),
+        // Newly computed column stats should override the existing ones.
+        colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColCatalogStats)
+
+      sessionState.catalog.alterTableStats(tableIdent, Some(statistics))
     }
-    val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
-    val relation = sparkSession.table(tableIdent).logicalPlan
-    val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
-
-    // Compute stats for the computed list of columns.
-    val (rowCount, newColStats) =
-      CommandUtils.computeColumnStats(sparkSession, relation, columnsToAnalyze)
-
-    val newColCatalogStats = newColStats.map {
-      case (attr, columnStat) =>
-        attr.name -> columnStat.toCatalogColumnStat(attr.name, attr.dataType)
-    }
-
-    // We also update table-level stats in order to keep them consistent with column-level stats.
-    val statistics = CatalogStatistics(
-      sizeInBytes = sizeInBytes,
-      rowCount = Some(rowCount),
-      // Newly computed column stats should override the existing ones.
-      colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColCatalogStats)
-
-    sessionState.catalog.alterTableStats(tableIdent, Some(statistics))
   }
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */
