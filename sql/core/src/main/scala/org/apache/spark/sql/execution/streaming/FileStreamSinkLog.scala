@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @param blockReplication the block replication.
  * @param blockSize the block size.
  * @param action the file action. Must be either "add" or "delete".
+ * @param commitTime the time which batch for the file is committed
  */
 case class SinkFileStatus(
     path: String,
@@ -45,7 +46,20 @@ case class SinkFileStatus(
     modificationTime: Long,
     blockReplication: Int,
     blockSize: Long,
-    action: String) {
+    action: String,
+    commitTime: Long) {
+
+  def this(
+      path: String,
+      size: Long,
+      isDir: Boolean,
+      modificationTime: Long,
+      blockReplication: Int,
+      blockSize: Long,
+      action: String) {
+    // use modification time if we don't know about exact commit time
+    this(path, size, isDir, modificationTime, blockReplication, blockSize, action, modificationTime)
+  }
 
   def toFileStatus: FileStatus = {
     new FileStatus(
@@ -62,7 +76,8 @@ object SinkFileStatus {
       modificationTime = f.getModificationTime,
       blockReplication = f.getReplication,
       blockSize = f.getBlockSize,
-      action = FileStreamSinkLog.ADD_ACTION)
+      action = FileStreamSinkLog.ADD_ACTION,
+      commitTime = f.getModificationTime)
   }
 }
 
@@ -81,7 +96,8 @@ object SinkFileStatus {
 class FileStreamSinkLog(
     metadataLogVersion: Int,
     sparkSession: SparkSession,
-    path: String)
+    path: String,
+    outputTimeToLiveMs: Option[Long] = None)
   extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
 
   private implicit val formats = Serialization.formats(NoTypeHints)
@@ -97,8 +113,13 @@ class FileStreamSinkLog(
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +
       "to a positive value.")
 
+  private val ttlMs = outputTimeToLiveMs.getOrElse(Long.MaxValue)
+
   override def compactLogs(logs: Seq[SinkFileStatus]): Seq[SinkFileStatus] = {
-    val deletedFiles = logs.filter(_.action == FileStreamSinkLog.DELETE_ACTION).map(_.path).toSet
+    val curTime = System.currentTimeMillis()
+    val deletedFiles = logs.filter { log =>
+      log.action == FileStreamSinkLog.DELETE_ACTION || (curTime - log.commitTime) > ttlMs
+    }.map(_.path).toSet
     if (deletedFiles.isEmpty) {
       logs
     } else {

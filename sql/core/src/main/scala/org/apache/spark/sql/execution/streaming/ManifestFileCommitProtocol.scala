@@ -59,7 +59,10 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
-    val fileStatuses = taskCommits.flatMap(_.obj.asInstanceOf[Seq[SinkFileStatus]]).toArray
+    val commitTimestamp = System.currentTimeMillis()
+    val fileStatuses = taskCommits.flatMap { taskCommit =>
+      taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]].map(_.copy(commitTime = commitTimestamp))
+    }.toArray
 
     if (fileLog.add(batchId, fileStatuses)) {
       logInfo(s"Committed batch $batchId")
