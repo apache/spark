@@ -413,7 +413,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Long](_, t => DateTimeUtils.millisToDays(MICROSECONDS.toMillis(t), timeZone))
+      buildCast[Long](_, t => microsToDays(t))
   }
 
   // IntervalConverter
@@ -926,11 +926,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
        """
     case TimestampType =>
-      val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
-      (c, evPrim, evNull) =>
-        code"""$evPrim =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays(
-            $c / $MICROS_PER_MILLIS, $tz);"""
+      (c, evPrim, _) =>
+        code"""$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c);"""
     case _ =>
       (c, evPrim, evNull) => code"$evNull = true;"
   }

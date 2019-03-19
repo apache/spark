@@ -97,6 +97,10 @@ object DateTimeUtils {
     millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
   }
 
+  def microsToDays(epochMicros: SQLTimestamp): SQLDate = {
+    Math.floorDiv(epochMicros, MICROS_PER_DAY).toInt
+  }
+
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
     tf.format(us)
