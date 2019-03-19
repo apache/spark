@@ -239,17 +239,18 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("read Spark 2.1.0 log format") {
+    val maxLong = Long.MaxValue
     assert(readFromResource("file-sink-log-version-2.1.0") === Seq(
       // SinkFileStatus("/a/b/0", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION), -> deleted
-      SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION, 100),
-      SinkFileStatus("/a/b/2", 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION, 200),
-      SinkFileStatus("/a/b/3", 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION, 300),
-      SinkFileStatus("/a/b/4", 400, false, 400, 1, 100, FileStreamSinkLog.ADD_ACTION, 400),
-      SinkFileStatus("/a/b/5", 500, false, 500, 1, 100, FileStreamSinkLog.ADD_ACTION, 500),
-      SinkFileStatus("/a/b/6", 600, false, 600, 1, 100, FileStreamSinkLog.ADD_ACTION, 600),
-      SinkFileStatus("/a/b/7", 700, false, 700, 1, 100, FileStreamSinkLog.ADD_ACTION, 700),
-      SinkFileStatus("/a/b/8", 800, false, 800, 1, 100, FileStreamSinkLog.ADD_ACTION, 800),
-      SinkFileStatus("/a/b/9", 900, false, 900, 3, 200, FileStreamSinkLog.ADD_ACTION, 900)
+      SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/2", 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/3", 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/4", 400, false, 400, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/5", 500, false, 500, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/6", 600, false, 600, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/7", 700, false, 700, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/8", 800, false, 800, 1, 100, FileStreamSinkLog.ADD_ACTION, maxLong),
+      SinkFileStatus("/a/b/9", 900, false, 900, 3, 200, FileStreamSinkLog.ADD_ACTION, maxLong)
     ))
   }
 
@@ -258,7 +259,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
    * in SinkFileStatus.
    */
   private def newFakeSinkFileStatus(path: String, action: String): SinkFileStatus =
-    newFakeSinkFileStatus(path, action, 100L)
+    newFakeSinkFileStatus(path, action, Long.MaxValue)
 
   /**
    * Create a fake SinkFileStatus using path and action, and commit time.

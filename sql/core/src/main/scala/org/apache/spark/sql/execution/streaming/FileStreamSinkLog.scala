@@ -57,8 +57,8 @@ case class SinkFileStatus(
       blockReplication: Int,
       blockSize: Long,
       action: String) {
-    // use modification time if we don't know about exact commit time
-    this(path, size, isDir, modificationTime, blockReplication, blockSize, action, modificationTime)
+    // use Long.MaxValue if we don't know about exact commit time, which means they will not evicted
+    this(path, size, isDir, modificationTime, blockReplication, blockSize, action, Long.MaxValue)
   }
 
   def toFileStatus: FileStatus = {
@@ -69,15 +69,14 @@ case class SinkFileStatus(
 
 object SinkFileStatus {
   def apply(f: FileStatus): SinkFileStatus = {
-    SinkFileStatus(
-      path = f.getPath.toUri.toString,
-      size = f.getLen,
-      isDir = f.isDirectory,
-      modificationTime = f.getModificationTime,
-      blockReplication = f.getReplication,
-      blockSize = f.getBlockSize,
-      action = FileStreamSinkLog.ADD_ACTION,
-      commitTime = f.getModificationTime)
+    new SinkFileStatus(
+      f.getPath.toUri.toString,
+      f.getLen,
+      f.isDirectory,
+      f.getModificationTime,
+      f.getReplication,
+      f.getBlockSize,
+      FileStreamSinkLog.ADD_ACTION)
   }
 }
 
