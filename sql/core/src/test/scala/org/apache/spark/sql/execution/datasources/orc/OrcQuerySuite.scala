@@ -609,13 +609,8 @@ abstract class OrcQueryTest extends OrcTest {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         val path = dir.getCanonicalPath
-        spark.createDataFrame(
-          Lists.newArrayList[Row](
-            Row(BigDecimal(0.1)),
-            Row(BigDecimal(0.2)),
-            Row(BigDecimal(-0.30))),
-          StructType(Seq(StructField("x", new DecimalType(10, 2))))
-        ).write.orc(path)
+        Seq(BigDecimal(0.1), BigDecimal(0.2), BigDecimal(-0.3))
+          .toDF("x").write.orc(path)
         val df = spark.read.orc(path)
         checkAnswer(df.filter("x >= 0.1"), Seq(Row(0.1), Row(0.2)))
         checkAnswer(df.filter("x > 0.1"), Seq(Row(0.2)))
