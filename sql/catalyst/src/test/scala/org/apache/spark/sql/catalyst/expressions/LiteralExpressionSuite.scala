@@ -236,4 +236,17 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
   }
+
+  test("construct literals from LocalDate") {
+    Seq(
+      LocalDate.of(1, 1, 1),
+      LocalDate.of(1582, 10, 1),
+      LocalDate.of(1600, 7, 30),
+      LocalDate.of(1969, 12, 31),
+      LocalDate.of(1970, 1, 1),
+      LocalDate.of(2019, 3, 20),
+      LocalDate.of(2100, 5, 17)).foreach { localDate =>
+      checkEvaluation(Literal(localDate), localDate)
+    }
+  }
 }
