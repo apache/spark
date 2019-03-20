@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.Decimal
 /**
  * Helper functions for Orc serialize and deserialize.
  */
-private[spark] object OrcShimUtils {
+private[spark] object OrcSerializeUtils {
 
   def getSqlDate(value: Any): Date = value.asInstanceOf[DateWritable].get
 
