@@ -131,7 +131,18 @@
     <profile>
       <id>toast-lib-enhancement</id>
       <dependencies>
-        <dependency>
+       <dependency>
+         <groupId>org.apache.hadoop</groupId>
+         <artifactId>hadoop-aws</artifactId>
+         <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>*</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
+       </dependency>
+       <dependency>
           <groupId>com.amazonaws</groupId>
           <artifactId>aws-java-sdk</artifactId>
           <version>${aws.java.sdk.version}</version>
