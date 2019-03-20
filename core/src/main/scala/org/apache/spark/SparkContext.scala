@@ -89,7 +89,7 @@ class SparkContext(config: SparkConf) extends Logging {
     new AtomicReference[State](SparkContext.State.INITIAL)
 
   private[spark] def assertNotStopped(): Unit = {
-    if (state.get() == SparkContext.State.STOPPED) {
+    if (isStopped) {
       val activeContext = SparkContext.activeContext.get()
       val activeCreationSite =
         if (activeContext == null) {
@@ -245,8 +245,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return true if context is stopped or in the midst of stopping.
    */
   def isStopped: Boolean = {
-    val curState = state.get()
-    curState == SparkContext.State.STOPPING || curState == SparkContext.State.STOPPED
+    state.get() == SparkContext.State.STOPPED
   }
 
   private[spark] def statusStore: AppStatusStore = _statusStore
