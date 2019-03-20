@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
@@ -46,7 +47,7 @@ class KafkaStreamingWrite(
     schema: StructType)
   extends StreamingWrite {
 
-  validateQuery(schema.toAttributes, producerParams, topic)
+  validateQuery(schema.toAttributes, topic, m => new AnalysisException(m))
 
   override def createStreamingWriterFactory(): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)

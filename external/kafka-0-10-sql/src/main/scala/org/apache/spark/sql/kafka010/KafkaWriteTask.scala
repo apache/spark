@@ -101,38 +101,15 @@ private[kafka010] abstract class KafkaRowWriter(
   }
 
   private def createProjection = {
-    val topicExpression = topic.map(Literal(_)).orElse {
-      inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME)
-    }.getOrElse {
-      throw new IllegalStateException(s"topic option required when no " +
-        s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present")
-    }
-    topicExpression.dataType match {
-      case StringType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type $t. ${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          s"must be a ${StringType.catalogString}")
-    }
+    KafkaWriter.validateQuery(inputSchema, topic, message => new IllegalStateException(message))
+    val topicExpression = topic.map(t => Literal.create(t, StringType))
+      .orElse(inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME))
+      .get
     val keyExpression = inputSchema.find(_.name == KafkaWriter.KEY_ATTRIBUTE_NAME)
       .getOrElse(Literal(null, BinaryType))
-    keyExpression.dataType match {
-      case StringType | BinaryType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.KEY_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type ${t.catalogString}")
-    }
-    val valueExpression = inputSchema
-      .find(_.name == KafkaWriter.VALUE_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalStateException("Required attribute " +
-        s"'${KafkaWriter.VALUE_ATTRIBUTE_NAME}' not found")
-    )
-    valueExpression.dataType match {
-      case StringType | BinaryType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type ${t.catalogString}")
-    }
+    val valueExpression = inputSchema.find(_.name == KafkaWriter.VALUE_ATTRIBUTE_NAME)
+      .get
+
     UnsafeProjection.create(
       Seq(topicExpression, Cast(keyExpression, BinaryType),
         Cast(valueExpression, BinaryType)), inputSchema)

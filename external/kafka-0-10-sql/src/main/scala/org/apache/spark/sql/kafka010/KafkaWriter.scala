@@ -44,37 +44,40 @@ private[kafka010] object KafkaWriter extends Logging {
 
   def validateQuery(
       schema: Seq[Attribute],
-      kafkaParameters: ju.Map[String, Object],
-      topic: Option[String] = None): Unit = {
-    schema.find(_.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
-      if (topic.isEmpty) {
-        throw new AnalysisException(s"topic option required when no " +
+      topic: Option[String] = None,
+      newException: String => Exception): Unit = {
+    topic.map(t => Literal.create(t, StringType))
+      .orElse(schema.find(_.name == TOPIC_ATTRIBUTE_NAME))
+      .getOrElse(
+        throw newException.apply(s"topic option is required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
           s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option, " +
-          s"${DataSourceOptions.PATH_KEY} option for setting a topic.")
-      } else {
-        Literal.create(topic.get, StringType)
-      }
-    ).dataType match {
-      case StringType => // good
-      case _ =>
-        throw new AnalysisException(s"Topic type must be a ${StringType.catalogString}")
+          s"${DataSourceOptions.PATH_KEY} option for setting a topic."))
+      .dataType match {
+        case StringType | BinaryType => // good
+        case t =>
+          throw newException.apply(s"$TOPIC_ATTRIBUTE_NAME attribute type " +
+            s"must be a ${StringType.catalogString}, but was ${t.catalogString}")
     }
+
     schema.find(_.name == KEY_ATTRIBUTE_NAME).getOrElse(
       Literal(null, StringType)
     ).dataType match {
       case StringType | BinaryType => // good
-      case _ =>
-        throw new AnalysisException(s"$KEY_ATTRIBUTE_NAME attribute type " +
-          s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
+      case t =>
+        throw newException.apply(s"$KEY_ATTRIBUTE_NAME attribute type " +
+          s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}, " +
+          s"but was ${t.catalogString}")
     }
+
     schema.find(_.name == VALUE_ATTRIBUTE_NAME).getOrElse(
       throw new AnalysisException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
     ).dataType match {
       case StringType | BinaryType => // good
-      case _ =>
-        throw new AnalysisException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
-          s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
+      case t =>
+        throw newException.apply(s"$VALUE_ATTRIBUTE_NAME attribute type " +
+          s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}, " +
+          s"but was ${t.catalogString}")
     }
   }
 
@@ -84,7 +87,7 @@ private[kafka010] object KafkaWriter extends Logging {
       kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
     val schema = queryExecution.analyzed.output
-    validateQuery(schema, kafkaParameters, topic)
+    validateQuery(schema, topic, message => new AnalysisException(message))
     queryExecution.toRdd.foreachPartition { iter =>
       val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic)
       Utils.tryWithSafeFinally(block = writeTask.execute(iter))(

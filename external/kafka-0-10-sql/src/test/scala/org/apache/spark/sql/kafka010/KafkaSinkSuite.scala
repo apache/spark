@@ -113,7 +113,31 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
         .save(pathOptionTopic)
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "topic' and 'path' options should match if both defined"))
+      "'topic' and 'path' options must match if both defined"))
+  }
+
+  test("batch - write to different topics") {
+    val topic1 = newTopic()
+    val topic2 = newTopic()
+    val topic3 = newTopic()
+    testUtils.createTopic(topic1)
+    testUtils.createTopic(topic2)
+    testUtils.createTopic(topic3)
+
+    val df = Seq(topic1, topic2, topic3).map(t => (t, "value")).toDF("topic", "value")
+    df.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .save()
+    checkAnswer(
+      createKafkaReader(topic1).selectExpr("CAST(value as STRING) value"),
+      Row("value") :: Nil)
+    checkAnswer(
+      createKafkaReader(topic2).selectExpr("CAST(value as STRING) value"),
+      Row("value") :: Nil)
+    checkAnswer(
+      createKafkaReader(topic3).selectExpr("CAST(value as STRING) value"),
+      Row("value") :: Nil)
   }
 
   test("batch - null topic field value, and no topic or path option") {
@@ -330,7 +354,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     }
     assert(ex.getMessage
       .toLowerCase(Locale.ROOT)
-      .contains("topic option required when no 'topic' attribute is present"))
+      .contains("topic option is required when no 'topic' attribute is present"))
 
     try {
       /* No value field */
@@ -367,7 +391,9 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("topic type must be a string"))
+    assert(
+      ex.getMessage.toLowerCase(Locale.ROOT)
+        .contains("topic attribute type must be a string, but was int"))
 
     try {
       /* value field wrong type */
