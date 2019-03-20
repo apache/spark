@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.time.{Instant, LocalDate}
 
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
@@ -26,6 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -64,8 +66,14 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(BinaryType), "".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
     checkEvaluation(Literal.default(DecimalType.SYSTEM_DEFAULT), Decimal(0))
-    checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
-    checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "false") {
+      checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
+      checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
+    }
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
+      checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
+    }
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0L))
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
