@@ -1047,6 +1047,11 @@ class Analyzer(
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
           })
+        case p: XxHash64 if containsStar(p.children) =>
+          p.copy(children = p.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
           failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")

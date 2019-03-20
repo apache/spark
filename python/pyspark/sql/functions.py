@@ -1468,6 +1468,19 @@ def hash(*cols):
     return Column(jc)
 
 
+@since(3.0)
+def xxhash64(*cols):
+    """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
+    and returns the result as a long column.
+
+    >>> spark.createDataFrame([('ABC',)], ['a']).select(xxhash64('a').alias('hash')).collect()
+    [Row(hash=4105715581806190027)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.xxhash64(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
