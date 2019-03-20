@@ -455,10 +455,19 @@ replaced with one of the above namespaces.
     </td>
   </tr>
   <tr>
+    <td><code>${ns}.keyPasswordFile</code></td>
+    <td>None</td>
+    <td>
+      File which contains the password to the private key in the key store.
+      The file content will be read, trimmed leading/tailing whitespaces and internally set as ${ns}.keyPassword.
+    </td>
+  </tr>
+  <tr>
     <td><code>${ns}.keyPassword</code></td>
     <td>None</td>
     <td>
       The password to the private key in the key store.
+      The more secure solution to provide passoword is ${ns}.keyPasswordFile, please use it instead.
     </td>
   </tr>
   <tr>
@@ -470,9 +479,20 @@ replaced with one of the above namespaces.
     </td>
   </tr>
   <tr>
+    <td><code>${ns}.keyStorePasswordFile</code></td>
+    <td>None</td>
+    <td>
+      File which contains the password to the key store.
+      The file content will be read, trimmed leading/tailing whitespaces and internally set as ${ns}.keyStorePassword.
+    </td>
+  </tr>
+  <tr>
     <td><code>${ns}.keyStorePassword</code></td>
     <td>None</td>
-    <td>Password to the key store.</td>
+    <td>
+      Password to the key store.
+      The more secure solution to provide passoword is ${ns}.keyStorePasswordFile, please use it instead.
+    </td>
   </tr>
   <tr>
     <td><code>${ns}.keyStoreType</code></td>
@@ -505,9 +525,20 @@ replaced with one of the above namespaces.
     </td>
   </tr>
   <tr>
+    <td><code>${ns}.trustStorePasswordFile</code></td>
+    <td>None</td>
+    <td>
+      File which contains the password for the trust store.
+      The file content will be read, trimmed leading/tailing whitespaces and internally set as ${ns}.keyStorePassword.
+    </td>
+  </tr>
+  <tr>
     <td><code>${ns}.trustStorePassword</code></td>
     <td>None</td>
-    <td>Password for the trust store.</td>
+    <td>
+      Password for the trust store.
+      The more secure solution to provide passoword is ${ns}.trustStorePasswordFile, please use it instead.
+    </td>
   </tr>
   <tr>
     <td><code>${ns}.trustStoreType</code></td>

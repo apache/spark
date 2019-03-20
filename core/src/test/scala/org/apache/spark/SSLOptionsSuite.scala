@@ -29,7 +29,72 @@ import org.apache.spark.util.SparkConfWithEnv
 
 class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
-  test("test resolving property file as spark conf ") {
+  test("missing password file") {
+    val hadoopConf = new Configuration()
+
+    def testMissingPasswordFile(param: String): Unit = {
+      val missingFile = "/intentionally/missing/file"
+      val conf = getPasswordFilesSparkConf
+      conf.set(param, missingFile)
+      val msg = intercept[IllegalArgumentException] {
+        SSLOptions.parse(conf, hadoopConf, "spark.ssl")
+      }.getMessage
+      assert(msg.contains("No file found") && msg.contains(missingFile))
+    }
+
+    testMissingPasswordFile("spark.ssl.keyStorePasswordFile")
+    testMissingPasswordFile("spark.ssl.keyPasswordFile")
+    testMissingPasswordFile("spark.ssl.trustStorePasswordFile")
+  }
+
+  test("both plain text password and file provided but differs") {
+    val hadoopConf = new Configuration()
+
+    def testPasswordDiffers(param: String): Unit = {
+      val conf = getPasswordFilesSparkConf
+      conf.set(param, "12345")
+      val msg = intercept[IllegalArgumentException] {
+        SSLOptions.parse(conf, hadoopConf, "spark.ssl")
+      }.getMessage
+      assert(msg.contains(param) && msg.contains("they differ"))
+    }
+
+    testPasswordDiffers("spark.ssl.keyStorePassword")
+    testPasswordDiffers("spark.ssl.keyPassword")
+    testPasswordDiffers("spark.ssl.trustStorePassword")
+  }
+
+  test("test resolving property file as spark conf and plain passwords") {
+    testResolvingWithSparkConf(getPlainTextPasswordSparkConf)
+  }
+
+  test("test resolving property file as spark conf and password files") {
+    testResolvingWithSparkConf(getPasswordFilesSparkConf)
+  }
+
+  private def getPlainTextPasswordSparkConf: SparkConf = {
+    val conf = new SparkConf
+    conf.set("spark.ssl.keyStorePassword", "password")
+    conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.trustStorePassword", "password")
+    conf
+  }
+
+  private def getPasswordFilesSparkConf: SparkConf = {
+    val keyStorePasswordPath =
+      new File(this.getClass.getResource("/keystore-password").toURI).getAbsolutePath
+    val keyPasswordPath =
+      new File(this.getClass.getResource("/key-password").toURI).getAbsolutePath
+    val trustStorePasswordPath =
+      new File(this.getClass.getResource("/truststore-password").toURI).getAbsolutePath
+
+    val conf = new SparkConf
+    conf.set("spark.ssl.keyStorePasswordFile", keyStorePasswordPath)
+    conf.set("spark.ssl.keyPasswordFile", keyPasswordPath)
+    conf.set("spark.ssl.trustStorePasswordFile", trustStorePasswordPath)
+  }
+
+  private def testResolvingWithSparkConf(conf: SparkConf) {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
 
@@ -42,14 +107,10 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
       .take(2)
       .toSet
 
-    val conf = new SparkConf
     val hadoopConf = new Configuration()
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
-    conf.set("spark.ssl.keyStorePassword", "password")
-    conf.set("spark.ssl.keyPassword", "password")
     conf.set("spark.ssl.trustStore", trustStorePath)
-    conf.set("spark.ssl.trustStorePassword", "password")
     conf.set("spark.ssl.enabledAlgorithms", algorithms.mkString(","))
     conf.set("spark.ssl.protocol", "TLSv1.2")
 
@@ -69,18 +130,22 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.enabledAlgorithms === algorithms)
   }
 
-  test("test resolving property with defaults specified ") {
+  test("test resolving property with defaults specified and plain passwords") {
+    testResolvingWithDefaults(getPlainTextPasswordSparkConf)
+  }
+
+  test("test resolving property with defaults specified and password files") {
+    testResolvingWithDefaults(getPasswordFilesSparkConf)
+  }
+
+  private def testResolvingWithDefaults(conf: SparkConf) {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
 
-    val conf = new SparkConf
     val hadoopConf = new Configuration()
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
-    conf.set("spark.ssl.keyStorePassword", "password")
-    conf.set("spark.ssl.keyPassword", "password")
     conf.set("spark.ssl.trustStore", trustStorePath)
-    conf.set("spark.ssl.trustStorePassword", "password")
     conf.set("spark.ssl.enabledAlgorithms",
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.protocol", "SSLv3")
@@ -103,21 +168,25 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
       Set("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"))
   }
 
-  test("test whether defaults can be overridden ") {
+  test("test whether defaults can be overridden with plain passwords") {
+    testResolvingWithDefaultsAndOverwrite(getPlainTextPasswordSparkConf)
+  }
+
+  test("test whether defaults can be overridden with password files") {
+    testResolvingWithDefaultsAndOverwrite(getPasswordFilesSparkConf)
+  }
+
+  private def testResolvingWithDefaultsAndOverwrite(conf: SparkConf): Unit = {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
 
-    val conf = new SparkConf
     val hadoopConf = new Configuration()
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.ui.enabled", "false")
     conf.set("spark.ssl.ui.port", "4242")
     conf.set("spark.ssl.keyStore", keyStorePath)
-    conf.set("spark.ssl.keyStorePassword", "password")
     conf.set("spark.ssl.ui.keyStorePassword", "12345")
-    conf.set("spark.ssl.keyPassword", "password")
     conf.set("spark.ssl.trustStore", trustStorePath)
-    conf.set("spark.ssl.trustStorePassword", "password")
     conf.set("spark.ssl.enabledAlgorithms",
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.ui.enabledAlgorithms", "ABC, DEF")

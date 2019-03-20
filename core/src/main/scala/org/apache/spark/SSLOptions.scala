@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.file.Files
 import java.security.NoSuchAlgorithmException
 import javax.net.ssl.SSLContext
 
@@ -131,8 +132,9 @@ private[spark] case class SSLOptions(
   /** Returns a string representation of this SSLOptions with all the passwords masked. */
   override def toString: String = s"SSLOptions{enabled=$enabled, port=$port, " +
       s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
+      s"keyPassword=${keyPassword.map(_ => "xxx")}, keyStoreType=$keyStoreType, " +
       s"trustStore=$trustStore, trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
-      s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
+      s"trustStoreType=$trustStoreType, protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
 
 }
 
@@ -184,13 +186,11 @@ private[spark] object SSLOptions extends Logging {
     val keyStore = conf.getWithSubstitution(s"$ns.keyStore").map(new File(_))
         .orElse(defaults.flatMap(_.keyStore))
 
-    val keyStorePassword = conf.getWithSubstitution(s"$ns.keyStorePassword")
-        .orElse(Option(hadoopConf.getPassword(s"$ns.keyStorePassword")).map(new String(_)))
-        .orElse(defaults.flatMap(_.keyStorePassword))
+    val keyStorePassword =
+      getPassword(conf, hadoopConf, ns, "keyStorePassword", defaults.flatMap(_.keyStorePassword))
 
-    val keyPassword = conf.getWithSubstitution(s"$ns.keyPassword")
-        .orElse(Option(hadoopConf.getPassword(s"$ns.keyPassword")).map(new String(_)))
-        .orElse(defaults.flatMap(_.keyPassword))
+    val keyPassword =
+      getPassword(conf, hadoopConf, ns, "keyPassword", defaults.flatMap(_.keyPassword))
 
     val keyStoreType = conf.getWithSubstitution(s"$ns.keyStoreType")
         .orElse(defaults.flatMap(_.keyStoreType))
@@ -201,9 +201,8 @@ private[spark] object SSLOptions extends Logging {
     val trustStore = conf.getWithSubstitution(s"$ns.trustStore").map(new File(_))
         .orElse(defaults.flatMap(_.trustStore))
 
-    val trustStorePassword = conf.getWithSubstitution(s"$ns.trustStorePassword")
-        .orElse(Option(hadoopConf.getPassword(s"$ns.trustStorePassword")).map(new String(_)))
-        .orElse(defaults.flatMap(_.trustStorePassword))
+    val trustStorePassword = getPassword(
+      conf, hadoopConf, ns, "trustStorePassword", defaults.flatMap(_.trustStorePassword))
 
     val trustStoreType = conf.getWithSubstitution(s"$ns.trustStoreType")
         .orElse(defaults.flatMap(_.trustStoreType))
@@ -229,6 +228,46 @@ private[spark] object SSLOptions extends Logging {
       trustStoreType,
       protocol,
       enabledAlgorithms)
+  }
+
+  private def getPassword(
+      conf: SparkConf,
+      hadoopConf: Configuration,
+      ns: String,
+      parameter: String,
+      default: Option[String]): Option[String] = {
+    var parameterValue = conf.getWithSubstitution(s"$ns.$parameter")
+      .orElse(Option(hadoopConf.getPassword(s"$ns.$parameter")).map(new String(_)))
+      .orElse(default)
+    if (parameterValue.isDefined && default.isDefined && parameterValue.get != default.get) {
+      logWarning(
+        s"$ns.$parameter configuration parameter defined which may cause security problems. When " +
+        "its configured as command line argument then plain text password can be dumped by " +
+        "listing the process command line arguments. The more secure alternative solution is to " +
+        s"use $ns.${parameter}File."
+      )
+    }
+
+    val parameterFileValue = conf.getWithSubstitution(s"$ns.${parameter}File")
+      .orElse(Option(hadoopConf.getPassword(s"$ns.${parameter}File")).map(new String(_)))
+    if (parameterFileValue.isDefined) {
+      val parameterFileContent = readPasswordFile(parameterFileValue.get)
+      if (parameterValue.isDefined && parameterValue.get != parameterFileContent) {
+        throw new IllegalArgumentException(s"Both $ns.$parameter and $ns.${parameter}File " +
+          "parameters defined but the they differ.")
+      }
+      parameterValue = Some(parameterFileContent)
+    }
+
+    parameterValue
+  }
+
+  private def readPasswordFile(passwordFilePath: String): String = {
+    val passwordFile = new File(passwordFilePath)
+    require(passwordFile.isFile, s"No file found containing the password at $passwordFilePath.")
+    val content = new String(Files.readAllBytes(passwordFile.toPath)).trim
+    require(!content.isEmpty, s"Password from file located at $passwordFilePath is empty.")
+    content
   }
 
 }
