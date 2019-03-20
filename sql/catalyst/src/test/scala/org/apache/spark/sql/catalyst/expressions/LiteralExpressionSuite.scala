@@ -237,7 +237,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('\n'), "\n")
   }
 
-  test("construct literals from LocalDate") {
+  test("construct literals from java.time.LocalDate") {
     Seq(
       LocalDate.of(1, 1, 1),
       LocalDate.of(1582, 10, 1),
@@ -247,6 +247,18 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       LocalDate.of(2019, 3, 20),
       LocalDate.of(2100, 5, 17)).foreach { localDate =>
       checkEvaluation(Literal(localDate), localDate)
+    }
+  }
+
+  test("construct literals from java.time.Instant") {
+    Seq(
+      Instant.parse("0001-01-01T00:00:00Z"),
+      Instant.parse("1582-10-01T01:02:03Z"),
+      Instant.parse("1970-02-28T11:12:13Z"),
+      Instant.ofEpochMilli(0),
+      Instant.parse("2019-03-20T10:15:30Z"),
+      Instant.parse("2100-12-31T22:17:31Z")).foreach { instant =>
+      checkEvaluation(Literal(instant), instant)
     }
   }
 }
