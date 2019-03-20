@@ -146,15 +146,16 @@ case class FlatMapGroupsInPandasExec(
         sessionLocalTimeZone,
         pythonRunnerConf).compute(grouped, context.partitionId(), context)
 
+      val unsafeProj = UnsafeProjection.create(output, output)
+
       columnarBatchIter.flatMap { batch =>
         // Grouped Map UDF returns a StructType column in ColumnarBatch, select the children here
-        // TODO: ColumnVector getChild is protected, so use ArrowColumnVector which is public
         val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-        val outputVectors = output.indices.map(structVector.getChild(_).asInstanceOf[ColumnVector])
+        val outputVectors = output.indices.map(structVector.getChild)
         val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
         flattenedBatch.setNumRows(batch.numRows())
         flattenedBatch.rowIterator.asScala
-      }.map(UnsafeProjection.create(output, output))
+      }.map(unsafeProj)
     }
   }
 }
