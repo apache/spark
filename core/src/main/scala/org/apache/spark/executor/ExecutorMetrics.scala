@@ -26,7 +26,7 @@ import org.apache.spark.metrics.ExecutorMetricType
  * Executor-level metrics are sent from each executor to the driver as part of the Heartbeat.
  */
 @DeveloperApi
-class ExecutorMetrics private[spark] extends Serializable {
+private[spark] class ExecutorMetrics extends Serializable {
   // Metrics are indexed by ExecutorMetricType.metricToOffset
   private val metrics = new Array[Long](ExecutorMetricType.numMetrics)
   // the first element is initialized to -1, indicating that the values for the array
