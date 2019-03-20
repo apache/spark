@@ -411,7 +411,7 @@ object DateTimeUtils {
     segments(i) = currentSegmentValue
     try {
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
+      val instant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant
       Some(instantToDays(instant))
     } catch {
       case NonFatal(_) => None
