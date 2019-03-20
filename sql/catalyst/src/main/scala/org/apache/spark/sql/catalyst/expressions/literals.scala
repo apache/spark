@@ -100,7 +100,9 @@ object Literal {
     case JavaBoolean.TYPE => BooleanType
 
     // java classes
+    case _ if clz == classOf[LocalDate] => DateType
     case _ if clz == classOf[Date] => DateType
+    case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType

@@ -247,6 +247,16 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       LocalDate.of(2019, 3, 20),
       LocalDate.of(2100, 5, 17)).foreach { localDate =>
       checkEvaluation(Literal(localDate), localDate)
+      checkEvaluation(Literal(Array(localDate)), Array(localDate))
+    }
+  }
+
+  test("construct literals from arrays of java.time.LocalDate") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      val localDate0 = LocalDate.of(2019, 3, 20)
+      checkEvaluation(Literal(Array(localDate0)), Array(localDate0))
+      val localDate1 = LocalDate.of(2100, 4, 22)
+      checkEvaluation(Literal(Array(localDate0, localDate1)), Array(localDate0, localDate1))
     }
   }
 
@@ -259,6 +269,15 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Instant.parse("2019-03-20T10:15:30Z"),
       Instant.parse("2100-12-31T22:17:31Z")).foreach { instant =>
       checkEvaluation(Literal(instant), instant)
+    }
+  }
+
+  test("construct literals from arrays of java.time.Instant") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      val instant0 = Instant.ofEpochMilli(0)
+      checkEvaluation(Literal(Array(instant0)), Array(instant0))
+      val instant1 = Instant.parse("2019-03-20T10:15:30Z")
+      checkEvaluation(Literal(Array(instant0, instant1)), Array(instant0, instant1))
     }
   }
 }
