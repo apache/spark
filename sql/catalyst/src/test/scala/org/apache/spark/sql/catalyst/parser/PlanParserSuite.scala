@@ -760,7 +760,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 =
       """
         |CREATE VIEW testView AS FROM jt
-        |INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
+        |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
         |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
       """.stripMargin
     intercept[ParseException](parsePlan(sql1))
