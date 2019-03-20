@@ -21,7 +21,9 @@ import java.io.File
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -477,5 +479,47 @@ class FileStreamSinkSuite extends StreamTest {
       val outputDf = spark.read.parquet(outputDir.getCanonicalPath).as[Int]
       checkDatasetUnorderly(outputDf, 1, 2, 3)
     }
+  }
+
+  test("cleanup incomplete output for aborted task") {
+    withSQLConf(("spark.sql.streaming.commitProtocolClass",
+      classOf[TaskFailToCommitManifestFileCommitProtocol].getCanonicalName)) {
+      withTempDir { tempDir =>
+        val checkpointDir = new File(tempDir, "chk")
+        val outputDir = new File(tempDir, "output")
+        val inputData = MemoryStream[Int]
+        inputData.addData(1, 2, 3)
+        val q = inputData.toDF()
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .format("parquet")
+          .start(outputDir.getCanonicalPath)
+
+        intercept[StreamingQueryException] {
+          try {
+            q.processAllAvailable()
+          } finally {
+            q.stop()
+          }
+        }
+
+        val outputFiles = outputDir.listFiles().filterNot(_.getName == FileStreamSink.metadataDir)
+        assert(outputFiles.length === 0, "Incomplete files should be cleaned up.")
+      }
+    }
+  }
+}
+
+class TaskFailToCommitManifestFileCommitProtocol(jobId: String, path: String)
+  extends ManifestFileCommitProtocol(jobId, path) {
+
+  override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
+    val addedFiles = this.getAddedFiles
+    assert(addedFiles.length > 0, "Expect at least one output file.")
+    val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)
+    assert(addedFiles.forall(file => fs.exists(new Path(file))),
+      "Output files being tracked must be exist for now.")
+
+    throw new IllegalStateException("Intended error!")
   }
 }

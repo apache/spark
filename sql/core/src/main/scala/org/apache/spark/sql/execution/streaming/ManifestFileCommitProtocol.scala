@@ -43,6 +43,9 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   @transient private var fileLog: FileStreamSinkLog = _
   private var batchId: Long = _
 
+  /** returns copied version of addedFiles: only unit tests purpose */
+  private[sql] def getAddedFiles: Array[String] = Array(addedFiles: _*)
+
   /**
    * Sets up the manifest log output and the batch id for this job.
    * Must be called before any other function.
@@ -114,7 +117,10 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   }
 
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
-    // Do nothing
-    // TODO: we can also try delete the addedFiles as a best-effort cleanup.
+    // best effort cleanup of incomplete files
+    if (addedFiles.nonEmpty) {
+      val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)
+      addedFiles.foreach { file => fs.delete(new Path(file), false) }
+    }
   }
 }
