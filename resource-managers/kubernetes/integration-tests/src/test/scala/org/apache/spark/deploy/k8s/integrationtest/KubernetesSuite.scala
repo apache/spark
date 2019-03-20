@@ -116,12 +116,9 @@ class KubernetesSuite extends SparkFunSuite
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,
       s"No directory found for spark home specified at $sparkHomeDir.")
-    image = testImageRef(Option(System.getProperty(CONFIG_KEY_IMAGE_JVM))
-      .getOrElse("spark"))
-    pyImage = testImageRef(Option(System.getProperty(CONFIG_KEY_IMAGE_PYTHON))
-      .getOrElse("spark-py"))
-    rImage = testImageRef(Option(System.getProperty(CONFIG_KEY_IMAGE_R))
-      .getOrElse("spark-r"))
+    image = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_JVM, "spark"))
+    pyImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_PYTHON, "spark-py"))
+    rImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_R, "spark-r"))
 
     val scalaVersion = scala.util.Properties.versionNumberString
       .split("\\.")
