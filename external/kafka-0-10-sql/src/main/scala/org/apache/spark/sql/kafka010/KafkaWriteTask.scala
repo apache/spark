@@ -51,14 +51,17 @@ private[kafka010] class KafkaWriteTask(
 
   def close(): Unit = {
     checkForErrors()
-    producer.flush()
-    checkForErrors()
-    CachedKafkaProducer.release(producer, failedWrite != null)
+    try {
+      producer.flush()
+    } finally {
+      CachedKafkaProducer.release(producer, failedWrite != null)
+    }
   }
+
 }
 
 private[kafka010] abstract class KafkaRowWriter(
-    inputSchema: Seq[Attribute], topic: Option[String]) extends Logging {
+    inputSchema: Seq[Attribute], topic: Option[String]) {
 
   protected val producer: CachedKafkaProducer
   // used to synchronize with Kafka callbacks

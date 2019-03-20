@@ -18,15 +18,21 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.TimeUnit
 
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.Utils
 
 class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
+
+  protected override def beforeEach(): Unit = {
+    super.beforeEach()
+    CachedKafkaProducer.clear()
+  }
 
   test("Should return the cached instance on calling acquire with same params.") {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
@@ -92,9 +98,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
   }
 }
 
-class KafkaSinkStressSuite extends KafkaContinuousTest {
-
-  import testImplicits._
+class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest {
 
   override val streamingTimeout = 30.seconds
 
@@ -124,22 +128,33 @@ class KafkaSinkStressSuite extends KafkaContinuousTest {
    */
   test("Single source and multiple kafka sink with 2ms cache timeout.") {
 
-    val query = spark.readStream
+    val df = spark.readStream
       .format("rate")
-      .option("numPartitions", "100")
-      .option("rowsPerSecond", "200")
+      .option("numPartitions", "10")
+      .option("rowsPerSecond", "100")
       .load()
       .selectExpr("CAST(timestamp AS STRING) key", "CAST(value AS STRING) value")
-    val queries = for (i <- 1 to 10) yield {
-      val topic = newTopic()
-      testUtils.createTopic(topic, 100)
-      query.writeStream.format("kafka")
-        .option("broker.address", testUtils.brokerAddress)
-        .option("topic", topic).start()
+
+    val checkpointDir = Utils.createTempDir()
+    val topic = newTopic()
+    testUtils.createTopic(topic, 100)
+    val queries = for (i <- 1 to 5) yield {
+      df.writeStream
+        .format("kafka")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath + i)
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.max.block.ms", "1000")
+        .option("topic", topic)
+        .trigger(Trigger.Continuous(1000))
+        .queryName(s"kafkaStream$i")
+        .start()
     }
+    Thread.sleep(30000)
+
     queries.foreach{ q =>
-      q.processAllAvailable()
-      q.awaitTermination(TimeUnit.MINUTES.toMillis(2))
+      assert(q.exception.isEmpty, "None of the queries should fail.")
+      q.stop()
     }
+
   }
 }

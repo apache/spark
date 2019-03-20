@@ -127,41 +127,50 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * exist, a new KafkaProducer will be created. KafkaProducer is thread safe, it is best to keep
    * one instance per specified kafkaParams.
    */
-  private[kafka010] def acquire(kafkaParamsMap: ju.Map[String, Object]): CachedKafkaProducer =
-    this.synchronized {
-      val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParamsMap)
-      try {
+  private[kafka010] def acquire(kafkaParamsMap: ju.Map[String, Object]): CachedKafkaProducer = {
+    val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParamsMap)
+    try {
+      val producer = this.synchronized {
         val cachedKafkaProducer: CachedKafkaProducer = guavaCache.get(paramsSeq)
-        val useCount = cachedKafkaProducer.inUseCount.incrementAndGet()
-        logDebug(s"Granted producer $cachedKafkaProducer, inuse-count: $useCount")
+        cachedKafkaProducer.inUseCount.incrementAndGet()
+        logDebug(s"Granted producer $cachedKafkaProducer")
         cachedKafkaProducer
-      } catch {
-        case e@(_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
-          if e.getCause != null =>
-          throw e.getCause
       }
+      producer
+    } catch {
+      case e@(_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
+        if e.getCause != null =>
+        throw e.getCause
     }
+  }
 
   private def paramsToSeq(kafkaParamsMap: ju.Map[String, Object]): Seq[(String, Object)] = {
     val paramsSeq: Seq[(String, Object)] = kafkaParamsMap.asScala.toSeq.sortBy(x => x._1)
     paramsSeq
   }
 
-  /* Release a kafka producer back to the kafka cache. We simple decrement it's inuse count. */
+  /* Release a kafka producer back to the kafka cache. We simply decrement it's inuse count. */
   private[kafka010] def release(producer: CachedKafkaProducer, failing: Boolean): Unit = {
     this.synchronized {
-      val inUseCount = producer.inUseCount.decrementAndGet()
-      logDebug(s"Released producer $producer, updated inuse count: $inUseCount")
+      // It should be ok to call release multiple times on the same producer object.
+      if (producer.inUse()) {
+        // So that we do not end up with -ve in-use counts.
+        producer.inUseCount.decrementAndGet()
+        logDebug(s"Released producer $producer.")
+      }
       if (failing) {
         // If this producer is failing to write, we remove it from cache.
         // So that it is re-created, eventually.
-        logDebug(s"Invalidated a failing producer: $producer.")
-        guavaCache.invalidate(producer.kafkaParams)
+        val cachedProducer = guavaCache.getIfPresent(producer.kafkaParams)
+        if (cachedProducer != null && cachedProducer.id == producer.id) {
+          logDebug(s"Invalidating a failing producer: $producer.")
+          guavaCache.invalidate(producer.kafkaParams)
+        }
       }
-      if (!producer.inUse() && !producer.isCached) {
-        // it will take care of removing it from close queue as well.
-        close(producer)
-      }
+    }
+    if (!producer.inUse() && !producer.isCached) {
+      // it will take care of removing it from close queue as well.
+      close(producer)
     }
   }
 
@@ -179,7 +188,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   // Intended for testing purpose only.
   private[kafka010] def clear(): Unit = {
-    logInfo("Cleaning up guava cache and force closing all kafka producer.")
+    logInfo("Cleaning up guava cache and force closing all kafka producers.")
     guavaCache.invalidateAll()
     for (p <- closeQueue.iterator().asScala) {
       p.close()

@@ -113,8 +113,10 @@ class KafkaStreamDataWriter(
 
   private def close(): Unit = {
     checkForErrors()
-    producer.flush()
-    checkForErrors()
-    CachedKafkaProducer.release(producer, failedWrite != null)
+    try {
+      producer.flush()
+    } finally {
+      CachedKafkaProducer.release(producer, failedWrite != null)
+    }
   }
 }
