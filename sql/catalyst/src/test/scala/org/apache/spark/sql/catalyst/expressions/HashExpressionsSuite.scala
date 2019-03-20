@@ -630,6 +630,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val murmursHashEval = Murmur3Hash(exprs, 42).eval(input)
       assert(murmur3HashPlan(input).getInt(0) == murmursHashEval)
 
+      val xxHash64Expr = XxHash64(exprs, 42)
+      val xxHash64Plan = GenerateMutableProjection.generate(Seq(xxHash64Expr))
+      val xxHash64Eval = XxHash64(exprs, 42).eval(input)
+      assert(xxHash64Plan(input).getLong(0) == xxHash64Eval)
+
       val hiveHashExpr = HiveHash(exprs)
       val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
       val hiveHashEval = HiveHash(exprs).eval(input)

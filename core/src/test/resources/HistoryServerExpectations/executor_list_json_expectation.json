@@ -1,5 +1,5 @@
 [ {
-  "id" : "<driver>",
+  "id" : "driver",
   "hostPort" : "localhost:57971",
   "isActive" : true,
   "rddBlocks" : 0,

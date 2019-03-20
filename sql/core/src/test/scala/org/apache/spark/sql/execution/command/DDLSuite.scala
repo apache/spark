@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
+import java.io.{File, PrintWriter}
 import java.net.URI
 import java.util.Locale
 
@@ -2714,5 +2714,41 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql(s"SET ${config.CPUS_PER_TASK.key} = 4")
     }
     assert(ex.getMessage.contains("Spark config"))
+  }
+
+  test("Refresh table before drop database cascade") {
+    withTempDir { tempDir =>
+      val file1 = new File(tempDir + "/first.csv")
+      val writer1 = new PrintWriter(file1)
+      writer1.write("first")
+      writer1.close()
+
+      val file2 = new File(tempDir + "/second.csv")
+      val writer2 = new PrintWriter(file2)
+      writer2.write("second")
+      writer2.close()
+
+      withDatabase("foo") {
+        withTable("foo.first") {
+          sql("CREATE DATABASE foo")
+          sql(
+            s"""CREATE TABLE foo.first (id STRING)
+               |USING csv OPTIONS (path='${file1.toURI}')
+             """.stripMargin)
+          sql("SELECT * FROM foo.first")
+          checkAnswer(spark.table("foo.first"), Row("first"))
+
+          // Dropping the database and again creating same table with different path
+          sql("DROP DATABASE foo CASCADE")
+          sql("CREATE DATABASE foo")
+          sql(
+            s"""CREATE TABLE foo.first (id STRING)
+               |USING csv OPTIONS (path='${file2.toURI}')
+             """.stripMargin)
+          sql("SELECT * FROM foo.first")
+          checkAnswer(spark.table("foo.first"), Row("second"))
+        }
+      }
+    }
   }
 }

@@ -33,9 +33,10 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
+import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin, SQLHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
@@ -81,7 +82,7 @@ case class SelfReferenceUDF(
   def apply(key: String): Boolean = config.contains(key)
 }
 
-class TreeNodeSuite extends SparkFunSuite {
+class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
     assert(after === Literal(2))
@@ -594,5 +595,29 @@ class TreeNodeSuite extends SparkFunSuite {
     val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
     val expected = Coalesce(Stream(Literal(1), Literal(3)))
     assert(result === expected)
+  }
+
+  test("treeString limits plan length") {
+    withSQLConf(SQLConf.MAX_PLAN_STRING_LENGTH.key -> "200") {
+      val ds = (1 until 20).foldLeft(Literal("TestLiteral"): Expression) { case (treeNode, x) =>
+        Add(Literal(x), treeNode)
+      }
+
+      val planString = ds.treeString
+      logWarning("Plan string: " + planString)
+      assert(planString.endsWith(" more characters"))
+      assert(planString.length <= SQLConf.get.maxPlanStringLength)
+    }
+  }
+
+  test("treeString limit at zero") {
+    withSQLConf(SQLConf.MAX_PLAN_STRING_LENGTH.key -> "0") {
+      val ds = (1 until 2).foldLeft(Literal("TestLiteral"): Expression) { case (treeNode, x) =>
+        Add(Literal(x), treeNode)
+      }
+
+      val planString = ds.treeString
+      assert(planString.startsWith("Truncated plan of"))
+    }
   }
 }

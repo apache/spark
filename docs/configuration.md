@@ -914,6 +914,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.custom.executor.log.url</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies custom spark executor log URL for supporting external log service instead of using cluster
+    managers' application log URLs in Spark UI. Spark will support some path variables via patterns
+    which can vary on cluster manager. Please check the documentation for your cluster manager to
+    see which patterns are supported, if any. <p/>
+    Please note that this configuration also replaces original log urls in event log,
+    which will be also effective when accessing the application on history server. The new log urls must be
+    permanent, otherwise you might have dead link for executor log urls.
+    <p/>
+    For now, only YARN mode supports this configuration
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.ui.retainedExecutors</code></td>
   <td>1000</td>
   <td>

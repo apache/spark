@@ -343,11 +343,11 @@ struct<>
 -- !query 36 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-No interval can be constructed(line 1, pos 16)
+no viable alternative at input 'interval 10 nanoseconds'(line 1, pos 19)
 
 == SQL ==
 select interval 10 nanoseconds
-----------------^^^
+-------------------^^^
 
 
 -- !query 37

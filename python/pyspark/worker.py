@@ -39,12 +39,14 @@ from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
-from pyspark.sql.types import to_arrow_type
+from pyspark.sql.types import to_arrow_type, StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
 
 if sys.version >= '3':
     basestring = str
+else:
+    from itertools import imap as map  # use iterator map by default
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -90,8 +92,9 @@ def wrap_scalar_pandas_udf(f, return_type):
     def verify_result_length(*a):
         result = f(*a)
         if not hasattr(result, "__len__"):
+            pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
             raise TypeError("Return type of the user-defined function should be "
-                            "Pandas.Series, but is {}".format(type(result)))
+                            "{}, but is {}".format(pd_type, type(result)))
         if len(result) != len(a[0]):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                "expected %d, got %d" % (len(a[0]), len(result)))
@@ -254,7 +257,12 @@ def read_udfs(pickleSer, infile, eval_type):
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
         safecheck = runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion",
                                     "false").lower() == 'true'
-        ser = ArrowStreamPandasSerializer(timezone, safecheck)
+        # NOTE: this is duplicated from wrap_grouped_map_pandas_udf
+        assign_cols_by_name = runner_conf.get(
+            "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")\
+            .lower() == "true"
+
+        ser = ArrowStreamPandasSerializer(timezone, safecheck, assign_cols_by_name)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 

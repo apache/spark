@@ -84,7 +84,7 @@ GIT_REF=${GIT_REF:-master}
 
 RELEASE_STAGING_LOCATION="https://dist.apache.org/repos/dist/dev/spark"
 
-GPG="gpg -u $GPG_KEY --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch --pinentry-mode loopback"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
@@ -116,7 +116,7 @@ SCALA_2_11_PROFILES=
 if [[ $SPARK_VERSION > "2.3" ]]; then
   BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
   if [[ $SPARK_VERSION < "3.0." ]]; then
-    SCALA_2_11_PROFILES="-Pkafka-0-8"
+    SCALA_2_11_PROFILES="-Pkafka-0-8 -Pflume"
   fi
 else
   PUBLISH_SCALA_2_10=1
@@ -124,6 +124,9 @@ fi
 
 PUBLISH_SCALA_2_12=0
 SCALA_2_12_PROFILES="-Pscala-2.12"
+if [[ $SPARK_VERSION < "3.0." ]]; then
+  SCALA_2_12_PROFILES="-Pscala-2.12 -Pflume"
+fi
 if [[ $SPARK_VERSION > "2.4" ]]; then
   PUBLISH_SCALA_2_12=1
 fi

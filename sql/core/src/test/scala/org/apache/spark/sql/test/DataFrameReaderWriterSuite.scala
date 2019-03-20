@@ -838,6 +838,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
           checkReadPartitionColumnDuplication("parquet", c0, c1, src)
+
+          // Check ORC format
+          checkWriteDataColumnDuplication("orc", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "orc", c0, c1, src)
+          checkReadPartitionColumnDuplication("orc", c0, c1, src)
         }
       }
     }

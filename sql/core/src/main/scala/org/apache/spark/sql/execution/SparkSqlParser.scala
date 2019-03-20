@@ -297,7 +297,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ClearCacheCommand]] logical plan.
    */
   override def visitClearCache(ctx: ClearCacheContext): LogicalPlan = withOrigin(ctx) {
-    ClearCacheCommand()
+    ClearCacheCommand
   }
 
   /**
@@ -367,6 +367,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         partitionSpec,
         isExtended)
     }
+  }
+
+  /**
+   * Create a [[DescribeQueryCommand]] logical command.
+   */
+  override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
+    DescribeQueryCommand(visitQueryToDesc(ctx.queryToDesc()))
   }
 
   /**
