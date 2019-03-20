@@ -125,10 +125,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     With(plan, ctes)
   }
 
-  override def visitQueryToDesc(ctx: QueryToDescContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
-  }
-
   override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
     val from = visitFromClause(ctx.fromClause)
     validate(ctx.selectStatement.querySpecification.fromClause == null,
