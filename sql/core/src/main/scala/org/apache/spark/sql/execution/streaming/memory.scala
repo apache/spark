@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
@@ -96,6 +98,8 @@ class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table
   override def name(): String = "MemoryStreamDataSource"
 
   override def schema(): StructType = stream.fullSchema()
+
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new MemoryStreamScanBuilder(stream)

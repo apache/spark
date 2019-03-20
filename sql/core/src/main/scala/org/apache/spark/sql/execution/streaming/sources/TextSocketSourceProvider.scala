@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import java.text.SimpleDateFormat
-import java.util.Locale
+import java.util
+import java.util.{Collections, Locale}
 
 import scala.util.{Failure, Success, Try}
 
@@ -77,6 +78,8 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
       TextSocketReader.SCHEMA_REGULAR
     }
   }
+
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
     override def build(): Scan = new Scan {

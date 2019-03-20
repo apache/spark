@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+class AvroReadSchemaSuite
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest {
 
-/**
- * An empty mix-in interface for {@link Table}, to indicate this table supports batch write.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap)} must return a
- * {@link WriteBuilder} with {@link WriteBuilder#buildForBatch()} implemented.
- * </p>
- */
-@Evolving
-public interface SupportsBatchWrite extends SupportsWrite {}
+  override val format: String = "avro"
+}

@@ -931,6 +931,7 @@ This is the component with the largest amount of instrumented metrics
    `spark.app.status.metrics.enabled=true` (default is false)
   - stages.failedStages.count
   - stages.skippedStages.count
+  - stages.completedStages.count
   - tasks.blackListedExecutors.count
   - tasks.completedTasks.count
   - tasks.failedTasks.count

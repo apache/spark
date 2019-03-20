@@ -18,7 +18,10 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.File
+import java.util
 import java.util.OptionalLong
+
+import scala.collection.JavaConverters._
 
 import test.org.apache.spark.sql.sources.v2._
 
@@ -30,6 +33,7 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.partitioning.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -411,11 +415,13 @@ object SimpleReaderFactory extends PartitionReaderFactory {
   }
 }
 
-abstract class SimpleBatchTable extends Table with SupportsBatchRead  {
+abstract class SimpleBatchTable extends Table with SupportsRead  {
 
   override def schema(): StructType = new StructType().add("i", "int").add("j", "int")
 
   override def name(): String = this.getClass.toString
+
+  override def capabilities(): util.Set[TableCapability] = Set(BATCH_READ).asJava
 }
 
 abstract class SimpleScanBuilder extends ScanBuilder

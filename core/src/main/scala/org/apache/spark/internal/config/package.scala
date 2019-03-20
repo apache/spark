@@ -301,6 +301,7 @@ package object config {
       .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
         "hashing Block files into.")
       .intConf
+      .checkValue(_ > 0, "The number of subdirectories must be positive.")
       .createWithDefault(64)
 
   private[spark] val BLOCK_FAILURES_BEFORE_LOCATION_REFRESH =
@@ -357,6 +358,13 @@ package object config {
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
+
+  private[spark] val SHUFFLE_SERVICE_DB_ENABLED =
+    ConfigBuilder("spark.shuffle.service.db.enabled")
+      .doc("Whether to use db in ExternalShuffleService. Note that this only affects " +
+        "standalone mode.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").intConf.createWithDefault(7337)

@@ -22,7 +22,8 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.{SupportsBatchRead, SupportsBatchWrite, Table}
+import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -32,16 +33,17 @@ abstract class FileTable(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
-  extends Table with SupportsBatchRead with SupportsBatchWrite {
+  extends Table with SupportsRead with SupportsWrite {
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
-    val scalaMap = options.asScala.toMap
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(scalaMap)
+    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+    // Hadoop Configurations are case sensitive.
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
       checkEmptyGlobPath = true, checkFilesExist = true)
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
     new InMemoryFileIndex(
-      sparkSession, rootPathsSpecified, scalaMap, userSpecifiedSchema, fileStatusCache)
+      sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
   }
 
   lazy val dataSchema: StructType = userSpecifiedSchema.orElse {
@@ -62,10 +64,16 @@ abstract class FileTable(
       partitionSchema, caseSensitive)._1
   }
 
+  override def capabilities(): java.util.Set[TableCapability] = FileTable.CAPABILITIES
+
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
    * does not support inference, or no valid files are given should return None.  In these cases
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
+}
+
+object FileTable {
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
 }
