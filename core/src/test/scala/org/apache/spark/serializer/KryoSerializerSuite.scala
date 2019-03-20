@@ -565,6 +565,20 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     assert(serInstance.deserialize[Any](serObj) === (obj))
     assert(serInstance.deserialize[Any](byteBuffer) === (obj))
   }
+
+  test("SPARK-27216: kryo serialization with RoaringBitmap") {
+    val bitmap = new RoaringBitmap
+    bitmap.add(1787)
+
+    val safeSer = new KryoSerializer(conf).newInstance()
+    val bitmap2 : RoaringBitmap = safeSer.deserialize(safeSer.serialize(bitmap))
+    assert(bitmap2.equals(bitmap))
+
+    conf.set("spark.kryo.unsafe", "true")
+    val unsafeSer = new KryoSerializer(conf).newInstance()
+    val bitmap3 : RoaringBitmap = unsafeSer.deserialize(unsafeSer.serialize(bitmap))
+    assert(bitmap3.equals(bitmap)) // this will fail
+  }
 }
 
 class ClassLoaderTestingObject
