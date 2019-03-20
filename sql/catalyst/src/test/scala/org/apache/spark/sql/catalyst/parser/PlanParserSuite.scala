@@ -756,27 +756,45 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("create/alter view as insert into table") {
-    intercept[ParseException](parsePlan("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)"))
-    val sql1 =
-      """
-        |CREATE VIEW testView AS FROM jt
-        |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
-        |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
-      """.stripMargin
-    intercept[ParseException](parsePlan(sql1))
-    intercept[ParseException](parsePlan("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)"))
-    // Multiinsert query
-    val sql2 =
-      """
-        |ALTER VIEW testView AS FROM jt
-        |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
-        |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
-      """.stripMargin
-    intercept[ParseException](parsePlan(sql2))
+    val m1 = intercept[ParseException] {
+      parsePlan("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
+    }.getMessage
+    assert(m1.contains("mismatched input 'INSERT' expecting"))
+    // Multi insert query
+    val m2 = intercept[ParseException] {
+      parsePlan(
+        """
+          |CREATE VIEW testView AS FROM jt
+          |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
+          |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+        """.stripMargin)
+    }.getMessage
+    assert(m2.contains("mismatched input 'INSERT' expecting"))
+    val m3 = intercept[ParseException] {
+      parsePlan("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)")
+    }.getMessage
+    assert(m3.contains("mismatched input 'INSERT' expecting"))
+    // Multi insert query
+    val m4 = intercept[ParseException] {
+      parsePlan(
+        """
+          |ALTER VIEW testView AS FROM jt
+          |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
+          |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+        """.stripMargin
+      )
+    }.getMessage
+    assert(m4.contains("mismatched input 'INSERT' expecting"))
   }
 
   test("Invalid insert constructs in the query") {
-    intercept[ParseException](parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))"))
-    intercept[ParseException](parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))"))
+    val m1 = intercept[ParseException] {
+      parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))")
+    }.getMessage
+    assert(m1.contains("mismatched input 'FROM' expecting"))
+    val m2 = intercept[ParseException] {
+      parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
+    }.getMessage
+    assert(m2.contains("mismatched input 'FROM' expecting"))
   }
 }
