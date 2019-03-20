@@ -379,7 +379,7 @@ private[spark] object ClosureCleaner extends Logging {
       logDebug(s"Cleaning lambda: ${lambdaFunc.get.getImplMethodName}")
 
       val captClass = Utils.classForName(lambdaFunc.get.getCapturingClass.replace('/', '.'),
-        initialize = false, noSparkClassLoader = false)
+        initialize = false, noSparkClassLoader = true)
       // Fail fast if we detect return statements in closures
       getClassReader(captClass)
         .accept(new ReturnStatementFinder(Some(lambdaFunc.get.getImplMethodName)), 0)
