@@ -63,6 +63,10 @@ class SparkContext(object):
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD} and
     broadcast variables on that cluster.
+
+    .. note:: :class:`SparkContext` instance is not supported to share across multiple
+        processes out of the box, and PySpark does not guarantee multi-processing execution.
+        Use threads instead for concurrent processing purpose.
     """
 
     _gateway = None
@@ -112,6 +116,20 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
+        if gateway is not None and gateway.gateway_parameters.auth_token is None:
+            allow_insecure_env = os.environ.get("PYSPARK_ALLOW_INSECURE_GATEWAY", "0")
+            if allow_insecure_env == "1" or allow_insecure_env.lower() == "true":
+                warnings.warn(
+                    "You are passing in an insecure Py4j gateway.  This "
+                    "presents a security risk, and will be completely forbidden in Spark 3.0")
+            else:
+                raise ValueError(
+                    "You are trying to pass an insecure Py4j gateway to Spark. This"
+                    " presents a security risk.  If you are sure you understand and accept this"
+                    " risk, you can set the environment variable"
+                    " 'PYSPARK_ALLOW_INSECURE_GATEWAY=1', but"
+                    " note this option will be removed in Spark 3.0")
+
         SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,

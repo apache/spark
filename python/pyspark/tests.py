@@ -61,6 +61,7 @@ else:
 from pyspark import keyword_only
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
+from pyspark.java_gateway import _launch_gateway
 from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
@@ -2380,6 +2381,37 @@ class ContextTests(unittest.TestCase):
     def test_startTime(self):
         with SparkContext() as sc:
             self.assertGreater(sc.startTime, 0)
+
+    def test_forbid_insecure_gateway(self):
+        # By default, we fail immediately if you try to create a SparkContext
+        # with an insecure gateway
+        gateway = _launch_gateway(insecure=True)
+        log4j = gateway.jvm.org.apache.log4j
+        old_level = log4j.LogManager.getRootLogger().getLevel()
+        try:
+            log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
+            with self.assertRaises(Exception) as context:
+                SparkContext(gateway=gateway)
+            self.assertIn("insecure Py4j gateway", str(context.exception))
+            self.assertIn("PYSPARK_ALLOW_INSECURE_GATEWAY", str(context.exception))
+            self.assertIn("removed in Spark 3.0", str(context.exception))
+        finally:
+            log4j.LogManager.getRootLogger().setLevel(old_level)
+
+    def test_allow_insecure_gateway_with_conf(self):
+        with SparkContext._lock:
+            SparkContext._gateway = None
+            SparkContext._jvm = None
+        gateway = _launch_gateway(insecure=True)
+        try:
+            os.environ["PYSPARK_ALLOW_INSECURE_GATEWAY"] = "1"
+            with SparkContext(gateway=gateway) as sc:
+                a = sc.accumulator(1)
+                rdd = sc.parallelize([1, 2, 3])
+                rdd.foreach(lambda x: a.add(x))
+                self.assertEqual(7, a.value)
+        finally:
+            os.environ.pop("PYSPARK_ALLOW_INSECURE_GATEWAY", None)
 
 
 class ConfTests(unittest.TestCase):

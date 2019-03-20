@@ -658,18 +658,4 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
            |GROUP BY a
            |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))
   }
-
-  test("NaN and -0.0 in window partition keys") {
-    val df = Seq(
-      (Float.NaN, Double.NaN, 1),
-      (0.0f/0.0f, 0.0/0.0, 1),
-      (0.0f, 0.0, 1),
-      (-0.0f, -0.0, 1)).toDF("f", "d", "i")
-    val result = df.select($"f", count("i").over(Window.partitionBy("f", "d")))
-    checkAnswer(result, Seq(
-      Row(Float.NaN, 2),
-      Row(Float.NaN, 2),
-      Row(0.0f, 2),
-      Row(0.0f, 2)))
-  }
 }

@@ -86,9 +86,9 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ExtractFiltersAndInnerJoins(input, conditions)
+    case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
+      val reordered = if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
@@ -99,6 +99,29 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         createOrderedJoin(input, conditions)
       }
+
+      if (sameOutput(p, reordered)) {
+        reordered
+      } else {
+        // Reordering the joins have changed the order of the columns.
+        // Inject a projection to make sure we restore to the expected ordering.
+        Project(p.output, reordered)
+      }
+  }
+
+  /**
+   * Returns true iff output of both plans are semantically the same, ie.:
+   *  - they contain the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   * NOTE: this is copied over from SPARK-25691 from master.
+   */
+  def sameOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    val output1 = plan1.output
+    val output2 = plan2.output
+    output1.length == output2.length && output1.zip(output2).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
+    }
   }
 }
 
@@ -169,8 +192,8 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case j @ Join(_, _, joinType, Some(cond)) if hasUnevaluablePythonUDF(cond, j) =>
-      if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
-        // The current strategy only support InnerLike and LeftSemi join because for other type,
+      if (!joinType.isInstanceOf[InnerLike]) {
+        // The current strategy supports only InnerLike join because for other types,
         // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
         // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
         // `requires attributes from more than one child`, we throw firstly here for better
@@ -191,10 +214,6 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
       val newJoin = j.copy(condition = newCondition)
       joinType match {
         case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
-        case LeftSemi =>
-          Project(
-            j.left.output.map(_.toAttribute),
-            Filter(udf.reduceLeft(And), newJoin.copy(joinType = Inner)))
         case _ =>
           throw new AnalysisException("Using PythonUDF in join condition of join type" +
             s" $joinType is not supported.")

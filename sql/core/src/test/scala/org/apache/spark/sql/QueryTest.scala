@@ -289,7 +289,7 @@ object QueryTest {
   def prepareRow(row: Row): Row = {
     Row.fromSeq(row.toSeq.map {
       case null => null
-      case bd: java.math.BigDecimal => BigDecimal(bd)
+      case d: java.math.BigDecimal => BigDecimal(d)
       // Equality of WrappedArray differs for AnyVal and AnyRef in Scala 2.12.2+
       case seq: Seq[_] => seq.map {
         case b: java.lang.Byte => b.byteValue
@@ -303,9 +303,6 @@ object QueryTest {
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
-      // spark treats -0.0 as 0.0
-      case d: Double if d == -0.0d => 0.0d
-      case f: Float if f == -0.0f => 0.0f
       case o => o
     })
   }

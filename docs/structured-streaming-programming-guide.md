@@ -922,7 +922,7 @@ late data for that aggregate any more. To enable this, in Spark 2.1, we have int
 **watermarking**, which lets the engine automatically track the current event time in the data
 and attempt to clean up old state accordingly. You can define the watermark of a query by 
 specifying the event time column and the threshold on how late the data is expected to be in terms of 
-event time. For a specific window starting at time `T`, the engine will maintain state and allow late
+event time. For a specific window ending at time `T`, the engine will maintain state and allow late
 data to update the state until `(max event time seen by the engine - late threshold > T)`. 
 In other words, late data within the threshold will be aggregated, 
 but data later than the threshold will start getting dropped

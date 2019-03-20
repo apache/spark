@@ -50,24 +50,4 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     assert(res1 == res2)
   }
 
-  test("SPARK-26021: normalize float/double NaN and -0.0") {
-    val unsafeRowWriter1 = new UnsafeRowWriter(4)
-    unsafeRowWriter1.resetRowWriter()
-    unsafeRowWriter1.write(0, Float.NaN)
-    unsafeRowWriter1.write(1, Double.NaN)
-    unsafeRowWriter1.write(2, 0.0f)
-    unsafeRowWriter1.write(3, 0.0)
-    val res1 = unsafeRowWriter1.getRow
-
-    val unsafeRowWriter2 = new UnsafeRowWriter(4)
-    unsafeRowWriter2.resetRowWriter()
-    unsafeRowWriter2.write(0, 0.0f/0.0f)
-    unsafeRowWriter2.write(1, 0.0/0.0)
-    unsafeRowWriter2.write(2, -0.0f)
-    unsafeRowWriter2.write(3, -0.0)
-    val res2 = unsafeRowWriter2.getRow
-
-    // The two rows should be the equal
-    assert(res1 == res2)
-  }
 }
