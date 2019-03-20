@@ -323,7 +323,7 @@ object DateTimeUtils {
         timeZoneId
       } else {
         val sign = if (tz.get.toChar == '-') -1 else 1
-        ZoneId.ofOffset("GMT", ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8)))
+        ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8))
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
