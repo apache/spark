@@ -67,21 +67,21 @@ private[spark] class SparkRackResolver {
  * In the meantime, this is a re-implementation for spark's use.
  */
 object SparkRackResolver extends Logging {
-  private var dnsToSwitchMapping: DNSToSwitchMapping = _
-  @volatile private var initCalled = false
+  @volatile private var dnsToSwitchMapping: DNSToSwitchMapping = _
 
   def coreResolve(conf: Configuration, hostNames: Seq[String]): Seq[Node] = {
-    if (!initCalled) {
+    if (dnsToSwitchMapping == null) {
       synchronized {
-        initCalled = true
-        val dnsToSwitchMappingClass =
-          conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-            classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
-        val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
-          .asInstanceOf[DNSToSwitchMapping]
-        dnsToSwitchMapping = newInstance match {
-          case _: CachedDNSToSwitchMapping => newInstance
-          case _ => new CachedDNSToSwitchMapping(newInstance)
+        if (dnsToSwitchMapping == null) {
+          val dnsToSwitchMappingClass =
+            conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+              classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
+          val newInstance = ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
+            .asInstanceOf[DNSToSwitchMapping]
+          dnsToSwitchMapping = newInstance match {
+            case _: CachedDNSToSwitchMapping => newInstance
+            case _ => new CachedDNSToSwitchMapping(newInstance)
+          }
         }
       }
     }
