@@ -125,12 +125,12 @@ private[kafka010] class KafkaOffsetReader(
   }
 
   def fetchOffsetsByTime(times: Map[TopicPartition, Long]):
-      Map[TopicPartition, Long] = runUninterruptibly {
+      Map[TopicPartition, Option[Long]] = runUninterruptibly {
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
 
     consumer.offsetsForTimes(times.map{case (k, v) => k -> long2Long(v)}.asJava)
       .asScala.map{case (k, v) =>
-        k -> (if (v != null) Long2long(v.offset()) else KafkaOffsetReader.EMPTY_OFFSET)
+        k -> (if (v != null) Some(Long2long(v.offset())) else None)
     }.toMap
   }
 

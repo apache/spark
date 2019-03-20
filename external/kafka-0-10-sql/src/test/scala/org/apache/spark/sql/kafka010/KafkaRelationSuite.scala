@@ -441,12 +441,41 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 5003000)
     testUtils.sendMessagesOverPartitions(topic, 40 to 49, 3, 100000000)
     val df = createDF(topic).where(
-      """timestamp > cast(4000 as TIMESTAMP) and
-        |timestamp < cast(8000 as TIMESTAMP) and
-        |timestamp > cast(5000 as TIMESTAMP) and
+      """timestamp > cast(5000 as TIMESTAMP) and
+        |timestamp > cast(4000 as TIMESTAMP) and
         |timestamp < cast(5003 as TIMESTAMP) and
-        |timestamp < cast(5002 as TIMESTAMP)""".stripMargin)
+        |timestamp < cast(5002 as TIMESTAMP) and
+        |timestamp < cast(8000 as TIMESTAMP) and""".stripMargin)
     checkAnswer(df, (10 to 19).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown multiple conditions with simple or predicate") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 49, 3, 100000000)
+    val df = createDF(topic).where(
+      "timestamp < cast(5002 as TIMESTAMP) or timestamp > cast(5003 as TIMESTAMP)")
+    checkAnswer(df, ((0 to 19) ++ (40 to 49)).map(_.toString).toDF())
+  }
+
+  test("timestamp pushdown multiple conditions with complex or predicate") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 3)
+    testUtils.sendMessagesOverPartitions(topic, 0 to 9, 3, 5000000)
+    testUtils.sendMessagesOverPartitions(topic, 10 to 19, 3, 5001000)
+    testUtils.sendMessagesOverPartitions(topic, 20 to 29, 3, 5002000)
+    testUtils.sendMessagesOverPartitions(topic, 30 to 39, 3, 5003000)
+    testUtils.sendMessagesOverPartitions(topic, 40 to 49, 3, 100000000)
+    val df = createDF(topic).where(
+      """(timestamp > cast(5000 as TIMESTAMP) and
+        |timestamp < cast(5002 as TIMESTAMP)) or
+        |(timestamp > cast(5002 as TIMESTAMP) and
+        |timestamp < cast(5004 as TIMESTAMP))""".stripMargin)
+    checkAnswer(df, ((10 to 19) ++ (30 to 39)).map(_.toString).toDF())
   }
 
   test("timestamp pushdown with contradictory condition") {
@@ -620,8 +649,6 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testUtils.sendMessagesOverPartitions(topic, 18 to 26, 3, 5002000)
     testUtils.sendMessagesOverPartitions(topic, 27 to 35, 3, 5003000)
     testUtils.sendMessagesOverPartitions(topic, 36 to 44, 3, 100000000)
-    createKafkaDF(topic).selectExpr("CAST(value AS STRING)", "partition", "offset", "timestamp")
-      .show(100)
     val df = createDF(topic).where("timestamp > cast(5001 as TIMESTAMP) and partition = 0")
     // first 3 elements from each batch
     checkAnswer(df, ((18 to 20) ++ (27 to 29) ++ (36 to 38)).map(_.toString).toDF())
