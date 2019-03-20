@@ -26,6 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
@@ -328,7 +329,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   private def testBucketing(
       bucketedTableTestSpecLeft: BucketedTableTestSpec,
       bucketedTableTestSpecRight: BucketedTableTestSpec,
-      joinType: String = "inner",
+      joinType: JoinType = Inner,
       joinCondition: (DataFrame, DataFrame) => Column): Unit = {
     val BucketedTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
       bucketedTableTestSpecLeft
@@ -608,7 +609,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     testBucketing(
       bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
       bucketedTableTestSpecRight = bucketedTableTestSpecRight,
-      joinType = "fullouter",
+      joinType = FullOuter,
       joinCondition = (left: DataFrame, right: DataFrame) => {
         val joinPredicates = Seq("i").map(col => left(col) === right(col)).reduce(_ && _)
         val filterLeft = left("i") === Literal("1")

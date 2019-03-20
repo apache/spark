@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -325,8 +326,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     val b = Seq((1, "a")).toDF("key", "value")
     val c = Seq(1).toDF("key")
 
-    val ab = a.join(b, Stream("key"), "left")
-    val abc = ab.join(c, Seq("key"), "left")
+    val ab = a.join(b, Stream("key"), LeftOuter)
+    val abc = ab.join(c, Seq("key"), LeftOuter)
 
     checkAnswer(abc, Row(1, "a"))
   }

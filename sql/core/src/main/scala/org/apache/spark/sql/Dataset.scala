@@ -922,7 +922,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_], usingColumns: Seq[String]): DataFrame = {
-    join(right, usingColumns, "inner")
+    join(right, usingColumns, Inner)
   }
 
   /**
@@ -935,11 +935,9 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
-   * @param joinType Type of join to perform. Default `inner`. Must be one of:
-   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
-   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
-   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
-   *
+   * @param joinType Type of join to perform. Default `Inner`. Must be one of the valid JoinType:
+   *                 `Inner`, `Cross`, `FullOuter`, `LeftOuter`, `RightOuter`,
+   *                 `LeftSemi`, `LeftAnti`.
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
@@ -947,18 +945,18 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
+  def join(right: Dataset[_], usingColumns: Seq[String], joinType: JoinType): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sparkSession.sessionState.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None, JoinHint.NONE))
+      Join(logicalPlan, right.logicalPlan, joinType = joinType, None, JoinHint.NONE))
       .analyzed.asInstanceOf[Join]
 
     withPlan {
       Join(
         joined.left,
         joined.right,
-        UsingJoin(JoinType(joinType), usingColumns),
+        UsingJoin(joinType, usingColumns),
         None,
         JoinHint.NONE)
     }
@@ -976,7 +974,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
+  def join(right: Dataset[_], joinExprs: Column): DataFrame = join(right, joinExprs, Inner)
 
   /**
    * Join with another `DataFrame`, using the given join expression. The following performs
@@ -985,24 +983,25 @@ class Dataset[T] private[sql](
    * {{{
    *   // Scala:
    *   import org.apache.spark.sql.functions._
-   *   df1.join(df2, $"df1Key" === $"df2Key", "outer")
+   *   import org.apache.spark.sql.catalyst.plans.FullOuter
+   *   df1.join(df2, $"df1Key" === $"df2Key", FullOuter)
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   df1.join(df2, col("df1Key").equalTo(col("df2Key")), "outer");
+   *   import  org.apache.spark.sql.catalyst.plans.FullOuter
+   *   df1.join(df2, col("df1Key").equalTo(col("df2Key")), FulOuter);
    * }}}
    *
    * @param right Right side of the join.
    * @param joinExprs Join expression.
-   * @param joinType Type of join to perform. Default `inner`. Must be one of:
-   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
-   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
-   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
+   * @param joinType Type of join to perform. Default `Inner`. Must be one of the valid JoinType:
+   *                 `Inner`, `Cross`, `FullOuter`, `LeftOuter`, RightOuter,
+   *                 `LeftSemi`, `LeftAnti`.
    *
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
+  def join(right: Dataset[_], joinExprs: Column, joinType: JoinType): DataFrame = {
     // Note that in this function, we introduce a hack in the case of self-join to automatically
     // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
     // Consider this case: df.join(df, df("key") === df("key"))
@@ -1014,7 +1013,7 @@ class Dataset[T] private[sql](
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
     val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr), JoinHint.NONE))
+      Join(logicalPlan, right.logicalPlan, joinType, Some(joinExprs.expr), JoinHint.NONE))
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
@@ -1079,23 +1078,22 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   * @param joinType Type of join to perform. Default `inner`. Must be one of:
-   *                 `inner`, `cross`, `outer`, `full`, `fullouter`,`full_outer`, `left`,
-   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`.
+   * @param joinType Type of join to perform. Default `Inner`. Must be one of the valid JoinType:
+   *                 `Inner`, `Cross`, `FullOuter`, `LeftOuter`, RightOuter.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
   @Evolving
-  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: JoinType): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
     val joined = sparkSession.sessionState.executePlan(
       Join(
         this.logicalPlan,
         other.logicalPlan,
-        JoinType(joinType),
+        joinType,
         Some(condition.expr),
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
@@ -1154,7 +1152,7 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair
+   * Using Inner equi-join to join this Dataset returning a `Tuple2` for each pair
    * where `condition` evaluates to true.
    *
    * @param other Right side of the join.
@@ -1166,7 +1164,7 @@ class Dataset[T] private[sql](
   @Experimental
   @Evolving
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
-    joinWith(other, condition, "inner")
+    joinWith(other, condition, Inner)
   }
 
   /**

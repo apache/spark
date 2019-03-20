@@ -25,6 +25,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -310,13 +311,13 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 0)
-    val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
+    val df = df1.join(broadcast(df2), $"key" === $"key2", LeftOuter)
     testSparkPlanMetrics(df, 2, Map(
       0L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 5L))))
     )
 
-    val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
+    val df3 = df1.join(broadcast(df2), $"key" === $"key2", RightOuter)
     testSparkPlanMetrics(df3, 2, Map(
       0L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 6L))))
@@ -346,7 +347,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 1)
-    val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
+    val df = df1.join(broadcast(df2), $"key" === $"key2", LeftSemi)
     testSparkPlanMetrics(df, 2, Map(
       1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))

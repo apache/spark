@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -107,7 +108,7 @@ object JoinBenchmark extends SqlBasedBenchmark {
     val M = 1 << 16
     val dim = broadcast(spark.range(M).selectExpr("id as k", "cast(id as string) as v"))
     codegenBenchmark("outer join w long", N) {
-      val df = spark.range(N).join(dim, (col("id") % M) === col("k"), "left")
+      val df = spark.range(N).join(dim, (col("id") % M) === col("k"), LeftOuter)
       assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
       df.count()
     }
@@ -118,7 +119,7 @@ object JoinBenchmark extends SqlBasedBenchmark {
     val M = 1 << 16
     val dim = broadcast(spark.range(M).selectExpr("id as k", "cast(id as string) as v"))
     codegenBenchmark("semi join w long", N) {
-      val df = spark.range(N).join(dim, (col("id") % M) === col("k"), "leftsemi")
+      val df = spark.range(N).join(dim, (col("id") % M) === col("k"), LeftSemi)
       assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
       df.count()
     }

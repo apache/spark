@@ -25,7 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -427,7 +427,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq(1, 2).toDS().as("b")
 
     checkDataset(
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
+      ds1.joinWith(ds2, $"a.value" === $"b.value", Inner),
       (1, 1), (2, 2))
   }
 
@@ -465,22 +465,22 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq(1, 2).toDS().as("b")
 
     val e1 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
+      ds1.joinWith(ds2, $"a.value" === $"b.value", LeftSemi)
     }.getMessage
     assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
 
     val e2 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "semi")
+      ds1.joinWith(ds2, $"a.value" === $"b.value", LeftSemi)
     }.getMessage
     assert(e2.contains("Invalid join type in joinWith: " + LeftSemi.sql))
 
     val e3 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
+      ds1.joinWith(ds2, $"a.value" === $"b.value", LeftAnti)
     }.getMessage
     assert(e3.contains("Invalid join type in joinWith: " + LeftAnti.sql))
 
     val e4 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "anti")
+      ds1.joinWith(ds2, $"a.value" === $"b.value", LeftAnti)
     }.getMessage
     assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
   }
@@ -684,7 +684,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("self join") {
     val ds = Seq("1", "2").toDS().as("a")
-    val joined = ds.joinWith(ds, lit(true), "cross")
+    val joined = ds.joinWith(ds, lit(true), Cross)
     checkDataset(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
   }
 
@@ -704,7 +704,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Kryo encoder self join") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true), "cross").collect().toSet ==
+    assert(ds.joinWith(ds, lit(true), Cross).collect().toSet ==
       Set(
         (KryoData(1), KryoData(1)),
         (KryoData(1), KryoData(2)),
@@ -732,7 +732,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true), "cross").collect().toSet ==
+    assert(ds.joinWith(ds, lit(true), Cross).collect().toSet ==
       Set(
         (JavaData(1), JavaData(1)),
         (JavaData(1), JavaData(2)),
@@ -750,7 +750,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")).toDS()
 
     checkDataset(
-      ds1.joinWith(ds2, lit(true), "cross"),
+      ds1.joinWith(ds2, lit(true), Cross),
       ((nullInt, "1"), (nullInt, "1")),
       ((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")),
       ((java.lang.Integer.valueOf(22), "2"), (nullInt, "1")),
@@ -1103,7 +1103,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-15441: Dataset outer join") {
     val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
     val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
-    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", LeftOuter)
     val result = joined.collect().toSet
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
@@ -1653,7 +1653,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-24762: joinWith on Option[Product]") {
     val ds1 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("a")
     val ds2 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("b")
-    val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
+    val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", Inner)
     checkDataset(joined, (Some((2, 3)), Some((1, 2))))
   }
 

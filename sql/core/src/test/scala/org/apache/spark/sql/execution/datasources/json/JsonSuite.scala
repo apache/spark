@@ -32,6 +32,7 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -1810,7 +1811,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .join(
           additionalCorruptRecords.toDF("value"),
           F.regexp_replace($"_corrupt_record", "(^\\s+|\\s+$)", "") === F.trim($"value"),
-          "outer")
+          FullOuter)
         .agg(
           F.count($"dummy").as("valid"),
           F.count($"_corrupt_record").as("corrupt"),

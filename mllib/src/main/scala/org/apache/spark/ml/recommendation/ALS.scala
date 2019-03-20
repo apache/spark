@@ -44,6 +44,7 @@ import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -308,9 +309,9 @@ class ALSModel private[ml] (
     // create a new column named map(predictionCol) by running the predict UDF.
     val predictions = dataset
       .join(userFactors,
-        checkedCast(dataset($(userCol))) === userFactors("id"), "left")
+        checkedCast(dataset($(userCol))) === userFactors("id"), LeftOuter)
       .join(itemFactors,
-        checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
+        checkedCast(dataset($(itemCol))) === itemFactors("id"), LeftOuter)
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
     getColdStartStrategy match {
@@ -404,7 +405,7 @@ class ALSModel private[ml] (
       factors: DataFrame,
       column: String): DataFrame = {
     factors
-      .join(dataset.select(column), factors("id") === dataset(column), joinType = "left_semi")
+      .join(dataset.select(column), factors("id") === dataset(column), joinType = LeftSemi)
       .select(factors("id"), factors("features"))
   }
 

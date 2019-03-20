@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
@@ -65,7 +66,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   /**
    * Test whether the specified broadcast join updates the peak execution memory accumulator.
    */
-  private def testBroadcastJoinPeak[T: ClassTag](name: String, joinType: String): Unit = {
+  private def testBroadcastJoinPeak[T: ClassTag](name: String, joinType: JoinType): Unit = {
     AccumulatorSuite.verifyPeakExecutionMemorySet(spark.sparkContext, name) {
       val plan = testBroadcastJoin[T](joinType)
       plan.executeCollect()
@@ -73,7 +74,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   private def testBroadcastJoin[T: ClassTag](
-      joinType: String,
+      joinType: JoinType,
       forceBroadcast: Boolean = false): SparkPlan = {
     val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
@@ -91,26 +92,26 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("unsafe broadcast hash join updates peak execution memory") {
-    testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash join", "inner")
+    testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash join", Inner)
   }
 
   test("unsafe broadcast hash outer join updates peak execution memory") {
-    testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash outer join", "left_outer")
+    testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash outer join", LeftOuter)
   }
 
   test("unsafe broadcast left semi join updates peak execution memory") {
-    testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast left semi join", "leftsemi")
+    testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast left semi join", LeftSemi)
   }
 
   test("broadcast hint isn't bothered by authBroadcastJoinThreshold set to low values") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
+      testBroadcastJoin[BroadcastHashJoinExec](Inner, true)
     }
   }
 
   test("broadcast hint isn't bothered by a disabled authBroadcastJoinThreshold") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
+      testBroadcastJoin[BroadcastHashJoinExec](Inner, true)
     }
   }
 
@@ -120,7 +121,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
         val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
         df2.cache()
-        val df3 = df1.join(broadcast(df2), Seq("key"), "inner")
+        val df3 = df1.join(broadcast(df2), Seq("key"), Inner)
         val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
           case b: BroadcastHashJoinExec => b
         }.size
@@ -138,7 +139,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
         broadcast(df2).cache()
 
-        val df3 = df1.join(df2, Seq("key"), "inner")
+        val df3 = df1.join(df2, Seq("key"), Inner)
         val numCachedPlan = df3.queryExecution.executedPlan.collect {
           case i: InMemoryTableScanExec => i
         }.size
@@ -160,10 +161,10 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
       val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df3 = df1.join(broadcast(df2), Seq("key"), "inner").drop(df2("key"))
+      val df3 = df1.join(broadcast(df2), Seq("key"), Inner).drop(df2("key"))
 
       val df4 = Seq((1, "5"), (2, "5")).toDF("key", "value")
-      val df5 = df4.join(df3, Seq("key"), "inner")
+      val df5 = df4.join(df3, Seq("key"), Inner)
 
       val plan = EnsureRequirements(spark.sessionState.conf).apply(df5.queryExecution.sparkPlan)
 
@@ -174,7 +175,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
   private def assertBroadcastJoin(df : Dataset[Row]) : Unit = {
     val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
-    val joined = df1.join(df, Seq("key"), "inner")
+    val joined = df1.join(df, Seq("key"), Inner)
 
     val plan = EnsureRequirements(spark.sessionState.conf).apply(joined.queryExecution.sparkPlan)
 

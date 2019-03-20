@@ -31,6 +31,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -576,7 +577,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val col = newSalary("id")
     // this join will result in duplicate "id" columns
     val joinedDf = person.join(newSalary,
-      person("id") === newSalary("id"), "inner")
+      person("id") === newSalary("id"), Inner)
     // remove only the "id" column that was associated with newSalary
     val df = joinedDf.drop(col)
     checkAnswer(
@@ -1745,7 +1746,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-16181: outer join with isNull filter") {
     val left = Seq("x").toDF("col")
     val right = Seq("y").toDF("col").withColumn("new", lit(true))
-    val joined = left.join(right, left("col") === right("col"), "left_outer")
+    val joined = left.join(right, left("col") === right("col"), LeftOuter)
 
     checkAnswer(joined, Row("x", null, null))
     checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
@@ -1851,7 +1852,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
       val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
       val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
-      val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
+      val joinedDf = df1.join(df2, Seq("a"), FullOuter).na.fill(0)
       val df3 = Seq((3, 1)).toDF("a", "d")
       checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
     }
@@ -1881,7 +1882,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .withColumn("y", udf{ (x: String) => x.substring(0, 1) + "!" }.apply($"x"))
     val df2 = Seq("a", "b").toDF("x1")
     df1
-      .join(df2, df1("x") === df2("x1"), "left_outer")
+      .join(df2, df1("x") === df2("x1"), LeftOuter)
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count
   }

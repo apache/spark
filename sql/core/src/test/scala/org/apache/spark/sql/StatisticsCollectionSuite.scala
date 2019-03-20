@@ -25,6 +25,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -46,7 +47,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         .createOrReplaceTempView("test")
       val df1 = spark.table("test")
       val df2 = spark.table("test").limit(0)
-      val df = df1.join(df2, Seq("k"), "left")
+      val df = df1.join(df2, Seq("k"), LeftOuter)
 
       val sizes = df.queryExecution.analyzed.collect { case g: Join =>
         g.stats.sizeInBytes

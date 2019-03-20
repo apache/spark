@@ -27,6 +27,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Literal}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.{FileSourceScanExec, LogicalRDD}
@@ -447,7 +448,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     return (input, df)
   }
 
-  private def setupWindowedJoin(joinType: String):
+  private def setupWindowedJoin(joinType: JoinType):
   (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
     val (input1, df1) = setupStream("left", 2)
     val (input2, df2) = setupStream("right", 3)
@@ -471,7 +472,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         left("key") === right("key")
           && left("window") === right("window")
           && 'leftValue > 4,
-        "left_outer")
+      LeftOuter)
         .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
 
     testStream(joined)(
@@ -500,7 +501,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       left("key") === right("key")
         && left("window") === right("window")
         && 'rightValue.cast("int") > 7,
-      "left_outer")
+      LeftOuter)
       .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
 
     testStream(joined)(
@@ -529,7 +530,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       left("key") === right("key")
         && left("window") === right("window")
         && 'leftValue > 4,
-      "right_outer")
+      RightOuter)
       .select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
 
     testStream(joined)(
@@ -558,7 +559,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       left("key") === right("key")
         && left("window") === right("window")
         && 'rightValue.cast("int") > 7,
-      "right_outer")
+      RightOuter)
       .select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
 
     testStream(joined)(
@@ -576,7 +577,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
   }
 
   test("windowed left outer join") {
-    val (leftInput, rightInput, joined) = setupWindowedJoin("left_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoin(LeftOuter)
 
     testStream(joined)(
       // Test inner part of the join.
@@ -594,7 +595,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
   }
 
   test("windowed right outer join") {
-    val (leftInput, rightInput, joined) = setupWindowedJoin("right_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoin(RightOuter)
 
     testStream(joined)(
       // Test inner part of the join.
@@ -612,10 +613,9 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
   }
 
   Seq(
-    ("left_outer", Row(3, null, 5, null)),
-    ("right_outer", Row(null, 2, null, 5))
-  ).foreach { case (joinType: String, outerResult) =>
-    test(s"${joinType.replaceAllLiterally("_", " ")} with watermark range condition") {
+    (LeftOuter, Row(3, null, 5, null)),
+    (RightOuter, Row(null, 2, null, 5))
+  ).foreach { case (joinType: JoinType, outerResult) =>
       import org.apache.spark.sql.functions._
 
       val leftInput = MemoryStream[(Int, Int)]
@@ -653,7 +653,6 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         CheckNewAnswer(outerResult),
         assertNumStateRows(total = 2, updated = 1)
       )
-    }
   }
 
   // When the join condition isn't true, the outer null rows must be generated, even if the join
@@ -669,7 +668,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         right,
         left("key") === right("key") && left("window") === right("window") &&
             'leftValue > 10 && ('rightValue < 300 || 'rightValue > 1000),
-        "left_outer")
+      LeftOuter)
       .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
 
     testStream(joined)(

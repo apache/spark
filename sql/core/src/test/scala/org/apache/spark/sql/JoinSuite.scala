@@ -27,6 +27,7 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{BinaryExecNode, SortExec}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
@@ -45,7 +46,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
+    val join = x.join(y, $"x.a" === $"y.a", Inner).queryExecution.optimizedPlan
     val planned = spark.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
@@ -203,7 +204,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-22141: Propagate empty relation before checking Cartesian products") {
-    Seq("inner", "left", "right", "left_outer", "right_outer", "full_outer").foreach { joinType =>
+    Seq(Inner, LeftOuter, RightOuter, FullOuter).foreach { joinType =>
       val x = testData2.where($"a" === 2 && !($"a" === 2)).as("x")
       val y = testData2.where($"a" === 1 && !($"a" === 1)).as("y")
       checkAnswer(x.join(y, Seq.empty, joinType), Nil)
@@ -249,7 +250,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("left outer join") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        upperCaseData.join(lowerCaseData, $"n" === $"N", "left"),
+        upperCaseData.join(lowerCaseData, $"n" === $"N", LeftOuter),
         Row(1, "A", 1, "a") ::
           Row(2, "B", 2, "b") ::
           Row(3, "C", 3, "c") ::
@@ -258,7 +259,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(6, "F", null, null) :: Nil)
 
       checkAnswer(
-        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > 1, "left"),
+        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > 1, LeftOuter),
         Row(1, "A", null, null) ::
           Row(2, "B", 2, "b") ::
           Row(3, "C", 3, "c") ::
@@ -267,7 +268,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(6, "F", null, null) :: Nil)
 
       checkAnswer(
-        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > 1, "left"),
+        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > 1, LeftOuter),
         Row(1, "A", null, null) ::
           Row(2, "B", 2, "b") ::
           Row(3, "C", 3, "c") ::
@@ -276,7 +277,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(6, "F", null, null) :: Nil)
 
       checkAnswer(
-        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
+        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", LeftOuter),
         Row(1, "A", 1, "a") ::
           Row(2, "B", 2, "b") ::
           Row(3, "C", 3, "c") ::
@@ -315,7 +316,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("right outer join") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        lowerCaseData.join(upperCaseData, $"n" === $"N", "right"),
+        lowerCaseData.join(upperCaseData, $"n" === $"N", RightOuter),
         Row(1, "a", 1, "A") ::
           Row(2, "b", 2, "B") ::
           Row(3, "c", 3, "C") ::
@@ -323,7 +324,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
       checkAnswer(
-        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > 1, "right"),
+        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > 1, RightOuter),
         Row(null, null, 1, "A") ::
           Row(2, "b", 2, "B") ::
           Row(3, "c", 3, "C") ::
@@ -331,7 +332,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
       checkAnswer(
-        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > 1, "right"),
+        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > 1, RightOuter),
         Row(null, null, 1, "A") ::
           Row(2, "b", 2, "B") ::
           Row(3, "c", 3, "C") ::
@@ -339,7 +340,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
       checkAnswer(
-        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
+        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", RightOuter),
         Row(1, "a", 1, "A") ::
           Row(2, "b", 2, "B") ::
           Row(3, "c", 3, "C") ::
@@ -384,7 +385,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val right = UnresolvedRelation(TableIdentifier("right"))
 
     checkAnswer(
-      left.join(right, $"left.N" === $"right.N", "full"),
+      left.join(right, $"left.N" === $"right.N", FullOuter),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", 3, "C") ::
@@ -393,7 +394,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), FullOuter),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -403,7 +404,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), FullOuter),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
