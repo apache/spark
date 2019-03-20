@@ -683,7 +683,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       try {
         val fieldNames = getConstructorParameterNames(p.getClass)
         val fieldValues = p.productIterator.toSeq
-        assert(fieldNames.length == fieldValues.length)
+        assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
+          fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
         ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
           case (name, value) => name -> parseToJson(value)
         }.toList
