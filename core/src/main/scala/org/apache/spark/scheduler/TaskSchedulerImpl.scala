@@ -832,7 +832,10 @@ private[spark] class TaskSchedulerImpl(
     if (skipRackResolving) {
       defaultRackValue
     } else {
-      doGetRacksForHosts(Seq(hosts)).head
+      doGetRacksForHosts(Seq(hosts)) match {
+        case Nil => defaultRackValue
+        case head :: Nil => head
+      }
     }
   }
 
