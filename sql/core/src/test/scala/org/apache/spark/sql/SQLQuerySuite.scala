@@ -2047,6 +2047,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("xxhash64 function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempView("tbl") {
+      df.createOrReplaceTempView("tbl")
+      checkAnswer(
+        df.select(xxhash64($"i", $"j")),
+        sql("SELECT xxhash64(i, j) from tbl")
+      )
+    }
+  }
+
   test("join with using clause") {
     val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
       ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
