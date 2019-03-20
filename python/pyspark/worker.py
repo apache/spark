@@ -38,7 +38,7 @@ from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasSerializer
+    BatchedSerializer, ArrowStreamPandasUDFSerializer
 from pyspark.sql.types import to_arrow_type, StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
@@ -251,7 +251,7 @@ def read_udfs(pickleSer, infile, eval_type):
             "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")\
             .lower() == "true"
 
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, assign_cols_by_name)
+        ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 
