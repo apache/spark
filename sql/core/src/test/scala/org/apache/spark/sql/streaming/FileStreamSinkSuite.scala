@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.nio.file.Files
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
@@ -503,7 +504,9 @@ class FileStreamSinkSuite extends StreamTest {
           }
         }
 
-        val outputFiles = outputDir.listFiles().filterNot(_.getName == FileStreamSink.metadataDir)
+        import scala.collection.JavaConverters._
+        val outputFiles = Files.walk(outputDir.toPath).iterator().asScala
+          .filter(p => Files.isRegularFile(p) && p.endsWith(".parquet"))
         assert(outputFiles.length === 0, "Incomplete files should be cleaned up.")
       }
     }
