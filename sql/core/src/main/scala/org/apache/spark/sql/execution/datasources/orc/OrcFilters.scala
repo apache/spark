@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentFactory}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
@@ -113,10 +114,7 @@ private[orc] object OrcFilters {
     case FloatType | DoubleType =>
       value.asInstanceOf[Number].doubleValue()
     case _: DecimalType =>
-      val decimal = value.asInstanceOf[java.math.BigDecimal]
-      val decimalWritable = new HiveDecimalWritable(decimal.longValue)
-      decimalWritable.mutateEnforcePrecisionScale(decimal.precision, decimal.scale)
-      decimalWritable
+      new HiveDecimalWritable(HiveDecimal.create(value.asInstanceOf[java.math.BigDecimal]))
     case _ => value
   }
 
