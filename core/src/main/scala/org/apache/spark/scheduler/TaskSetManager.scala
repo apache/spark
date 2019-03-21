@@ -70,6 +70,8 @@ private[spark] class TaskSetManager(
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
 
+  val localityGainFactor = conf.get(LOCALITY_GAIN_FACTOR)
+
   // Serializer for closures and tasks.
   val env = SparkEnv.get
   val ser = env.closureSerializer.newInstance()
@@ -184,6 +186,7 @@ private[spark] class TaskSetManager(
     t.epoch = epoch
   }
 
+  val taskPendingStartTimes = new HashMap[Long, Long]()
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
@@ -244,6 +247,7 @@ private[spark] class TaskSetManager(
     }
 
     allPendingTasks += index  // No point scanning this whole list to find the old task there
+    taskPendingStartTimes.put(index, clock.getTimeMillis())
   }
 
   /**
@@ -287,6 +291,7 @@ private[spark] class TaskSetManager(
       if (!isTaskBlacklistedOnExecOrNode(index, execId, host)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
+        taskPendingStartTimes.remove(index)
         if (copiesRunning(index) == 0 && !successful(index)) {
           return Some(index)
         }
@@ -555,6 +560,7 @@ private[spark] class TaskSetManager(
           return true
         } else {
           pendingTaskIds.remove(indexOffset)
+          taskPendingStartTimes.remove(index)
         }
       }
       false
@@ -578,6 +584,17 @@ private[spark] class TaskSetManager(
       hasTasks
     }
 
+    val actualNumTasksCanRun = math.min(allPendingTasks.size,
+      sched.backend.maxNumConcurrentTasks() - sched.runningTasksByExecutors.values.sum)
+    val probabilityOfNextLocalitySchedule = 0.5D
+    val maxTolerantStarvingTime = if (successfulTaskDurations.isEmpty()) {
+      Long.MaxValue
+    } else {
+      actualNumTasksCanRun *
+        successfulTaskDurations.median * localityGainFactor * probabilityOfNextLocalitySchedule
+    }
+
+    val totalStarvingTime = taskPendingStartTimes.map(curTime - _._2).sum
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
         case TaskLocality.PROCESS_LOCAL => moreTasksToRunIn(pendingTasksForExecutor)
@@ -599,6 +616,12 @@ private[spark] class TaskSetManager(
         lastLaunchTime += localityWaits(currentLocalityIndex)
         logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
+        currentLocalityIndex += 1
+      } else if (totalStarvingTime > maxTolerantStarvingTime) {
+        lastLaunchTime = curTime
+        logDebug(s"Lots of pending tasks have been waiting a long time for locality level " +
+          s"${myLocalityLevels(currentLocalityIndex)}, so moving to locality level " +
+          s"${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)

@@ -356,6 +356,10 @@ package object config {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")
 
+  private[spark] val LOCALITY_GAIN_FACTOR = ConfigBuilder("spark.locality.gainFactor")
+    .doubleConf
+    .createWithDefault(0.1)
+
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
 
