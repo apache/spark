@@ -18,14 +18,17 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.time.{LocalDateTime, ZoneOffset}
+import java.util.TimeZone
 
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -227,5 +230,24 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
+  }
+
+  test("format timestamp literal using spark.sql.session.timeZone") {
+    withSQLConf(
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT+1:00",
+      SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      val originTimeZone = TimeZone.getDefault
+      try {
+        TimeZone.setDefault(TimeZone.getTimeZone("GMT-8:00"))
+        val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
+          .atZone(ZoneOffset.UTC)
+          .toInstant
+        val expected = "TIMESTAMP('2019-03-21 01:02:03.456')"
+        val literalStr = Literal.create(timestamp).sql
+        assert(literalStr === expected)
+      } finally {
+        TimeZone.setDefault(originTimeZone)
+      }
+    }
   }
 }
