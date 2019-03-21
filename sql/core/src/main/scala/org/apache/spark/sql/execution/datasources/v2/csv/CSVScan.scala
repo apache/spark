@@ -68,8 +68,9 @@ case class CSVScan(
       )
     }
 
-    val hadoopConf =
-      sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
+    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+    // Hadoop Configurations are case sensitive.
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
