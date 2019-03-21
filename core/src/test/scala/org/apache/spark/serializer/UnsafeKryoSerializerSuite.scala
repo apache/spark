@@ -17,6 +17,8 @@
 
 package org.apache.spark.serializer
 
+import org.roaringbitmap.RoaringBitmap
+
 import org.apache.spark.internal.config.Kryo._
 
 class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
@@ -31,5 +33,20 @@ class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
   override def afterAll() {
     conf.set(KRYO_USE_UNSAFE, false)
     super.afterAll()
+  }
+
+  test("SPARK-27216: kryo serialization with RoaringBitmap") {
+    val expected = new RoaringBitmap
+    expected.add(1787)
+
+    conf.set(KRYO_USE_UNSAFE, false)
+    val safeSer = new KryoSerializer(conf).newInstance()
+    var actual : RoaringBitmap = safeSer.deserialize(safeSer.serialize(expected))
+    assert(actual === expected)
+
+    conf.set(KRYO_USE_UNSAFE, true)
+    val unsafeSer = new KryoSerializer(conf).newInstance()
+    actual = unsafeSer.deserialize(unsafeSer.serialize(expected))
+    assert(actual !== expected)
   }
 }
