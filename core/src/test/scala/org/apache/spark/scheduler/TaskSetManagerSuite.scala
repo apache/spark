@@ -1612,7 +1612,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       result.accumUpdates, info3)
   }
 
-  test("SPARK-27038 Rack Resolution is done with a batch of de-duped hosts") {
+  test("SPARK-13704 Rack Resolution is done with a batch of de-duped hosts") {
     val conf = new SparkConf()
       .set(config.LOCALITY_WAIT.key, "0")
       .set(config.LOCALITY_WAIT_RACK.key, "1s")
@@ -1648,7 +1648,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(FakeRackUtil.numBatchInvocation === 1)
   }
 
-  test("SPARK-27038 Rack resolving is skipped when spark.locality.wait is zero") {
+  test("SPARK-13704 Rack resolving is skipped when spark.locality.wait is zero") {
     val conf = new SparkConf().set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "test", conf)
     for (i <- 0 to 99) {
@@ -1663,7 +1663,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(100, locations: _*)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    // verify the total number not changed with SPARK-27038
+    // verify the total number not changed with SPARK-13704
     assert(manager.getPendingTasksForRack(sched.defaultRackValue).length === 100)
     assert(FakeRackUtil.numBatchInvocation === 0)
   }

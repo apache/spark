@@ -58,10 +58,10 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
   }
 
   /**
-    * Added in SPARK-27038.
-    * This should be changed to `RackResolver.resolve(conf, hostNames)`
-    * in hadoop releases with YARN-9332.
-    */
+   * Added in SPARK-13704.
+   * This should be changed to `RackResolver.resolve(conf, hostNames)`
+   * in hadoop releases with YARN-9332.
+   */
   def resolve(conf: Configuration, hostNames: Seq[String]): Seq[Node] = {
     SparkRackResolver(conf).coreResolve(hostNames)
   }

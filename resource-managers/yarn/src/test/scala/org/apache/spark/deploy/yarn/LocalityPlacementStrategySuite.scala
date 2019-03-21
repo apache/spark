@@ -58,7 +58,7 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
 
     val resource = Resource.newInstance(8 * 1024, 4)
     val strategy = new LocalityPreferredContainerPlacementStrategy(new SparkConf(),
-      yarnConf, resource, new MockResolver())
+      yarnConf, resource, new MockResolver(yarnConf))
 
     val totalTasks = 32 * 1024
     val totalContainers = totalTasks / 16
