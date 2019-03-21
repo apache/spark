@@ -89,11 +89,11 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
         throw e;
       }
 
-      if (!LOG.isDebugEnabled()) {
-        LOG.info("New auth protocol failed, trying SASL.");
-      } else {
+      if (LOG.isDebugEnabled()) {
         Throwable cause = e.getCause() != null ? e.getCause() : e;
         LOG.debug("New auth protocol failed, trying SASL.", cause);
+      } else {
+        LOG.info("New auth protocol failed, trying SASL.");
       }
       doSaslAuth(client, channel);
     }
