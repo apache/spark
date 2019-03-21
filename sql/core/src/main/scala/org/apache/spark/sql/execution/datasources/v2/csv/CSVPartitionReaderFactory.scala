@@ -31,7 +31,7 @@ import org.apache.spark.util.SerializableConfiguration
  * A factory used to create CSV readers.
  *
  * @param sqlConf SQL configuration.
- * @param broadcastedConf Broadcast serializable Hadoop Configuration.
+ * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
  * @param dataSchema Schema of CSV files.
  * @param partitionSchema Schema of partitions.
  * @param readSchema Required schema in the batch scan.

@@ -375,8 +375,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25700: do not read schema when writing in other modes" +
-    " except append and overwrite") {
+  test("SPARK-25700: do not read schema when writing in other modes except append and overwrite") {
     withTempPath { file =>
       val cls = classOf[SimpleWriteOnlyDataSource]
       val path = file.getCanonicalPath

@@ -332,7 +332,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "orc,csv"
+          "csv,orc"
         } else {
           ""
         }
@@ -377,7 +377,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     // TODO: test file source V2 after write path is fixed.
     Seq(true).foreach { useV1 =>
       val useV1List = if (useV1) {
-        "orc,csv"
+        "csv,orc"
       } else {
         ""
       }
