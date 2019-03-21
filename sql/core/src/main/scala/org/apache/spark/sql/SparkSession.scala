@@ -361,7 +361,11 @@ class SparkSession private(
   @DeveloperApi
   @Evolving
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD, schema, needsConversion = true)
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
+    val encoder = RowEncoder(schema)
+    val catalystRows = rowRDD.map(encoder.toRow)
+    internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
   /**
@@ -588,25 +592,6 @@ class SparkSession private(
       catalystRows,
       isStreaming = isStreaming)(self)
     Dataset.ofRows(self, logicalPlan)
-  }
-
-  /**
-   * Creates a `DataFrame` from an `RDD[Row]`.
-   * User can specify whether the input rows should be converted to Catalyst rows.
-   */
-  private[sql] def createDataFrame(
-      rowRDD: RDD[Row],
-      schema: StructType,
-      needsConversion: Boolean) = {
-    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
-    // schema differs from the existing schema on any field data type.
-    val catalystRows = if (needsConversion) {
-      val encoder = RowEncoder(schema)
-      rowRDD.map(encoder.toRow)
-    } else {
-      rowRDD.map { r: Row => InternalRow.fromSeq(r.toSeq) }
-    }
-    internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
 
