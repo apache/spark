@@ -378,11 +378,8 @@ private[hive] class HiveClientImpl(
 
       val bucketSpec = if (h.getNumBuckets > 0) {
         val sortColumnOrders = h.getSortCols.asScala
-        // Currently Spark only supports columns to be sorted in ascending order
-        // but Hive can support both ascending and descending order. If all the columns
-        // are sorted in ascending order, only then propagate the sortedness information
-        // to downstream processing / optimizations in Spark
-        // TODO: In future we can have Spark support columns sorted in descending order
+        // If all the columns are sorted in ascending order, only then propagate
+        // the sortedness information to downstream processing / optimizations in Spark
         val allAscendingSorted = sortColumnOrders.forall(_.getOrder == HIVE_COLUMN_ORDER_ASC)
 
         val sortColumnNames = if (allAscendingSorted) {
