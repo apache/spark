@@ -48,9 +48,10 @@ private[v1] class SqlResource extends BaseAppResource {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
 
-      sqlStore.executionsList()
-        .filter(execution => execution.executionId == execId)
+      sqlStore
+        .execution(execId)
         .map(exec => prepareExecutionData(exec))
+        .toSeq
     }
   }
 
@@ -59,15 +60,14 @@ private[v1] class SqlResource extends BaseAppResource {
     var completed = Seq[Int]()
     var failed = Seq[Int]()
 
-    exec.jobs.map { job =>
-      job match {
-        case (id, status) if status == JobExecutionStatus.RUNNING =>
-          running = running :+ id
-        case (id, status) if status == JobExecutionStatus.SUCCEEDED =>
-          completed = completed :+ id
-        case (id, status) if status == JobExecutionStatus.FAILED =>
-          failed = failed :+ id
-      }
+    exec.jobs.foreach {
+      case (id, JobExecutionStatus.RUNNING) =>
+        running = running :+ id
+      case (id, JobExecutionStatus.SUCCEEDED ) =>
+        completed = completed :+ id
+      case (id, JobExecutionStatus.FAILED) =>
+        failed = failed :+ id
+      case _ =>
     }
 
     val status = if (exec.jobs.size == completed.size) {
