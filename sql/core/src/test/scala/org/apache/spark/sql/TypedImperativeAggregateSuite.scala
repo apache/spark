@@ -320,9 +320,9 @@ object TypedImperativeAggregateSuite {
   }
 
   /**
-    * Calculate the max value with object aggregation buffer. This stores class MaxValue
-    * in aggregation buffer.
-    */
+   * Calculate the max value with object aggregation buffer. This stores class MaxValue
+   * in aggregation buffer.
+   */
   private case class TypedMax2(
     child: Expression,
     nullable: Boolean = false,
