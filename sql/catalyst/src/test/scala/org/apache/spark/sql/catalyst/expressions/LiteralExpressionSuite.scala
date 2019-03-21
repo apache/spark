@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.time.{Instant, LocalDate}
 
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
@@ -26,6 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -64,8 +66,14 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(BinaryType), "".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
     checkEvaluation(Literal.default(DecimalType.SYSTEM_DEFAULT), Decimal(0))
-    checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
-    checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "false") {
+      checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
+      checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
+    }
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
+      checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
+    }
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0L))
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
@@ -227,5 +235,48 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
+  }
+
+  test("construct literals from java.time.LocalDate") {
+    Seq(
+      LocalDate.of(1, 1, 1),
+      LocalDate.of(1582, 10, 1),
+      LocalDate.of(1600, 7, 30),
+      LocalDate.of(1969, 12, 31),
+      LocalDate.of(1970, 1, 1),
+      LocalDate.of(2019, 3, 20),
+      LocalDate.of(2100, 5, 17)).foreach { localDate =>
+      checkEvaluation(Literal(localDate), localDate)
+    }
+  }
+
+  test("construct literals from arrays of java.time.LocalDate") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      val localDate0 = LocalDate.of(2019, 3, 20)
+      checkEvaluation(Literal(Array(localDate0)), Array(localDate0))
+      val localDate1 = LocalDate.of(2100, 4, 22)
+      checkEvaluation(Literal(Array(localDate0, localDate1)), Array(localDate0, localDate1))
+    }
+  }
+
+  test("construct literals from java.time.Instant") {
+    Seq(
+      Instant.parse("0001-01-01T00:00:00Z"),
+      Instant.parse("1582-10-01T01:02:03Z"),
+      Instant.parse("1970-02-28T11:12:13Z"),
+      Instant.ofEpochMilli(0),
+      Instant.parse("2019-03-20T10:15:30Z"),
+      Instant.parse("2100-12-31T22:17:31Z")).foreach { instant =>
+      checkEvaluation(Literal(instant), instant)
+    }
+  }
+
+  test("construct literals from arrays of java.time.Instant") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      val instant0 = Instant.ofEpochMilli(0)
+      checkEvaluation(Literal(Array(instant0)), Array(instant0))
+      val instant1 = Instant.parse("2019-03-20T10:15:30Z")
+      checkEvaluation(Literal(Array(instant0, instant1)), Array(instant0, instant1))
+    }
   }
 }
