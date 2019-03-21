@@ -299,7 +299,7 @@ test_that("spark.mlp", {
   df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                 source = "libsvm")
   model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 5, 4, 3),
-                     solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 42)
+                     solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
 
   # Test summary method
   summary <- summary(model)
@@ -307,13 +307,13 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
-  expect_equal(head(summary$weights, 5), list(0.2664868, 0.02332, 0.8180507, -0.5645642, 0.4120664),
+  expect_equal(head(summary$weights, 5), list(0.327309, 0.2385232, -0.8763775, -1.01558, 0.8494107),
                tolerance = 1e-6)
 
   # Test predict method
   mlpTestDF <- df
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "1.0", "1.0", "1.0", "1.0", "1.0"))
+  expect_equal(head(mlpPredictions$prediction, 6), c("2.0", "2.0", "2.0", "2.0", "2.0", "2.0"))
 
   # Test model save/load
   if (windows_with_hadoop()) {
