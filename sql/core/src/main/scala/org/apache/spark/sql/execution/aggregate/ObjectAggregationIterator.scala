@@ -58,8 +58,7 @@ class ObjectAggregationIterator(
 
   private[this] var aggBufferIterator: Iterator[AggregationBufferEntry] = _
 
-  // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
-  var (sortBasedAggExpressions, sortBasedAggFunctions): (
+  val (sortBasedAggExpressions, sortBasedAggFunctions): (
     Seq[AggregateExpression], Array[AggregateFunction]) = {
     val newExpressions = aggregateExpressions.map {
       case agg @ AggregateExpression(_, Partial, _, _) =>
@@ -71,6 +70,7 @@ class ObjectAggregationIterator(
     (newExpressions, initializeAggregateFunctions(newExpressions, 0))
   }
 
+  // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
   private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
     val newInputAttributes = sortBasedAggFunctions.flatMap(_.inputAggBufferAttributes)
     generateProcessRow(sortBasedAggExpressions, sortBasedAggFunctions, newInputAttributes)
@@ -111,19 +111,14 @@ class ObjectAggregationIterator(
   //  - when creating aggregation buffer for a new group in the hash map, and
   //  - when creating the re-used buffer for sort-based aggregation
   private def createNewAggregationBuffer(
-    functions: Array[AggregateFunction]): SpecificInternalRow = {
+      functions: Array[AggregateFunction]): SpecificInternalRow = {
     val bufferFieldTypes = functions.flatMap(_.aggBufferAttributes.map(_.dataType))
     val buffer = new SpecificInternalRow(bufferFieldTypes)
-    initAggregationBuffer(buffer, functions)
-    buffer
-  }
-
-  private def initAggregationBuffer(
-    buffer: SpecificInternalRow, functions: Array[AggregateFunction]): Unit = {
     // Initializes declarative aggregates' buffer values
     expressionAggInitialProjection.target(buffer)(EmptyRow)
     // Initializes imperative aggregates' buffer values
     functions.collect { case f: ImperativeAggregate => f }.foreach(_.initialize(buffer))
+    buffer
   }
 
   private def getAggregationBufferByKey(
