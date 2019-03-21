@@ -34,7 +34,7 @@ class SQLQueryWithKryoSuite extends QueryTest with SharedSQLContext {
     // 1. Enable KryoSerializer
     // 2. Set spark.kryo.unsafe to true
     // 3. Use HighlyCompressedMapStatus since it uses RoaringBitmap
-    // 4. Set spark.sql.shuffle.partitions to 6000, only 6000 can trigger
+    // 4. Set spark.sql.shuffle.partitions to 6000, 6000 can trigger issue based the supplied data
     // 5. Comment the zero-size blocks fetch fail exception in ShuffleBlockFetcherIterator
     //    or this job will failed with FetchFailedException.
     withSQLConf(
