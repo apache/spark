@@ -2159,7 +2159,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       .setMaxIter(220).setTol(1e-10)
     val trainer2 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(0.5).setRegParam(0.1).setStandardization(false)
-      .setMaxIter(90).setTol(1e-10)
+      .setMaxIter(220).setTol(1e-10)
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
@@ -2248,7 +2248,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model1.interceptVector ~== interceptsRStd absTol 0.1)
     assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficientMatrix ~== coefficientsR absTol 0.01)
-    assert(model2.interceptVector ~== interceptsR absTol 0.9)
+    assert(model2.interceptVector ~== interceptsR absTol 0.01)
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
   }
 
