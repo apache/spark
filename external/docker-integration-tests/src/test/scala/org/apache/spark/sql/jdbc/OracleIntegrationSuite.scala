@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  *
  * The following would be the steps to test this
  * 1. Build Oracle database in Docker, please refer below link about how to.
- *    @see https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
+ *    https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
  * 2. export ORACLE_DOCKER_IMAGE_NAME=$ORACLE_DOCKER_IMAGE_NAME
  *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 3. Start docker - sudo service docker start
@@ -81,11 +81,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.prepareStatement(
       "CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)").executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO ts_with_timezone VALUES " +
-        "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+      """
+        |INSERT INTO ts_with_timezone VALUES (
+        |1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))
+         """.stripMargin).executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO ts_with_timezone VALUES " +
-        "(2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+      """
+        |INSERT INTO ts_with_timezone VALUES (
+        |2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))
+      """.stripMargin).executeUpdate()
     conn.commit()
 
     conn.prepareStatement(
