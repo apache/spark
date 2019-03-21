@@ -247,7 +247,6 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       LocalDate.of(2019, 3, 20),
       LocalDate.of(2100, 5, 17)).foreach { localDate =>
       checkEvaluation(Literal(localDate), localDate)
-      checkEvaluation(Literal(Array(localDate)), Array(localDate))
     }
   }
 
