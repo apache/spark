@@ -913,9 +913,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {
     case StringType =>
-      (c, evPrim, evNull) => code"$evPrim = $c.getBytes();"
+      (c, evPrim, evNull) =>
+        code"$evPrim = $c.getBytes();"
     case ByteType | ShortType | IntegerType | LongType =>
-      (c, evPrim, evNull) => code"$evPrim = ${NumberConverter.getClass.getName.stripSuffix("$")}.toBinary($c);"
+      (c, evPrim, evNull) =>
+        code"$evPrim = ${NumberConverter.getClass.getName.stripSuffix("$")}.toBinary($c);"
   }
 
   private[this] def castToDateCode(

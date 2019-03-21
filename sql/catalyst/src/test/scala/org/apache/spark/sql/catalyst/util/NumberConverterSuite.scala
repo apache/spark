@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder.BIG_ENDIAN
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.NumberConverter.convert
+import org.apache.spark.sql.catalyst.util.NumberConverter.{convert, toBinary}
 import org.apache.spark.unsafe.types.UTF8String
 
 class NumberConverterSuite extends SparkFunSuite {
@@ -74,13 +74,13 @@ class NumberConverterSuite extends SparkFunSuite {
 
   def checkToBinary[T](in: T): Unit = in match {
     case b: Byte =>
-      assert(NumberConverter.toBinary(b) === ByteBuffer.allocate(1).order(BIG_ENDIAN).put(b).array())
+      assert(toBinary(b) === ByteBuffer.allocate(1).order(BIG_ENDIAN).put(b).array())
     case s: Short =>
-      assert(NumberConverter.toBinary(s) === ByteBuffer.allocate(2).order(BIG_ENDIAN).putShort(s).array())
+      assert(toBinary(s) === ByteBuffer.allocate(2).order(BIG_ENDIAN).putShort(s).array())
     case i: Int =>
-      assert(NumberConverter.toBinary(i) === ByteBuffer.allocate(4).order(BIG_ENDIAN).putInt(i).array())
+      assert(toBinary(i) === ByteBuffer.allocate(4).order(BIG_ENDIAN).putInt(i).array())
     case l: Long =>
-      assert(NumberConverter.toBinary(l) === ByteBuffer.allocate(8).order(BIG_ENDIAN).putLong(l).array())
+      assert(toBinary(l) === ByteBuffer.allocate(8).order(BIG_ENDIAN).putLong(l).array())
   }
 
 }
