@@ -482,47 +482,30 @@ class FileStreamSinkSuite extends StreamTest {
     }
   }
 
-  test("cleanup incomplete output for aborted task") {
-    withSQLConf(("spark.sql.streaming.commitProtocolClass",
-      classOf[TaskFailToCommitManifestFileCommitProtocol].getCanonicalName)) {
-      withTempDir { tempDir =>
-        val checkpointDir = new File(tempDir, "chk")
-        val outputDir = new File(tempDir, "output")
-        val inputData = MemoryStream[Int]
-        inputData.addData(1, 2, 3)
-        val q = inputData.toDF()
-          .writeStream
-          .option("checkpointLocation", checkpointDir.getCanonicalPath)
-          .format("parquet")
-          .start(outputDir.getCanonicalPath)
+  testQuietly("cleanup incomplete output for aborted task") {
+    withTempDir { tempDir =>
+      val checkpointDir = new File(tempDir, "chk")
+      val outputDir = new File(tempDir, "output")
+      val inputData = MemoryStream[Int]
+      inputData.addData(1, 2, 3)
+      val q = inputData.toDS().map(_ / 0)
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .format("parquet")
+        .start(outputDir.getCanonicalPath)
 
-        intercept[StreamingQueryException] {
-          try {
-            q.processAllAvailable()
-          } finally {
-            q.stop()
-          }
+      intercept[StreamingQueryException] {
+        try {
+          q.processAllAvailable()
+        } finally {
+          q.stop()
         }
-
-        import scala.collection.JavaConverters._
-        val outputFiles = Files.walk(outputDir.toPath).iterator().asScala
-          .filter(p => Files.isRegularFile(p) && p.endsWith(".parquet"))
-        assert(outputFiles.length === 0, "Incomplete files should be cleaned up.")
       }
+
+      import scala.collection.JavaConverters._
+      val outputFiles = Files.walk(outputDir.toPath).iterator().asScala
+        .filter(_.toString.endsWith(".parquet"))
+      assert(outputFiles.toList.isEmpty, "Incomplete files should be cleaned up.")
     }
-  }
-}
-
-class TaskFailToCommitManifestFileCommitProtocol(jobId: String, path: String)
-  extends ManifestFileCommitProtocol(jobId, path) {
-
-  override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
-    val addedFiles = this.getAddedFiles
-    assert(addedFiles.length > 0, "Expect at least one output file.")
-    val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)
-    assert(addedFiles.forall(file => fs.exists(new Path(file))),
-      "Output files being tracked must be exist for now.")
-
-    throw new IllegalStateException("Intended error!")
   }
 }
