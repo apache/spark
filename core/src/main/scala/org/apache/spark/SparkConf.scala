@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.util.{Map => JMap}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
@@ -28,6 +28,7 @@ import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -278,6 +279,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.timeStringAsSeconds(get(key, defaultValue))
+  }
+
+  /**
+   * Get a time parameter as seconds, falling back to a default if not set. If no
+   * suffix is provided then defaultUnit is assumed.
+   * @throws NumberFormatException If the value cannot be interpreted as seconds
+   */
+  def getTimeAsSeconds(key: String, defaultValue: String, defaultUnit: TimeUnit): Long =
+    catchIllegalValue(key) {
+      JavaUtils.timeStringAs(get(key, defaultValue), TimeUnit.SECONDS, defaultUnit)
   }
 
   /**
@@ -610,7 +621,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
 
     val executorTimeoutThreshold = getTimeAsSeconds("spark.network.timeout", "120s")
-    val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
+    val executorHeartbeatInterval =
+      getTimeAsSeconds("spark.executor.heartbeatInterval", "10s", TimeUnit.MILLISECONDS)
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThreshold > executorHeartbeatInterval, "The value of " +

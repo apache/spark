@@ -28,6 +28,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -70,6 +71,11 @@ private[spark] class Executor(
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   private val conf = env.conf
+
+  private val HEARTBEAT_INTERVAL_KEY = "spark.executor.heartbeatInterval"
+
+  private val heartbeatIntervalInSec =
+    conf.getTimeAsSeconds(HEARTBEAT_INTERVAL_KEY, "10s", TimeUnit.MILLISECONDS).seconds
 
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
@@ -832,8 +838,9 @@ private[spark] class Executor(
 
     val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
     try {
+
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
-          message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
+          message, new RpcTimeout(heartbeatIntervalInSec, HEARTBEAT_INTERVAL_KEY))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
@@ -855,9 +862,7 @@ private[spark] class Executor(
    * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
    */
   private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf
-      .getTimeAsSeconds("spark.executor.heartbeatInterval", "10s") *
-      TimeUnit.SECONDS.toMillis(1)
+    val intervalMs = heartbeatIntervalInSec.toMillis
 
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
