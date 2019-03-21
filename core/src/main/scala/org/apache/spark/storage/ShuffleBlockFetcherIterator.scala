@@ -453,7 +453,7 @@ final class ShuffleBlockFetcherIterator(
             // since the last call.
             val msg = s"Received a zero-size buffer for block $blockId from $address " +
               s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
-            throwFetchFailedException(blockId, address, new IOException(msg))
+//            throwFetchFailedException(blockId, address, new IOException(msg))
           }
 
           val in = try {
