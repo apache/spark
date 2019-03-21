@@ -376,7 +376,7 @@ private[spark] class TaskSchedulerImpl(
         newExecAvail = true
       }
     }
-    val hosts = offers.map(_.host)
+    val hosts = offers.map(_.host).toSet.toSeq
     for ((host, rack) <- hosts.zip(getRacksForHosts(hosts))) {
       hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += host
     }
@@ -823,10 +823,14 @@ private[spark] class TaskSchedulerImpl(
   protected val defaultRackValue: String = "unknown"
 
   /**
-   * Get racks info for a host list. This is the internal method of [[getRacksForHosts]].
-   * It should be override in different TaskScheduler. Return [[Nil]] by default.
+   * Get racks info for hosts. This is the internal method of [[getRacksForHosts]].
+   * It should be override in different TaskScheduler.
+   * The return racks must have to be the same length as the hosts passed in.
+   * Return [[defaultRackValue]] sequence by default.
    */
-  protected def doGetRacksForHosts(hosts: Seq[String]): Seq[String] = Nil
+  protected def doGetRacksForHosts(hosts: Seq[String]): Seq[String] = {
+    hosts.map(_ => defaultRackValue)
+  }
 
   def getRackForHost(hosts: String): String = {
     if (skipRackResolving) {

@@ -22,7 +22,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -1325,7 +1325,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
 
     // Assert the task has been black listed on the executor it was last executed on.
-    when(taskSetManagerSpy.addPendingTask(anyInt(), any())).thenAnswer(
+    when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean(), any())).thenAnswer(
       new Answer[Unit] {
         override def answer(invocationOnMock: InvocationOnMock): Unit = {
           val task: Int = invocationOnMock.getArgument(0)
@@ -1339,7 +1339,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val e = new ExceptionFailure("a", "b", Array(), "c", None)
     taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
-    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt(), any())
+    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt(), anyBoolean(), any())
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {

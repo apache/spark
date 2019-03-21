@@ -192,9 +192,9 @@ private[spark] class TaskSetManager(
     val (_, duration) = Utils.timeTakenMs {
       val hostToIndices = new HashMap[String, ArrayBuffer[Int]]()
       for (i <- (0 until numTasks).reverse) {
-        addPendingTask(i, Some(hostToIndices))
+        addPendingTask(i, initializing = true, Some(hostToIndices))
       }
-      // Resolve the rack for each host. This can be somehow slow, so de-dupe the list of hosts,
+      // Resolve the rack for each host. This can be slow, so de-dupe the list of hosts,
       // and assign the rack to all relevant task indices.
       for (
         (rack, indices) <- sched.getRacksForHosts(hostToIndices.keySet.toSeq)
@@ -231,7 +231,8 @@ private[spark] class TaskSetManager(
   /** Add a task to all the pending-task lists that it should be on. */
   private[spark] def addPendingTask(
       index: Int,
-      initializingHostToIndices: Option[HashMap[String, ArrayBuffer[Int]]] = None) {
+      initializing: Boolean = false,
+      initializingMap: Option[HashMap[String, ArrayBuffer[Int]]] = None) {
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -252,13 +253,12 @@ private[spark] class TaskSetManager(
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
 
-      initializingHostToIndices match {
-        case Some(hostToIndices) =>
-          // when TaskSetManager initializing, preferredLocation -> task indices
-          hostToIndices.getOrElseUpdate(loc.host, new ArrayBuffer) += index
-        case None =>
-          pendingTasksForRack.getOrElseUpdate(
-            sched.getRackForHost(loc.host), new ArrayBuffer) += index
+      if (initializing) {
+        // preferredLocation -> task indices, initializingMap used when TaskSetManager initializing
+        initializingMap.foreach(_.getOrElseUpdate(loc.host, new ArrayBuffer) += index)
+      } else {
+        pendingTasksForRack.getOrElseUpdate(
+          sched.getRackForHost(loc.host), new ArrayBuffer) += index
       }
     }
 
