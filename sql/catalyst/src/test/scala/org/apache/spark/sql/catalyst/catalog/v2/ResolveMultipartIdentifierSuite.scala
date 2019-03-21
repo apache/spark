@@ -78,6 +78,10 @@ class ResolveMultipartIdentifierSuite extends AnalysisTest {
     checkResolution("test.db.tbl", catalogs.get("test"), Array("db"), "tbl")
     checkResolution("test.ns1.ns2.ns3.tbl",
       catalogs.get("test"), Array("ns1", "ns2", "ns3"), "tbl")
+    checkResolution("`db.tbl`", None, Array.empty, "db.tbl")
+    checkResolution("parquet.`file:/tmp/db.tbl`", None, Array("parquet"), "file:/tmp/db.tbl")
+    checkResolution("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", None,
+      Array("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json")
   }
 
   test("resolve table identifier") {
@@ -86,5 +90,10 @@ class ResolveMultipartIdentifierSuite extends AnalysisTest {
     checkTableResolution("prod.func", None)
     checkTableResolution("ns1.ns2.tbl", None)
     checkTableResolution("prod.db.tbl", None)
+    checkTableResolution("`db.tbl`", Some(TableIdentifier("db.tbl")))
+    checkTableResolution("parquet.`file:/tmp/db.tbl`",
+      Some(TableIdentifier("file:/tmp/db.tbl", Some("parquet"))))
+    checkTableResolution("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
+      Some(TableIdentifier("s3://buck/tmp/abc.json", Some("org.apache.spark.sql.json"))))
   }
 }

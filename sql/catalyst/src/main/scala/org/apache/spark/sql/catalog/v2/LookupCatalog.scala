@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalog.v2
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 
+/**
+ * A trait to encapsulate catalog lookup function and helpful extractors.
+ */
 @Experimental
 trait LookupCatalog {
 
@@ -27,6 +30,9 @@ trait LookupCatalog {
 
   type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
 
+  /**
+   * Extract catalog plugin and identifier from a multi-part identifier.
+   */
   object CatalogObjectIdentifier {
     def unapply(parts: Seq[String]): Option[CatalogObjectIdentifier] = lookupCatalog.map { lookup =>
       parts match {
@@ -44,6 +50,12 @@ trait LookupCatalog {
     }
   }
 
+  /**
+   * Extract legacy table identifier from a multi-part identifier.
+   *
+   * For legacy support only. Please use
+   * [[org.apache.spark.sql.catalog.v2.LookupCatalog.CatalogObjectIdentifier]] in DSv2 code paths.
+   */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
       case CatalogObjectIdentifier(None, ident) =>
