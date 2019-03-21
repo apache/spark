@@ -280,14 +280,14 @@ object StateStoreProvider {
    * Return a instance of the required provider, initialized with the given configurations.
    */
   def createAndInit(
-      stateStoreId: StateStoreId,
+      providerId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
-    provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+    provider.init(providerId.storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
     provider
   }
 
@@ -327,6 +327,11 @@ object StateStoreProviderId {
     val storeId = StateStoreId(
       stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
     StateStoreProviderId(storeId, stateInfo.queryRunId)
+  }
+
+  private[sql] def withNoPartitionInformation(
+      providerId: StateStoreProviderId): StateStoreProviderId = {
+    providerId.copy(storeId = providerId.storeId.copy(partitionId = -1))
   }
 }
 
@@ -389,6 +394,9 @@ object StateStore extends Logging {
 
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
+
+  @GuardedBy("loadedProviders")
+  private val schemaValidated = new mutable.HashSet[StateStoreProviderId]()
 
   /**
    * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
@@ -467,10 +475,18 @@ object StateStore extends Logging {
       hadoopConf: Configuration): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded()
+
+      val newProvIdSchemaCheck = StateStoreProviderId.withNoPartitionInformation(storeProviderId)
+      if (!schemaValidated.contains(newProvIdSchemaCheck)) {
+        validateSchema(newProvIdSchemaCheck, keySchema, valueSchema,
+          storeConf.stateSchemaCheckEnabled)
+        schemaValidated.add(newProvIdSchemaCheck)
+      }
+
       val provider = loadedProviders.getOrElseUpdate(
         storeProviderId,
         StateStoreProvider.createAndInit(
-          storeProviderId.storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+          storeProviderId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
       reportActiveStoreInstance(storeProviderId)
       provider
@@ -480,6 +496,12 @@ object StateStore extends Logging {
   /** Unload a state store provider */
   def unload(storeProviderId: StateStoreProviderId): Unit = loadedProviders.synchronized {
     loadedProviders.remove(storeProviderId).foreach(_.close())
+  }
+
+  /** Unload all state store providers: unit test purpose */
+  private[sql] def unloadAll(): Unit = loadedProviders.synchronized {
+    loadedProviders.keySet.foreach { key => unload(key) }
+    loadedProviders.clear()
   }
 
   /** Whether a state store provider is loaded or not */
@@ -561,6 +583,24 @@ object StateStore extends Logging {
       verified
     } else {
       false
+    }
+  }
+
+  private def validateSchema(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      checkEnabled: Boolean): Unit = {
+    if (SparkEnv.get != null) {
+      val validated = coordinatorRef.flatMap(
+        _.validateSchema(storeProviderId, keySchema, valueSchema, checkEnabled))
+
+      validated match {
+        case Some(exc) =>
+          // driver would log the information, so just re-throw here
+          throw exc
+        case None =>
+      }
     }
   }
 
