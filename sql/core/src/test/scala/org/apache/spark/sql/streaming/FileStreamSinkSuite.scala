@@ -21,10 +21,10 @@ import java.io.File
 import java.nio.file.Files
 import java.util.Locale
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import scala.collection.JavaConverters._
 
-import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -502,7 +502,6 @@ class FileStreamSinkSuite extends StreamTest {
         }
       }
 
-      import scala.collection.JavaConverters._
       val outputFiles = Files.walk(outputDir.toPath).iterator().asScala
         .filter(_.toString.endsWith(".parquet"))
       assert(outputFiles.toList.isEmpty, "Incomplete files should be cleaned up.")
