@@ -25,9 +25,10 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -152,6 +153,22 @@ class CacheManager extends Logging {
         cd.plan.find(_.sameResult(plan)).isDefined && !cacheAlreadyLoaded
       })
     }
+  }
+
+  // Analyzes column statistics in the given cache data
+  private[sql] def analyzeColumnCacheQuery(
+      sparkSession: SparkSession,
+      cachedData: CachedData,
+      column: Seq[Attribute]): Unit = {
+    val relation = cachedData.cachedRepresentation
+    val (rowCount, newColStats) =
+      CommandUtils.computeColumnStats(sparkSession, relation, column)
+    val oldStats = relation.statsOfPlanToCache
+    val newStats = oldStats.copy(
+      rowCount = Some(rowCount),
+      attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
+    )
+    relation.statsOfPlanToCache = newStats
   }
 
   /**
