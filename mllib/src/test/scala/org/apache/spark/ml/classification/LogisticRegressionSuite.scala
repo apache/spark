@@ -1140,7 +1140,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   test("binary logistic regression with intercept with ElasticNet regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true).setMaxIter(120)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setWeightCol("weight")
-    val trainer2 = (new LogisticRegression).setFitIntercept(true).setMaxIter(30)
+    val trainer2 = (new LogisticRegression).setFitIntercept(true).setMaxIter(60)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
@@ -1185,7 +1185,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model1.intercept ~== interceptRStd relTol 6E-2)
     assert(model1.coefficients ~== coefficientsRStd absTol 5E-3)
     assert(model2.intercept ~== interceptR relTol 6E-3)
-    assert(model2.coefficients ~= coefficientsR absTol 0.05)
+    assert(model2.coefficients ~= coefficientsR absTol 1E-3)
   }
 
   test("binary logistic regression without intercept with ElasticNet regularization") {
