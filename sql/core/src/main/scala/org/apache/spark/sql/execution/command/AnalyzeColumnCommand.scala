@@ -59,17 +59,21 @@ case class AnalyzeColumnCommand(
     Seq.empty[Row]
   }
 
-  private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
+  private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
     val cacheManager = sparkSession.sharedState.cacheManager
-    cacheManager.lookupCachedData(plan) match {
-      case Some(cachedData) =>
-        val columnsToAnalyze = getColumnsToAnalyze(
-          tableIdent, cachedData.plan, columnNames, allColumns)
-        cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
-      case _ =>
-        val catalog = sparkSession.sessionState.catalog
-        val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-        throw new NoSuchTableException(db = db, table = tableIdent.identifier)
+    cacheManager.lookupCachedData(plan).map { cachedData =>
+      val columnsToAnalyze = getColumnsToAnalyze(
+        tableIdent, cachedData.plan, columnNames, allColumns)
+      cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
+      cachedData
+    }.isDefined
+  }
+
+  private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
+    if (!analyzeColumnInCachedData(plan, sparkSession)) {
+      val catalog = sparkSession.sessionState.catalog
+      val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
+      throw new NoSuchTableException(db = db, table = tableIdent.identifier)
     }
   }
 
@@ -102,15 +106,9 @@ case class AnalyzeColumnCommand(
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdent)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       // Analyzes a catalog view if the view is cached
-      val cacheManager = sparkSession.sharedState.cacheManager
       val plan = sparkSession.table(tableIdent.quotedString).logicalPlan
-      cacheManager.lookupCachedData(plan) match {
-        case Some(cachedData) =>
-          val columnsToAnalyze = getColumnsToAnalyze(
-            tableIdent, cachedData.plan, columnNames, allColumns)
-          cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
-        case _ =>
-          throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      if (!analyzeColumnInCachedData(plan, sparkSession)) {
+        throw new AnalysisException("ANALYZE TABLE is not supported on views.")
       }
     } else {
       val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
