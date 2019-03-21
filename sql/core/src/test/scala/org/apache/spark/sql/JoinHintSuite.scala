@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -43,14 +44,14 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
     verifyJoinHint(
       df.hint("broadcast").join(df, "id"),
       JoinHint(
-        Some(HintInfo(broadcast = true)),
+        Some(HintInfo(strategy = Some(BROADCAST))),
         None) :: Nil
     )
     verifyJoinHint(
       df.join(df.hint("broadcast"), "id"),
       JoinHint(
         None,
-        Some(HintInfo(broadcast = true))) :: Nil
+        Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
     )
   }
 
@@ -59,18 +60,18 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
       df1.join(df2.hint("broadcast").join(df3, 'b1 === 'c1).hint("broadcast"), 'a1 === 'c1),
       JoinHint(
         None,
-        Some(HintInfo(broadcast = true))) ::
+        Some(HintInfo(strategy = Some(BROADCAST)))) ::
         JoinHint(
-          Some(HintInfo(broadcast = true)),
+          Some(HintInfo(strategy = Some(BROADCAST))),
           None) :: Nil
     )
     verifyJoinHint(
       df1.hint("broadcast").join(df2, 'a1 === 'b1).hint("broadcast").join(df3, 'a1 === 'c1),
       JoinHint(
-        Some(HintInfo(broadcast = true)),
+        Some(HintInfo(strategy = Some(BROADCAST))),
         None) ::
         JoinHint(
-          Some(HintInfo(broadcast = true)),
+          Some(HintInfo(strategy = Some(BROADCAST))),
           None) :: Nil
     )
   }
@@ -89,13 +90,13 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
             |) b on a.a1 = b.b1
           """.stripMargin),
         JoinHint(
-          Some(HintInfo(broadcast = true)),
-          Some(HintInfo(broadcast = true))) ::
+          Some(HintInfo(strategy = Some(BROADCAST))),
+          Some(HintInfo(strategy = Some(BROADCAST)))) ::
           JoinHint(
             None,
-            Some(HintInfo(broadcast = true))) ::
+            Some(HintInfo(strategy = Some(BROADCAST)))) ::
           JoinHint(
-            Some(HintInfo(broadcast = true)),
+            Some(HintInfo(strategy = Some(BROADCAST))),
             None) :: Nil
       )
     }
@@ -112,9 +113,9 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
             "where a.a1 = b.b1 and b.b1 = c.c1"),
           JoinHint(
             None,
-            Some(HintInfo(broadcast = true))) ::
+            Some(HintInfo(strategy = Some(BROADCAST)))) ::
             JoinHint(
-              Some(HintInfo(broadcast = true)),
+              Some(HintInfo(strategy = Some(BROADCAST))),
               None) :: Nil
         )
         verifyJoinHint(
@@ -122,25 +123,25 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
             "where a.a1 = b.b1 and b.b1 = c.c1"),
           JoinHint.NONE ::
             JoinHint(
-              Some(HintInfo(broadcast = true)),
-              Some(HintInfo(broadcast = true))) :: Nil
+              Some(HintInfo(strategy = Some(BROADCAST))),
+              Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
         )
         verifyJoinHint(
           sql("select /*+ broadcast(b, c)*/ * from a, c, b " +
             "where a.a1 = b.b1 and b.b1 = c.c1"),
           JoinHint(
             None,
-            Some(HintInfo(broadcast = true))) ::
+            Some(HintInfo(strategy = Some(BROADCAST)))) ::
             JoinHint(
               None,
-              Some(HintInfo(broadcast = true))) :: Nil
+              Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
         )
 
         verifyJoinHint(
           df1.join(df2, 'a1 === 'b1 && 'a1 > 5).hint("broadcast")
             .join(df3, 'b1 === 'c1 && 'a1 < 10),
           JoinHint(
-            Some(HintInfo(broadcast = true)),
+            Some(HintInfo(strategy = Some(BROADCAST))),
             None) ::
             JoinHint.NONE :: Nil
         )
@@ -151,7 +152,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
             .join(df, 'b1 === 'id),
           JoinHint.NONE ::
             JoinHint(
-              Some(HintInfo(broadcast = true)),
+              Some(HintInfo(strategy = Some(BROADCAST))),
               None) ::
             JoinHint.NONE :: Nil
         )
@@ -164,7 +165,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
     verifyJoinHint(
       df.hint("broadcast").except(dfSub).join(df, "id"),
       JoinHint(
-        Some(HintInfo(broadcast = true)),
+        Some(HintInfo(strategy = Some(BROADCAST))),
         None) ::
         JoinHint.NONE :: Nil
     )
@@ -172,7 +173,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
       df.join(df.hint("broadcast").intersect(dfSub), "id"),
       JoinHint(
         None,
-        Some(HintInfo(broadcast = true))) ::
+        Some(HintInfo(strategy = Some(BROADCAST)))) ::
         JoinHint.NONE :: Nil
     )
   }
@@ -181,14 +182,14 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
     verifyJoinHint(
       df.hint("broadcast").filter('id > 2).hint("broadcast").join(df, "id"),
       JoinHint(
-        Some(HintInfo(broadcast = true)),
+        Some(HintInfo(strategy = Some(BROADCAST))),
         None) :: Nil
     )
     verifyJoinHint(
       df.join(df.hint("broadcast").limit(2).hint("broadcast"), "id"),
       JoinHint(
         None,
-        Some(HintInfo(broadcast = true))) :: Nil
+        Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
     )
   }
 
@@ -196,7 +197,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
     verifyJoinHint(
       df.hint("broadcast").hint("broadcast").filter('id > 2).join(df, "id"),
       JoinHint(
-        Some(HintInfo(broadcast = true)),
+        Some(HintInfo(strategy = Some(BROADCAST))),
         None) :: Nil
     )
   }
@@ -209,12 +210,230 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         join.join(broadcasted, "id").join(broadcasted, "id"),
         JoinHint(
           None,
-          Some(HintInfo(broadcast = true))) ::
+          Some(HintInfo(strategy = Some(BROADCAST)))) ::
           JoinHint(
             None,
-            Some(HintInfo(broadcast = true))) ::
+            Some(HintInfo(strategy = Some(BROADCAST)))) ::
           JoinHint.NONE :: JoinHint.NONE :: JoinHint.NONE :: Nil
       )
+    }
+  }
+
+  def equiJoinQueryWithHint(hints: Seq[String], joinType: String = "INNER"): String =
+    hints.map("/*+ " + _ + " */").mkString(
+      "SELECT ", " ", s" * FROM t1 $joinType JOIN t2 ON t1.key = t2.key")
+
+  def nonEquiJoinQueryWithHint(hints: Seq[String], joinType: String = "INNER"): String =
+    hints.map("/*+ " + _ + " */").mkString(
+      "SELECT ", " ", s" * FROM t1 $joinType JOIN t2 ON t1.key > t2.key")
+
+  private def assertBroadcastHashJoin(df: DataFrame, buildSide: BuildSide): Unit = {
+    val executedPlan = df.queryExecution.executedPlan
+    val broadcastHashJoins = executedPlan.collect {
+      case b: BroadcastHashJoinExec => b
+    }
+    assert(broadcastHashJoins.size == 1)
+    assert(broadcastHashJoins.head.buildSide == buildSide)
+  }
+
+  private def assertBroadcastNLJoin(df: DataFrame, buildSide: BuildSide): Unit = {
+    val executedPlan = df.queryExecution.executedPlan
+    val broadcastNLJoins = executedPlan.collect {
+      case b: BroadcastNestedLoopJoinExec => b
+    }
+    assert(broadcastNLJoins.size == 1)
+    assert(broadcastNLJoins.head.buildSide == buildSide)
+  }
+
+  private def assertShuffleHashJoin(df: DataFrame, buildSide: BuildSide): Unit = {
+    val executedPlan = df.queryExecution.executedPlan
+    val shuffleHashJoins = executedPlan.collect {
+      case s: ShuffledHashJoinExec => s
+    }
+    assert(shuffleHashJoins.size == 1)
+    assert(shuffleHashJoins.head.buildSide == buildSide)
+  }
+
+  private def assertShuffleMergeJoin(df: DataFrame): Unit = {
+    val executedPlan = df.queryExecution.executedPlan
+    val shuffleMergeJoins = executedPlan.collect {
+      case s: SortMergeJoinExec => s
+    }
+    assert(shuffleMergeJoins.size == 1)
+  }
+
+  private def assertShuffleReplicateNLJoin(df: DataFrame): Unit = {
+    val executedPlan = df.queryExecution.executedPlan
+    val shuffleReplicateNLJoins = executedPlan.collect {
+      case c: CartesianProductExec => c
+    }
+    assert(shuffleReplicateNLJoins.size == 1)
+  }
+
+  test("join strategy hint - broadcast") {
+    withTempView("t1", "t2") {
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
+
+      val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
+      val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
+      assert(t1Size < t2Size)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // Broadcast hint specified on one side
+        assertBroadcastHashJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: Nil)), BuildLeft)
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("BROADCAST(t2)" :: Nil)), BuildRight)
+
+        // Determine build side based on the join type and child relation sizes
+        assertBroadcastHashJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t1, t2)" :: Nil)), BuildLeft)
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("BROADCAST(t1, t2)" :: Nil, "left")), BuildRight)
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("BROADCAST(t1, t2)" :: Nil, "right")), BuildLeft)
+
+        // Use broadcast-hash join if hinted "broadcast" and equi-join
+        assertBroadcastHashJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t2)" :: "SHUFFLE_HASH(t1)" :: Nil)), BuildRight)
+        assertBroadcastHashJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: "MERGE(t2)" :: Nil)), BuildLeft)
+        assertBroadcastHashJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: "SHUFFLE_REPLICATE_NL(t2)" :: Nil)),
+          BuildLeft)
+
+        // Use broadcast-nl join if hinted "broadcast" and non-equi-join
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("SHUFFLE_HASH(t2)" :: "BROADCAST(t1)" :: Nil)), BuildLeft)
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("MERGE(t1)" :: "BROADCAST(t2)" :: Nil)), BuildRight)
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1)" :: "BROADCAST(t2)" :: Nil)),
+          BuildRight)
+
+        // Broadcast hint specified but not doable
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: Nil, "left")))
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t2)" :: Nil, "right")))
+      }
+    }
+  }
+
+  test("join strategy hint - shuffle-merge") {
+    withTempView("t1", "t2") {
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Int.MaxValue.toString) {
+        // Shuffle-merge hint specified on one side
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_MERGE(t1)" :: Nil)))
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("MERGEJOIN(t2)" :: Nil)))
+
+        // Shuffle-merge hint specified on both sides
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("MERGE(t1, t2)" :: Nil)))
+
+        // Shuffle-hash hint prioritized over shuffle-hash hint and shuffle-replicate-nl hint
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t2)" :: "MERGE(t1)" :: Nil, "left")))
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("MERGE(t2)" :: "SHUFFLE_HASH(t1)" :: Nil, "right")))
+
+        // Broadcast hint prioritized over shuffle-merge hint, but broadcast hint is not applicable
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: "MERGE(t2)" :: Nil, "left")))
+        assertShuffleMergeJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t2)" :: "MERGE(t1)" :: Nil, "right")))
+
+        // Shuffle-merge hint specified but not doable
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("MERGE(t1, t2)" :: Nil, "left")), BuildRight)
+      }
+    }
+  }
+
+  test("join strategy hint - shuffle-hash") {
+    withTempView("t1", "t2") {
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
+
+      val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
+      val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
+      assert(t1Size < t2Size)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Int.MaxValue.toString) {
+        // Shuffle-hash hint specified on one side
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1)" :: Nil)), BuildLeft)
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t2)" :: Nil)), BuildRight)
+
+        // Determine build side based on the join type and child relation sizes
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1, t2)" :: Nil)), BuildLeft)
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1, t2)" :: Nil, "left")), BuildRight)
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1, t2)" :: Nil, "right")), BuildLeft)
+
+        // Shuffle-hash hint prioritized over shuffle-replicate-nl hint
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t2)" :: "SHUFFLE_HASH(t1)" :: Nil)),
+          BuildLeft)
+
+        // Broadcast hint prioritized over shuffle-hash hint, but broadcast hint is not applicable
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: "SHUFFLE_HASH(t2)" :: Nil, "left")),
+          BuildRight)
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("BROADCAST(t2)" :: "SHUFFLE_HASH(t1)" :: Nil, "right")),
+          BuildLeft)
+
+        // Shuffle-hash hint specified but not doable
+        assertBroadcastHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1)" :: Nil, "left")), BuildRight)
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("SHUFFLE_HASH(t1)" :: Nil)), BuildLeft)
+      }
+    }
+  }
+
+  test("join strategy hint - shuffle-replicate-nl") {
+    withTempView("t1", "t2") {
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Int.MaxValue.toString) {
+        // Shuffle-replicate-nl hint specified on one side
+        assertShuffleReplicateNLJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1)" :: Nil)))
+        assertShuffleReplicateNLJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t2)" :: Nil)))
+
+        // Shuffle-replicate-nl hint specified on both sides
+        assertShuffleReplicateNLJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil)))
+
+        // Shuffle-merge hint prioritized over shuffle-replicate-nl hint, but shuffle-merge hint
+        // is not applicable
+        assertShuffleReplicateNLJoin(
+          sql(nonEquiJoinQueryWithHint("MERGE(t1)" :: "SHUFFLE_REPLICATE_NL(t2)" :: Nil)))
+
+        // Shuffle-hash hint prioritized over shuffle-replicate-nl hint, but shuffle-hash hint is
+        // not applicable
+        assertShuffleReplicateNLJoin(
+          sql(nonEquiJoinQueryWithHint("SHUFFLE_HASH(t2)" :: "SHUFFLE_REPLICATE_NL(t1)" :: Nil)))
+
+        // Shuffle-replicate-nl hint specified but not doable
+        assertBroadcastHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil, "left")), BuildRight)
+        assertBroadcastNLJoin(
+          sql(nonEquiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil, "right")), BuildLeft)
+      }
     }
   }
 }

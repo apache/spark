@@ -28,45 +28,56 @@ import org.apache.spark.sql.internal.SQLConf
 
 
 /**
- * Collection of rules related to hints. The only hint currently available is broadcast join hint.
+ * Collection of rules related to hints. The only hint currently available is join strategy hint.
  *
  * Note that this is separately into two rules because in the future we might introduce new hint
- * rules that have different ordering requirements from broadcast.
+ * rules that have different ordering requirements from join strategies.
  */
 object ResolveHints {
 
   /**
-   * For broadcast hint, we accept "BROADCAST", "BROADCASTJOIN", and "MAPJOIN", and a sequence of
-   * relation aliases can be specified in the hint. A broadcast hint plan node will be inserted
-   * on top of any relation (that is not aliased differently), subquery, or common table expression
-   * that match the specified name.
+   * The list of allowed join strategy hints is defined in [[JoinStrategyHint.strategies]], and a
+   * sequence of relation aliases can be specified with a join strategy hint, e.g., "MERGE(a, c)",
+   * "BROADCAST(a)". A join strategy hint plan node will be inserted on top of any relation (that
+   * is not aliased differently), subquery, or common table expression that match the specified
+   * name.
    *
    * The hint resolution works by recursively traversing down the query plan to find a relation or
-   * subquery that matches one of the specified broadcast aliases. The traversal does not go past
-   * beyond any existing broadcast hints, subquery aliases.
+   * subquery that matches one of the specified relation aliases. The traversal does not go past
+   * beyond any view reference, with clause or subquery alias.
    *
    * This rule must happen before common table expressions.
    */
-  class ResolveBroadcastHints(conf: SQLConf) extends Rule[LogicalPlan] {
-    private val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
+  class ResolveJoinStrategyHints(conf: SQLConf) extends Rule[LogicalPlan] {
+    private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
 
     def resolver: Resolver = conf.resolver
 
-    private def applyBroadcastHint(plan: LogicalPlan, toBroadcast: Set[String]): LogicalPlan = {
+    private def createHintInfo(hintName: String): HintInfo = {
+      HintInfo(strategy =
+        JoinStrategyHint.strategies.find(
+          _.hintAliases.map(
+            _.toUpperCase(Locale.ROOT)).contains(hintName.toUpperCase(Locale.ROOT))))
+    }
+
+    private def applyJoinStrategyHint(
+        plan: LogicalPlan,
+        relations: Set[String],
+        hintName: String): LogicalPlan = {
       // Whether to continue recursing down the tree
       var recurse = true
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case u: UnresolvedRelation if toBroadcast.exists(resolver(_, u.tableIdentifier.table)) =>
-            ResolvedHint(plan, HintInfo(broadcast = true))
-          case r: SubqueryAlias if toBroadcast.exists(resolver(_, r.alias)) =>
-            ResolvedHint(plan, HintInfo(broadcast = true))
+          case u: UnresolvedRelation if relations.exists(resolver(_, u.tableIdentifier.table)) =>
+            ResolvedHint(plan, createHintInfo(hintName))
+          case r: SubqueryAlias if relations.exists(resolver(_, r.alias)) =>
+            ResolvedHint(plan, createHintInfo(hintName))
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
             // Don't traverse down these nodes.
-            // For an existing broadcast hint, there is no point going down (if we do, we either
-            // won't change the structure, or will introduce another broadcast hint that is useless.
+            // For an existing strategy hint, there is no point going down (if we do, we either
+            // won't change the structure, or will introduce another strategy hint that is useless.
             // The rest (view, with, subquery) indicates different scopes that we shouldn't traverse
             // down. Note that technically when this rule is executed, we haven't completed view
             // resolution yet and as a result the view part should be deadcode. I'm leaving it here
@@ -80,25 +91,25 @@ object ResolveHints {
       }
 
       if ((plan fastEquals newNode) && recurse) {
-        newNode.mapChildren(child => applyBroadcastHint(child, toBroadcast))
+        newNode.mapChildren(child => applyJoinStrategyHint(child, relations, hintName))
       } else {
         newNode
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case h: UnresolvedHint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      case h: UnresolvedHint if STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
-          // If there is no table alias specified, turn the entire subtree into a BroadcastHint.
-          ResolvedHint(h.child, HintInfo(broadcast = true))
+          // If there is no table alias specified, apply the hint on the entire subtree.
+          ResolvedHint(h.child, createHintInfo(h.name))
         } else {
-          // Otherwise, find within the subtree query plans that should be broadcasted.
-          applyBroadcastHint(h.child, h.parameters.map {
+          // Otherwise, find within the subtree query plans to apply the hint.
+          applyJoinStrategyHint(h.child, h.parameters.map {
             case tableName: String => tableName
             case tableId: UnresolvedAttribute => tableId.name
-            case unsupported => throw new AnalysisException("Broadcast hint parameter should be " +
-              s"an identifier or string but was $unsupported (${unsupported.getClass}")
-          }.toSet)
+            case unsupported => throw new AnalysisException("Join strategy hint parameter " +
+              s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
+          }.toSet, h.name)
         }
     }
   }

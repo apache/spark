@@ -211,16 +211,52 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     private def canBroadcastByHints(
         joinType: JoinType, left: LogicalPlan, right: LogicalPlan, hint: JoinHint): Boolean = {
-      val buildLeft = canBuildLeft(joinType) && hint.leftHint.exists(_.broadcast)
-      val buildRight = canBuildRight(joinType) && hint.rightHint.exists(_.broadcast)
+      val buildLeft =
+        canBuildLeft(joinType) && hint.leftHint.exists(_.strategy.contains(BROADCAST))
+      val buildRight =
+        canBuildRight(joinType) && hint.rightHint.exists(_.strategy.contains(BROADCAST))
       buildLeft || buildRight
     }
 
     private def broadcastSideByHints(
         joinType: JoinType, left: LogicalPlan, right: LogicalPlan, hint: JoinHint): BuildSide = {
-      val buildLeft = canBuildLeft(joinType) && hint.leftHint.exists(_.broadcast)
-      val buildRight = canBuildRight(joinType) && hint.rightHint.exists(_.broadcast)
+      val buildLeft =
+        canBuildLeft(joinType) && hint.leftHint.exists(_.strategy.contains(BROADCAST))
+      val buildRight =
+        canBuildRight(joinType) && hint.rightHint.exists(_.strategy.contains(BROADCAST))
       broadcastSide(buildLeft, buildRight, left, right)
+    }
+
+    private def canShuffleHashByHints(
+        joinType: JoinType, left: LogicalPlan, right: LogicalPlan, hint: JoinHint): Boolean = {
+      val buildLeft =
+        canBuildLeft(joinType) && hint.leftHint.exists(_.strategy.contains(SHUFFLE_HASH))
+      val buildRight =
+        canBuildRight(joinType) && hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
+      buildLeft || buildRight
+    }
+
+    private def shuffleHashSideByHints(
+        joinType: JoinType, left: LogicalPlan, right: LogicalPlan, hint: JoinHint): BuildSide = {
+      val buildLeft =
+        canBuildLeft(joinType) && hint.leftHint.exists(_.strategy.contains(SHUFFLE_HASH))
+      val buildRight =
+        canBuildRight(joinType) && hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
+      broadcastSide(buildLeft, buildRight, left, right)
+    }
+
+    private def canShuffleMergeByHints(
+        leftKeys: Seq[Expression], hint: JoinHint): Boolean = {
+      val isOrderable = RowOrdering.isOrderable(leftKeys)
+      val hasMergeHint =
+        (hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE))
+          || hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE)))
+      isOrderable && hasMergeHint
+    }
+
+    private def shuffleReplicateNLByHints(hint: JoinHint): Boolean = {
+      (hint.leftHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
+        || hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL)))
     }
 
     private def canBroadcastBySizes(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
@@ -239,18 +275,47 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
-      // --- BroadcastHashJoin --------------------------------------------------------------------
+      // --- Hints specified, choose join strategy based on hints. --------------------------------
 
-      // broadcast hints were specified
+      // broadcast hints specified with equi-join keys, use broadcast-hash
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint)
-        if canBroadcastByHints(joinType, left, right, hint) =>
+          if canBroadcastByHints(joinType, left, right, hint) =>
         val buildSide = broadcastSideByHints(joinType, left, right, hint)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
-      // broadcast hints were not specified, so need to infer it from size and configuration.
+      // broadcast hints specified with no equi-join keys, use broadcast-nested-loop
+      case j @ logical.Join(left, right, joinType, condition, hint)
+          if canBroadcastByHints(joinType, left, right, hint) =>
+        val buildSide = broadcastSideByHints(joinType, left, right, hint)
+        Seq(joins.BroadcastNestedLoopJoinExec(
+          planLater(left), planLater(right), buildSide, joinType, condition))
+
+      // shuffle-merge hints specified
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint)
+          if canShuffleMergeByHints(leftKeys, hint) =>
+        Seq(joins.SortMergeJoinExec(
+          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)))
+
+      // shuffle-hash hints specified
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint)
+          if canShuffleHashByHints(joinType, left, right, hint) =>
+        val buildSide = shuffleHashSideByHints(joinType, left, right, hint)
+        Seq(joins.ShuffledHashJoinExec(
+          leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
+
+      // shuffle-replicate-nl hints specified
+      case logical.Join(left, right, _: InnerLike, condition, hint)
+          if shuffleReplicateNLByHints(hint) =>
+        Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition))
+
+
+      // --- No hints specified, choose join strategy based on size and configuration. ------------
+
+      // --- BroadcastHashJoin --------------------------------------------------------------------
+
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, _)
-        if canBroadcastBySizes(joinType, left, right) =>
+          if canBroadcastBySizes(joinType, left, right) =>
         val buildSide = broadcastSideBySizes(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
@@ -281,12 +346,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- Without joining keys ------------------------------------------------------------
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcast
-      case j @ logical.Join(left, right, joinType, condition, hint)
-          if canBroadcastByHints(joinType, left, right, hint) =>
-        val buildSide = broadcastSideByHints(joinType, left, right, hint)
-        joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
-
       case j @ logical.Join(left, right, joinType, condition, _)
           if canBroadcastBySizes(joinType, left, right) =>
         val buildSide = broadcastSideBySizes(joinType, left, right)
@@ -299,7 +358,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Join(left, right, joinType, condition, hint) =>
         val buildSide = broadcastSide(
-          hint.leftHint.exists(_.broadcast), hint.rightHint.exists(_.broadcast), left, right)
+          hint.leftHint.exists(_.strategy.contains(BROADCAST)),
+          hint.rightHint.exists(_.strategy.contains(BROADCAST)), left, right)
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil

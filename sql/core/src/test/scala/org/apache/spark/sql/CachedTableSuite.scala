@@ -27,7 +27,7 @@ import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join}
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -940,7 +940,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       case Join(_, _, _, _, hint) => hint
     }
     assert(hint.size == 1)
-    assert(hint(0).leftHint.get.broadcast)
+    assert(hint(0).leftHint.get.strategy.contains(BROADCAST))
     assert(hint(0).rightHint.isEmpty)
 
     // Clean-up

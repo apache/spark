@@ -40,8 +40,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
   }
 
   private def mergeHints(hints: Seq[HintInfo]): Option[HintInfo] = {
-    hints.reduceOption((h1, h2) => HintInfo(
-      broadcast = h1.broadcast || h2.broadcast))
+    hints.reduceOption((h1, h2) => h1.merge(h2))
   }
 
   private def collectHints(plan: LogicalPlan): Seq[HintInfo] = {
@@ -50,7 +49,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
       case u: UnaryNode => collectHints(u.child)
       // TODO revisit this logic:
       // except and intersect are semi/anti-joins which won't return more data then
-      // their left argument, so the broadcast hint should be propagated here
+      // their left argument, so the join strategy hint should be propagated here
       case i: Intersect => collectHints(i.left)
       case e: Except => collectHints(e.left)
       case _ => Seq.empty

@@ -66,17 +66,76 @@ object JoinHint {
 /**
  * The hint attributes to be applied on a specific node.
  *
- * @param broadcast If set to true, it indicates that the broadcast hash join is the preferred join
- *                  strategy and the node with this hint is preferred to be the build side.
+ * @param strategy The preferred join strategy.
  */
-case class HintInfo(broadcast: Boolean = false) {
+case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
+
+  /**
+   * Combine two [[HintInfo]]s into one [[HintInfo]], in which the new strategy will the strategy
+   * in this [[HintInfo]] if defined, otherwise the strategy in the other [[HintInfo]].
+   */
+  def merge(other: HintInfo): HintInfo = {
+    HintInfo(strategy = this.strategy.orElse(other.strategy))
+  }
 
   override def toString: String = {
     val hints = scala.collection.mutable.ArrayBuffer.empty[String]
-    if (broadcast) {
-      hints += "broadcast"
+    if (strategy.isDefined) {
+      hints += s"strategy=${strategy.get}"
     }
 
     if (hints.isEmpty) "none" else hints.mkString("(", ", ", ")")
   }
+}
+
+sealed abstract class JoinStrategyHint {
+
+  def displayName: String
+  def hintAliases: Set[String]
+
+  override def toString: String = displayName
+}
+
+/**
+ * The enumeration of join strategy hints.
+ *
+ * The hinted strategy will be used for the join with which it is associated if doable. In case
+ * of contradicting strategy hints specified for each side of the join, hints are prioritized as
+ * BROADCAST over SHUFFLE_MERGE over SHUFFLE_HASH over SHUFFLE_REPLICATE_NL.
+ */
+object JoinStrategyHint {
+
+  val strategies: Set[JoinStrategyHint] = Set(
+    BROADCAST,
+    SHUFFLE_MERGE,
+    SHUFFLE_HASH,
+    SHUFFLE_REPLICATE_NL)
+}
+
+case object BROADCAST extends JoinStrategyHint {
+  override def displayName: String = "broadcast-hash"
+  override def hintAliases: Set[String] = Set(
+    "BROADCAST",
+    "BROADCASTJOIN",
+    "MAPJOIN")
+}
+
+case object SHUFFLE_MERGE extends JoinStrategyHint {
+  override def displayName: String = "shuffle-merge"
+  override def hintAliases: Set[String] = Set(
+    "SHUFFLE_MERGE",
+    "MERGE",
+    "MERGEJOIN")
+}
+
+case object SHUFFLE_HASH extends JoinStrategyHint {
+  override def displayName: String = "shuffle-hash"
+  override def hintAliases: Set[String] = Set(
+    "SHUFFLE_HASH")
+}
+
+case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
+  override def displayName: String = "shuffle-replicate-nested-loop"
+  override def hintAliases: Set[String] = Set(
+    "SHUFFLE_REPLICATE_NL")
 }
