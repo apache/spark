@@ -234,11 +234,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("format timestamp literal using spark.sql.session.timeZone") {
     withSQLConf(
-      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT+1:00",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT+01:00",
       SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
       val originTimeZone = TimeZone.getDefault
       try {
-        TimeZone.setDefault(TimeZone.getTimeZone("GMT-8:00"))
+        TimeZone.setDefault(TimeZone.getTimeZone("GMT-08:00"))
         val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
           .atZone(ZoneOffset.UTC)
           .toInstant
