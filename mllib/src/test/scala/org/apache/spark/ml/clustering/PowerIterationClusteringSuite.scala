@@ -34,9 +34,9 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
   @transient var data: Dataset[_] = _
   final val r1 = 1.0
-  final val n1 = 10
-  final val r2 = 100.0
-  final val n2 = 40
+  final val n1 = 80
+  final val r2 = 4.0
+  final val n2 = 80
 
   override def beforeAll(): Unit = {
     super.beforeAll()
