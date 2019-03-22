@@ -17,21 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.net.URI
-
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
+class SelectedFieldSuite extends AnalysisTest {
   private val ignoredField = StructField("col1", StringType, nullable = false)
 
   // The test schema as a tree string, i.e. `schema.treeString`
@@ -322,6 +316,18 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
         StructField("subfield1", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
   }
 
+  testSelect(arrayOfStruct, "map_values(col5[0]).field1.subfield1 as foo") {
+    StructField("col5", ArrayType(MapType(StringType, StructType(
+      StructField("field1", StructType(
+        StructField("subfield1", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
+  }
+
+  testSelect(arrayOfStruct, "map_values(col5[0]).field1.subfield2 as foo") {
+    StructField("col5", ArrayType(MapType(StringType, StructType(
+      StructField("field1", StructType(
+        StructField("subfield2", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
+  }
+
   //  |-- col1: string (nullable = false)
   //  |-- col6: map (nullable = true)
   //  |    |-- key: string
@@ -526,19 +532,10 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
-  val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
-  val analyzer = {
-    catalog.createDatabase(
-      CatalogDatabase("default", "", new URI("loc"), Map.empty),
-      ignoreIfExists = false)
-    new Analyzer(catalog, conf)
-  }
-
   private def unapplySelect(expr: String, relation: LocalRelation) = {
     val parsedExpr = parseAsCatalystExpression(Seq(expr)).head
     val select = relation.select(parsedExpr)
-    val analyzed = analyzer.execute(select)
+    val analyzed = caseSensitiveAnalyzer.execute(select)
     SelectedField.unapply(analyzed.expressions.head)
   }
 
