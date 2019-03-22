@@ -3014,6 +3014,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("reset")
     }
   }
+
+  test("SPARK-27233 match schema when DF is converted to table") {
+    withTable("testSchema") {
+      val df = Seq(Some(Seq(1L, 2L, 3L)), None).toDF("seq")
+      df.write.format("parquet").saveAsTable("testSchema")
+      val res = sqlContext.table("testSchema")
+      assert(df.schema === res.schema)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

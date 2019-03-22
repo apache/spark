@@ -90,7 +90,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   override def sql: String = s"ARRAY<${elementType.sql}>"
 
   override private[spark] def asNullable: ArrayType =
-    ArrayType(elementType.asNullable, containsNull = true)
+    ArrayType(elementType.asNullable, containsNull)
 
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || elementType.existsRecursively(f)
