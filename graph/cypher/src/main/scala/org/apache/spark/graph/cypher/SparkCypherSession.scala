@@ -5,7 +5,7 @@ import org.apache.spark.graph.api.io.{ReaderConfig, WriterConfig}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
 import org.apache.spark.graph.cypher.io.ReadWriteGraph._
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession, functions}
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
@@ -67,6 +67,37 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     val relFrames = relVarNames.flatMap(result.relationshipFrames).toSeq
 
     createGraph(nodeFrames, relFrames)
+  }
+
+  override def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph = {
+    val idColumn = "$ID"
+    val sourceIdColumn = "$SOURCE_ID"
+    val targetIdColumn = "$TARGET_ID"
+
+    val labelColumns = nodes.columns.filter(_.startsWith(":")).toSet
+    val nodeProperties = (nodes.columns.toSet - idColumn -- labelColumns).map(col => col -> col).toMap
+
+    val trueLit = functions.lit(true)
+    val falseLit = functions.lit(false)
+
+    val nodeFrames = labelColumns.subsets().map { labelSet =>
+      val predicate = labelColumns.map {
+        case labelColumn if labelSet.contains(labelColumn) => nodes.col(labelColumn) === trueLit
+        case labelColumn => nodes.col(labelColumn) === falseLit
+      }.reduce(_ && _)
+
+      NodeFrame(nodes.filter(predicate), idColumn, labelSet.map(_.substring(1)), nodeProperties)
+    }
+
+    val relTypeColumns = relationships.columns.filter(_.startsWith(":")).toSet
+    val relProperties = (relationships.columns.toSet - idColumn - sourceIdColumn - targetIdColumn -- relTypeColumns).map(col => col -> col).toMap
+    val relFrames = relTypeColumns.map { relTypeColumn =>
+      val predicate = relationships.col(relTypeColumn) === trueLit
+
+      RelationshipFrame(relationships.filter(predicate), idColumn, sourceIdColumn, targetIdColumn, relTypeColumn.substring(1), relProperties)
+    }
+
+    createGraph(nodeFrames.toSeq, relFrames.toSeq)
   }
 
   def cypher(graph: PropertyGraph, query: String): CypherResult = cypher(graph, query, Map.empty)

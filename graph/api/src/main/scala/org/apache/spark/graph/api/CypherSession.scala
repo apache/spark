@@ -1,7 +1,7 @@
 package org.apache.spark.graph.api
 
 import org.apache.spark.graph.api.io.{PropertyGraphReader, PropertyGraphWriter, ReaderConfig, WriterConfig}
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 /**
   * Allows for creating [[PropertyGraph]] instances and running Cypher-queries on them.
@@ -42,6 +42,27 @@ trait CypherSession {
     * @param result a [[CypherResult]] containing nodes and/or relationships
     */
   def createGraph(result: CypherResult): PropertyGraph
+
+  /**
+    * Creates a [[PropertyGraph]] from nodes and relationships.
+    *
+    * The given DataFrames need to adhere to column naming conventions:
+    *
+    * {{{
+    * Id column:        `$ID`            (nodes and relationships)
+    * SourceId column:  `$SOURCE_ID`     (relationships)
+    * TargetId column:  `$TARGET_ID`     (relationships)
+    *
+    * Label columns:    `:{LABEL_NAME}`  (nodes)
+    * RelType columns:  `:{REL_TYPE}`    (relationships)
+    *
+    * Property columns: `{Property_Key}` (nodes and relationships)
+    * }}}
+    *
+    * @param nodes node [[DataFrame]]
+    * @param relationships relationship [[DataFrame]]
+    */
+  def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph
 
   /**
     * Returns a [[PropertyGraphWriter]] for `graph`.

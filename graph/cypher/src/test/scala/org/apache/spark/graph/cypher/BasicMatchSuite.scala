@@ -59,5 +59,33 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     val berkeleyGraph2 = cypherSession.createGraph(result)
     berkeleyGraph2.cypher("MATCH (n:Student)-[:KNOWS]->(o:Student) RETURN n.name AS person, o.name AS friend").df.show()
   }
-  
+
+  test("round trip example using column name conventions") {
+
+    val nodes: DataFrame = spark.createDataFrame(Seq(
+      (0, true,   false,  Some("Alice"),  Some(42), None),
+      (1, true,   false,  Some("Bob"),    Some(23), None),
+      (2, true,   false,  Some("Eve"),    Some(19), None),
+      (3, false,  true,   None,           None,     Some("UC Berkeley")),
+      (4, false,  true,   None,           None,     Some("Stanford"))
+    )).toDF("$ID", ":Student", ":University", "name", "age", "title")
+
+    val relationships: DataFrame = spark.createDataFrame(Seq(
+      (0, 0, 1, true,  false),
+      (1, 0, 2, true,  false),
+      (2, 0, 2, false, true),
+      (3, 1, 3, false, true),
+      (4, 2, 2, false, true),
+    )).toDF("$ID", "$SOURCE_ID", "$TARGET_ID", ":KNOWS", ":STUDY_AT")
+
+    val graph1: PropertyGraph = cypherSession.createGraph(nodes, relationships)
+    graph1.nodes.show()
+    graph1.relationships.show()
+
+    graph1.cypher("MATCH (n:Student)-[:STUDY_AT]->(u:University) RETURN n, u").df.show()
+
+    val graph2: PropertyGraph = cypherSession.createGraph(graph1.nodes, graph1.relationships)
+    graph2.nodes.show()
+    graph2.relationships.show()
+  }
 }
