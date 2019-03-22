@@ -232,39 +232,39 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('\n'), "\n")
   }
 
-  test("format timestamp literal using spark.sql.session.timeZone") {
+  private def withTimeZones(
+      sessionTimeZone: String,
+      systemTimeZone: String)(f: => Unit): Unit = {
     withSQLConf(
-      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT+01:00",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTimeZone,
       SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
       val originTimeZone = TimeZone.getDefault
       try {
         TimeZone.setDefault(TimeZone.getTimeZone("GMT-08:00"))
-        val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
-          .atZone(ZoneOffset.UTC)
-          .toInstant
-        val expected = "TIMESTAMP('2019-03-21 01:02:03.456')"
-        val literalStr = Literal.create(timestamp).sql
-        assert(literalStr === expected)
+        f
       } finally {
         TimeZone.setDefault(originTimeZone)
       }
     }
   }
 
+  test("format timestamp literal using spark.sql.session.timeZone") {
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
+        .atZone(ZoneOffset.UTC)
+        .toInstant
+      val expected = "TIMESTAMP('2019-03-21 01:02:03.456')"
+      val literalStr = Literal.create(timestamp).sql
+      assert(literalStr === expected)
+    }
+  }
+
   test("format date literal independently from time zone") {
-    withSQLConf(
-      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT-11:00",
-      SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
-      val originTimeZone = TimeZone.getDefault
-      try {
-        TimeZone.setDefault(TimeZone.getTimeZone("GMT-10:00"))
-        val date = LocalDate.of(2019, 3, 21)
-        val expected = "DATE '2019-03-21'"
-        val literalStr = Literal.create(date).sql
-        assert(literalStr === expected)
-      } finally {
-        TimeZone.setDefault(originTimeZone)
-      }
+    withTimeZones(sessionTimeZone = "GMT-11:00", systemTimeZone = "GMT-10:00") {
+      val date = LocalDate.of(2019, 3, 21)
+      val expected = "DATE '2019-03-21'"
+      val literalStr = Literal.create(date).sql
+      assert(literalStr === expected)
     }
   }
 }
