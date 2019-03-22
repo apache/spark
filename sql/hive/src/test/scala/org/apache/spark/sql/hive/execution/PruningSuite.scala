@@ -148,6 +148,14 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
     Seq(
       Seq("2008-04-08", "11")))
 
+  createPruningTest(
+    "Partition pruning - with filter containing non-determined condition in sub And-expr",
+    "SELECT value, hr FROM srcpart1 WHERE (ds = '2008-04-08' AND rand() < 1) AND (hr < 12)",
+    Seq("value", "hr"),
+    Seq("value", "hr"),
+    Seq(
+      Seq("2008-04-08", "11")))
+
   def createPruningTest(
       testCaseName: String,
       sql: String,

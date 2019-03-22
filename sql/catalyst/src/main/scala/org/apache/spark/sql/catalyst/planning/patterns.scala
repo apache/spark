@@ -63,22 +63,11 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case filter: Filter if filter.condition.deterministic || filter.condition.isInstanceOf[And] =>
-        val condition = filter.condition
-        val determinedCondition = if (condition.deterministic) {
-          Some(condition)
-        } else {
-          val andCondition = condition.asInstanceOf[And]
-          if (andCondition.left.deterministic) {
-            Some(andCondition.left)
-          } else if (andCondition.right.deterministic) {
-            Some(andCondition.right)
-          } else {
-            None
-          }
-        }
+      case filter @ Filter(condition, child)
+          if condition.deterministic || condition.isInstanceOf[And] =>
+        val determinedCondition = getDeterminedExpression(condition)
         if (determinedCondition.isDefined) {
-          val (fields, filters, other, aliases) = collectProjectsAndFilters(filter.child)
+          val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
           val substitutedCondition = substitute(aliases)(determinedCondition.get)
           (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
         } else {
@@ -106,6 +95,27 @@ object PhysicalOperation extends PredicateHelper {
       case a: AttributeReference =>
         aliases.get(a)
           .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
+    }
+  }
+
+  private def getDeterminedExpression(expr: Expression): Option[Expression] = {
+    if (expr.deterministic) {
+      Some(expr)
+    } else {
+      expr match {
+        case And(left, right) =>
+          val leftDeterminedExpr = getDeterminedExpression(left)
+          val rightDeterminedExpr = getDeterminedExpression(right)
+          if (leftDeterminedExpr.isDefined && rightDeterminedExpr.isDefined) {
+            Some(And(leftDeterminedExpr.get, rightDeterminedExpr.get))
+          } else if (leftDeterminedExpr.isDefined || rightDeterminedExpr.isDefined) {
+            Some(leftDeterminedExpr.getOrElse(rightDeterminedExpr.get))
+          } else {
+            None
+          }
+        case _ =>
+          None
+      }
     }
   }
 }
