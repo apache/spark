@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTable, CreateTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2008,7 +2008,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a table, returning a [[CreateTable]] logical plan.
+   * Create a table, returning a [[CreateTableStatement]] logical plan.
    *
    * Expected format:
    * {{{
@@ -2063,7 +2063,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           ctx)
 
       case Some(query) =>
-        CreateTableAsSelect(
+        CreateTableAsSelectStatement(
           table, query, partitionCols, bucketSpec, properties, provider, options, location, comment,
           ifNotExists = ifNotExists)
 
@@ -2073,8 +2073,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
 
       case _ =>
-        CreateTable(table, schema.getOrElse(new StructType), partitionCols, bucketSpec, properties,
-          provider, options, location, comment, ifNotExists = ifNotExists)
+        CreateTableStatement(table, schema.getOrElse(new StructType), partitionCols, bucketSpec,
+          properties, provider, options, location, comment, ifNotExists = ifNotExists)
     }
   }
 

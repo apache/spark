@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.sql
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
 
 case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport  {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case sql.CreateTable(
+    case CreateTableStatement(
         table, schema, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
         location, comment, ifNotExists) =>
 
@@ -42,7 +42,7 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
 
       CreateTable(tableDesc, mode, None)
 
-    case sql.CreateTableAsSelect(
+    case CreateTableAsSelectStatement(
         table, query, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
         location, comment, ifNotExists) =>
 

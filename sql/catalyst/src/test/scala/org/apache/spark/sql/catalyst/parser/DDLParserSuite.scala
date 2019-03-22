@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTable, CreateTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class DDLParserSuite extends AnalysisTest {
@@ -37,7 +37,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
 
     parsePlan(sql) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("my_tab"))
         assert(create.tableSchema == new StructType()
             .add("a", IntegerType, nullable = true, "test")
@@ -52,7 +52,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
 
@@ -64,7 +64,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE IF NOT EXISTS my_tab(a INT, b STRING) USING parquet"
 
     parsePlan(sql) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
@@ -77,7 +77,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -87,7 +87,7 @@ class DDLParserSuite extends AnalysisTest {
         "USING parquet PARTITIONED BY (a)"
 
     parsePlan(query) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("my_tab"))
         assert(create.tableSchema == new StructType()
             .add("a", IntegerType, nullable = true, "test")
@@ -102,7 +102,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $query")
     }
   }
@@ -112,7 +112,7 @@ class DDLParserSuite extends AnalysisTest {
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
     parsePlan(query) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
@@ -125,7 +125,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $query")
     }
   }
@@ -134,7 +134,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
 
     parsePlan(sql) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
@@ -147,7 +147,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -156,7 +156,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet TBLPROPERTIES('test' = 'test')"
 
     parsePlan(sql) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
@@ -169,7 +169,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -178,7 +178,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
 
     parsePlan(sql) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
@@ -191,7 +191,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -200,7 +200,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE 1m.2g(a INT) USING parquet"
 
     parsePlan(sql) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("2g", Some("1m")))
         assert(create.tableSchema == new StructType().add("a", IntegerType))
         assert(create.partitioning.isEmpty)
@@ -213,7 +213,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -243,7 +243,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
 
     parsePlan(sql) match {
-      case create: CreateTable =>
+      case create: CreateTableStatement =>
         assert(create.table == TableIdentifier("table_name"))
         assert(create.tableSchema == new StructType)
         assert(create.partitioning.isEmpty)
@@ -256,7 +256,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(!create.ifNotExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -298,7 +298,7 @@ class DDLParserSuite extends AnalysisTest {
 
     def checkParsing(sql: String): Unit = {
       parsePlan(sql) match {
-        case create: CreateTableAsSelect =>
+        case create: CreateTableAsSelectStatement =>
           assert(create.table == TableIdentifier("page_view", Some("mydb")))
           assert(create.partitioning.isEmpty)
           assert(create.bucketSpec.isEmpty)
@@ -310,8 +310,8 @@ class DDLParserSuite extends AnalysisTest {
           assert(create.ifNotExists)
 
         case other =>
-          fail(s"Expected to parse ${classOf[CreateTableAsSelect].getClass.getName} from query," +
-              s"got ${other.getClass.getName}: $sql")
+          fail(s"Expected to parse ${classOf[CreateTableAsSelectStatement].getClass.getName} " +
+              s"from query, got ${other.getClass.getName}: $sql")
       }
     }
   }

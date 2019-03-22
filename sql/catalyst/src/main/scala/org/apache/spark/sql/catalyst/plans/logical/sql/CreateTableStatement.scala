@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
  *
  * This is a metadata-only command and is not used to write data to the created table.
  */
-case class CreateTable(
+case class CreateTableStatement(
     table: TableIdentifier,
     tableSchema: StructType,
     partitioning: Seq[String],
@@ -38,7 +38,7 @@ case class CreateTable(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
-    ifNotExists: Boolean) extends ParsedLogicalPlan {
+    ifNotExists: Boolean) extends ParsedStatement {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -48,7 +48,7 @@ case class CreateTable(
 /**
  * A CREATE TABLE AS SELECT command, as parsed from SQL.
  */
-case class CreateTableAsSelect(
+case class CreateTableAsSelectStatement(
     table: TableIdentifier,
     asSelect: LogicalPlan,
     partitioning: Seq[String],
@@ -58,7 +58,7 @@ case class CreateTableAsSelect(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
-    ifNotExists: Boolean) extends ParsedLogicalPlan {
+    ifNotExists: Boolean) extends ParsedStatement {
 
   override def output: Seq[Attribute] = Seq.empty
 

@@ -25,15 +25,15 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * This is used to hold information parsed from SQL when there are multiple implementations of a
  * query or command. For example, CREATE TABLE may be implemented by different nodes for v1 and v2.
  * Instead of parsing directly to a v1 CreateTable that keeps metadata in CatalogTable, and then
- * converting that v1 metadata to the v2 equivalent, the sql [[CreateTable]] plan is produced by
- * the parser and converted once into both implementations.
+ * converting that v1 metadata to the v2 equivalent, the sql [[CreateTableStatement]] plan is
+ * produced by the parser and converted once into both implementations.
  *
  * Parsed logical plans are not resolved because they must be converted to concrete logical plans.
  *
  * Parsed logical plans are located in Catalyst so that as much SQL parsing logic as possible is be
  * kept in a [[org.apache.spark.sql.catalyst.parser.AbstractSqlParser]].
  */
-private[sql] abstract class ParsedLogicalPlan extends LogicalPlan {
+private[sql] abstract class ParsedStatement extends LogicalPlan {
   // Redact properties and options when parsed nodes are used by generic methods like toString
   override def productIterator: Iterator[Any] = super.productIterator.map {
     case mapArg: Map[_, _] => conf.redactOptions(mapArg.asInstanceOf[Map[String, String]])
