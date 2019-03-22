@@ -133,7 +133,8 @@ private[spark] case class SSLOptions(
   override def toString: String = s"SSLOptions{enabled=$enabled, port=$port, " +
       s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
       s"keyPassword=${keyPassword.map(_ => "xxx")}, keyStoreType=$keyStoreType, " +
-      s"trustStore=$trustStore, trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
+      s"needClientAuth=$needClientAuth, trustStore=$trustStore, "
+      s"trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
       s"trustStoreType=$trustStoreType, protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
 
 }
@@ -239,7 +240,7 @@ private[spark] object SSLOptions extends Logging {
     var parameterValue = conf.getWithSubstitution(s"$ns.$parameter")
       .orElse(Option(hadoopConf.getPassword(s"$ns.$parameter")).map(new String(_)))
       .orElse(default)
-    if (parameterValue.isDefined && default.isDefined && parameterValue.get != default.get) {
+    if (parameterValue.isDefined && (!default.isDefined || (parameterValue.get != default.get))) {
       logWarning(
         s"$ns.$parameter configuration parameter defined which may cause security problems. When " +
         "its configured as command line argument then plain text password can be dumped by " +
@@ -254,7 +255,7 @@ private[spark] object SSLOptions extends Logging {
       val parameterFileContent = readPasswordFile(parameterFileValue.get)
       if (parameterValue.isDefined && parameterValue.get != parameterFileContent) {
         throw new IllegalArgumentException(s"Both $ns.$parameter and $ns.${parameter}File " +
-          "parameters defined but the they differ.")
+          "parameters defined but they differ.")
       }
       parameterValue = Some(parameterFileContent)
     }
