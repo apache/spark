@@ -211,7 +211,7 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
-  def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
+  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
@@ -320,10 +320,10 @@ object DateTimeUtils {
     }
     try {
       val zoneId = if (tz.isEmpty) {
-        timeZone.toZoneId
+        timeZoneId
       } else {
         val sign = if (tz.get.toChar == '-') -1 else 1
-        ZoneId.ofOffset("GMT", ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8)))
+        ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8))
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
@@ -411,7 +411,7 @@ object DateTimeUtils {
     segments(i) = currentSegmentValue
     try {
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      val instant = localDate.atStartOfDay(TimeZoneUTC.toZoneId).toInstant
+      val instant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant
       Some(instantToDays(instant))
     } catch {
       case NonFatal(_) => None
