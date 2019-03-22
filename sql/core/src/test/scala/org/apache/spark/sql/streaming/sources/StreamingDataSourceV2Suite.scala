@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.{BaseStreamingSink, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
@@ -80,7 +80,7 @@ class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
   }
 }
 
-trait FakeStreamingWriteTable extends Table with SupportsWrite {
+trait FakeStreamingWriteTable extends Table with SupportsWrite with BaseStreamingSink {
   override def name(): String = "fake"
   override def schema(): StructType = StructType(Seq())
   override def capabilities(): util.Set[TableCapability] = {

@@ -318,7 +318,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         provider.getTable(dsOptions) match {
-          case table: SupportsWrite if table.supports(STREAMING_WRITE) => table
+          case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
+            table.asInstanceOf[BaseStreamingSink]
           case _ => createV1Sink()
         }
       } else {

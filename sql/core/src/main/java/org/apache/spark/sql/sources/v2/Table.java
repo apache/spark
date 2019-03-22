@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Set;
@@ -32,7 +31,7 @@ import java.util.Set;
  * and writing ability.
  */
 @Evolving
-public interface Table extends BaseStreamingSink {
+public interface Table {
 
   /**
    * A name to identify this table. Implementations should provide a meaningful name, like the

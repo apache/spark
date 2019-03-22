@@ -61,7 +61,7 @@ class ConsoleSinkProvider extends TableProvider
   def shortName(): String = "console"
 }
 
-object ConsoleTable extends Table with SupportsWrite {
+object ConsoleTable extends Table with SupportsWrite with BaseStreamingSink {
 
   override def name(): String = "console"
 
