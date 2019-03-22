@@ -2672,10 +2672,10 @@ object SparkContext extends Logging {
       val cpusPerTask = sc.conf.get(CPUS_PER_TASK)
       if (executorCoreNum < cpusPerTask) {
         val message = if (clusterMode) {
-          s"${EXECUTOR_CORES.key} must not be less than ${CPUS_PER_TASK.key} when run on $master."
+          s"${CPUS_PER_TASK.key} must be <= ${EXECUTOR_CORES.key} when run on $master."
         } else {
-          s"Only $executorCoreNum cores available for an executor when run on" +
-            s" $master, and ${CPUS_PER_TASK.key} must not be greater than it."
+          s"Only $executorCoreNum cores available per executor when run on $master," +
+            s" and ${CPUS_PER_TASK.key} must be <= it."
         }
         throw new SparkException(message)
       }
