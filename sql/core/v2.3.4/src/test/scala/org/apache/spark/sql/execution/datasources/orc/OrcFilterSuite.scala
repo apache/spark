@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -31,7 +32,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -423,6 +423,18 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
           GreaterThan("a", 1)
         )
       )).get.toString
+    }
+  }
+
+  test("SPARK-27160: Fix casting of the DecimalType literal") {
+    import org.apache.spark.sql.sources._
+    val schema = StructType(Array(StructField("a", DecimalType(3, 2))))
+    assertResult("leaf-0 = (LESS_THAN a 3.14), expr = leaf-0") {
+      OrcFilters.createFilter(schema, Array(
+        LessThan(
+          "a",
+          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2)))
+      ).get.toString
     }
   }
 }
