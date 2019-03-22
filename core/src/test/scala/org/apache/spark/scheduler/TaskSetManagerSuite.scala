@@ -1629,7 +1629,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val clock = new ManualClock(10000L)
     var manager: TaskSetManager = null
     sched = new FakeTaskScheduler(sc,
-      (0 until 20).map(i => (s"exec$i", s"host$i")): _*
+      (0 until 20).map(i => (s"exec$i", "host1")): _*
     ) {
       private var schedulableBuilder: SchedulableBuilder = null
 
@@ -1662,7 +1662,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     clock.advance(2000)
     val taskDescs1 = sched.resourceOffers(IndexedSeq(
       WorkerOffer("exec1", "host1", 1),
-      WorkerOffer("exec2", "host2", 1)
+      WorkerOffer("exec2", "host1", 1)
     )).flatten
     assert(taskDescs1.length === 1)
     assert(taskDescs1.head.executorId === "exec1")
@@ -1670,7 +1670,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     clock.advance(2000)
     val taskDescs2 = sched.resourceOffers(IndexedSeq(
       WorkerOffer("exec1", "host1", 1),
-      WorkerOffer("exec2", "host2", 1)
+      WorkerOffer("exec2", "host1", 1)
     )).flatten
     assert(taskDescs2.length === 1)
     assert(taskDescs2.head.executorId === "exec1")
@@ -1678,7 +1678,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     clock.advance(2000)
     val taskDescs3 = sched.resourceOffers(IndexedSeq(
       WorkerOffer("exec1", "host1", 1),
-      WorkerOffer("exec2", "host2", 1)
+      WorkerOffer("exec2", "host1", 1)
     )).flatten
     // Locality level upgraded to NODE_LOCAL
     assert(taskDescs3.length === 2)

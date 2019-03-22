@@ -463,6 +463,7 @@ private[spark] class TaskSetManager(
       val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality
+      val previousUpgradeTime = lastUpgradeTime
 
       if (maxLocality != TaskLocality.NO_PREF) {
         allowedLocality = getAllowedLocalityLevel(curTime)
@@ -486,7 +487,11 @@ private[spark] class TaskSetManager(
         // Update our locality level for delay scheduling
         // NO_PREF will not affect the variables related to delay scheduling
         if (maxLocality != TaskLocality.NO_PREF) {
-          currentLocalityIndex = getLocalityIndex(taskLocality)
+          val actualLocalityIndex = getLocalityIndex(taskLocality)
+          if (actualLocalityIndex < currentLocalityIndex) {
+            lastUpgradeTime = previousUpgradeTime
+          }
+          currentLocalityIndex = actualLocalityIndex
           lastLaunchTime = curTime
         }
         // Serialize and return the task
@@ -624,10 +629,10 @@ private[spark] class TaskSetManager(
           s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
       } else if (curTime - lastUpgradeTime >= localityWaits(currentLocalityIndex) &&
-        isDelaySchedulingWorthwhile) {
+        !isDelaySchedulingWorthwhile) {
           lastLaunchTime = curTime
           lastUpgradeTime = curTime
-          logDebug(s"Lots of pending tasks have been waiting a long time for locality level " +
+          logDebug(s"Not worth to continue waiting on locality level " +
             s"${myLocalityLevels(currentLocalityIndex)}, so moving to locality level " +
             s"${myLocalityLevels(currentLocalityIndex + 1)}")
           currentLocalityIndex += 1
