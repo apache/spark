@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -244,6 +244,23 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           .toInstant
         val expected = "TIMESTAMP('2019-03-21 01:02:03.456')"
         val literalStr = Literal.create(timestamp).sql
+        assert(literalStr === expected)
+      } finally {
+        TimeZone.setDefault(originTimeZone)
+      }
+    }
+  }
+
+  test("format date literal independently from time zone") {
+    withSQLConf(
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT-11:00",
+      SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      val originTimeZone = TimeZone.getDefault
+      try {
+        TimeZone.setDefault(TimeZone.getTimeZone("GMT-10:00"))
+        val date = LocalDate.of(2019, 3, 21)
+        val expected = "DATE '2019-03-21'"
+        val literalStr = Literal.create(date).sql
         assert(literalStr === expected)
       } finally {
         TimeZone.setDefault(originTimeZone)
