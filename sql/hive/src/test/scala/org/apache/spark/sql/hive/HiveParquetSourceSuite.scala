@@ -178,6 +178,46 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
     }
   }
 
+  test("Verify the PARQUET conversion parameter: CONVERT_METASTORE_PARQUET_EXCLUDED_TABLES") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+
+      val tableName = "test_parquet_ctas"
+      Seq(tableName + ",others", "").foreach { parquetConversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET_EXCLUDED_TABLES.key -> parquetConversion) {
+          withTable(tableName) {
+            sql(
+              s"""
+                 |CREATE TABLE $tableName STORED AS PARQUET
+                 |AS SELECT tmp.key, tmp.value FROM single tmp
+               """.stripMargin)
+
+            val df = spark.sql(s"SELECT * FROM $tableName WHERE key=0")
+            checkAnswer(df, singleRowDF)
+
+            val queryExecution = df.queryExecution
+            if (!parquetConversion.split(",").contains(tableName)) {
+              queryExecution.analyzed.collectFirst {
+                case _: LogicalRelation =>
+              }.getOrElse {
+                fail(s"Expecting the query plan to convert parquet to data sources, " +
+                  s"but got:\n$queryExecution")
+              }
+            } else {
+              queryExecution.analyzed.collectFirst {
+                case _: HiveTableRelation =>
+              }.getOrElse {
+                fail(s"Expecting no conversion from parquet to data sources, " +
+                  s"but got:\n$queryExecution")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("values in arrays and maps stored in parquet are always nullable") {
     val df = createDataFrame(Tuple2(Map(2 -> 3), Seq(4, 5, 6)) :: Nil).toDF("m", "a")
     val mapType1 = MapType(IntegerType, IntegerType, valueContainsNull = false)

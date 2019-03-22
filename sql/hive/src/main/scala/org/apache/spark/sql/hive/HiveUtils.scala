@@ -97,6 +97,13 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val CONVERT_METASTORE_PARQUET_EXCLUDED_TABLES =
+    buildConf("spark.sql.hive.convertMetastoreParquet.excludedTables")
+    .doc("A comma-separated list of Parquet table names, which do not use the built-in Parquet" +
+      "reader and writer when \"spark.sql.hive.convertMetastoreParquet\" is true.")
+    .stringConf
+    .createWithDefault("")
+
   val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING =
     buildConf("spark.sql.hive.convertMetastoreParquet.mergeSchema")
       .doc("When true, also tries to merge possibly different but compatible Parquet schemas in " +
@@ -110,6 +117,13 @@ private[spark] object HiveUtils extends Logging {
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(true)
+
+  val CONVERT_METASTORE_ORC_EXCLUDED_TABLES =
+    buildConf("spark.sql.hive.convertMetastoreOrc.excludedTables")
+      .doc("A comma-separated list of ORC table names, which do not use the built-in ORC" +
+        "reader and writer when \"spark.sql.hive.convertMetastoreOrc\" is true.")
+      .stringConf
+      .createWithDefault("")
 
   val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
     .doc("When set to true,  Spark will try to use built-in data source writer " +

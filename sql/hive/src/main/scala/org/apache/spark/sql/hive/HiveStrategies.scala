@@ -185,8 +185,16 @@ case class RelationConversions(
 
   private def isConvertible(tableMeta: CatalogTable): Boolean = {
     val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
-      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+    val excludedParquetTables =
+      SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_EXCLUDED_TABLES)
+    val excludedOrcTables =
+      SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC_EXCLUDED_TABLES)
+    val tableName = tableMeta.identifier.table.toLowerCase(Locale.ROOT)
+
+    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) &&
+      !excludedParquetTables.toLowerCase(Locale.ROOT).split(",").contains(tableName) ||
+      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC) &&
+      !excludedOrcTables.toLowerCase(Locale.ROOT).split(",").contains(tableName)
   }
 
   private val metastoreCatalog = sessionCatalog.metastoreCatalog

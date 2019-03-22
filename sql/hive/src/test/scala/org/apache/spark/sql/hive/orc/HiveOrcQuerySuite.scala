@@ -127,6 +127,56 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
+  test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC_EXCLUDED_TABLES") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+
+      val tableName = "dummy_orc"
+      Seq(tableName + ",others", "").foreach { orcConversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC_EXCLUDED_TABLES.key -> orcConversion) {
+          withTable(tableName) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.sql(
+                s"""
+                   |CREATE TABLE $tableName(key INT, value STRING)
+                   |STORED AS ORC
+                   |LOCATION '${dir.toURI}'
+                 """.stripMargin)
+
+              spark.sql(
+                s"""
+                   |INSERT INTO TABLE $tableName
+                   |SELECT key, value FROM single
+                 """.stripMargin)
+
+              val df = spark.sql(s"SELECT * FROM $tableName WHERE key=0")
+              checkAnswer(df, singleRowDF)
+
+              val queryExecution = df.queryExecution
+              if (!orcConversion.split(",").contains(tableName)) {
+                queryExecution.analyzed.collectFirst {
+                  case _: LogicalRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting the query plan to convert orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              } else {
+                queryExecution.analyzed.collectFirst {
+                  case _: HiveTableRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting no conversion from orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("converted ORC table supports resolving mixed case field") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
       withTable("dummy_orc") {
