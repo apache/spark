@@ -58,11 +58,29 @@ trait PropertyGraph {
 
   /**
     * Returns a [[DataFrame]] that contains a row for each node in this graph.
+    *
+    * The DataFrame adheres to column naming conventions:
+    *
+    * {{{
+    * Id column:        `$ID`
+    * Label columns:    `:{LABEL_NAME}`
+    * Property columns: `{Property_Key}`
+    * }}}
     */
   def nodes: DataFrame
 
   /**
     * Returns a [[DataFrame]] that contains a row for each relationship in this graph.
+    *
+    * The DataFrame adheres to column naming conventions:
+    *
+    * {{{
+    * Id column:        `$ID`
+    * SourceId column:  `$SOURCE_ID`
+    * TargetId column:  `$TARGET_ID`
+    * RelType columns:  `:{REL_TYPE}`
+    * Property columns: `{Property_Key}`
+    * }}}
     */
   def relationships: DataFrame
 
