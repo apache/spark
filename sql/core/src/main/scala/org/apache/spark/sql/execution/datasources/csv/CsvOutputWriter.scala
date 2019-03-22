@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.csv.{CSVOptions, UnivocityGenerator}
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
 import org.apache.spark.sql.types.StructType
 
-private[sql] class CsvOutputWriter(
+class CsvOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
