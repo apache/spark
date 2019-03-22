@@ -43,6 +43,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   @transient private var fileLog: FileStreamSinkLog = _
   private var batchId: Long = _
 
+  @transient private var pendingCommitFiles: ArrayBuffer[String] = _
+
   /**
    * Sets up the manifest log output and the batch id for this job.
    * Must be called before any other function.
@@ -54,12 +56,20 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def setupJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
-    // Do nothing
+    pendingCommitFiles = new ArrayBuffer[String]
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
     val fileStatuses = taskCommits.flatMap(_.obj.asInstanceOf[Seq[SinkFileStatus]]).toArray
+
+    // We shouldn't remove the files if they're written to the metadata:
+    // `fileLog.add(batchId, fileStatuses)` could fail AFTER writing files to the metadata
+    // as well as there could be race
+    // so for the safety we clean up the list before calling anything incurs exception.
+    // The case is uncommon and we do best effort instead of guarantee, so the simplicity of
+    // logic here would be OK, and safe for dealing with unexpected situations.
+    pendingCommitFiles.clear()
 
     if (fileLog.add(batchId, fileStatuses)) {
       logInfo(s"Committed batch $batchId")
@@ -70,7 +80,24 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def abortJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
-    // Do nothing
+    // best effort cleanup of complete files from failed job
+    // since the file has UUID in its filename, we are safe to try deleting them
+    // not deleting them doesn't help reducing cost to saving files when retrying
+    if (pendingCommitFiles.nonEmpty) {
+      pendingCommitFiles.foreach { file =>
+        val path = new Path(file)
+        val fs = path.getFileSystem(jobContext.getConfiguration)
+        // this is to make sure the file can be seen from driver as well
+        if (fs.exists(path)) {
+          fs.delete(path, false)
+        }
+      }
+      pendingCommitFiles.clear()
+    }
+  }
+
+  override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
+    pendingCommitFiles ++= taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]].map(_.path)
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
