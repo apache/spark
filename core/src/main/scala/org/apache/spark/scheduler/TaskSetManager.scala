@@ -209,6 +209,7 @@ private[spark] class TaskSetManager(
   // We then move down if we manage to launch a "more local" task.
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
   private var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
+  private var lastUpgradeTime = clock.getTimeMillis() // Time we last moved up the locality level
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
@@ -584,17 +585,20 @@ private[spark] class TaskSetManager(
       hasTasks
     }
 
-    val actualNumTasksCanRun = math.min(allPendingTasks.size,
-      sched.backend.maxNumConcurrentTasks() - sched.runningTasksByExecutors.values.sum)
-    val probabilityOfNextLocalitySchedule = 0.5D
-    val maxTolerantStarvingTime = if (successfulTaskDurations.isEmpty()) {
-      Long.MaxValue
-    } else {
-      actualNumTasksCanRun *
-        successfulTaskDurations.median * localityGainFactor * probabilityOfNextLocalitySchedule
+    def isDelaySchedulingWorthwhile: Boolean = {
+      if (successfulTaskDurations.isEmpty()) {
+        false
+      } else {
+        val actualNumTasksCanRun = math.min(allPendingTasks.size,
+          sched.backend.maxNumConcurrentTasks() - sched.runningTasksByExecutors.values.sum)
+        val probabilityOfNextLocalitySchedule = 0.5D
+        val maxTolerableStarvationTime = actualNumTasksCanRun *
+            successfulTaskDurations.median * localityGainFactor * probabilityOfNextLocalitySchedule
+        val totalStarvationTime = taskPendingStartTimes.map(curTime - _._2).sum
+        totalStarvationTime < maxTolerableStarvationTime
+      }
     }
 
-    val totalStarvingTime = taskPendingStartTimes.map(curTime - _._2).sum
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
         case TaskLocality.PROCESS_LOCAL => moreTasksToRunIn(pendingTasksForExecutor)
@@ -607,6 +611,7 @@ private[spark] class TaskSetManager(
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
         lastLaunchTime = curTime
+        lastUpgradeTime = curTime
         logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
           s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
@@ -614,15 +619,18 @@ private[spark] class TaskSetManager(
         // Jump to the next locality level, and reset lastLaunchTime so that the next locality
         // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
+        lastUpgradeTime = curTime
         logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
-      } else if (totalStarvingTime > maxTolerantStarvingTime) {
-        lastLaunchTime = curTime
-        logDebug(s"Lots of pending tasks have been waiting a long time for locality level " +
-          s"${myLocalityLevels(currentLocalityIndex)}, so moving to locality level " +
-          s"${myLocalityLevels(currentLocalityIndex + 1)}")
-        currentLocalityIndex += 1
+      } else if (curTime - lastUpgradeTime >= localityWaits(currentLocalityIndex) &&
+        isDelaySchedulingWorthwhile) {
+          lastLaunchTime = curTime
+          lastUpgradeTime = curTime
+          logDebug(s"Lots of pending tasks have been waiting a long time for locality level " +
+            s"${myLocalityLevels(currentLocalityIndex)}, so moving to locality level " +
+            s"${myLocalityLevels(currentLocalityIndex + 1)}")
+          currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
