@@ -57,6 +57,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     }
   }
 
+  /** Creates a multi-part identifier for a given SQL string */
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
+    }
+  }
+
   /**
    * Creates StructType for a given SQL string, which is a comma separated list of field
    * definitions which will preserve the correct Hive metadata.

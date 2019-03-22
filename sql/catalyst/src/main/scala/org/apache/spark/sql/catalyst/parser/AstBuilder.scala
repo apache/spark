@@ -86,6 +86,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     visitFunctionIdentifier(ctx.functionIdentifier)
   }
 
+  override def visitSingleMultipartIdentifier(
+      ctx: SingleMultipartIdentifierContext): Seq[String] = withOrigin(ctx) {
+    visitMultipartIdentifier(ctx.multipartIdentifier)
+  }
+
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
     visitSparkDataType(ctx.dataType)
   }
@@ -955,6 +960,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitFunctionIdentifier(
       ctx: FunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
     FunctionIdentifier(ctx.function.getText, Option(ctx.db).map(_.getText))
+  }
+
+  /**
+   * Create a multi-part identifier.
+   */
+  override def visitMultipartIdentifier(
+      ctx: MultipartIdentifierContext): Seq[String] = withOrigin(ctx) {
+    ctx.parts.asScala.map(_.getText)
   }
 
   /* ********************************************************************************************
