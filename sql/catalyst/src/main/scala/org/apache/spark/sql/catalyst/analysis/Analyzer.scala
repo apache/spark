@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, LookupCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -95,11 +96,17 @@ object AnalysisContext {
 class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
-    maxIterations: Int)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
+    maxIterations: Int,
+    override val lookupCatalog: Option[(String) => CatalogPlugin] = None)
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
+  }
+
+  def this(lookupCatalog: Option[(String) => CatalogPlugin], catalog: SessionCatalog,
+      conf: SQLConf) = {
+    this(catalog, conf, conf.optimizerMaxIterations, lookupCatalog)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
