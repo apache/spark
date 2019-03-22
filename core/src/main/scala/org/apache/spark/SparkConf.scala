@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.util.{Map => JMap}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
@@ -29,7 +29,6 @@ import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 

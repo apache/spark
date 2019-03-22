@@ -835,7 +835,6 @@ private[spark] class Executor(
 
     val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
     try {
-
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
           message, new RpcTimeout(heartbeatInterval.millis.toSeconds.seconds,
           EXECUTOR_HEARTBEAT_INTERVAL.key))
