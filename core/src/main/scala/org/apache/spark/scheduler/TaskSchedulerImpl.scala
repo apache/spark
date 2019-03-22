@@ -156,6 +156,12 @@ private[spark] class TaskSchedulerImpl(
 
   private[scheduler] var barrierCoordinator: RpcEndpoint = null
 
+  /**
+   * It can be override in different TaskScheduler, like Yarn.
+   * None by default. This should be initialized before any invocation.
+   */
+  protected val defaultRackValue: Option[String] = None
+
   private def maybeInitBarrierCoordinator(): Unit = {
     if (barrierCoordinator == null) {
       barrierCoordinator = new BarrierCoordinator(barrierSyncTimeout, sc.listenerBus,
@@ -377,7 +383,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     val hosts = offers.map(_.host).toSet.toSeq
-    for ((host, rack) <- hosts.zip(getRacksForHosts(hosts))) {
+    for ((host, Some(rack)) <- hosts.zip(getRacksForHosts(hosts))) {
       hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += host
     }
 
@@ -765,8 +771,7 @@ private[spark] class TaskSchedulerImpl(
     execs -= executorId
     if (execs.isEmpty) {
       hostToExecutors -= host
-      val rack = getRackForHost(host)
-      for (hosts <- hostsByRack.get(rack)) {
+      for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
         hosts -= host
         if (hosts.isEmpty) {
           hostsByRack -= rack
@@ -817,40 +822,32 @@ private[spark] class TaskSchedulerImpl(
   private def skipRackResolving: Boolean = sc.conf.get(LOCALITY_WAIT_RACK) == 0L
 
   /**
-   * Rack is `unknown` by default.
-   * It can be override in different TaskScheduler, like Yarn.
-   */
-  protected val defaultRackValue: String = "unknown"
-
-  /**
    * Get racks info for hosts. This is the internal method of [[getRacksForHosts]].
    * It should be override in different TaskScheduler.
    * The return racks must have to be the same length as the hosts passed in.
    * Return [[defaultRackValue]] sequence by default.
    */
-  protected def doGetRacksForHosts(hosts: Seq[String]): Seq[String] = {
+  protected def doGetRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
     hosts.map(_ => defaultRackValue)
   }
 
-  def getRackForHost(hosts: String): String = {
+  // By default, rack is unknown
+  def getRackForHost(hosts: String): Option[String] = {
     if (skipRackResolving) {
       defaultRackValue
     } else {
-      doGetRacksForHosts(Seq(hosts)) match {
-        case Nil => defaultRackValue
-        case head :: Nil => head
-      }
+      doGetRacksForHosts(Seq(hosts)).head
     }
   }
 
   /**
    * null in return sequences will be replaced to [[defaultRackValue]].
    */
-  def getRacksForHosts(hosts: Seq[String]): Seq[String] = {
+  def getRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
     if (skipRackResolving) {
       hosts.map(_ => defaultRackValue)
     } else {
-      doGetRacksForHosts(hosts).map(Option(_).getOrElse(defaultRackValue))
+      doGetRacksForHosts(hosts)
     }
   }
 

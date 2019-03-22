@@ -37,7 +37,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
 
-class MockResolver(conf: Configuration) extends SparkRackResolver(conf) {
+class MockResolver() extends SparkRackResolver(new Configuration()) {
 
   override def resolve(conf: Configuration, hostName: String): String = {
     if (hostName == "host3") "/rack2" else "/rack1"
@@ -112,7 +112,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       appAttemptId,
       new SecurityManager(sparkConf),
       Map(),
-      new MockResolver(conf),
+      new MockResolver(),
       clock)
   }
 

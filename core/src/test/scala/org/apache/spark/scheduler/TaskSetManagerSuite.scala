@@ -80,12 +80,12 @@ object FakeRackUtil {
     hostToRack(host) = rack
   }
 
-  def getRacksForHosts(hosts: Seq[String]): Seq[String] = {
+  def getRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
     assert(hosts.toSet.size == hosts.size) // no dups in hosts
     if (hosts.nonEmpty && hosts.length != 1) {
       numBatchInvocation += 1
     }
-    hosts.map(hostToRack.getOrElse(_, null))
+    hosts.map(hostToRack.get(_))
   }
 }
 
@@ -106,12 +106,14 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   val executors = new mutable.HashMap[String, String]
 
+  // this must be initialized before addExecutor
+  override val defaultRackValue: Option[String] = Some("default")
   for ((execId, host) <- liveExecutors) {
     addExecutor(execId, host)
   }
 
-  for ((execId, host) <- liveExecutors) {
-    hostsByRack.getOrElseUpdate(getRackForHost(host), new mutable.HashSet[String]()) += host
+  for ((execId, host) <- liveExecutors; rack <- getRackForHost(host)) {
+    hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += host
   }
 
   dagScheduler = new FakeDAGScheduler(sc, this)
@@ -123,8 +125,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     val hostId = host.get
     val executorsOnHost = hostToExecutors(hostId)
     executorsOnHost -= execId
-    val rack = getRackForHost(hostId)
-    for (hosts <- hostsByRack.get(rack)) {
+    for (rack <- getRackForHost(hostId); hosts <- hostsByRack.get(rack)) {
       hosts -= hostId
       if (hosts.isEmpty) {
         hostsByRack -= rack
@@ -147,12 +148,12 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     val executorsOnHost = hostToExecutors.getOrElseUpdate(host, new mutable.HashSet[String])
     executorsOnHost += execId
     executorIdToHost += execId -> host
-    hostsByRack.getOrElseUpdate(getRackForHost(host), new mutable.HashSet[String]()) += host
+    for (rack <- getRackForHost(host)) {
+      hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += host
+    }
   }
 
-  override val defaultRackValue: String = "default"
-
-  override def doGetRacksForHosts(hosts: Seq[String]): Seq[String] = {
+  override def doGetRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
     FakeRackUtil.getRacksForHosts(hosts)
   }
 }
@@ -1664,7 +1665,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     // verify the total number not changed with SPARK-13704
-    assert(manager.getPendingTasksForRack(sched.defaultRackValue).length === 100)
+    assert(manager.getPendingTasksForRack(sched.defaultRackValue.get).length === 100)
     assert(FakeRackUtil.numBatchInvocation === 0)
   }
 }

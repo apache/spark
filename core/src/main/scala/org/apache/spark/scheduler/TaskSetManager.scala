@@ -197,7 +197,7 @@ private[spark] class TaskSetManager(
       // Resolve the rack for each host. This can be slow, so de-dupe the list of hosts,
       // and assign the rack to all relevant task indices.
       for (
-        (rack, indices) <- sched.getRacksForHosts(hostToIndices.keySet.toSeq)
+        (Some(rack), indices) <- sched.getRacksForHosts(hostToIndices.keySet.toSeq)
           .zip(hostToIndices.values)) {
         pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) ++= indices
       }
@@ -257,8 +257,9 @@ private[spark] class TaskSetManager(
         // preferredLocation -> task indices, initializingMap used when TaskSetManager initializing
         initializingMap.foreach(_.getOrElseUpdate(loc.host, new ArrayBuffer) += index)
       } else {
-        pendingTasksForRack.getOrElseUpdate(
-          sched.getRackForHost(loc.host), new ArrayBuffer) += index
+        for (rack <- sched.getRackForHost(loc.host)) {
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+        }
       }
     }
 
@@ -357,7 +358,7 @@ private[spark] class TaskSetManager(
         val executors = prefs.flatMap(_ match {
           case e: ExecutorCacheTaskLocation => Some(e.executorId)
           case _ => None
-        });
+        })
         if (executors.contains(execId)) {
           speculatableTasks -= index
           return Some((index, TaskLocality.PROCESS_LOCAL))
@@ -388,12 +389,13 @@ private[spark] class TaskSetManager(
 
       // Check for rack-local tasks
       if (TaskLocality.isAllowed(locality, TaskLocality.RACK_LOCAL)) {
-        val rack = sched.getRackForHost(host)
-        for (index <- speculatableTasks if canRunOnHost(index)) {
-          val racks = tasks(index).preferredLocations.map(_.host).map(sched.getRackForHost)
-          if (racks.contains(rack)) {
-            speculatableTasks -= index
-            return Some((index, TaskLocality.RACK_LOCAL))
+        for (rack <- sched.getRackForHost(host)) {
+          for (index <- speculatableTasks if canRunOnHost(index)) {
+            val racks = tasks(index).preferredLocations.map(_.host).map(sched.getRackForHost)
+            if (racks.contains(rack)) {
+              speculatableTasks -= index
+              return Some((index, TaskLocality.RACK_LOCAL))
+            }
           }
         }
       }
@@ -437,8 +439,10 @@ private[spark] class TaskSetManager(
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
-      val rack = sched.getRackForHost(host)
-      for (index <- dequeueTaskFromList(execId, host, getPendingTasksForRack(rack))) {
+      for {
+        rack <- sched.getRackForHost(host)
+        index <- dequeueTaskFromList(execId, host, getPendingTasksForRack(rack))
+      } {
         return Some((index, TaskLocality.RACK_LOCAL, false))
       }
     }
