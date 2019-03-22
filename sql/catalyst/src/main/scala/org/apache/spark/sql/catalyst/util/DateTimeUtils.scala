@@ -101,6 +101,10 @@ object DateTimeUtils {
     Math.floorDiv(epochMicros, MICROS_PER_DAY).toInt
   }
 
+  def daysToMicros(days: SQLDate): SQLTimestamp = {
+    Math.multiplyExact(days, MICROS_PER_DAY)
+  }
+
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
     tf.format(us)

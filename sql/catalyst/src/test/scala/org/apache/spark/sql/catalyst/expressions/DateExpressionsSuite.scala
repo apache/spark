@@ -256,14 +256,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal("y"), pstId), "2015")
     checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), pstId), "2013")
     checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstId),
-      Literal("H"), pstId), "0")
+      Literal("H"), pstId), "17")
     checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), pstId), "5")
 
     checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
       Literal("y"), jstId), "2015")
     checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), jstId), "2013")
     checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
-      Literal("H"), jstId), "0")
+      Literal("H"), jstId), "9")
     checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), jstId), "22")
   }
 

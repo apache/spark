@@ -376,7 +376,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case ByteType =>
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => MILLISECONDS.toMicros(DateTimeUtils.daysToMillis(d, timeZone)))
+      buildCast[Int](_, d => daysToMicros(d))
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -1031,11 +1031,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: IntegralType =>
       (c, evPrim, evNull) => code"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
-      val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
-      (c, evPrim, evNull) =>
-        code"""$evPrim =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis(
-            $c, $tz) * $MICROS_PER_MILLIS;"""
+      (c, evPrim, _) =>
+        code"""$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c);"""
     case DecimalType() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>

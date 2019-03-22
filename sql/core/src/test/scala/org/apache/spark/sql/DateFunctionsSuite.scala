@@ -171,11 +171,11 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(hour($"a"), hour($"b"), hour($"c")),
-      Row(0, 13, 13))
+      Row(17, 13, 13))
 
     checkAnswer(
       df.selectExpr("hour(a)", "hour(b)", "hour(c)"),
-      Row(0, 13, 13))
+      Row(17, 13, 13))
   }
 
   test("minute") {
