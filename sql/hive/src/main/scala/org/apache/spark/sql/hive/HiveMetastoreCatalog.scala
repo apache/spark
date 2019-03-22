@@ -167,6 +167,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val tablePath = new Path(relation.tableMeta.location)
     val fileFormat = fileFormatClass.getConstructor().newInstance()
 
+    var getFromCache = true
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema
       val rootPaths: Seq[Path] = if (lazyPruningEnabled) {
@@ -197,6 +198,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           Some(partitionSchema))
 
         val logicalRelation = cached.getOrElse {
+          getFromCache = false
           val sizeInBytes = relation.stats.sizeInBytes.toLong
           val fileIndex = {
             val index = new CatalogFileIndex(sparkSession, relation.tableMeta, sizeInBytes)
@@ -233,6 +235,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormatClass,
           None)
         val logicalRelation = cached.getOrElse {
+          getFromCache = false
           val updatedTable = inferIfNeeded(relation, options, fileFormat)
           val created =
             LogicalRelation(
@@ -254,12 +257,18 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
     // The inferred schema may have different field names as the table schema, we should respect
     // it, but also respect the exprId in table relation output.
-    assert(result.output.length == relation.output.length &&
-      result.output.zip(relation.output).forall { case (a1, a2) => a1.dataType == a2.dataType })
-    val newOutput = result.output.zip(relation.output).map {
-      case (a1, a2) => a1.withExprId(a2.exprId)
+    val isValid = result.output.length == relation.output.length &&
+      result.output.zip(relation.output).forall { case (a1, a2) => a1.dataType == a2.dataType }
+    if (getFromCache && !isValid) {
+      catalogProxy.invalidateCachedTable(tableIdentifier)
+      convertToLogicalRelation(relation, options, fileFormatClass, fileType)
+    } else {
+      assert(isValid == true)
+      val newOutput = result.output.zip(relation.output).map {
+        case (a1, a2) => a1.withExprId(a2.exprId)
+      }
+      result.copy(output = newOutput)
     }
-    result.copy(output = newOutput)
   }
 
   private def inferIfNeeded(
