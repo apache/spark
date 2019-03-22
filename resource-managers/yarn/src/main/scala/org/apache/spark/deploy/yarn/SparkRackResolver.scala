@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
  * default behavior, since YARN's class self-initializes the first time it's called, and
  * future calls all use the initial configuration.
  */
-private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
+private[yarn] class SparkRackResolver(conf: Configuration) extends Logging {
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
