@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.exchange._
  * There are 2 kinds of query stages:
  *   1. Shuffle query stage. This stage materializes its output to shuffle files, and Spark launches
  *      another job to execute the further operators.
- *   2. Broadcast stage. This stage materializes its output to an array in driver JVM. Spark
+ *   2. Broadcast query stage. This stage materializes its output to an array in driver JVM. Spark
  *      broadcasts the array before executing the further operators.
  */
 abstract class QueryStageExec extends LeafExecNode {

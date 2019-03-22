@@ -527,11 +527,11 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       spark.sql("SET spark.sql.exchange.reuse=true")
       val df = spark.range(1).selectExpr("id AS key", "id AS value")
 
-      // test case 1: a fragment has 3 child fragments but they are the same fragment.
-      // ResultQueryFragment 1
-      //   ShuffleQueryFragment 0
-      //   ReusedQueryFragment 0
-      //   ReusedQueryFragment 0
+      // test case 1: a query stage has 3 child stages but they are the same stage.
+      // ResultQueryStage 1
+      //   ShuffleQueryStage 0
+      //   ReusedQueryStage 0
+      //   ReusedQueryStage 0
       val resultDf = df.join(df, "key").join(df, "key")
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
@@ -539,12 +539,12 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
       checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
 
-      // test case 2: a fragment has 2 parent fragments.
-      // ResultQueryFragment 3
-      //   ShuffleQueryFragment 1
-      //     ShuffleQueryFragment 0
-      //   ShuffleQueryFragment 2
-      //     ReusedQueryFragment 0
+      // test case 2: a query stage has 2 parent stages.
+      // ResultQueryStage 3
+      //   ShuffleQueryStage 1
+      //     ShuffleQueryStage 0
+      //   ShuffleQueryStage 2
+      //     ReusedQueryStage 0
       val grouped = df.groupBy("key").agg(max("value").as("value"))
       val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
         .union(grouped.groupBy(col("key") + 2).max("value"))
@@ -552,22 +552,22 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       val finalPlan2 = resultDf2.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].finalPlan
 
-      // The result fragment has 2 children
-      val level1Fragments = finalPlan2.collect { case q: QueryStageExec => q }
-      assert(level1Fragments.length == 2)
+      // The result stage has 2 children
+      val level1Stages = finalPlan2.collect { case q: QueryStageExec => q }
+      assert(level1Stages.length == 2)
 
-      val leafFragments = level1Fragments.flatMap { fragment =>
-        // All of the child fragments of result fragment have only one child fragment.
-        val children = fragment.plan.collect { case q: QueryStageExec => q }
+      val leafStages = level1Stages.flatMap { stage =>
+        // All of the child stages of result stage have only one child stage.
+        val children = stage.plan.collect { case q: QueryStageExec => q }
         assert(children.length == 1)
         children
       }
-      assert(leafFragments.length == 2)
+      assert(leafStages.length == 2)
 
-      val reusedFragments = level1Fragments.flatMap { fragment =>
-        fragment.plan.collect { case r: ReusedQueryStageExec => r }
+      val reusedStages = level1Stages.flatMap { stage =>
+        stage.plan.collect { case r: ReusedQueryStageExec => r }
       }
-      assert(reusedFragments.length == 1)
+      assert(reusedStages.length == 1)
 
       checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Nil)
     }

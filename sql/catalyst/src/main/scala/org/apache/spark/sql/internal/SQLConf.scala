@@ -278,23 +278,24 @@ object SQLConf {
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.minNumPostShufflePartitions")
       .doc("The advisory minimum number of post-shuffle partitions used in adaptive execution.")
       .intConf
-      .checkValue(numPartitions => numPartitions > 0, "The minimum shuffle partition number " +
+      .checkValue(_ > 0, "The minimum shuffle partition number " +
         "must be a positive integer.")
       .createWithDefault(1)
 
   val SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.maxNumPostShufflePartitions")
-      .doc("The advisory maximum number of post-shuffle partitions used in adaptive execution.")
+      .doc("The advisory maximum number of post-shuffle partitions used in adaptive execution. " +
+        "The by default equals to spark.sql.shuffle.partitions")
       .intConf
-      .checkValue(numPartitions => numPartitions > 0, "The maximum shuffle partition number " +
+      .checkValue(_ > 0, "The maximum shuffle partition number " +
         "must be a positive integer.")
-      .createWithDefault(500)
+      .createOptional
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -1735,7 +1736,8 @@ class SQLConf extends Serializable with Logging {
 
   def minNumPostShufflePartitions: Int = getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
 
-  def maxNumPostShufflePartitions: Int = getConf(SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS)
+  def maxNumPostShufflePartitions: Int =
+    getConf(SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS).getOrElse(numShufflePartitions)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 

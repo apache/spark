@@ -34,7 +34,7 @@ import org.apache.spark.util.{EventLoop, ThreadUtils}
  *
  * When one query stage finishes materialization, a list of adaptive optimizer rules will be
  * executed, trying to optimize the query plan with the data statistics collected from the the
- * materialized data. Then we travers the query plan again and try to insert more query stages.
+ * materialized data. Then we traverse the query plan again and try to insert more query stages.
  *
  * To create query stages, we traverse the query tree bottom up. When we hit an exchange node,
  * and all the child query stages of this exchange node are materialized, we create a new
