@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.util.Objects
+import java.util
 
 import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
 import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
-import scala.collection.mutable
 
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -311,50 +310,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 }
 
 /**
- * This case class represents a position in a `Filter` tree, paired with information about
- * whether `AND` predicates can be partially pushed down. It is used as a key in the
- * memoization map for `OrcConvertibilityChecker`.
- *
- * Because of the way this class is used, there are a few subtleties in its implementation
- * and behaviour:
- * - The default generated `hashCode` and `equals` methods have linear complexity in the size of
- *   the `expression` Filter. This is because they end up recursing over the whole `Filter` tree
- *   in order to check for equality, in order to return true for `Filter`s with different
- *   identities but the same actual contents. As a result, using this class as a key in a HashMap
- *   with the default generated methods would end up having a complexity that's linear in the
- *   size of the `expression`, instead of constnant. This means that using it as a key in the
- *   memoization map for `OrcConvertibilityChecker` would make the whole convertibility checking
- *   take time quadratic in the size of the tree instead of linear.
- * - For this reason, we override `hashCode` and `equals` to only check the identity of the
- *   `expression` and not the full expression object.
- * - Hashing based on the identity of the expression results in correct behaviour because we
- *   are indeed only interested in memoizing the results for exact locations in the `Filter`
- *   tree. If there are expressions that are exactly the same but at different locations, we
- *   would treat them as different objects and simply compute the results for them twice.
- * - Since implementing `equals` and `hashCode` in the presence of subclasses is trickier,
- *   this class is sealed to guarantee that we don't need to be concerned with subclassing.
- */
-private sealed case class FilterWithConjunctPushdown(
-  expression: Filter,
-  canPartialPushDownConjuncts: Boolean
-) {
-  override def hashCode(): Int = {
-    Objects.hash(
-      System.identityHashCode(expression).asInstanceOf[Object],
-      canPartialPushDownConjuncts.asInstanceOf[Object])
-  }
-
-  override def equals(obj: Any): Boolean = {
-    obj match {
-      case FilterWithConjunctPushdown(expr, canPushDown) =>
-        Objects.equals(System.identityHashCode(expression), System.identityHashCode(expr)) &&
-        Objects.equals(canPartialPushDownConjuncts, canPushDown)
-      case _ => false
-    }
-  }
-}
-
-/**
  * Helper class for efficiently checking whether a `Filter` and its children can be converted to
  * ORC `SearchArgument`s. The `isConvertible` method has a constant amortized complexity for
  * checking whether a node from a Filter expression is convertible to an ORC `SearchArgument`.
@@ -365,14 +320,19 @@ private sealed case class FilterWithConjunctPushdown(
  */
 private class OrcConvertibilityChecker(dataTypeMap: Map[String, DataType]) {
 
-  private val convertibilityCache = new mutable.HashMap[FilterWithConjunctPushdown, Boolean]
+  // Here, we only need the hash map to be based on the identity of the `Filter` and not on object
+  // equality. This ensures that the complexity for accessing the hash map is constant (with the
+  // only necessary step being to compute the identity hash code of the `Filter`) instead of
+  // linear (which would be the case if we were computing the `Filter` hash code based on all of
+  // its children).
+  private val convertibilityCache = new util.IdentityHashMap[Filter, Boolean]
 
   /**
    * Checks if a given expression from a Filter is convertible.
    *
-   * The result for a given (expression, canPartialPushDownConjuncts) pair within a Filter
-   * will never change, so we memoize the results in the `convertibilityCache`. This means
-   * that the overall complexity for checking all nodes in a `Filter` is:
+   * The result for a given expression within a Filter will never change, so we memoize the
+   * results in the `convertibilityCache`. This means that the overall complexity for checking
+   * all nodes in a `Filter` is:
    * - a total of one pass across the whole Filter tree is made when nodes are checked for
    *   convertibility for the first time.
    * - when checked for a second, etc. time, the result has already been memoized in the cache
@@ -384,19 +344,29 @@ private class OrcConvertibilityChecker(dataTypeMap: Map[String, DataType]) {
    *                                    do at the top level or none of its ancestors is NOT and OR.
    */
   def isConvertible(expression: Filter, canPartialPushDownConjuncts: Boolean): Boolean = {
-    val node = FilterWithConjunctPushdown(expression, canPartialPushDownConjuncts)
-    convertibilityCache.getOrElseUpdate(node, isConvertibleImpl(node))
+    // The value of `canPartialPushDownConjuncts` will always be the same for invocations on the
+    // `expression`. Thus, we don't need to add that as part of the memoization key.
+    if (convertibilityCache.containsKey(expression)) {
+      convertibilityCache.get(expression)
+    } else {
+      val result = isConvertibleImpl(expression, canPartialPushDownConjuncts)
+      convertibilityCache.put(expression, result)
+      result
+    }
   }
 
   /**
    * This method duplicates the logic from `OrcFilters.createBuilder` that is related to checking
    * if a given part of the filter is actually convertible to an ORC `SearchArgument`.
    */
-  private def isConvertibleImpl(node: FilterWithConjunctPushdown): Boolean = {
+  private def isConvertibleImpl(
+    expression: Filter,
+    canPartialPushDownConjuncts: Boolean
+  ): Boolean = {
     import org.apache.spark.sql.sources._
     import OrcFilters._
 
-    node.expression match {
+    expression match {
       case And(left, right) =>
         // At here, it is not safe to just convert one side and remove the other side
         // if we do not understand what the parent filters are.
@@ -409,12 +379,12 @@ private class OrcConvertibilityChecker(dataTypeMap: Map[String, DataType]) {
         // Pushing one side of AND down is only safe to do at the top level or in the child
         // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
         // can be safely removed.
-        val leftIsConvertible = isConvertible(left, node.canPartialPushDownConjuncts)
-        val rightIsConvertible = isConvertible(right, node.canPartialPushDownConjuncts)
+        val leftIsConvertible = isConvertible(left, canPartialPushDownConjuncts)
+        val rightIsConvertible = isConvertible(right, canPartialPushDownConjuncts)
         // NOTE: If we can use partial predicates here, we only need one of the children to
         // be convertible to be able to convert the parent. Otherwise, we need both to be
         // convertible.
-        if (node.canPartialPushDownConjuncts) {
+        if (canPartialPushDownConjuncts) {
           leftIsConvertible || rightIsConvertible
         } else {
           leftIsConvertible && rightIsConvertible
