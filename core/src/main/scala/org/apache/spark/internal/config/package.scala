@@ -646,4 +646,13 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val EXECUTOR_HEARTBEAT_INTERVAL =
+    ConfigBuilder("spark.executor.heartbeatInterval")
+      .doc("Interval between each executor's heartbeats to the driver.  Heartbeats let " +
+        "the driver know that the executor is still alive and update it with metrics for" +
+        "in-progress tasks. spark.executor.heartbeatInterval should be significantly less than " +
+        "spark.network.timeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10s")
 }

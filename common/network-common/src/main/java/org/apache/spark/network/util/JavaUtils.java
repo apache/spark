@@ -226,14 +226,6 @@ public class JavaUtils {
    * The unit is also considered the default if the given string does not specify a unit.
    */
   public static long timeStringAs(String str, TimeUnit unit) {
-    return timeStringAs(str, unit, unit);
-  }
-
-  /**
-   * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count in the given unit.
-   * defaultUnit is used for string which have just number and no units mentioned
-   */
-  public static long timeStringAs(String str, TimeUnit unit, TimeUnit defaultUnit) {
     String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
@@ -251,7 +243,7 @@ public class JavaUtils {
       }
 
       // If suffix is valid use that, otherwise none was provided and use the default passed
-      return unit.convert(val, suffix != null ? timeSuffixes.get(suffix) : defaultUnit);
+      return unit.convert(val, suffix != null ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
               "milliseconds (ms), microseconds (us), minutes (m or min), hour (h), or day (d). " +
