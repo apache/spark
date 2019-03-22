@@ -146,13 +146,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
     // Filters out the pruned fields.
     val prunedFields = struct.nameExprs.zip(struct.valExprs).filter { case (nameExpr, _) =>
       val name = nameExpr.eval(EmptyRow).toString
-      prunedType.fieldNames.exists { fieldName =>
-        if (SQLConf.get.caseSensitiveAnalysis) {
-          fieldName.equals(name)
-        } else {
-          fieldName.equalsIgnoreCase(name)
-        }
-      }
+      prunedType.fieldNames.exists(SQLConf.get.resolver(_, name))
     }.flatMap(pair => Seq(pair._1, pair._2))
 
     CreateNamedStruct(prunedFields)
@@ -181,9 +175,6 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
     val transformedSerializer = serializer.transformDown {
       case m: ExternalMapToCatalyst =>
-        val valueStructs = m.valueConverter.collect {
-          case s: CreateNamedStruct => s
-        }
         val prunedValueConverter = m.valueConverter.transformDown {
           case s: CreateNamedStruct if structTypeIndex < prunedStructTypes.size =>
             val prunedType = prunedStructTypes(structTypeIndex)

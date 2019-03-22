@@ -51,9 +51,9 @@ class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
       val structs = serializer.collect {
         case c: CreateNamedStruct => Seq(c)
         case m: ExternalMapToCatalyst =>
-         m.valueConverter.collect {
-           case c: CreateNamedStruct => c
-         }
+          m.valueConverter.collect {
+            case c: CreateNamedStruct => c
+          }
       }.flatten
       assert(structs.size == fields.size)
       structs.zip(fields).foreach { case (struct, fieldNames) =>
