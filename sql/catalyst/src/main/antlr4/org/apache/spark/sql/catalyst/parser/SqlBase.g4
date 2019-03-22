@@ -63,6 +63,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleMultipartIdentifier
+    : multipartIdentifier EOF
+    ;
+
 singleFunctionIdentifier
     : functionIdentifier EOF
     ;
@@ -83,6 +87,7 @@ statement
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
     | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitionColumnNames=identifierList) |
@@ -153,7 +158,6 @@ statement
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
-    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
@@ -552,6 +556,10 @@ rowFormat
       (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
       (LINES TERMINATED BY linesSeparatedBy=STRING)?
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
+    ;
+
+multipartIdentifier
+    : parts+=identifier ('.' parts+=identifier)*
     ;
 
 tableIdentifier
