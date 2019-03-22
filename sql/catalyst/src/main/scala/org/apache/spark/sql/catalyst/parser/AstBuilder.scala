@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -84,6 +84,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitSingleFunctionIdentifier(
       ctx: SingleFunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
     visitFunctionIdentifier(ctx.functionIdentifier)
+  }
+
+  override def visitSingleMultipartIdentifier(
+      ctx: SingleMultipartIdentifierContext): Seq[String] = withOrigin(ctx) {
+    visitMultipartIdentifier(ctx.multipartIdentifier)
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
@@ -957,6 +962,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     FunctionIdentifier(ctx.function.getText, Option(ctx.db).map(_.getText))
   }
 
+  /**
+   * Create a multi-part identifier.
+   */
+  override def visitMultipartIdentifier(
+      ctx: MultipartIdentifierContext): Seq[String] = withOrigin(ctx) {
+    ctx.parts.asScala.map(_.getText)
+  }
+
   /* ********************************************************************************************
    * Expression parsing
    * ******************************************************************************************** */
@@ -1580,8 +1593,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       valueType match {
         case "DATE" => toLiteral(stringToDate, DateType)
         case "TIMESTAMP" =>
-          val timeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
-          toLiteral(stringToTimestamp(_, timeZone), TimestampType)
+          val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
+          toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))

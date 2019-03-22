@@ -44,12 +44,14 @@ public class Catalogs {
    * @param name a String catalog name
    * @param conf a SQLConf
    * @return an initialized CatalogPlugin
-   * @throws SparkException If the plugin class cannot be found or instantiated
+   * @throws CatalogNotFoundException if the plugin class cannot be found
+   * @throws SparkException if the plugin class cannot be instantiated
    */
-  public static CatalogPlugin load(String name, SQLConf conf) throws SparkException {
+  public static CatalogPlugin load(String name, SQLConf conf)
+      throws CatalogNotFoundException, SparkException {
     String pluginClassName = conf.getConfString("spark.sql.catalog." + name, null);
     if (pluginClassName == null) {
-      throw new SparkException(String.format(
+      throw new CatalogNotFoundException(String.format(
           "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined", name, name));
     }
 
