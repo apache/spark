@@ -97,6 +97,19 @@ object SelectedField {
         val MapType(keyType, _, valueContainsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
         selectField(child, opt)
+      case MapKeys(child) =>
+        val MapType(_, valueType, valueContainsNull) = child.dataType
+        // MapKeys does not select a field from a struct (i.e. prune the struct) so it can't be
+        // the top-level extractor. However it can be part of an extractor chain.
+        val newKeyType = dataTypeOpt match {
+          case None => None
+          case Some(ArrayType(dataType, _)) => Some(dataType)
+          case Some(x) =>
+            // This should not happen.
+            throw new AnalysisException(s"DataType '$x' is not supported by MapKeys.")
+        }
+        val opt = dataTypeOpt.map(dt => MapType(newKeyType.get, valueType, valueContainsNull))
+        selectField(child, opt)
       case GetArrayItem(child, _) =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
