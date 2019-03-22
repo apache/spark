@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter, O
 import org.apache.spark.sql.execution.datasources.csv.CsvOutputWriter
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CSVWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])

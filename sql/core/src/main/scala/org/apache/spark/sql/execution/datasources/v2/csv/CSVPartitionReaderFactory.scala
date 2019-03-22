@@ -35,6 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of CSV files.
  * @param partitionSchema Schema of partitions.
  * @param readSchema Required schema in the batch scan.
+ * @param parsedOptions Options for parsing CSV files.
  */
 case class CSVPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -63,10 +64,9 @@ case class CSVPartitionReaderFactory(
       file,
       parser,
       headerChecker,
-      readSchema)
+      readDataSchema)
     val fileReader = new PartitionReaderFromIterator[InternalRow](iter)
     new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
       partitionSchema, file.partitionValues)
   }
-
 }

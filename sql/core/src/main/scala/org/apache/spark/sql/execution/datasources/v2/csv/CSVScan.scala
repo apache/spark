@@ -39,9 +39,8 @@ case class CSVScan(
     options: CaseInsensitiveStringMap)
   extends TextBasedFileScan(sparkSession, fileIndex, readSchema, options) {
 
-  private val optionsAsScala = options.asScala.toMap
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
-    optionsAsScala,
+    options.asScala.toMap,
     columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
     sparkSession.sessionState.conf.sessionLocalTimeZone,
     sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -59,7 +58,7 @@ case class CSVScan(
       throw new AnalysisException(
         "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
           "referenced columns only include the internal corrupt record column\n" +
-          s"(named _corrupt_record by default). For example:\n" +
+          "(named _corrupt_record by default). For example:\n" +
           "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
           "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().\n" +
           "Instead, you can cache or save the parsed results and then send the same query.\n" +

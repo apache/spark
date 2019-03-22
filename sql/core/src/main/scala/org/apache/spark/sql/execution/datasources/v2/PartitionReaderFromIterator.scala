@@ -20,18 +20,18 @@ import org.apache.spark.sql.sources.v2.reader.PartitionReader
 
 class PartitionReaderFromIterator[InternalRow](
     iter: Iterator[InternalRow]) extends PartitionReader[InternalRow] {
-  private var nextValue: InternalRow = _
+  private var currentValue: InternalRow = _
 
   override def next(): Boolean = {
     if (iter.hasNext) {
-      nextValue = iter.next()
+      currentValue = iter.next()
       true
     } else {
       false
     }
   }
 
-  override def get(): InternalRow = nextValue
+  override def get(): InternalRow = currentValue
 
   override def close(): Unit = {}
 }

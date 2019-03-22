@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
-import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -28,10 +28,6 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
   override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
 
   override def shortName(): String = "csv"
-
-  private def getTableName(paths: Seq[String]): String = {
-    shortName() + ":" + paths.mkString(";")
-  }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
