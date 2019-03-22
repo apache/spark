@@ -595,7 +595,8 @@ private[spark] class TaskSetManager(
         false
       } else {
         val actualNumTasksCanRun = math.min(allPendingTasks.size,
-          sched.backend.maxNumConcurrentTasks() - sched.runningTasksByExecutors.values.sum)
+          sched.defaultParallelism / sched.CPUS_PER_TASK -
+            sched.runningTasksByExecutors.values.sum)
         val probabilityOfNextLocalitySchedule = 0.5D
         val maxTolerableStarvationTime = actualNumTasksCanRun *
             successfulTaskDurations.median * localityGainFactor * probabilityOfNextLocalitySchedule
