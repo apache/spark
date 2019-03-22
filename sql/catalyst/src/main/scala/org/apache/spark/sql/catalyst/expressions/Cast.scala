@@ -915,7 +915,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case StringType =>
       (c, evPrim, evNull) =>
         code"$evPrim = $c.getBytes();"
-    case ByteType | ShortType | IntegerType | LongType =>
+    case _: IntegralType =>
       (c, evPrim, evNull) =>
         code"$evPrim = ${NumberConverter.getClass.getName.stripSuffix("$")}.toBinary($c);"
   }
