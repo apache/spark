@@ -14,44 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.v2.orc
+package org.apache.spark.sql.execution.datasources.v2.csv
 
-import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.execution.datasources.FileFormat
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class OrcDataSourceV2 extends FileDataSourceV2 {
+class CSVDataSourceV2 extends FileDataSourceV2 {
 
-  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[OrcFileFormat]
+  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
 
-  override def shortName(): String = "orc"
+  override def shortName(): String = "csv"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
-    OrcTable(tableName, sparkSession, options, paths, None)
+    CSVTable(tableName, sparkSession, options, paths, None)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
-    OrcTable(tableName, sparkSession, options, paths, Some(schema))
+    CSVTable(tableName, sparkSession, options, paths, Some(schema))
   }
 }
 
-object OrcDataSourceV2 {
+object CSVDataSourceV2 {
   def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true
-
-    case st: StructType => st.forall { f => supportsDataType(f.dataType) }
-
-    case ArrayType(elementType, _) => supportsDataType(elementType)
-
-    case MapType(keyType, valueType, _) =>
-      supportsDataType(keyType) && supportsDataType(valueType)
 
     case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
 
