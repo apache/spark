@@ -78,7 +78,10 @@ private[spark] class KubernetesDriverConf(
 
   override val resourceNamePrefix: String = {
     val custom = if (Utils.isTesting) get(KUBERNETES_DRIVER_POD_NAME_PREFIX) else None
-    custom.getOrElse(KubernetesConf.getResourceNamePrefix(appName))
+    val resourceNamePrefix = custom.getOrElse(KubernetesConf.getResourceNamePrefix(appName))
+    // If the first character of resourceNamePrefix is number,add the extra prefix : "spark-".
+    val prefix = "spark-" + resourceNamePrefix.charAt(0)
+    resourceNamePrefix.replaceAll("^[0-9]", prefix)
   }
 
   override def labels: Map[String, String] = {
