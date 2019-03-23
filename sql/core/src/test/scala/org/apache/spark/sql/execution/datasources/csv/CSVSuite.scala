@@ -1343,15 +1343,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .collect()
     }.getMessage
     assert(msg.contains("only include the internal corrupt record column"))
-    intercept[org.apache.spark.sql.catalyst.errors.TreeNodeException[_]] {
-      spark
-        .read
-        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .schema(schema)
-        .csv(testFile(valueMalformedFile))
-        .filter($"_corrupt_record".isNotNull)
-        .count()
-    }
+
     // workaround
     val df = spark
       .read
