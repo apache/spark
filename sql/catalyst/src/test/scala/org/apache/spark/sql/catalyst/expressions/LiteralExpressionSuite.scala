@@ -289,7 +289,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
       val originTimeZone = TimeZone.getDefault
       try {
-        TimeZone.setDefault(TimeZone.getTimeZone("GMT-08:00"))
+        TimeZone.setDefault(TimeZone.getTimeZone(systemTimeZone))
         f
       } finally {
         TimeZone.setDefault(originTimeZone)
