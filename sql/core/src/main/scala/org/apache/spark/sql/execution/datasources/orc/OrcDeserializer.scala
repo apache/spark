@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.hadoop.hive.serde2.io.{DateWritable, HiveDecimalWritable}
 import org.apache.hadoop.io._
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 
@@ -109,14 +108,13 @@ class OrcDeserializer(
         updater.set(ordinal, bytes)
 
       case DateType => (ordinal, value) =>
-        updater.setInt(ordinal, DateTimeUtils.fromJavaDate(value.asInstanceOf[DateWritable].get))
+        updater.setInt(ordinal, DateTimeUtils.fromJavaDate(OrcShimUtils.getSqlDate(value)))
 
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
-        val decimal = value.asInstanceOf[HiveDecimalWritable].getHiveDecimal()
-        val v = Decimal(decimal.bigDecimalValue, decimal.precision(), decimal.scale())
+        val v = OrcShimUtils.getDecimal(value)
         v.changePrecision(precision, scale)
         updater.set(ordinal, v)
 

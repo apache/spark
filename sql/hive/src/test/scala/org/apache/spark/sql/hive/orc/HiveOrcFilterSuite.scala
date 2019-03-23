@@ -62,7 +62,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.toArray)
+    val maybeFilter = HiveOrcFilters.createFilter(query.schema, selectedFilters.toArray)
     assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $selectedFilters")
     checker(maybeFilter.get)
   }
@@ -106,7 +106,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.toArray)
+    val maybeFilter = HiveOrcFilters.createFilter(query.schema, selectedFilters.toArray)
     assert(maybeFilter.isEmpty, s"Could generate filter predicate for $selectedFilters")
   }
 
@@ -367,9 +367,11 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       checkNoFilterPredicate('_1 <=> 1.b)
     }
     // DateType
-    val stringDate = "2015-01-01"
-    withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
-      checkNoFilterPredicate('_1 === Date.valueOf(stringDate))
+    if (!HiveUtils.isHive2) {
+      val stringDate = "2015-01-01"
+      withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
+        checkNoFilterPredicate('_1 === Date.valueOf(stringDate))
+      }
     }
     // MapType
     withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
@@ -386,7 +388,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
         StructField("b", StringType, nullable = true)))
 
     // Can not remove unsupported `StringContains` predicate since it is under `Or` operator.
-    assert(OrcFilters.createFilter(schema, Array(
+    assert(HiveOrcFilters.createFilter(schema, Array(
       Or(
         LessThan("a", 10),
         And(
@@ -399,7 +401,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       assertResult(
         "leaf-0 = (LESS_THAN a 10), expr = leaf-0"
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           LessThan("a", 10),
           StringContains("b", "prefix")
         )).get.toString
@@ -409,7 +411,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       assertResult(
         "leaf-0 = (LESS_THAN a 10), expr = leaf-0"
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           LessThan("a", 10),
           Not(And(
             GreaterThan("a", 1),
@@ -422,7 +424,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       assertResult(
         "leaf-0 = (LESS_THAN a 10), expr = leaf-0"
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           And(
             LessThan("a", 10),
             StringContains("b", "prefix")
@@ -436,7 +438,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
         "leaf-0 = (LESS_THAN a 10), leaf-1 = (LESS_THAN_EQUALS a 1), " +
           "expr = (and leaf-0 (not leaf-1))"
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           And(
             And(
               LessThan("a", 10),
@@ -452,7 +454,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
           |expr = leaf-0
         """.stripMargin.trim
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           LessThan("a", 10),
           StringContains("b", "prefix")
         )).get.toString
@@ -464,7 +466,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
           |expr = leaf-0
         """.stripMargin.trim
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           LessThan("a", 10),
           Not(And(
             GreaterThan("a", 1),
@@ -479,7 +481,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
           |expr = leaf-0
         """.stripMargin.trim
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           And(
             LessThan("a", 10),
             StringContains("b", "prefix")
@@ -495,7 +497,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
           |expr = (and leaf-0 (not leaf-1))
         """.stripMargin.trim
       ) {
-        OrcFilters.createFilter(schema, Array(
+        HiveOrcFilters.createFilter(schema, Array(
           And(
             And(
               LessThan("a", 10),
