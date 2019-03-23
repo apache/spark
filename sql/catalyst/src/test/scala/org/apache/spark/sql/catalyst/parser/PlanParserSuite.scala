@@ -132,7 +132,7 @@ class PlanParserSuite extends AnalysisTest {
       table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
-      "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements")
+      "Multi-select queries cannot have a FROM clause in their individual SELECT statements")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(

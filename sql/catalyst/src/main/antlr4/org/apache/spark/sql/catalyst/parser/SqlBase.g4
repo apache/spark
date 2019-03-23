@@ -82,6 +82,7 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | insertStatement                                                  #insertStatementDefault
+    | multiSelectStatement                                             #multiSelectStatementDefault
     | USE db=identifier                                                #use
     | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
@@ -366,7 +367,7 @@ insertStatement
 
 queryNoWith
     : queryTerm queryOrganization                                               #noWithQuery
-    | fromClause querySpecification queryOrganization                           #queryWithFrom
+    | fromClause selectStatement                                                #queryWithFrom
     ;
 
 queryOrganization
@@ -379,9 +380,15 @@ queryOrganization
     ;
 
 multiInsertQueryBody
-    : insertInto?
-      querySpecification
-      queryOrganization
+    : insertInto selectStatement
+    ;
+
+multiSelectStatement
+    : (ctes)? fromClause selectStatement+                                                #multiSelect
+    ;
+
+selectStatement
+    : querySpecification queryOrganization
     ;
 
 queryTerm

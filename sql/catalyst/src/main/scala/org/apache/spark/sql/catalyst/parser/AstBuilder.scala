@@ -131,12 +131,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
     val from = visitFromClause(ctx.fromClause)
-    validate(ctx.querySpecification.fromClause == null,
+    validate(ctx.selectStatement.querySpecification.fromClause == null,
       "Script transformation queries cannot have a FROM clause in their" +
         " individual SELECT statements", ctx)
-    withQuerySpecification(ctx.querySpecification, from).
-      // Add organization statements.
-      optionalMap(ctx.queryOrganization)(withQueryResultClauses)
+    withQuerySpecification(ctx.selectStatement.querySpecification, from).
+      optionalMap(ctx.selectStatement.queryOrganization)(withQueryResultClauses)
   }
 
   override def visitNoWithQuery(ctx: NoWithQueryContext): LogicalPlan = withOrigin(ctx) {
@@ -172,17 +171,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val from = visitFromClause(ctx.fromClause)
 
     // Build the insert clauses.
-    val inserts = ctx.multiInsertQueryBody.asScala.map {
+    val inserts = ctx.multiInsertQueryBody().asScala.map {
       body =>
-        validate(body.querySpecification.fromClause == null,
+        validate(body.selectStatement.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
 
-        withQuerySpecification(body.querySpecification, from).
-          // Add organization statements.
-          optionalMap(body.queryOrganization)(withQueryResultClauses).
-          // Add insert.
-          optionalMap(body.insertInto())(withInsertInto)
+       withInsertInto(body.insertInto,
+         withQuerySpecification(body.selectStatement.querySpecification, from).
+           // Add organization statements.
+           optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -192,6 +190,30 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     // Apply CTEs
     insertPlan.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  override def visitMultiSelect(ctx: MultiSelectContext): LogicalPlan = withOrigin(ctx) {
+    val from = visitFromClause(ctx.fromClause)
+
+    // Build the insert clauses.
+    val selects = ctx.selectStatement.asScala.map {
+      body =>
+        validate(body.querySpecification.fromClause == null,
+          "Multi-select queries cannot have a FROM clause in their individual SELECT statements",
+          body)
+
+        withQuerySpecification(body.querySpecification, from).
+          // Add organization statements.
+          optionalMap(body.queryOrganization)(withQueryResultClauses)
+    }
+
+    // If there are multiple INSERTS just UNION them together into one query.
+    val selectUnionPlan = selects match {
+      case Seq(query) => query
+      case queries => Union(queries)
+    }
+    // Apply CTEs
+    selectUnionPlan.optionalMap(ctx.ctes)(withCTE)
   }
 
   /**
