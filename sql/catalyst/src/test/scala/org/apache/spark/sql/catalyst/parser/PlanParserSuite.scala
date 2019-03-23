@@ -133,6 +133,10 @@ class PlanParserSuite extends AnalysisTest {
     intercept(
       "from a select * select * from x where a.s < 10",
       "Multi-select queries cannot have a FROM clause in their individual SELECT statements")
+    intercept(
+      "from a select * from b",
+      "Individual select statement can not have FROM cause as its already specified in " +
+        "the outer query block")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(

@@ -132,8 +132,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
     val from = visitFromClause(ctx.fromClause)
     validate(ctx.selectStatement.querySpecification.fromClause == null,
-      "Script transformation queries cannot have a FROM clause in their" +
-        " individual SELECT statements", ctx)
+      "Individual select statement can not have FROM cause as its already specified in the" +
+        " outer query block", ctx)
     withQuerySpecification(ctx.selectStatement.querySpecification, from).
       optionalMap(ctx.selectStatement.queryOrganization)(withQueryResultClauses)
   }
