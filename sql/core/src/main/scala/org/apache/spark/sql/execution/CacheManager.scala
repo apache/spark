@@ -161,15 +161,7 @@ class CacheManager extends Logging {
     val relation = cachedData.cachedRepresentation
     val (rowCount, newColStats) =
       CommandUtils.computeColumnStats(sparkSession, relation, column)
-
-    relation.synchronized {
-      val oldStats = relation.statsOfPlanToCache
-      val newStats = oldStats.copy(
-        rowCount = Some(rowCount),
-        attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
-      )
-      relation.statsOfPlanToCache = newStats
-    }
+    relation.updateStats(rowCount, newColStats)
   }
 
   /**
