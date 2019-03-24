@@ -2988,6 +2988,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -2999,6 +3000,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3017,6 +3019,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3028,6 +3031,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }
