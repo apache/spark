@@ -52,15 +52,17 @@ trait TimeZoneAwareExpression extends Expression {
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 }
 
+// scalastyle:off line.size.limit
 /**
- * Returns the current date at the start of query evaluation.
+ * Returns the current date in the UTC time zone at the start of query evaluation.
  * All calls of current_date within the same query return the same value.
  *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current date at the start of query evaluation.",
+  usage = "_FUNC_() - Returns the current date in the UTC time zone at the start of query evaluation.",
   since = "1.5.0")
+// scalastyle:on line.size.limit
 case class CurrentDate() extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
