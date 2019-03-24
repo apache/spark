@@ -835,8 +835,7 @@ private[spark] class Executor(
     val heartbeatIntervalInSec =
       conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s").millis.toSeconds.seconds
     try {
-      val response =
-        heartbeatReceiverRef.askSync[HeartbeatResponse](
+      val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
           message, new RpcTimeout(heartbeatIntervalInSec, "spark.executor.heartbeatInterval"))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
