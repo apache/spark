@@ -1239,7 +1239,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   if (!SQLConf.get.utcTimestampFuncEnabled) {
-    throw new AnalysisException(s"The $prettyName function has been disabled since Spark 3.0." +
+    throw new AnalysisException(s"The $prettyName function has been disabled since Spark 3.0. " +
       s"Set ${SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key} to true to enable this function.")
   }
 
