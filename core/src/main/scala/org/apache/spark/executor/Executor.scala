@@ -867,9 +867,7 @@ private[spark] class Executor(
     val heartbeatTask = new Runnable() {
       override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
     }
-    heartbeater
-      .scheduleAtFixedRate(heartbeatTask, initialDelay,
-        intervalMs, TimeUnit.MILLISECONDS)
+    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 }
 
