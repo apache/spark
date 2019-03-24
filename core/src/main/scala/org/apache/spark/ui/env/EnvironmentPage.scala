@@ -81,9 +81,9 @@ private[ui] class EnvironmentPage(
             <a>Hadoop Properties</a>
           </h4>
         </span>
-          <div class="aggregated-hadoopProperties collapsible-table collapsed">
-            {hadoopPropertiesTable}
-          </div>
+        <div class="aggregated-hadoopProperties collapsible-table collapsed">
+          {hadoopPropertiesTable}
+        </div>
          }}
         <span class="collapse-aggregated-systemProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-systemProperties',
