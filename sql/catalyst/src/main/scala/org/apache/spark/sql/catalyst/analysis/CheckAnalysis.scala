@@ -80,6 +80,10 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
+  def isAggregateExpression(expr: Expression): Boolean = {
+    expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
@@ -172,16 +176,15 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
               s"conditions: $condition")
 
+          case Filter(condition, _) if condition.find(isAggregateExpression(_)).isDefined =>
+            failAnalysis("Aggregate expressions are not allowed in where clause of the query")
+
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression) = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
-            }
-
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case expr: Expression if isAggregateExpression(expr) =>
                 val aggFunction = expr match {
