@@ -25,10 +25,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -816,21 +818,29 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
-    test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
-    test(null, "UTC", null)
-    test("2015-07-24 00:00:00", null, null)
-    test(null, null, null)
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
+      test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
+      test(null, "UTC", null)
+      test("2015-07-24 00:00:00", null, null)
+      test(null, null, null)
+    }
+    val msg = intercept[AnalysisException] {
+      test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
+    }.getMessage
+    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
   }
 
   test("to_utc_timestamp - invalid time zone id") {
-    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
-      val msg = intercept[java.time.DateTimeException] {
-        GenerateUnsafeProjection.generate(
-          ToUTCTimestamp(
-            Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
-      }.getMessage
-      assert(msg.contains(invalidTz))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+        val msg = intercept[java.time.DateTimeException] {
+          GenerateUnsafeProjection.generate(
+            ToUTCTimestamp(
+              Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
+        }.getMessage
+        assert(msg.contains(invalidTz))
+      }
     }
   }
 
@@ -847,19 +857,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
-    test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
-    test(null, "UTC", null)
-    test("2015-07-24 00:00:00", null, null)
-    test(null, null, null)
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
+      test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
+      test(null, "UTC", null)
+      test("2015-07-24 00:00:00", null, null)
+      test(null, null, null)
+    }
+    val msg = intercept[AnalysisException] {
+      test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
+    }.getMessage
+    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
   }
 
   test("from_utc_timestamp - invalid time zone id") {
-    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
-      val msg = intercept[java.time.DateTimeException] {
-        GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
-      }.getMessage
-      assert(msg.contains(invalidTz))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+        val msg = intercept[java.time.DateTimeException] {
+          GenerateUnsafeProjection.generate(
+            FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
+        }.getMessage
+        assert(msg.contains(invalidTz))
+      }
     }
   }
 }
