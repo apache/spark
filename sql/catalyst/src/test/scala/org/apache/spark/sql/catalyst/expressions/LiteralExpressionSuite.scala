@@ -66,11 +66,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(BinaryType), "".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
     checkEvaluation(Literal.default(DecimalType.SYSTEM_DEFAULT), Decimal(0))
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "false") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "false") {
       checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
       checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
     }
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
@@ -251,7 +251,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("construct literals from arrays of java.time.LocalDate") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val localDate0 = LocalDate.of(2019, 3, 20)
       checkEvaluation(Literal(Array(localDate0)), Array(localDate0))
       val localDate1 = LocalDate.of(2100, 4, 22)
@@ -272,7 +272,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("construct literals from arrays of java.time.Instant") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val instant0 = Instant.ofEpochMilli(0)
       checkEvaluation(Literal(Array(instant0)), Array(instant0))
       val instant1 = Instant.parse("2019-03-20T10:15:30Z")
