@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType}
 
 /*
  * This file defines optimization rules related to object manipulation (for the Dataset API).
@@ -121,6 +121,7 @@ object EliminateMapObjects extends Rule[LogicalPlan] {
 object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
   /**
+   * Visible for testing.
    * Collects all struct types from given data type object, recursively.
    */
   def collectStructType(dt: DataType, structs: ArrayBuffer[StructType]): ArrayBuffer[StructType] = {
@@ -133,6 +134,8 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
       case MapType(_, valueType, _) =>
         // Because we can't select a field from struct in key, so we skip key type.
         collectStructType(valueType, structs)
+      // We don't use UserDefinedType in those serializers.
+      case _: UserDefinedType[_] =>
       case _ =>
     }
     structs
