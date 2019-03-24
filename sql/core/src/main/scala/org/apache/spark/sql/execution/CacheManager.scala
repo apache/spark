@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
-
 import scala.collection.immutable.IndexedSeq
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -163,12 +161,7 @@ class CacheManager extends Logging {
     val relation = cachedData.cachedRepresentation
     val (rowCount, newColStats) =
       CommandUtils.computeColumnStats(sparkSession, relation, column)
-    val oldStats = relation.statsOfPlanToCache
-    val newStats = oldStats.copy(
-      rowCount = Some(rowCount),
-      attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
-    )
-    relation.statsOfPlanToCache = newStats
+    relation.updateStats(rowCount, newColStats)
   }
 
   /**
