@@ -72,8 +72,6 @@ private[spark] class Executor(
 
   private val conf = env.conf
 
-  private val heartbeatInterval = conf.get(EXECUTOR_HEARTBEAT_INTERVAL)
-
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
   // must not have port specified.
@@ -834,10 +832,12 @@ private[spark] class Executor(
     }
 
     val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
+    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
     try {
-      val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
-          message, new RpcTimeout(heartbeatInterval.millis.toSeconds.seconds,
-          EXECUTOR_HEARTBEAT_INTERVAL.key))
+      val response =
+        heartbeatReceiverRef.askSync[HeartbeatResponse](
+          message,
+          new RpcTimeout(intervalMs.millis.toSeconds.seconds, "spark.executor.heartbeatInterval"))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
@@ -859,15 +859,17 @@ private[spark] class Executor(
    * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
    */
   private def startDriverHeartbeater(): Unit = {
+    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
+
     // Wait a random interval so the heartbeats don't end up in sync
-    val initialDelay = heartbeatInterval + (math.random * heartbeatInterval).asInstanceOf[Int]
+    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
 
     val heartbeatTask = new Runnable() {
       override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
     }
     heartbeater
       .scheduleAtFixedRate(heartbeatTask, initialDelay,
-        heartbeatInterval, TimeUnit.MILLISECONDS)
+        intervalMs, TimeUnit.MILLISECONDS)
   }
 }
 
