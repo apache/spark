@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.util;
 
 import java.io.IOException;
@@ -34,11 +33,11 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
     ClassLoader.registerAsParallelCapable();
   }
 
-  private ParentClassLoader parentClassLoader;
+  private ParentClassLoader parent;
 
   public ChildFirstURLClassLoader(URL[] urls, ClassLoader parent) {
     super(urls, null);
-    parentClassLoader = new ParentClassLoader(parent);
+    this.parent = new ParentClassLoader(parent);
   }
 
   @Override
@@ -46,14 +45,14 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
     try {
       return super.loadClass(name, resolve);
     } catch (ClassNotFoundException cnf) {
-      return parentClassLoader.loadClass(name, resolve);
+      return parent.loadClass(name, resolve);
     }
   }
 
   @Override
   public Enumeration<URL> getResources(String name) throws IOException {
     ArrayList<URL> urls = Collections.list(super.getResources(name));
-    urls.addAll(Collections.list(parentClassLoader.getResources(name)));
+    urls.addAll(Collections.list(parent.getResources(name)));
     return Collections.enumeration(urls);
   }
 
@@ -63,7 +62,7 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
     if (url != null) {
       return url;
     } else {
-      return parentClassLoader.getResource(name);
+      return parent.getResource(name);
     }
   }
 }

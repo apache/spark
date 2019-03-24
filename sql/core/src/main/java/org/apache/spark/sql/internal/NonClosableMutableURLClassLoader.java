@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.internal;
 
-import org.apache.spark.util.MutableURLClassLoader;
-
 import java.net.URL;
+
+import org.apache.spark.util.MutableURLClassLoader;
 
 /**
  * This class loader cannot be closed (its `close` method is a no-op).
