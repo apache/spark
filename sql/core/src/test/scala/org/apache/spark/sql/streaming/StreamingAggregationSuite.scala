@@ -344,11 +344,10 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
-    val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(to_utc_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY), tz))
+        .select(to_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY)))
         .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
