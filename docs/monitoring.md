@@ -948,7 +948,7 @@ This is the component with the largest amount of instrumented metrics
   - LongAccumulatorSource
 
 - namespace=spark.streaming
-  - **note** applies to Spark Structured Streaming only. Conditional to a configuration
+  - **note:** This applies to Spark Structured Streaming only. Conditional to a configuration
   parameter: `spark.sql.streaming.metricsEnabled=true` (default is false) 
   - eventTime-watermark
   - inputRate-total
@@ -1076,7 +1076,7 @@ Note: applies when running in Spark standalone as worker
 - coresFree
 - memFree_MB
 
-## Component instance = shuffleService
+### Component instance = shuffleService
 Note: applies to the shuffle service
 
 - blockTransferRateBytes (meter)
