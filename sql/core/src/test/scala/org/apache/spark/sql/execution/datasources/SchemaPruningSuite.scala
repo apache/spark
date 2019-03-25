@@ -259,15 +259,13 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("select nested field from a complex map key using map_keys") {
     val query = sql("select map_keys(relations).middle[0], p from contacts")
-    checkScan(query,
-    "struct<relations:map<struct<middle:string>,string>>")
+    checkScan(query, "struct<relations:map<struct<middle:string>,string>>")
     checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
   testSchemaPruning("select nested field from a complex map value using map_values") {
     val query = sql("select map_values(relatives).middle[0], p from contacts")
-    checkScan(query,
-      "struct<relatives:map<string,struct<middle:string>>>")
+    checkScan(query, "struct<relatives:map<string,struct<middle:string>>>")
     checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
