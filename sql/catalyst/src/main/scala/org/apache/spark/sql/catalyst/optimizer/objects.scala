@@ -147,9 +147,10 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
    */
   private def pruneNamedStruct(struct: CreateNamedStruct, prunedType: StructType) = {
     // Filters out the pruned fields.
+    val resolver = SQLConf.get.resolver
     val prunedFields = struct.nameExprs.zip(struct.valExprs).filter { case (nameExpr, _) =>
       val name = nameExpr.eval(EmptyRow).toString
-      prunedType.fieldNames.exists(SQLConf.get.resolver(_, name))
+      prunedType.fieldNames.exists(resolver(_, name))
     }.flatMap(pair => Seq(pair._1, pair._2))
 
     CreateNamedStruct(prunedFields)
