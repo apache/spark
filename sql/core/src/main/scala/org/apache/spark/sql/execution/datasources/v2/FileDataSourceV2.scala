@@ -47,4 +47,8 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       Option(map.get("path")).toSeq
     }
   }
+
+  protected def getTableName(paths: Seq[String]): String = {
+    shortName() + ":" + paths.mkString(";")
+  }
 }

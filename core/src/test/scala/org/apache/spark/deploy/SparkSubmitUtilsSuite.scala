@@ -94,8 +94,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("add dependencies works correctly") {
     val md = SparkSubmitUtils.getModuleDescriptor
-    val artifacts = SparkSubmitUtils.extractMavenCoordinates("com.databricks:spark-csv_2.11:0.1," +
-      "com.databricks:spark-avro_2.11:0.1")
+    val artifacts = SparkSubmitUtils.extractMavenCoordinates("com.databricks:spark-csv_2.12:0.1," +
+      "com.databricks:spark-avro_2.12:0.1")
 
     SparkSubmitUtils.addDependenciesToIvy(md, artifacts, "default")
     assert(md.getDependencies.length === 2)
@@ -189,7 +189,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("neglects Spark and Spark's dependencies") {
     val coordinates = SparkSubmitUtils.IVY_DEFAULT_EXCLUDES
-      .map(comp => s"org.apache.spark:spark-${comp}2.11:2.1.1")
+      .map(comp => s"org.apache.spark:spark-${comp}2.12:2.4.0")
       .mkString(",") + ",org.apache.spark:spark-core_fake:1.2.0"
 
     val path = SparkSubmitUtils.resolveMavenCoordinates(
@@ -197,7 +197,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       SparkSubmitUtils.buildIvySettings(None, None),
       isTest = true)
     assert(path === "", "should return empty path")
-    val main = MavenCoordinate("org.apache.spark", "spark-streaming-kafka-assembly_2.11", "1.2.0")
+    val main = MavenCoordinate("org.apache.spark", "spark-streaming-kafka-assembly_2.12", "1.2.0")
     IvyTestUtils.withRepository(main, None, None) { repo =>
       val files = SparkSubmitUtils.resolveMavenCoordinates(
         coordinates + "," + main.toString,

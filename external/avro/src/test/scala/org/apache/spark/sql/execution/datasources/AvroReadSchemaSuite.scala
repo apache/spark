@@ -21,6 +21,8 @@ class AvroReadSchemaSuite
   extends ReadSchemaSuite
   with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
   with ChangePositionTest {
 
   override val format: String = "avro"
