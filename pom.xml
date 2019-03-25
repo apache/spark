@@ -774,7 +774,6 @@
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
         <version>1.1.0</version>
       </dependency>
-      <!-- SPARK-16770 affecting Scala 2.11.x -->
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
@@ -2717,41 +2716,6 @@
     <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
       <id>scala-2.12</id>
-    </profile>
-
-    <profile>
-      <id>scala-2.11</id>
-      <properties>
-        <scala.version>2.11.12</scala.version>
-        <scala.binary.version>2.11</scala.binary.version>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>enforce-versions</id>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <bannedDependencies>
-                      <excludes combine.self="override">
-                        <exclude>org.jboss.netty</exclude>
-                        <exclude>org.codehaus.groovy</exclude>
-                        <exclude>*:*_2.10</exclude>
-                      </excludes>
-                    </bannedDependencies>
-                  </rules>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
 
     <!--

@@ -59,6 +59,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.regression.LassoModel.formatVersion"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.regression.LinearRegressionModel.formatVersion"),
 
+    // [SPARK-26132] Remove support for Scala 2.11 in Spark 3.0.0
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.concurrent.Future.transformWith"),
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.concurrent.Future.transform"),
+
     // [SPARK-26254][CORE] Extract Hive + Kafka dependencies from Core.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.deploy.security.HiveDelegationTokenProvider"),
 
