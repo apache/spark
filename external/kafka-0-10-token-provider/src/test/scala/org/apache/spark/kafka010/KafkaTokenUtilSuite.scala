@@ -21,7 +21,7 @@ import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -83,11 +83,11 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SASL_PLAINTEXT.name)
-    assert(!adminClientProperties.containsKey("ssl.truststore.location"))
-    assert(!adminClientProperties.containsKey("ssl.truststore.password"))
-    assert(!adminClientProperties.containsKey("ssl.keystore.location"))
-    assert(!adminClientProperties.containsKey("ssl.keystore.password"))
-    assert(!adminClientProperties.containsKey("ssl.key.password"))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEY_PASSWORD_CONFIG))
   }
 
   test("createAdminClientProperties with SASL_SSL protocol should include truststore config") {
@@ -105,11 +105,13 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SASL_SSL.name)
-    assert(adminClientProperties.get("ssl.truststore.location") === trustStoreLocation)
-    assert(adminClientProperties.get("ssl.truststore.password") === trustStorePassword)
-    assert(!adminClientProperties.containsKey("ssl.keystore.location"))
-    assert(!adminClientProperties.containsKey("ssl.keystore.password"))
-    assert(!adminClientProperties.containsKey("ssl.key.password"))
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG)
+      === trustStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
+      === trustStorePassword)
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEY_PASSWORD_CONFIG))
   }
 
   test("createAdminClientProperties with SSL protocol should include keystore and truststore " +
@@ -128,11 +130,13 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SSL.name)
-    assert(adminClientProperties.get("ssl.truststore.location") === trustStoreLocation)
-    assert(adminClientProperties.get("ssl.truststore.password") === trustStorePassword)
-    assert(adminClientProperties.get("ssl.keystore.location") === keyStoreLocation)
-    assert(adminClientProperties.get("ssl.keystore.password") === keyStorePassword)
-    assert(adminClientProperties.get("ssl.key.password") === keyPassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG)
+      === trustStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
+      === trustStorePassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG) === keyStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG) === keyStorePassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG) === keyPassword)
   }
 
   test("createAdminClientProperties with global config should not set dynamic jaas config") {
@@ -151,37 +155,47 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties with keytab should set keytab dynamic jaas config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
-    sparkConf.set(KEYTAB, keytab)
-    sparkConf.set(PRINCIPAL, principal)
+    Seq(false, true).foreach { debug =>
+      sparkConf.set(Kafka.DEBUG_DYNAMIC_JAAS_AUTHENTICATION, debug)
+      sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+      sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+      sparkConf.set(KEYTAB, keytab)
+      sparkConf.set(PRINCIPAL, principal)
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+      val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
-    assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-      === bootStrapServers)
-    assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-      === SASL_SSL.name)
-    assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
-    val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
-    assert(saslJaasConfig.contains("Krb5LoginModule required"))
-    assert(saslJaasConfig.contains("useKeyTab=true"))
+      assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+        === bootStrapServers)
+      assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
+        === SASL_SSL.name)
+      assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
+      val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
+      assert(saslJaasConfig.contains("Krb5LoginModule required"))
+      assert(saslJaasConfig.contains(s"debug=$debug"))
+      assert(saslJaasConfig.contains("useKeyTab=true"))
+      assert(saslJaasConfig.contains(s"""keyTab="$keytab""""))
+      assert(saslJaasConfig.contains(s"""principal="$principal""""))
+    }
   }
 
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+    Seq(false, true).foreach { debug =>
+      sparkConf.set(Kafka.DEBUG_DYNAMIC_JAAS_AUTHENTICATION, debug)
+      sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+      sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+      val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
-    assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-      === bootStrapServers)
-    assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-      === SASL_SSL.name)
-    assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
-    val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
-    assert(saslJaasConfig.contains("Krb5LoginModule required"))
-    assert(saslJaasConfig.contains("useTicketCache=true"))
+      assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+        === bootStrapServers)
+      assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
+        === SASL_SSL.name)
+      assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
+      val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
+      assert(saslJaasConfig.contains("Krb5LoginModule required"))
+      assert(saslJaasConfig.contains(s"debug=$debug"))
+      assert(saslJaasConfig.contains("useTicketCache=true"))
+    }
   }
 
   test("isGlobalJaasConfigurationProvided without global config should return false") {
