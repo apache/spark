@@ -19,6 +19,19 @@ trait CypherResult {
     */
   def df: DataFrame
 
+  // TODO: determine what happens if there are dangling relationships (create empty nodes or filter such relationships)
+  /**
+    * Creates a [[PropertyGraph]] from nodes and relationship present in this result.
+    *
+    * @example
+    * {{{
+    * val result = graph.cypher("MATCH (n)-[r]->(m) RETURN n, r, m")
+    * // returns the original graph
+    * val graph2 = result.graph
+    * }}}
+    */
+  def graph: PropertyGraph
+
   /**
     * Extracts nodes that are specified as a return item.
     *

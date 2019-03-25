@@ -37,13 +37,6 @@ trait CypherSession {
   def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame] = Seq.empty): PropertyGraph
 
   /**
-    * Creates a [[PropertyGraph]] from nodes and relationship present in the given [[CypherResult]].
-    *
-    * @param result a [[CypherResult]] containing nodes and/or relationships
-    */
-  def createGraph(result: CypherResult): PropertyGraph
-
-  /**
     * Creates a [[PropertyGraph]] from nodes and relationships.
     *
     * The given DataFrames need to adhere to column naming conventions:

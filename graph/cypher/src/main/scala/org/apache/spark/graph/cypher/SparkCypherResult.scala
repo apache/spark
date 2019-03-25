@@ -1,6 +1,6 @@
 package org.apache.spark.graph.cypher
 
-import org.apache.spark.graph.api.{CypherResult, NodeFrame, RelationshipFrame}
+import org.apache.spark.graph.api.{CypherResult, NodeFrame, PropertyGraph, RelationshipFrame}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.sql.{DataFrame, functions}
 import org.opencypher.okapi.api.schema.Schema
@@ -10,11 +10,22 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.api.table.RelationalCypherRecords
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
-case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameTable], schema: Schema) extends CypherResult {
+case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameTable], schema: Schema, session: SparkCypherSession) extends CypherResult {
 
   override val df: DataFrame = relationalTable.table.df
 
   private val header: RecordHeader = relationalTable.header
+
+  override def graph: PropertyGraph = {
+    val entityVars = relationalTable.header.entityVars
+    val nodeVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTNode) => v.name }
+    val relVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTRelationship) => v.name }
+
+    val nodeFrames = nodeVarNames.flatMap(this.nodeFrames).toSeq
+    val relFrames = relVarNames.flatMap(this.relationshipFrames).toSeq
+
+    session.createGraph(nodeFrames, relFrames)
+  }
 
   // TODO: Error handling
   override def nodeFrames(varName: String): Seq[NodeFrame] = {

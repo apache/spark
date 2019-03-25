@@ -6,7 +6,6 @@ import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
 import org.apache.spark.graph.cypher.io.ReadWriteGraph._
 import org.apache.spark.sql.{DataFrame, SparkSession, functions}
-import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory, RelationalCypherSession}
@@ -46,27 +45,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
   }
 
   override def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame] = Seq.empty): PropertyGraph = {
-    require(nodes.nonEmpty, "Creating a graph requires at least one NodeDataFrame")
     RelationalGraphAdapter(this, nodes, relationships)
-  }
-
-  override def createGraph(result: CypherResult): PropertyGraph = {
-    val sparkCypherResult = result match {
-      case r: SparkCypherResult => r
-      case other => throw IllegalArgumentException(
-        expected = "A result that has been created by `SparkCypherSession.cypher`",
-        actual = other.getClass.getSimpleName
-      )
-    }
-
-    val entityVars = sparkCypherResult.relationalTable.header.entityVars
-    val nodeVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTNode) => v.name }
-    val relVarNames = entityVars.collect { case v if v.cypherType.subTypeOf(CTRelationship) => v.name }
-
-    val nodeFrames = nodeVarNames.flatMap(result.nodeFrames).toSeq
-    val relFrames = relVarNames.flatMap(result.relationshipFrames).toSeq
-
-    createGraph(nodeFrames, relFrames)
   }
 
   override def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph = {
@@ -104,7 +83,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
 
   override def cypher(graph: PropertyGraph, query: String, parameters: Map[String, Any]): CypherResult = {
     val relationalGraph = toRelationalGraph(graph)
-    SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records, relationalGraph.schema)
+    SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records, relationalGraph.schema, this)
   }
 
   override private[spark] def readGraph(config: ReaderConfig): PropertyGraph = {

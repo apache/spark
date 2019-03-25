@@ -14,9 +14,13 @@ case class RelationalGraphAdapter(
   relationshipFrames: Seq[RelationshipFrame]) extends PropertyGraph {
 
   private [graph] lazy val graph = {
-    val nodeTables = nodeFrames.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
-    val relTables = relationshipFrames.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
-    cypherSession.graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*)
+    if (nodeFrames.isEmpty) {
+      cypherSession.graphs.empty
+    } else {
+      val nodeTables = nodeFrames.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
+      val relTables = relationshipFrames.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
+      cypherSession.graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*)
+    }
   }
 
   private lazy val _nodeFrame: Map[Set[String], NodeFrame] = nodeFrames.map(nf => nf.labels -> nf).toMap

@@ -56,7 +56,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     berkeleyGraph.cypher("MATCH (n:Student)-[:KNOWS]->(o:Student) RETURN n.name AS person, o.name AS friend").df.show()
 
     // Option 2: Use CypherResult to create a new PropertyGraph
-    val berkeleyGraph2 = cypherSession.createGraph(result)
+    val berkeleyGraph2 = result.graph
     berkeleyGraph2.cypher("MATCH (n:Student)-[:KNOWS]->(o:Student) RETURN n.name AS person, o.name AS friend").df.show()
   }
 
@@ -82,10 +82,22 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
     graph1.nodes.show()
     graph1.relationships.show()
 
-    graph1.cypher("MATCH (n:Student)-[:STUDY_AT]->(u:University) RETURN n, u").df.show()
+    val result = graph1.cypher("MATCH (n:Student)-[:STUDY_AT]->(u:University) RETURN n, u")
 
-    val graph2: PropertyGraph = cypherSession.createGraph(graph1.nodes, graph1.relationships)
-    graph2.nodes.show()
-    graph2.relationships.show()
+    def pageRank(g: PropertyGraph): PropertyGraph = {
+      // some pagerank implementation
+      g
+    }
+
+    val graph2 = result.graph
+    val graph3 = pageRank(graph2)
+
+    graph3.nodes.show()
+    graph3.relationships.show()
+    result.df.show()
+
+    val graph4: PropertyGraph = cypherSession.createGraph(graph3.nodes, graph3.relationships)
+    graph4.nodes.show()
+    graph4.relationships.show()
   }
 }
