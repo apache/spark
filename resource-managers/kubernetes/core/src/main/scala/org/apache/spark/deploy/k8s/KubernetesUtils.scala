@@ -205,4 +205,15 @@ private[spark] object KubernetesUtils extends Logging {
   def formatTime(time: String): String = {
     if (time != null) time else "N/A"
   }
+
+  def submitterLocalFiles(fileUris: Iterable[String]): Iterable[String] = {
+    fileUris
+      .map(Utils.resolveURI)
+      .filter { file =>
+        Option(file.getScheme).getOrElse("file") == "file"
+      }
+      .map(_.getPath)
+      .map(new File(_))
+      .map(_.getAbsolutePath)
+  }
 }

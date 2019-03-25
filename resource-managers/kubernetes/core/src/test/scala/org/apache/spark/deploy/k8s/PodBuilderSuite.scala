@@ -108,6 +108,8 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(container.getTerminationMessagePath === "termination-message-path")
     assert(container.getTerminationMessagePolicy === "termination-message-policy")
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "test-volume"))
+
+    assert(container.getVolumeMounts.asScala.exists(_.getName == "submitted-files"))
   }
 
   private def podWithSupportedFeatures(): Pod = {

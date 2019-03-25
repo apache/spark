@@ -64,6 +64,10 @@ if ! [ -z ${HADOOP_CONF_DIR+x} ]; then
   SPARK_CLASSPATH="$HADOOP_CONF_DIR:$SPARK_CLASSPATH";
 fi
 
+if [ -n "$SPARK_MOUNTED_FILES_FROM_SECRET_DIR" ]; then
+  cp -R "$SPARK_MOUNTED_FILES_FROM_SECRET_DIR/." .
+fi
+
 case "$1" in
   driver)
     shift 1
