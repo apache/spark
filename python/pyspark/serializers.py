@@ -390,13 +390,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         if self._df_for_struct and type(data_type) == StructType:
             import pandas as pd
-            import pyarrow as pa
-            column_arrays = zip(*[[chunk.field(i)
-                                   for i in range(chunk.type.num_children)]
-                                  for chunk in arrow_column.data.iterchunks()])
-            series = [_arrow_column_to_pandas(pa.column(field.name, pa.chunked_array(arrays)),
-                                              field.dataType)
-                      for arrays, field in zip(column_arrays, data_type)]
+            series = [_arrow_column_to_pandas(column, field.dataType).rename(field.name)
+                      for column, field in zip(arrow_column.flatten(), data_type)]
             s = _check_dataframe_localize_timestamps(pd.concat(series, axis=1), self._timezone)
         else:
             s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column, data_type)

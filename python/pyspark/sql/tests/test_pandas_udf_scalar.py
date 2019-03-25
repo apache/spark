@@ -294,7 +294,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         struct_f = pandas_udf(lambda x: x, return_type)
         actual = df.select(struct_f(struct(col('id'), col('id').cast('string').alias('str'))))
-        if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
             with QuietTest(self.sc):
                 from py4j.protocol import Py4JJavaError
                 with self.assertRaisesRegexp(
