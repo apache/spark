@@ -81,15 +81,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.prepareStatement(
       "CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)").executeUpdate()
     conn.prepareStatement(
-      """
-        |INSERT INTO ts_with_timezone VALUES (
-        |1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))
-         """.stripMargin).executeUpdate()
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
     conn.prepareStatement(
-      """
-        |INSERT INTO ts_with_timezone VALUES (
-        |2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))
-      """.stripMargin).executeUpdate()
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
     conn.commit()
 
     conn.prepareStatement(
