@@ -1710,7 +1710,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DATETIME_JAVA8API_EANBLED = buildConf("spark.sql.datetime.java8API.enabled")
+  val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
       "java.time.LocalDate classes of Java 8 API are used as external types for " +
       "Catalyst's TimestampType and DateType. If it is set to false, java.sql.Timestamp " +
@@ -1906,7 +1906,7 @@ class SQLConf extends Serializable with Logging {
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
-  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_EANBLED)
+  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

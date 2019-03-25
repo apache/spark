@@ -283,7 +283,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("encoding/decoding TimestampType to/from java.time.Instant") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("t", TimestampType)
       val encoder = RowEncoder(schema).resolveAndBind()
       val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
@@ -295,7 +295,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("encoding/decoding DateType to/from java.time.LocalDate") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("d", DateType)
       val encoder = RowEncoder(schema).resolveAndBind()
       val localDate = java.time.LocalDate.parse("2019-02-27")
