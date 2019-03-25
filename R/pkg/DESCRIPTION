@@ -60,5 +60,4 @@ Collate:
     'window.R'
 RoxygenNote: 5.0.1
 VignetteBuilder: knitr
-Encoding: UTF-8
 NeedsCompilation: no
