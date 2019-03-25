@@ -239,7 +239,7 @@ Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.ml
 ### Streaming Significance Testing
 `spark.mllib` provides online implementations of some tests to support use cases
 like A/B testing. These tests may be performed on a Spark Streaming
-`DStream[(Boolean,Double)]` where the first element of each tuple
+`DStream[(Boolean, Double)]` where the first element of each tuple
 indicates control group (`false`) or treatment group (`true`) and the
 second element is the value of an observation.
 
