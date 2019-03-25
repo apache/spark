@@ -53,6 +53,7 @@ case class CachedRDDBuilder(
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
+  val rowCountStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
@@ -116,6 +117,7 @@ case class CachedRDDBuilder(
           }
 
           sizeInBytesStats.add(totalSize)
+          rowCountStats.add(rowCount)
 
           val stats = InternalRow.fromSeq(
             columnBuilders.flatMap(_.columnStats.collectedStatistics))
@@ -200,11 +202,14 @@ case class InMemoryRelation(
   }
 
   override def computeStats(): Statistics = {
-    if (cacheBuilder.sizeInBytesStats.value == 0L) {
+    if (!cacheBuilder.isCachedColumnBuffersLoaded) {
       // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
       statsOfPlanToCache
     } else {
-      statsOfPlanToCache.copy(sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue)
+      statsOfPlanToCache.copy(
+        sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue,
+        rowCount = Some(cacheBuilder.rowCountStats.value.longValue)
+      )
     }
   }
 
