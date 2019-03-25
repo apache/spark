@@ -29,10 +29,6 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "orc"
 
-  private def getTableName(paths: Seq[String]): String = {
-    shortName() + ":" + paths.mkString(";")
-  }
-
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)

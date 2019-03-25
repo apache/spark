@@ -61,6 +61,10 @@ private class ClientEndpoint(
    private val lostMasters = new HashSet[RpcAddress]
    private var activeMasterEndpoint: RpcEndpointRef = null
 
+  private def getProperty(key: String, conf: SparkConf): Option[String] = {
+    sys.props.get(key).orElse(conf.getOption(key))
+  }
+
   override def onStart(): Unit = {
     driverArgs.cmd match {
       case "launch" =>
@@ -70,18 +74,19 @@ private class ClientEndpoint(
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
         val classPathConf = config.DRIVER_CLASS_PATH.key
-        val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
+        val classPathEntries = getProperty(classPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
         val libraryPathConf = config.DRIVER_LIBRARY_PATH.key
-        val libraryPathEntries = sys.props.get(libraryPathConf).toSeq.flatMap { cp =>
+        val libraryPathEntries = getProperty(libraryPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
         val extraJavaOptsConf = config.DRIVER_JAVA_OPTIONS.key
-        val extraJavaOpts = sys.props.get(extraJavaOptsConf)
+        val extraJavaOpts = getProperty(extraJavaOptsConf, conf)
           .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass,

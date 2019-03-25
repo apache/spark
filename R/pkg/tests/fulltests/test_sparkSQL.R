@@ -1786,9 +1786,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.636, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], 1.68, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -2360,7 +2360,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_equal(count(joined3), 4)
   expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
-  
+
   joined4 <- join(df, df2, df$name == df2$name, "right_outer")
   expect_equal(names(joined4), c("age", "name", "name", "test"))
   expect_equal(count(joined4), 4)
@@ -2377,19 +2377,19 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined6), c("newAge", "name", "test"))
   expect_equal(count(joined6), 4)
   expect_equal(collect(orderBy(joined6, joined6$name))$newAge[3], 24)
-  
+
   joined7 <- select(join(df, df2, df$name == df2$name, "full"),
                     alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(joined7), c("newAge", "name", "test"))
   expect_equal(count(joined7), 4)
   expect_equal(collect(orderBy(joined7, joined7$name))$newAge[3], 24)
-  
+
   joined8 <- select(join(df, df2, df$name == df2$name, "fullouter"),
                     alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(joined8), c("newAge", "name", "test"))
   expect_equal(count(joined8), 4)
   expect_equal(collect(orderBy(joined8, joined8$name))$newAge[3], 24)
-  
+
   joined9 <- select(join(df, df2, df$name == df2$name, "full_outer"),
                     alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(joined9), c("newAge", "name", "test"))
@@ -2400,12 +2400,12 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined10), c("age", "name", "name", "test"))
   expect_equal(count(joined10), 3)
   expect_true(is.na(collect(orderBy(joined10, joined10$age))$age[1]))
-  
+
   joined11 <- join(df, df2, df$name == df2$name, "leftouter")
   expect_equal(names(joined11), c("age", "name", "name", "test"))
   expect_equal(count(joined11), 3)
   expect_true(is.na(collect(orderBy(joined11, joined11$age))$age[1]))
-  
+
   joined12 <- join(df, df2, df$name == df2$name, "left_outer")
   expect_equal(names(joined12), c("age", "name", "name", "test"))
   expect_equal(count(joined12), 3)
@@ -2418,23 +2418,23 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   joined14 <- join(df, df2, df$name == df2$name, "semi")
   expect_equal(names(joined14), c("age", "name"))
   expect_equal(count(joined14), 3)
-  
+
   joined14 <- join(df, df2, df$name == df2$name, "leftsemi")
   expect_equal(names(joined14), c("age", "name"))
   expect_equal(count(joined14), 3)
-  
+
   joined15 <- join(df, df2, df$name == df2$name, "left_semi")
   expect_equal(names(joined15), c("age", "name"))
   expect_equal(count(joined15), 3)
-  
+
   joined16 <- join(df2, df, df2$name == df$name, "anti")
   expect_equal(names(joined16), c("name", "test"))
   expect_equal(count(joined16), 1)
-  
+
   joined17 <- join(df2, df, df2$name == df$name, "leftanti")
   expect_equal(names(joined17), c("name", "test"))
   expect_equal(count(joined17), 1)
-  
+
   joined18 <- join(df2, df, df2$name == df$name, "left_anti")
   expect_equal(names(joined18), c("name", "test"))
   expect_equal(count(joined18), 1)
@@ -2444,7 +2444,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
                  "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
                  "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'.")
   expect_error(join(df2, df, df2$name == df$name, "invalid"), error_msg)
-  
+
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
   expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
@@ -3026,7 +3026,7 @@ test_that("sampleBy() on a DataFrame", {
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
   expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 8))
 })
 
 test_that("approxQuantile() on a DataFrame", {
