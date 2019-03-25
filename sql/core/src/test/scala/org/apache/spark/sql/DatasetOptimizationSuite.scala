@@ -18,7 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.CreateNamedStruct
+import org.apache.spark.sql.catalyst.expressions.objects.ExternalMapToCatalyst
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -47,8 +49,12 @@ class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
 
     serializer.serializer.zip(structFields).foreach { case (serializer, fields) =>
       val structs = serializer.collect {
-        case c: CreateNamedStruct => c
-      }
+        case c: CreateNamedStruct => Seq(c)
+        case m: ExternalMapToCatalyst =>
+          m.valueConverter.collect {
+            case c: CreateNamedStruct => c
+          }
+      }.flatten
       assert(structs.size == fields.size)
       structs.zip(fields).foreach { case (struct, fieldNames) =>
         assert(struct.names.map(_.toString) == fieldNames)
@@ -102,6 +108,21 @@ class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
       testSerializer(df3, Seq(Seq("_1", "_3"), Seq("_2")), Seq(Seq("_1")))
       checkAnswer(df3, Seq(Row(Seq("a", "b"), Seq(11, 22), "aa"),
         Row(Seq("c", "d"), Seq(33, 44), "bb")))
+    }
+  }
+
+  test("Prune nested serializers: map of struct") {
+    withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      val mapData = Seq((Map(("k", ("a_1", 11))), 1), (Map(("k", ("b_1", 22))), 2),
+        (Map(("k", ("c_1", 33))), 3))
+      val mapDs = mapData.toDS().map(t => (t._1, t._2 + 1))
+      val df1 = mapDs.select("_1.k._1")
+      testSerializer(df1, Seq(Seq("_1")))
+      checkAnswer(df1, Seq(Row("a_1"), Row("b_1"), Row("c_1")))
+
+      val df2 = mapDs.select("_1.k._2")
+      testSerializer(df2, Seq(Seq("_2")))
+      checkAnswer(df2, Seq(Row(11), Row(22), Row(33)))
     }
   }
 }
