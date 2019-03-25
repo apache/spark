@@ -43,10 +43,4 @@ case class OrcScan(
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, fileIndex.partitionSchema, readSchema)
   }
-
-  override def supportsDataType(dataType: DataType): Boolean = {
-    OrcDataSourceV2.supportsDataType(dataType)
-  }
-
-  override def formatName: String = "ORC"
 }

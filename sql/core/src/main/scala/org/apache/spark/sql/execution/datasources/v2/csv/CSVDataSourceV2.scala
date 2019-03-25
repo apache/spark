@@ -41,13 +41,3 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
     CSVTable(tableName, sparkSession, options, paths, Some(schema))
   }
 }
-
-object CSVDataSourceV2 {
-  def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: AtomicType => true
-
-    case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
-
-    case _ => false
-  }
-}
