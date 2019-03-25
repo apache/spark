@@ -62,57 +62,22 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
   }
 
   test("round trip example using column name conventions") {
-
-    val nodes: DataFrame = spark.createDataFrame(Seq(
-      (0, true,   false,  Some("Alice"),  Some(42), None),
-      (1, true,   false,  Some("Bob"),    Some(23), None),
-      (2, true,   false,  Some("Eve"),    Some(19), None),
-      (3, false,  true,   None,           None,     Some("UC Berkeley")),
-      (4, false,  true,   None,           None,     Some("Stanford"))
-    )).toDF("$ID", ":Student", ":University", "name", "age", "title")
-
-    val relationships: DataFrame = spark.createDataFrame(Seq(
-      (0, 0, 1, true,  false),
-      (1, 0, 2, true,  false),
-      (2, 0, 2, false, true),
-      (3, 1, 3, false, true),
-      (4, 2, 2, false, true),
-    )).toDF("$ID", "$SOURCE_ID", "$TARGET_ID", ":KNOWS", ":STUDY_AT")
-
     val graph1: PropertyGraph = cypherSession.createGraph(nodes, relationships)
-    graph1.nodes.show()
-    graph1.relationships.show()
-
-    graph1.cypher("MATCH (n:Student)-[:STUDY_AT]->(u:University) RETURN n, u").df.show()
-
     val graph2: PropertyGraph = cypherSession.createGraph(graph1.nodes, graph1.relationships)
     graph2.nodes.show()
     graph2.relationships.show()
   }
 
+  test("example for retaining user ids") {
+    val nodesWithRetainedId = nodes.withColumn("retainedId", nodes.col("$ID"))
+    val relsWithRetainedId = relationships.withColumn("retainedId", relationships.col("$ID"))
+
+    cypherSession
+      .createGraph(nodesWithRetainedId, relsWithRetainedId)
+      .cypher("MATCH (n:Student)-[:STUDY_AT]->(u:University) RETURN n, u").df.show()
+  }
+
   test("query composition + graph analytics workflow") {
-
-    val nodes: DataFrame = spark.createDataFrame(Seq(
-      (0L, true, false, Some("Alice"), Some(42), None),
-      (1L, true, false, Some("Bob"), Some(23), None),
-      (2L, true, false, Some("Carol"), Some(22), None),
-      (3L, true, false, Some("Eve"), Some(19), None),
-      (4L, false, true, None, None, Some("UC Berkeley")),
-      (5L, false, true, None, None, Some("Stanford"))
-    )).toDF("$ID", ":Student", ":University", "name", "age", "title")
-
-    val relationships: DataFrame = spark.createDataFrame(Seq(
-      (0L, 0L, 1L, true, false),
-      (1L, 0L, 3L, true, false),
-      (2L, 1L, 3L, true, false),
-      (3L, 3L, 0L, true, false),
-      (4L, 3L, 1L, true, false),
-      (5L, 0L, 4L, false, true),
-      (6L, 1L, 4L, false, true),
-      (7L, 3L, 4L, false, true),
-      (8L, 2L, 5L, false, true),
-    )).toDF("$ID", "$SOURCE_ID", "$TARGET_ID", ":KNOWS", ":STUDY_AT")
-
     cypherSession.createGraph(nodes, relationships)
       .cypher(
         """|MATCH (student:Student)-[:STUDY_AT]->(uni:University),
@@ -124,4 +89,25 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
       .cypher("MATCH (n:Student) RETURN n.name, n.pageRank ORDER BY n.pageRank DESC")
       .df.show()
   }
+
+  lazy val nodes: DataFrame = spark.createDataFrame(Seq(
+    (0L, true, false, Some("Alice"), Some(42), None),
+    (1L, true, false, Some("Bob"), Some(23), None),
+    (2L, true, false, Some("Carol"), Some(22), None),
+    (3L, true, false, Some("Eve"), Some(19), None),
+    (4L, false, true, None, None, Some("UC Berkeley")),
+    (5L, false, true, None, None, Some("Stanford"))
+  )).toDF("$ID", ":Student", ":University", "name", "age", "title")
+
+  lazy val relationships: DataFrame = spark.createDataFrame(Seq(
+    (0L, 0L, 1L, true, false),
+    (1L, 0L, 3L, true, false),
+    (2L, 1L, 3L, true, false),
+    (3L, 3L, 0L, true, false),
+    (4L, 3L, 1L, true, false),
+    (5L, 0L, 4L, false, true),
+    (6L, 1L, 4L, false, true),
+    (7L, 3L, 4L, false, true),
+    (8L, 2L, 5L, false, true),
+  )).toDF("$ID", "$SOURCE_ID", "$TARGET_ID", ":KNOWS", ":STUDY_AT")
 }
