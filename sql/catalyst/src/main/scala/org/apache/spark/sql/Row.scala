@@ -200,12 +200,28 @@ trait Row extends Serializable {
   def getBoolean(i: Int): Boolean = getAnyValAs[Boolean](i)
 
   /**
+   * Returns the value in the column name as boolean.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getBoolean(column: String) : Boolean = getByColumnNameAs[Boolean](column)
+
+  /**
    * Returns the value at position i as a primitive byte.
    *
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   def getByte(i: Int): Byte = getAnyValAs[Byte](i)
+
+  /**
+   * Returns the value by column name name as byte.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getByte(column: String) : Byte = getByColumnNameAs[Byte](column)
 
   /**
    * Returns the value at position i as a primitive short.
@@ -216,6 +232,14 @@ trait Row extends Serializable {
   def getShort(i: Int): Short = getAnyValAs[Short](i)
 
   /**
+   * Returns the value by column name name as short.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getShort(column: String) : Short = getByColumnNameAs[Short](column)
+
+  /**
    * Returns the value at position i as a primitive int.
    *
    * @throws ClassCastException when data type does not match.
@@ -224,12 +248,28 @@ trait Row extends Serializable {
   def getInt(i: Int): Int = getAnyValAs[Int](i)
 
   /**
+   * Returns the value by column name name as int.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getInt(column: String) : Int = getByColumnNameAs[Int](column)
+
+  /**
    * Returns the value at position i as a primitive long.
    *
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   def getLong(i: Int): Long = getAnyValAs[Long](i)
+
+  /**
+   * Returns the value by column name name as long.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getLong(column: String) : Long = getByColumnNameAs[Long](column)
 
   /**
    * Returns the value at position i as a primitive float.
@@ -241,6 +281,15 @@ trait Row extends Serializable {
   def getFloat(i: Int): Float = getAnyValAs[Float](i)
 
   /**
+   * Returns the value in the column name as float.
+   * Throws an exception if the type mismatches or if the value is null.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getFloat(column: String) : Float = getByColumnNameAs[Float](column)
+
+  /**
    * Returns the value at position i as a primitive double.
    *
    * @throws ClassCastException when data type does not match.
@@ -249,11 +298,26 @@ trait Row extends Serializable {
   def getDouble(i: Int): Double = getAnyValAs[Double](i)
 
   /**
+   * Returns the value by column name name as double.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getDouble(column: String) : Double = getByColumnNameAs[Double](column)
+
+  /**
    * Returns the value at position i as a String object.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getString(i: Int): String = getAs[String](i)
+
+  /**
+   * Returns the value by column name name as string.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getString(column: String) : String = getByColumnNameAs[String](column)
 
   /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
@@ -270,11 +334,26 @@ trait Row extends Serializable {
   def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
+   * Returns the value by column name as java.sql.Date
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDate(column: String) : java.sql.Date = getByColumnNameAs[java.sql.Date](column)
+
+  /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
+
+  /**
+   * Returns the value by column name as java.sql.Timestamp.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getTimestamp(column: String) : java.sql.Timestamp =
+   getByColumnNameAs[java.sql.Timestamp](column)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
@@ -289,7 +368,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getList[T](i: Int): java.util.List[T] =
-    getSeq[T](i).asJava
+   getSeq[T](i).asJava
 
   /**
    * Returns the value at position i of map type as a Scala Map.
@@ -472,4 +551,13 @@ trait Row extends Serializable {
   private def getAnyValAs[T <: AnyVal](i: Int): T =
     if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
     else getAs[T](i)
+
+  /**
+   * Retrieves the value by column name using the field index
+   *
+   * @param column
+   * @tparam T
+   * @return value as type by column name
+   */
+  private def getByColumnNameAs[T] (column: String ): T = getAs[T](schema.fieldIndex(column))
 }

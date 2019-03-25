@@ -28,8 +28,30 @@ class RowTest extends FunSpec with Matchers {
   val schema = StructType(
     StructField("col1", StringType) ::
     StructField("col2", StringType) ::
-    StructField("col3", IntegerType) :: Nil)
-  val values = Array("value1", "value2", 1)
+    StructField("col3", IntegerType) ::
+    StructField("col4", BooleanType) ::
+    StructField("col5", ByteType) ::
+    StructField("col6", ShortType) ::
+    StructField("col7", LongType) ::
+    StructField("col8", FloatType)::
+    StructField("col9", DoubleType) ::
+    StructField("col10", DateType) ::
+    StructField("col11", TimestampType) :: Nil )
+
+
+  val values = Array(
+    "value1",
+    "value2",
+    1,
+    true,
+    1.toByte,
+    1.toShort,
+    1.toLong,
+    1.0.toFloat,
+    1.0,
+    new java.sql.Date(1),
+    new java.sql.Timestamp(1)
+  )
   val valuesWithoutCol3 = Array[Any](null, "value2", null)
 
   val sampleRow: Row = new GenericRowWithSchema(values, schema)
@@ -56,6 +78,19 @@ class RowTest extends FunSpec with Matchers {
     it("getAs[T] retrieves a value by fieldname") {
       sampleRow.getAs[String]("col1") shouldBe "value1"
       sampleRow.getAs[Int]("col3") shouldBe 1
+    }
+
+    it("get<$T> convenience methods for primitives retrieves a value by column name") {
+      sampleRow.getBoolean("col4") shouldBe true
+      sampleRow.getByte("col5") shouldBe 1.toByte
+      sampleRow.getShort("col6") shouldBe 1.toShort
+      sampleRow.getInt("col3") shouldBe 1
+      sampleRow.getLong("col7") shouldBe 1.toLong
+      sampleRow.getFloat("col8") shouldBe 1.0.toFloat
+      sampleRow.getDouble("col9") shouldBe 1.0
+      sampleRow.getString("col1") shouldBe "value1"
+      sampleRow.getDate("col10") shouldBe new java.sql.Date(1L)
+      sampleRow.getTimestamp("col11") shouldBe new java.sql.Timestamp(1)
     }
 
     it("Accessing non existent field throws an exception") {
