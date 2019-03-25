@@ -107,6 +107,12 @@ abstract class DataType extends AbstractDataType {
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
 
+private object JSortedObject {
+  def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
+    case JObject(seq) => Some(seq.toList.sortBy(_._1))
+    case _ => None
+  }
+}
 
 /**
  * @since 1.3.0
@@ -141,13 +147,6 @@ object DataType {
         other,
         throw new IllegalArgumentException(
           s"Failed to convert the JSON string '$name' to a data type."))
-    }
-  }
-
-  private object JSortedObject {
-    def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
-      case JObject(seq) => Some(seq.toList.sortBy(_._1))
-      case _ => None
     }
   }
 
