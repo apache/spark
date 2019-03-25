@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+import scala.concurrent.duration._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
@@ -610,7 +611,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
 
     val executorTimeoutThreshold = getTimeAsSeconds("spark.network.timeout", "120s")
-    val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
+    val executorHeartbeatInterval =
+      getTimeAsMs("spark.executor.heartbeatInterval", "10s").millis.toSeconds
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThreshold > executorHeartbeatInterval, "The value of " +
