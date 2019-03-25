@@ -2,6 +2,7 @@ package org.apache.spark.graph.cypher
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graph.api.{CypherResult, NodeFrame, PropertyGraph, RelationshipFrame}
+import org.apache.spark.graph.cypher.algos.GraphAlgorithms._
 import org.apache.spark.sql.DataFrame
 
 class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
@@ -30,7 +31,7 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
 
   test("create property graph from query results") {
     val personData: DataFrame = spark.createDataFrame(Seq(Tuple3(0, "Alice", 42), Tuple3(1, "Bob", 23), Tuple3(2, "Eve", 19))).toDF("id", "name", "age")
-    val universityData: DataFrame = spark.createDataFrame(Seq(2 -> "UC Berkeley", 3-> "Stanford")).toDF("id", "title")
+    val universityData: DataFrame = spark.createDataFrame(Seq(2 -> "UC Berkeley", 3 -> "Stanford")).toDF("id", "title")
     val knowsData: DataFrame = spark.createDataFrame(Seq(Tuple3(0, 0, 1), Tuple3(1, 0, 2))).toDF("id", "source", "target")
     val studyAtData: DataFrame = spark.createDataFrame(Seq(Tuple3(2, 0, 2), Tuple3(3, 1, 3), Tuple3(4, 2, 2))).toDF("id", "source", "target")
     val personDataFrame: NodeFrame = NodeFrame(df = personData, idColumn = "id", labels = Set("Student"))
@@ -63,41 +64,35 @@ class BasicMatchSuite extends SparkFunSuite with SharedCypherContext {
   test("round trip example using column name conventions") {
 
     val nodes: DataFrame = spark.createDataFrame(Seq(
-      (0, true,   false,  Some("Alice"),  Some(42), None),
-      (1, true,   false,  Some("Bob"),    Some(23), None),
-      (2, true,   false,  Some("Eve"),    Some(19), None),
-      (3, false,  true,   None,           None,     Some("UC Berkeley")),
-      (4, false,  true,   None,           None,     Some("Stanford"))
+      (0L, true, false, Some("Alice"), Some(42), None),
+      (1L, true, false, Some("Bob"), Some(23), None),
+      (2L, true, false, Some("Carol"), Some(22), None),
+      (3L, true, false, Some("Eve"), Some(19), None),
+      (4L, false, true, None, None, Some("UC Berkeley")),
+      (5L, false, true, None, None, Some("Stanford"))
     )).toDF("$ID", ":Student", ":University", "name", "age", "title")
 
     val relationships: DataFrame = spark.createDataFrame(Seq(
-      (0, 0, 1, true,  false),
-      (1, 0, 2, true,  false),
-      (2, 0, 2, false, true),
-      (3, 1, 3, false, true),
-      (4, 2, 2, false, true),
+      (0L, 0L, 1L, true, false),
+      (1L, 0L, 3L, true, false),
+      (2L, 1L, 3L, true, false),
+      (3L, 3L, 0L, true, false),
+      (4L, 3L, 1L, true, false),
+      (5L, 0L, 4L, false, true),
+      (6L, 1L, 4L, false, true),
+      (7L, 3L, 4L, false, true),
+      (8L, 2L, 5L, false, true),
     )).toDF("$ID", "$SOURCE_ID", "$TARGET_ID", ":KNOWS", ":STUDY_AT")
 
-    val graph1: PropertyGraph = cypherSession.createGraph(nodes, relationships)
-    graph1.nodes.show()
-    graph1.relationships.show()
-
-    val result = graph1.cypher("MATCH (n:Student)-[:STUDY_AT]->(u:University) RETURN n, u")
-
-    def pageRank(g: PropertyGraph): PropertyGraph = {
-      // some pagerank implementation
-      g
-    }
-
-    val graph2 = result.graph
-    val graph3 = pageRank(graph2)
-
-    graph3.nodes.show()
-    graph3.relationships.show()
-    result.df.show()
-
-    val graph4: PropertyGraph = cypherSession.createGraph(graph3.nodes, graph3.relationships)
-    graph4.nodes.show()
-    graph4.relationships.show()
+    cypherSession.createGraph(nodes, relationships)
+      .cypher(
+        """|MATCH (student:Student)-[:STUDY_AT]->(uni:University),
+           |      (student)-[knows:KNOWS]-(:Student)
+           |WHERE uni.title = 'UC Berkeley'
+           |RETURN student, knows""".stripMargin)
+      .graph
+      .withPageRank(tolerance = 0.02)
+      .cypher("MATCH (n:Student) RETURN n.name, n.pageRank ORDER BY n.pageRank DESC")
+      .df.show()
   }
 }

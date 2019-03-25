@@ -33,14 +33,14 @@ case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameT
 
     val idColumn = header.column(nodeVar)
     val possibleLabels = header.labelsFor(nodeVar).map(_.label.name)
-    val labelCombinations = schema.combinationsFor(possibleLabels).toSeq
+    val labelCombinations = possibleLabels.flatMap(label => schema.combinationsFor(Set(label)))
 
     val labelToColumns = header.labelsFor(nodeVar).map(expr => expr.label.name -> header.column(expr)).toMap
     val propertyToColumns = header.propertiesFor(nodeVar).map(expr => expr.key.name -> header.column(expr)).toMap
 
     val allLabelColumns = labelToColumns.values.toSet
 
-    labelCombinations.map { labels =>
+    labelCombinations.toSeq.map { labels =>
       val trueLabels = labels.map(labelToColumns)
       val falseLabels = allLabelColumns -- trueLabels
 
