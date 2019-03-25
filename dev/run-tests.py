@@ -294,7 +294,8 @@ def get_hadoop_profiles(hadoop_version):
 def build_spark_maven(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
-    mvn_goals = ["dependency:purge-local-repository", "-Dinclude=org.apache.parquet", "clean", "package", "-DskipTests"]
+    mvn_goals = ["dependency:purge-local-repository", "-Dinclude=org.apache.parquet",
+	"clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
     print("[info] Building Spark (w/Hive 1.2.1) using Maven with these arguments: ",
