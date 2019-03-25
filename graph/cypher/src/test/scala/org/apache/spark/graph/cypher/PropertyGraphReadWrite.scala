@@ -42,21 +42,11 @@ class PropertyGraphReadWrite extends SparkFunSuite with SharedCypherContext with
     relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS"
   )
 
-  test("write a graph with orc") {
+  test("save and load a graph") {
     val graph = cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
-    graph.write.orc(basePath)
+    graph.save(basePath)
 
-    val readGraph = cypherSession.read.orc(basePath)
-    readGraph.cypher(
-      "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2"
-    ).df.show()
-  }
-
-  test("write a graph with parquet") {
-    val graph = cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
-    graph.write.parquet(basePath)
-
-    val readGraph = cypherSession.read.parquet(basePath)
+    val readGraph = cypherSession.load(basePath)
     readGraph.cypher(
       "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2"
     ).df.show()

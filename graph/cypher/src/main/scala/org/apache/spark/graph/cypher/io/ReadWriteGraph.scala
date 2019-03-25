@@ -3,7 +3,6 @@ package org.apache.spark.graph.cypher.io
 import java.net.URI
 
 import org.apache.hadoop.fs.FileSystem
-import org.apache.spark.graph.api.io.ReaderConfig
 import org.apache.spark.graph.api.{NodeFrame, RelationshipFrame}
 import org.apache.spark.graph.cypher.SparkGraphDirectoryStructure
 import org.apache.spark.graph.cypher.SparkGraphDirectoryStructure._
@@ -17,11 +16,11 @@ import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
 
 object ReadWriteGraph {
 
-  case class GraphImporter(sparkSession: SparkSession, config: ReaderConfig) {
+  case class GraphImporter(sparkSession: SparkSession, path: String, format: String) {
 
-    val directoryStructure: SparkGraphDirectoryStructure = SparkGraphDirectoryStructure(config.path)
+    val directoryStructure: SparkGraphDirectoryStructure = SparkGraphDirectoryStructure(path)
     val (labelCombos, relTypes): (Seq[Set[String]], Seq[String]) = {
-      val fs = FileSystem.get(new URI(config.path), sparkSession.sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(new URI(path), sparkSession.sparkContext.hadoopConfiguration)
       try {
         import org.apache.spark.graph.cypher.util.HadoopFSUtils._
         val combos = fs.listDirectories(directoryStructure.pathToNodeDirectory).map(_.toLabelCombo)
@@ -34,7 +33,7 @@ object ReadWriteGraph {
 
     def nodeFrames: Seq[NodeFrame] = {
       labelCombos.map { combo =>
-        val df = sparkSession.read.format(config.source).load(directoryStructure.pathToNodeTable(combo))
+        val df = sparkSession.read.format(format).load(directoryStructure.pathToNodeTable(combo))
         val propertyMappings = df.columns.collect {
           case colName if colName.isPropertyColumnName => colName.toProperty -> colName
         }.toMap
@@ -48,7 +47,7 @@ object ReadWriteGraph {
 
     def relationshipFrames: Seq[RelationshipFrame] = {
       relTypes.map { relType =>
-        val df = sparkSession.read.format(config.source).load(directoryStructure.pathToRelationshipTable(relType))
+        val df = sparkSession.read.format(format).load(directoryStructure.pathToRelationshipTable(relType))
         val propertyMappings = df.columns.collect {
           case colName if colName.isPropertyColumnName => colName.toProperty -> colName
         }.toMap

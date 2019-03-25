@@ -1,11 +1,10 @@
 package org.apache.spark.graph.cypher
 
 import org.apache.spark.graph.api._
-import org.apache.spark.graph.api.io.{ReaderConfig, WriterConfig}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.RelationalGraphAdapter
 import org.apache.spark.graph.cypher.io.ReadWriteGraph._
-import org.apache.spark.sql.{DataFrame, SparkSession, functions}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, functions}
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory, RelationalCypherSession}
@@ -86,27 +85,29 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records, relationalGraph.schema, this)
   }
 
-  override private[spark] def readGraph(config: ReaderConfig): PropertyGraph = {
-    val graphImporter = GraphImporter(sparkSession, config)
+  private val DEFAULT_FORMAT = "parquet"
+
+  override def load(path: String): PropertyGraph = {
+    val graphImporter = GraphImporter(sparkSession, path, DEFAULT_FORMAT)
     createGraph(graphImporter.nodeFrames, graphImporter.relationshipFrames)
   }
 
-  override private[spark] def writeGraph(graph: PropertyGraph, config: WriterConfig): Unit = {
+  override private[spark] def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit = {
     val relationalGraph = toRelationalGraph(graph)
-    val graphDirectoryStructure = SparkGraphDirectoryStructure(config.path)
+    val graphDirectoryStructure = SparkGraphDirectoryStructure(path)
 
     relationalGraph.schema.labelCombinations.combos.foreach { combo =>
       relationalGraph.canonicalNodeTable(combo)
         .write
-        .format(config.source)
-        .mode(config.mode)
+        .format(DEFAULT_FORMAT)
+        .mode(saveMode)
         .save(graphDirectoryStructure.pathToNodeTable(combo))
     }
     relationalGraph.schema.relationshipTypes.foreach { relType =>
       relationalGraph.canonicalRelationshipTable(relType)
         .write
-        .format(config.source)
-        .mode(config.mode)
+        .format(DEFAULT_FORMAT)
+        .mode(saveMode)
         .save(graphDirectoryStructure.pathToRelationshipTable(relType))
     }
   }

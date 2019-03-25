@@ -1,7 +1,6 @@
 package org.apache.spark.graph.api
 
-import org.apache.spark.graph.api.io.PropertyGraphWriter
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SaveMode}
 
 /**
   * A Property Graph as defined by the openCypher Property Graph Model.
@@ -85,8 +84,9 @@ trait PropertyGraph {
   def relationships: DataFrame
 
   /**
-    * Returns a [[PropertyGraphWriter]].
+    * Saves this graph to the given location.
     */
-  def write: PropertyGraphWriter = cypherSession.write(this)
+  def save(path: String, saveMode: SaveMode = SaveMode.ErrorIfExists): Unit =
+    cypherSession.save(this, path, saveMode)
 
 }

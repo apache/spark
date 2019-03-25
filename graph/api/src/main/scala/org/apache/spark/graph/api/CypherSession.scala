@@ -1,6 +1,5 @@
 package org.apache.spark.graph.api
 
-import org.apache.spark.graph.api.io.{PropertyGraphReader, PropertyGraphWriter, ReaderConfig, WriterConfig}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 /**
@@ -58,23 +57,10 @@ trait CypherSession {
   def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph
 
   /**
-    * Returns a [[PropertyGraphWriter]] for `graph`.
+    * Loads a [[PropertyGraph]] from the given location.
     */
-  def write(graph: PropertyGraph): PropertyGraphWriter = PropertyGraphWriter(graph, WriterConfig(
-    path = ".",
-    SaveMode.ErrorIfExists,
-    sparkSession.sessionState.conf.defaultDataSourceName)
-  )
+  def load(path: String): PropertyGraph
 
-  /**
-    * Returns a [[PropertyGraphReader]].
-    */
-  def read: PropertyGraphReader = PropertyGraphReader(this, ReaderConfig(
-    path = ".",
-    sparkSession.sessionState.conf.defaultDataSourceName))
-
-  private[spark] def readGraph(config: ReaderConfig): PropertyGraph
-
-  private[spark] def writeGraph(graph: PropertyGraph, config: WriterConfig): Unit
+  private[spark] def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit
 
 }
