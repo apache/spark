@@ -2296,7 +2296,7 @@ In some cases, you may want to avoid hard-coding certain configurations in a `Sp
 instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
 
 {% highlight scala %}
-val conf = new SparkConf().set("spark.hadoop.abc.def","xyz")
+val conf = new SparkConf().set("spark.hadoop.abc.def", "xyz")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
