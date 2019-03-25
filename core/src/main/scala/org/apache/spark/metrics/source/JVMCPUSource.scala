@@ -19,7 +19,7 @@ package org.apache.spark.metrics.source
 
 import java.lang.management.ManagementFactory
 
-import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
+import com.codahale.metrics.{Gauge, MetricRegistry}
 import javax.management.{MBeanServer, ObjectName}
 import scala.util.control.NonFatal
 
