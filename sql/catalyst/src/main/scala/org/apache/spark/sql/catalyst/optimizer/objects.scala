@@ -131,8 +131,8 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
         fields.map(f => collectStructType(f.dataType, structs))
       case ArrayType(elementType, _) =>
         collectStructType(elementType, structs)
-      case MapType(_, valueType, _) =>
-        // Because we can't select a field from struct in key, so we skip key type.
+      case MapType(keyType, valueType, _) =>
+        collectStructType(keyType, structs)
         collectStructType(valueType, structs)
       // We don't use UserDefinedType in those serializers.
       case _: UserDefinedType[_] =>
@@ -179,13 +179,20 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
     val transformedSerializer = serializer.transformDown {
       case m: ExternalMapToCatalyst =>
+        val prunedKeyConverter = m.keyConverter.transformDown {
+          case s: CreateNamedStruct if structTypeIndex < prunedStructTypes.size =>
+            val prunedType = prunedStructTypes(structTypeIndex)
+            structTypeIndex += 1
+            pruneNamedStruct(s, prunedType)
+        }
         val prunedValueConverter = m.valueConverter.transformDown {
           case s: CreateNamedStruct if structTypeIndex < prunedStructTypes.size =>
             val prunedType = prunedStructTypes(structTypeIndex)
             structTypeIndex += 1
             pruneNamedStruct(s, prunedType)
         }
-        m.copy(valueConverter = alignNullTypeInIf(prunedValueConverter))
+        m.copy(keyConverter = alignNullTypeInIf(prunedKeyConverter),
+          valueConverter = alignNullTypeInIf(prunedValueConverter))
       case s: CreateNamedStruct if structTypeIndex < prunedStructTypes.size =>
         val prunedType = prunedStructTypes(structTypeIndex)
         structTypeIndex += 1
