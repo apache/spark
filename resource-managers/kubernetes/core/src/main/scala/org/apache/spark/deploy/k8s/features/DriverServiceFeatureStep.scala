@@ -38,13 +38,9 @@ private[spark] class DriverServiceFeatureStep(
     s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")
 
-  def isDigit(char: Char) : Boolean = {
-    char >= '0' && char <= '9'
-  }
-
   private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
   private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH
-    && !isDigit(preferredServiceName.charAt(0))) {
+    && !Character.isDigit(preferredServiceName.charAt(0))) {
     preferredServiceName
   } else {
     val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
