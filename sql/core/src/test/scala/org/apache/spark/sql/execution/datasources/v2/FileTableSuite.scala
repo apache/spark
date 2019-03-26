@@ -62,7 +62,7 @@ class FileTableSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val table = new DummyFileTable(spark, options, Seq(pathName), expectedDataSchema, None)
       assert(table.dataSchema == expectedDataSchema)
       val expectedPartitionSchema = StructType(Seq(StructField("p", IntegerType, true)))
-      assert(table.fileIndex.partitionSchema ==  expectedPartitionSchema)
+      assert(table.fileIndex.partitionSchema == expectedPartitionSchema)
     }
   }
 

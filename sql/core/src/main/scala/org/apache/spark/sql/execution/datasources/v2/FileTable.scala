@@ -47,15 +47,15 @@ abstract class FileTable(
   }
 
   lazy val dataSchema: StructType = userSpecifiedSchema.map { schema =>
-      val partitionSchema = fileIndex.partitionSchema
-      val equality = sparkSession.sessionState.conf.resolver
-      StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
-    }.orElse {
-      inferSchema(fileIndex.allFiles())
-    }.getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for $name. It must be specified manually.")
-    }.asNullable
+    val partitionSchema = fileIndex.partitionSchema
+    val equality = sparkSession.sessionState.conf.resolver
+    StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
+  }.orElse {
+    inferSchema(fileIndex.allFiles())
+  }.getOrElse {
+    throw new AnalysisException(
+      s"Unable to infer schema for $name. It must be specified manually.")
+  }.asNullable
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
