@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{AtomicType, DataType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class CSVTable(
@@ -48,5 +48,15 @@ case class CSVTable(
   }
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
-    new CSVWriteBuilder(options, paths)
+    new CSVWriteBuilder(options, paths, formatName, supportsDataType)
+
+  override def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
+
+    case _ => false
+  }
+
+  override def formatName: String = "CSV"
 }
