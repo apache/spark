@@ -41,7 +41,7 @@ case class AnalyzeTableCommand(
       if (cacheManager.lookupCachedData(table.logicalPlan).isDefined) {
         if (!noscan) {
           // To collect table stats, materializes an underlying columnar RDD
-          table.collect()
+          table.count()
         }
       } else {
         throw new AnalysisException("ANALYZE TABLE is not supported on views.")
