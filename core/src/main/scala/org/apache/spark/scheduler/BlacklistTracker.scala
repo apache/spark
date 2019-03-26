@@ -60,7 +60,6 @@ private[scheduler] class BlacklistTracker (
   BlacklistTracker.validateBlacklistConfs(conf)
   private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
   private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
-  private val MAX_FETCH_FAILURES_PER_NODE = conf.get(config.MAX_FETCH_FAILURES_PER_NODE)
   val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
   private val BLACKLIST_FETCH_FAILURE_ENABLED = conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
 
@@ -75,11 +74,6 @@ private[scheduler] class BlacklistTracker (
   val executorIdToBlacklistStatus = new HashMap[String, BlacklistedExecutor]()
   val nodeIdToBlacklistExpiryTime = new HashMap[String, Long]()
 
-  /**
-   * A map from node to information on fetch failures.  Tracks the time of each fetch failure,
-   * so that we can avoid blacklisting nodes due to failures that are very far apart.
-   */
-  private val nodeIdToFetchFailureList = new HashMap[String, ExecutorFailureList]()
   /**
    * An immutable copy of the set of nodes that are currently blacklisted.  Kept in an
    * AtomicReference to make [[nodeBlacklist()]] thread-safe.
@@ -194,12 +188,7 @@ private[scheduler] class BlacklistTracker (
     }
   }
 
-  def updateBlacklistForFetchFailure(
-      taskId: Int,
-      stageId: Int,
-      stageAttemptId: Int,
-      host: String,
-      exec: String): Unit = {
+  def updateBlacklistForFetchFailure(host: String, exec: String): Unit = {
     if (BLACKLIST_FETCH_FAILURE_ENABLED) {
       // If we blacklist on fetch failures, we are implicitly saying that we believe the failure is
       // non-transient, and can't be recovered from (even if this is the first fetch failure,
@@ -207,22 +196,13 @@ private[scheduler] class BlacklistTracker (
       // multiple fetch failures).
       // If the external shuffle-service is on, then every other executor on this node would
       // be suffering from the same issue, so we should blacklist (and potentially kill) all
-      // of them as soon as fetch failures on that node are greater than MAX_FAILED_EXEC_PER_NODE
+      // of them immediately.
 
       val now = clock.getTimeMillis()
       val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
 
       if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-
-        // Ensure that a node is not blacklisted because of transient failures which are far apart
-        val fetchFailuresOnHost =
-          nodeIdToFetchFailureList.getOrElseUpdate(host, new ExecutorFailureList)
-        fetchFailuresOnHost.addFailure(stageId, stageAttemptId, taskId, now)
-        fetchFailuresOnHost.dropFailuresWithTimeoutBefore(now)
-        val totalFailures = fetchFailuresOnHost.numUniqueTaskFailures
-
-        if (totalFailures >= MAX_FETCH_FAILURES_PER_NODE &&
-            !nodeIdToBlacklistExpiryTime.contains(host)) {
+        if (!nodeIdToBlacklistExpiryTime.contains(host)) {
           logInfo(s"Blacklisting node $host due to fetch failure of external shuffle service")
           nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
@@ -348,19 +328,11 @@ private[scheduler] class BlacklistTracker (
         failuresInTaskSet: ExecutorFailuresInTaskSet): Unit = {
       failuresInTaskSet.taskToFailureCountAndFailureTime.foreach {
         case (taskIdx, (_, failureTime)) =>
-          addFailure(stage, stageAttempt, taskIdx, failureTime)
-      }
-    }
-
-    def addFailure(
-        stage: Int,
-        stageAttempt: Int,
-        taskIdx: Int,
-        failureTime: Long): Unit = {
-      val expiryTime = failureTime + BLACKLIST_TIMEOUT_MILLIS
-      failuresAndExpiryTimes += ((TaskId(stage, stageAttempt, taskIdx), expiryTime))
-      if (expiryTime < minExpiryTime) {
-        minExpiryTime = expiryTime
+          val expiryTime = failureTime + BLACKLIST_TIMEOUT_MILLIS
+          failuresAndExpiryTimes += ((TaskId(stage, stageAttempt, taskIdx), expiryTime))
+          if (expiryTime < minExpiryTime) {
+            minExpiryTime = expiryTime
+          }
       }
     }
 

@@ -1727,11 +1727,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.blacklist.application.fetchFailure.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
-    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch
-    failure happens. If external shuffle service is enabled, then the whole node will be
-    blacklisted.
+    Spark blacklists the executor immediately when a fetch failure happens, if
+    <code>spark.blacklist.enabled</code> is set to "true". If external shuffle service is
+    enabled, then the whole node will be blacklisted.
   </td>
 </tr>
 <tr>

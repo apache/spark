@@ -565,12 +565,11 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     })
 
     conf.set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
-    conf.set(config.MAX_FETCH_FAILURES_PER_NODE, 1)
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
     conf.set(config.BLACKLIST_KILL_ENABLED, false)
-    blacklist.updateBlacklistForFetchFailure(1, 1, 1, "hostA", exec = "1")
+    blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
 
     verify(allocationClientMock, never).killExecutors(any(), any(), any(), any())
     verify(allocationClientMock, never).killExecutorsOnHost(any())
@@ -582,7 +581,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     conf.set(config.BLACKLIST_KILL_ENABLED, true)
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
     clock.advance(1000)
-    blacklist.updateBlacklistForFetchFailure(1, 1, 1, "hostA", exec = "1")
+    blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
 
     verify(allocationClientMock).killExecutors(Seq("1"), false, false, true)
     verify(allocationClientMock, never).killExecutorsOnHost(any())
@@ -599,7 +598,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Enable external shuffle service to see if all the executors on this node will be killed.
     conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
     clock.advance(1000)
-    blacklist.updateBlacklistForFetchFailure(1, 1, 1, "hostA", exec = "2")
+    blacklist.updateBlacklistForFetchFailure("hostA", exec = "2")
 
     verify(allocationClientMock, never).killExecutors(Seq("2"), true, true)
     verify(allocationClientMock).killExecutorsOnHost("hostA")
@@ -608,25 +607,5 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklist.nodeIdToBlacklistExpiryTime("hostA") ===
       2000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
     assert(blacklist.nextExpiryTime === 1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
-
-    // Ensure MAX_FAILED_EXEC_PER_NODE config is used for blacklisting
-    conf.set(config.MAX_FETCH_FAILURES_PER_NODE, 2)
-    blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
-    clock.advance(1000)
-    blacklist.updateBlacklistForFetchFailure(1, 1, 1, "hostB", exec = "2")
-
-    verify(allocationClientMock, never).killExecutors(Seq("2"), true, true)
-    verify(allocationClientMock, never).killExecutorsOnHost("hostB")
-    assert(!blacklist.nodeIdToBlacklistExpiryTime.contains("hostB"))
-
-    clock.advance(1000)
-    blacklist.updateBlacklistForFetchFailure(1, 1, 2, "hostB", exec = "3")
-
-    verify(allocationClientMock, never).killExecutors(Seq("3"), true, true)
-    verify(allocationClientMock).killExecutorsOnHost("hostB")
-
-    assert(blacklist.nodeIdToBlacklistExpiryTime.contains("hostB"))
-    assert(blacklist.nodeIdToBlacklistExpiryTime("hostB") ===
-      4000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
   }
 }

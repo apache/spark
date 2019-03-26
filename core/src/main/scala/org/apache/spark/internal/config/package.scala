@@ -495,11 +495,6 @@ package object config {
     ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
       .booleanConf
       .createWithDefault(true)
-
-  private[spark] val MAX_FETCH_FAILURES_PER_NODE =
-    ConfigBuilder("spark.blacklist.application.maxFetchFailuresPerNode")
-      .intConf
-      .createWithDefault(2)
   // End blacklist confs
 
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
