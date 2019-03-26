@@ -20,7 +20,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class OrcDataSourceV2 extends FileDataSourceV2 {
@@ -42,19 +42,3 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
   }
 }
 
-object OrcDataSourceV2 {
-  def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: AtomicType => true
-
-    case st: StructType => st.forall { f => supportsDataType(f.dataType) }
-
-    case ArrayType(elementType, _) => supportsDataType(elementType)
-
-    case MapType(keyType, valueType, _) =>
-      supportsDataType(keyType) && supportsDataType(valueType)
-
-    case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
-
-    case _ => false
-  }
-}

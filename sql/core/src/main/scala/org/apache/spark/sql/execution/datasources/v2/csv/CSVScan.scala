@@ -75,10 +75,4 @@ case class CSVScan(
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, fileIndex.partitionSchema, readSchema, parsedOptions)
   }
-
-  override def supportsDataType(dataType: DataType): Boolean = {
-    CSVDataSourceV2.supportsDataType(dataType)
-  }
-
-  override def formatName: String = "CSV"
 }

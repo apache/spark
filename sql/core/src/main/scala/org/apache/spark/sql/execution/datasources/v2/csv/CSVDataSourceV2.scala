@@ -20,7 +20,7 @@ import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CSVDataSourceV2 extends FileDataSourceV2 {
@@ -39,15 +39,5 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
     CSVTable(tableName, sparkSession, options, paths, Some(schema))
-  }
-}
-
-object CSVDataSourceV2 {
-  def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: AtomicType => true
-
-    case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
-
-    case _ => false
   }
 }
