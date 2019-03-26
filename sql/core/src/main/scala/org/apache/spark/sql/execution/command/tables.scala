@@ -635,8 +635,7 @@ case class DescribeTableCommand(
  * 3. VALUES statement.
  * 4. TABLE statement. Example : TABLE table_name
  * 5. statements of the form 'FROM table SELECT *'
- *
- * TODO : support CTEs.
+ * 6. Common table expressions (CTEs)
  */
 case class DescribeQueryCommand(query: LogicalPlan)
   extends DescribeCommandBase {
