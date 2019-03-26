@@ -193,14 +193,3 @@ object SharedState extends Logging {
     }
   }
 }
-
-
-/**
- * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
- * This class loader cannot be closed (its `close` method is a no-op).
- */
-private[sql] class NonClosableMutableURLClassLoader(parent: ClassLoader)
-  extends MutableURLClassLoader(Array.empty, parent) {
-
-  override def close(): Unit = {}
-}
