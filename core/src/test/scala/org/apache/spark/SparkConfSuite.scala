@@ -359,9 +359,8 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf().set("dummy.password", "dummy-password")
     conf.validateSettings()
 
-    val debugString = conf.toDebugString
     assert(conf.get("dummy.password") === "dummy-password")
-    assert(debugString.contains(EXPECTED_LOG))
+    assert(conf.toDebugString.contains(EXPECTED_LOG))
   }
 
   val defaultIllegalValue = "SomeIllegalValue"
