@@ -64,7 +64,7 @@ abstract class FileTable(
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
         throw new AnalysisException(
-          s"$name data source does not support ${field.dataType.catalogString} data type.")
+          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
       }
     }
     val partitionSchema = fileIndex.partitionSchema
