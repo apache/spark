@@ -839,7 +839,7 @@ The most common ones are distributed "shuffle" operations, such as grouping or a
 by a key.
 
 In Scala, these operations are automatically available on RDDs containing
-[Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
+[Tuple2](https://www.scala-lang.org/api/{{site.SCALA_VERSION}}/scala/Tuple2.html) objects
 (the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
 [PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
 which automatically wraps around an RDD of tuples.
@@ -871,7 +871,7 @@ The most common ones are distributed "shuffle" operations, such as grouping or a
 by a key.
 
 In Java, key-value pairs are represented using the
-[scala.Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) class
+[scala.Tuple2](https://www.scala-lang.org/api/{{site.SCALA_VERSION}}/scala/Tuple2.html) class
 from the Scala standard library. You can simply call `new Tuple2(a, b)` to create a tuple, and access
 its fields later with `tuple._1()` and `tuple._2()`.
 
