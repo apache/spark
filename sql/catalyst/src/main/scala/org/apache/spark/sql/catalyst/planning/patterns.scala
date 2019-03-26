@@ -43,6 +43,8 @@ object PhysicalOperation extends PredicateHelper {
 
   /**
    * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
+   * Note that, if the filter is non-deterministic the deterministic expressions should be
+   * extracted.
    * Here are two examples for alias in-lining/substitution.
    * Before:
    * {{{
@@ -63,9 +65,8 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case filter @ Filter(condition, child)
-          if condition.deterministic || condition.isInstanceOf[And] =>
-        val determinedCondition = getDeterminedExpression(condition)
+      case filter @ Filter(condition, child) =>
+        val determinedCondition = extractDeterministicExpressions(condition)
         if (determinedCondition.isDefined) {
           val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
           val substitutedCondition = substitute(aliases)(determinedCondition.get)
@@ -98,18 +99,45 @@ object PhysicalOperation extends PredicateHelper {
     }
   }
 
-  private def getDeterminedExpression(expr: Expression): Option[Expression] = {
+  /**
+   * Extract the deterministic expressions in non-deterministic expressions, i.e. 'And' and 'Or'.
+   *
+   * Example input:
+   * {{{
+   *   col = 1 and rand() < 1
+   *   (col1 = 1 and rand() < 1) and col2 = 1
+   *   col1 = 1 or rand() < 1
+   *   (col1 = 1 and rand() < 1) or (col2 = 1 and rand() < 1)
+   * }}}
+   *
+   * Result:
+   * {{{
+   *   col = 1
+   *   col1 = 1 and col2 = 1
+   *   None
+   *   col1 = 1 or col2 = 1
+   * }}}
+   */
+  private[planning] def extractDeterministicExpressions(expr: Expression): Option[Expression] = {
     if (expr.deterministic) {
       Some(expr)
     } else {
       expr match {
         case And(left, right) =>
-          val leftDeterminedExpr = getDeterminedExpression(left)
-          val rightDeterminedExpr = getDeterminedExpression(right)
+          val leftDeterminedExpr = extractDeterministicExpressions(left)
+          val rightDeterminedExpr = extractDeterministicExpressions(right)
           if (leftDeterminedExpr.isDefined && rightDeterminedExpr.isDefined) {
             Some(And(leftDeterminedExpr.get, rightDeterminedExpr.get))
           } else if (leftDeterminedExpr.isDefined || rightDeterminedExpr.isDefined) {
             Some(leftDeterminedExpr.getOrElse(rightDeterminedExpr.get))
+          } else {
+            None
+          }
+        case Or(left, right) =>
+          val leftDeterminedExpr = extractDeterministicExpressions(left)
+          val rightDeterminedExpr = extractDeterministicExpressions(right)
+          if (leftDeterminedExpr.isDefined && rightDeterminedExpr.isDefined) {
+            Some(Or(leftDeterminedExpr.get, rightDeterminedExpr.get))
           } else {
             None
           }
