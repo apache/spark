@@ -207,8 +207,12 @@ private[spark] class DirectKafkaInputDStream[K, V](
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
 
     // find latest available offsets
-    c.seekToEnd(currentOffsets.keySet.asJava)
-    parts.map(tp => tp -> c.position(tp)).toMap
+    val end = c.endOffsets(currentOffsets.keySet.asJava)
+      .asScala
+      .toMap
+      .mapValues(_.longValue)
+
+    parts.map(tp => tp -> end(tp)).toMap
   }
 
   // limits the maximum number of messages per partition
