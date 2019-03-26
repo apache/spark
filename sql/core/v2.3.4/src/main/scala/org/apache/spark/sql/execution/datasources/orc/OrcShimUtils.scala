@@ -20,15 +20,23 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.sql.Date
 
 import org.apache.orc.storage.common.`type`.HiveDecimal
+import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch
+import org.apache.orc.storage.ql.io.sarg.{SearchArgument => OrcSearchArgument}
+import org.apache.orc.storage.ql.io.sarg.PredicateLeaf.{Operator => OrcOperator}
 import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.types.Decimal
 
 /**
- * Helper functions for Orc serialize and deserialize.
+ * Various utilities for ORC used to upgrade the built-in Hive.
  */
-private[spark] object OrcSerializeUtils {
+private[sql] object OrcShimUtils {
+
+  class VectorizedRowBatchWrap(val batch: VectorizedRowBatch) {}
+
+  private[sql] type Operator = OrcOperator
+  private[sql] type SearchArgument = OrcSearchArgument
 
   def getSqlDate(value: Any): Date = value.asInstanceOf[DateWritable].get
 
