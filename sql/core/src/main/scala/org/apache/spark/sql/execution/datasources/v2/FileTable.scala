@@ -84,7 +84,7 @@ abstract class FileTable(
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
 
   /**
-   * Returns whether this format supports the given [[DataType]] in write path.
+   * Returns whether this format supports the given [[DataType]] in read/write path.
    * By default all data types are supported.
    */
   def supportsDataType(dataType: DataType): Boolean = true
