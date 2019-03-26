@@ -354,6 +354,20 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
+  test("SPARK-26998: SSL configuration not needed on executors") {
+    val conf = new SparkConf(false)
+    conf.validateSettings()
+
+    conf.set("spark.ssl.enabled", "true")
+    conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.keyStorePassword", "password")
+    conf.set("spark.ssl.trustStorePassword", "password")
+    conf.validateSettings()
+
+    val filtered = conf.getAll.filter { case (k, _) => SparkConf.isExecutorStartupConf(k) }
+    assert(filtered.isEmpty)
+  }
+
   val defaultIllegalValue = "SomeIllegalValue"
   val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
     "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
