@@ -115,6 +115,3 @@ structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin
 kafka-source-initial-offset-future-version.bin
 vote.tmpl
-key-password
-keystore-password
-truststore-password
