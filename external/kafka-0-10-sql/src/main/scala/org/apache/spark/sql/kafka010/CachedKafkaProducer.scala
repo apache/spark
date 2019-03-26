@@ -157,6 +157,8 @@ private[kafka010] object CachedKafkaProducer extends Logging {
         // So that we do not end up with -ve in-use counts.
         producer.inUseCount.decrementAndGet()
         logDebug(s"Released producer $producer.")
+      } else {
+        logWarning(s"Tried to release a not in use producer, $producer.")
       }
       if (failing) {
         // If this producer is failing to write, we remove it from cache.

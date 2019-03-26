@@ -21,7 +21,6 @@ import java.{util => ju}
 
 import org.apache.kafka.clients.producer.{Callback, ProducerRecord, RecordMetadata}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.types.{BinaryType, StringType}
@@ -50,9 +49,10 @@ private[kafka010] class KafkaWriteTask(
   }
 
   def close(): Unit = {
-    checkForErrors()
     try {
+      checkForErrors()
       producer.flush()
+      checkForErrors()
     } finally {
       CachedKafkaProducer.release(producer, failedWrite != null)
     }
@@ -97,9 +97,6 @@ private[kafka010] abstract class KafkaRowWriter(
 
   protected def checkForErrors(): Unit = {
     if (failedWrite != null) {
-      // Before throwing exception, we should mark this acquired producer as not in use,
-      // for this particular task. Otherwise it will linger on, assuming that it is in use.
-      CachedKafkaProducer.release(producer, failing = true)
       throw failedWrite
     }
   }

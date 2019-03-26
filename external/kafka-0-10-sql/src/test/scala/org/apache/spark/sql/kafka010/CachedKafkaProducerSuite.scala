@@ -18,14 +18,18 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.{ConcurrentLinkedQueue, Executors, TimeUnit}
+
+import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.kafka.common.serialization.ByteArraySerializer
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
+
 
 class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
 
@@ -100,8 +104,6 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
 
 class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest {
 
-  override val streamingTimeout = 30.seconds
-
   override val brokerProps = Map("auto.create.topics.enable" -> "false")
 
   override def afterAll(): Unit = {
@@ -117,6 +119,60 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     conf.set("spark.kafka.producer.cache.timeout", "2ms")
   }
 
+  test("concurrent use of CachedKafkaProducer") {
+    val topic = "topic" + Random.nextInt()
+    val data = (1 to 10).map(_.toString)
+    testUtils.createTopic(topic, 1)
+    val kafkaParams: Map[String, Object] = Map("bootstrap.servers" -> testUtils.brokerAddress,
+      "key.serializer" -> classOf[ByteArraySerializer].getName,
+      "value.serializer" -> classOf[ByteArraySerializer].getName)
+
+    import scala.collection.JavaConverters._
+
+    val numThreads: Int = 100
+    val numConcurrentProducers: Int = 500
+
+    val kafkaParamsUniqueMap = mutable.HashMap.empty[Int, ju.Map[String, Object]]
+    ( 1 to numConcurrentProducers).map {
+      i => kafkaParamsUniqueMap.put(i, kafkaParams.updated("retries", s"$i").asJava)
+    }
+    val toBeReleasedQueue = new ConcurrentLinkedQueue[CachedKafkaProducer]()
+
+    def acquire(i: Int): Unit = {
+      val producer = CachedKafkaProducer.acquire(kafkaParamsUniqueMap(i))
+      producer.kafkaProducer // materialize producer.
+      assert(!producer.isClosed)
+      toBeReleasedQueue.add(producer)
+    }
+
+    def release(producer: CachedKafkaProducer): Unit = {
+      if (producer != null) {
+        CachedKafkaProducer.release(producer, true)
+      }
+    }
+    val threadPool = Executors.newFixedThreadPool(numThreads)
+    try {
+      val futuresAcquire = (1 to numConcurrentProducers).map { i =>
+        threadPool.submit(new Runnable {
+          override def run(): Unit = {
+            acquire(i)
+          }
+        })
+      }
+      val futuresRelease = (1 to numConcurrentProducers).map { i =>
+        threadPool.submit(new Runnable {
+          override def run(): Unit = {
+            release(toBeReleasedQueue.poll())
+          }
+        })
+      }
+      futuresAcquire.foreach(_.get(1, TimeUnit.MINUTES))
+      futuresRelease.foreach(_.get(1, TimeUnit.MINUTES))
+    } finally {
+      threadPool.shutdown()
+    }
+
+  }
   /*
    * The following stress suite will cause frequent eviction of kafka producers from
    * the guava cache. Since these producers remain in use, because they are used by
@@ -149,7 +205,7 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
         .queryName(s"kafkaStream$i")
         .start()
     }
-    Thread.sleep(30000)
+    Thread.sleep(15000)
 
     queries.foreach{ q =>
       assert(q.exception.isEmpty, "None of the queries should fail.")
