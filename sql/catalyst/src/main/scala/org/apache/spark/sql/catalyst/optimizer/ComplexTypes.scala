@@ -20,6 +20,10 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.MapData
+import org.apache.spark.sql.types.MapType
+
+import scala.collection.mutable
 
 /**
  * Simplify redundant [[CreateNamedStructLike]], [[CreateArray]] and [[CreateMap]] expressions.
@@ -59,6 +63,13 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           Literal(null, ga.dataType)
         }
       case GetMapValue(CreateMap(elems), key) => CaseKeyWhen(key, elems)
+      case GetMapValue(Literal(map: MapData, MapType(kt, vt, _)), key) =>
+        val elems = new mutable.ListBuffer[Literal]
+        map.foreach(kt, vt, (key, value) => {
+          elems.append(Literal(key, kt))
+          elems.append(Literal(value, vt))
+        })
+        CaseKeyWhen(key, elems.result())
     }
   }
 }
