@@ -308,7 +308,7 @@ object InMemoryFileIndex extends Logging {
       //   implementations don't actually issue RPC for this method.
       //
       // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-      //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+      //   be a big deal since we always use to `bulkListLeafFiles` when the number of
       //   paths exceeds threshold.
       case f =>
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),

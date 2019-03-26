@@ -618,7 +618,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = sparkContext.parallelize(1 to n, 2).toDS()
     checkDataset(
       data.sample(withReplacement = false, 0.05, seed = 13),
-      3, 17, 27, 58, 62)
+      8, 37, 90)
   }
 
   test("sample fraction should not be negative with replacement") {
@@ -650,9 +650,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
+    val a = 7
     val simpleUdf = udf((n: Int) => {
-      require(n != 1, "simpleUdf shouldn't see id=1!")
-      1
+      require(n != a, s"simpleUdf shouldn't see id=$a!")
+      a
     })
 
     val df = Seq(
@@ -668,10 +669,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (9, "string9")
     ).toDF("id", "stringData")
     val sampleDF = df.sample(false, 0.7, 50)
-    // After sampling, sampleDF doesn't contain id=1.
-    assert(!sampleDF.select("id").as[Int].collect.contains(1))
-    // simpleUdf should not encounter id=1.
-    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
+    // After sampling, sampleDF doesn't contain id=a.
+    assert(!sampleDF.select("id").as[Int].collect.contains(a))
+    // simpleUdf should not encounter id=a.
+    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(a)))
   }
 
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
@@ -714,11 +715,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("Kryo encoder: check the schema mismatch when converting DataFrame to Dataset") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
-    val df = Seq((1)).toDF("a")
+    val df = Seq((1.0)).toDF("a")
     val e = intercept[AnalysisException] {
       df.as[KryoData]
     }.message
-    assert(e.contains("cannot cast int to binary"))
+    assert(e.contains("cannot cast double to binary"))
   }
 
   test("Java encoder") {

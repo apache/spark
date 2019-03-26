@@ -184,7 +184,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     val gbt = new GBTRegressor()
       .setMaxDepth(3)
       .setMaxIter(5)
-      .setSeed(123)
+      .setSeed(42)
       .setFeatureSubsetStrategy("all")
 
     // In this data, feature 1 is very important.

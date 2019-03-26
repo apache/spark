@@ -89,7 +89,7 @@ abstract class PartitioningAwareFileIndex(
     if (partitionSpec().partitionColumns.isEmpty) {
       // For each of the root input paths, get the list of files inside them
       rootPaths.flatMap { path =>
-        // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+        // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
         val fs = path.getFileSystem(hadoopConf)
         val qualifiedPathPre = fs.makeQualified(path)
         val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
@@ -203,7 +203,7 @@ abstract class PartitioningAwareFileIndex(
 
       case None =>
         rootPaths.map { path =>
-          // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+          // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
           if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }

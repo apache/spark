@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.ZoneOffset
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -43,7 +44,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val jstId = Option(TimeZoneJST.getID)
 
   def toMillis(timestamp: String): Long = {
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", TimeZoneGMT)
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
     TimeUnit.MICROSECONDS.toMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"

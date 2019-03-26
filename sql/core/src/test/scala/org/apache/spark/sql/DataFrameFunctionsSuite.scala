@@ -2884,7 +2884,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
       ("hash", (df: DataFrame) => df.select(hash())) ::
-      ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
+      ("hash", (df: DataFrame) => df.selectExpr("hash()")) ::
+      ("xxhash64", (df: DataFrame) => df.select(xxhash64())) ::
+      ("xxhash64", (df: DataFrame) => df.selectExpr("xxhash64()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
       assert(errMsg.contains(s"input to function $name requires at least one argument"))

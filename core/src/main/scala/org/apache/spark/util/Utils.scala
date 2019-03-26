@@ -189,15 +189,23 @@ private[spark] object Utils extends Logging {
 
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
-    // scalastyle:off classforname
-    Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
-    // scalastyle:on classforname
+    Try { classForName(clazz, initialize = false) }.isSuccess
   }
 
   // scalastyle:off classforname
-  /** Preferred alternative to Class.forName(className) */
-  def classForName(className: String): Class[_] = {
-    Class.forName(className, true, getContextOrSparkClassLoader)
+  /**
+   * Preferred alternative to Class.forName(className), as well as
+   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
+   */
+  def classForName(
+      className: String,
+      initialize: Boolean = true,
+      noSparkClassLoader: Boolean = false): Class[_] = {
+    if (!noSparkClassLoader) {
+      Class.forName(className, initialize, getContextOrSparkClassLoader)
+    } else {
+      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader)
+    }
     // scalastyle:on classforname
   }
 

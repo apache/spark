@@ -36,6 +36,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.util.Utils
@@ -52,7 +53,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
-    yarnConfig.setInt("spark.shuffle.service.port", 0)
+    yarnConfig.setInt(SHUFFLE_SERVICE_PORT.key, 0)
     yarnConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
     val localDir = Utils.createTempDir()
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)

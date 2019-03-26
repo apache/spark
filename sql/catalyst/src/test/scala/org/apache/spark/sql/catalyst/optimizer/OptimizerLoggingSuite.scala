@@ -67,7 +67,8 @@ class OptimizerLoggingSuite extends PlanTest {
 
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
     val logAppender = new MockAppender()
-    withLogLevelAndAppender(Level.TRACE, logAppender) {
+    withLogAppender(logAppender,
+        loggerName = Some(Optimize.getClass.getName.dropRight(1)), level = Some(Level.TRACE)) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
       val query = input.select('a, 'b).select('a).where('a > 1).analyze
       val expected = input.where('a > 1).select('a).analyze
