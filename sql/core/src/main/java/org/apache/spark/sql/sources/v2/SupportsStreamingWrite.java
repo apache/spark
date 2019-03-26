@@ -18,8 +18,8 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
+import org.apache.spark.sql.sources.v2.writer.streaming.BaseStreamingSink;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**

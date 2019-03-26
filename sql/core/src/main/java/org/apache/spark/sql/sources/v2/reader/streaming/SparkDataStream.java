@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 
 /**
  * The base interface representing a readable data stream in a Spark streaming query. It's
