@@ -90,61 +90,98 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Select the proper physical plan for join based on joining keys and size of logical plan.
-   *
-   * At first, uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the
-   * predicates can be evaluated by matching join keys. If found, join implementations are chosen
-   * with the following precedence:
+   * Select the proper physical plan for join based on join strategy hints, the availability of
+   * equi-join keys and the sizes of joining relations. Below are the existing join strategies,
+   * their characteristics and their limitations.
    *
    * - Broadcast hash join (BHJ):
-   *     BHJ is not supported for full outer join. For right outer join, we only can broadcast the
-   *     left side. For left outer, left semi, left anti and the internal join type ExistenceJoin,
-   *     we only can broadcast the right side. For inner like join, we can broadcast both sides.
-   *     Normally, BHJ can perform faster than the other join algorithms when the broadcast side is
-   *     small. However, broadcasting tables is a network-intensive operation. It could cause OOM
-   *     or perform worse than the other join algorithms, especially when the build/broadcast side
-   *     is big.
+   *     Only supported for equi-joins, while the join keys do not need to be sortable.
+   *     Supported for all join types except full outer joins.
+   *     BHJ usually performs faster than the other join algorithms when the broadcast side is
+   *     small. However, broadcasting tables is a network-intensive operation and it could cause
+   *     OOM or perform badly in some cases, especially when the build/broadcast side is big.
    *
-   *     For the supported cases, users can specify the broadcast hint (e.g. the user applied the
-   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame) and session-based
-   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold to adjust whether BHJ is used and
-   *     which join side is broadcast.
+   * - Shuffle hash join:
+   *     Only supported for equi-joins, while the join keys do not need to be sortable.
+   *     Supported for all join types except full outer joins.
    *
-   *     1) Broadcast the join side with the broadcast hint, even if the size is larger than
-   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]]. If both sides have the hint (only when the type
-   *     is inner like join), the side with a smaller estimated physical size will be broadcast.
-   *     2) Respect the [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold and broadcast the side
-   *     whose estimated physical size is smaller than the threshold. If both sides are below the
-   *     threshold, broadcast the smaller side. If neither is smaller, BHJ is not used.
+   * - Shuffle sort merge join (SMJ):
+   *     Only supported for equi-joins and the join keys have to be sortable.
+   *     Supported for all join types.
    *
-   * - Shuffle hash join: if the average size of a single partition is small enough to build a hash
-   *     table.
+   * - Broadcast nested loop join (BNLJ):
+   *     Supports both equi-joins and non-equi-joins.
+   *     Supports all the join types, but the implementation is optimized for:
+   *       1) broadcasting the left side in a right outer join;
+   *       2) broadcasting the right side in a left outer, left semi, left anti or existence join;
+   *       3) broadcasting either side in an inner-like join.
    *
-   * - Sort merge: if the matching join keys are sortable.
+   * - Shuffle-and-replicate nested loop join (a.k.a. cartesian product join):
+   *     Supports both equi-joins and non-equi-joins.
+   *     Supports only inner like joins.
    *
-   * If there is no joining keys, Join implementations are chosen with the following precedence:
-   * - BroadcastNestedLoopJoin (BNLJ):
-   *     BNLJ supports all the join types but the impl is OPTIMIZED for the following scenarios:
-   *     For right outer join, the left side is broadcast. For left outer, left semi, left anti
-   *     and the internal join type ExistenceJoin, the right side is broadcast. For inner like
-   *     joins, either side is broadcast.
+   * First, look at applicable join strategies hints:
    *
-   *     Like BHJ, users still can specify the broadcast hint and session-based
-   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold to impact which side is broadcast.
+   * 1. Use broadcast hash join if:
+   *    a) it is an equi-join; and
+   *    b) either side has `BROADCAST` hint and is buildable, i.e., not being the null-generating
+   *       side of an outer join (e.g., either side of an inner-like join, left side of a right
+   *       outer join, or right side of a left outer, left semi, left anti or existence join).
+   *    If both sides satisfy b), choose the smaller side (based on stats) to broadcast.
    *
-   *     1) Broadcast the join side with the broadcast hint, even if the size is larger than
-   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]]. If both sides have the hint (i.e., just for
-   *     inner-like join), the side with a smaller estimated physical size will be broadcast.
-   *     2) Respect the [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold and broadcast the side
-   *     whose estimated physical size is smaller than the threshold. If both sides are below the
-   *     threshold, broadcast the smaller side. If neither is smaller, BNLJ is not used.
+   * 2. Use broadcast nested loop join if:
+   *    either side has `BROADCAST` hint and is buildable.
+   *    If both sides satisfy, choose the smaller side to broadcast.
+   *    ** Note that hitting this branch implies this is a non-equi-join.
    *
-   * - CartesianProduct: for inner like join, CartesianProduct is the fallback option.
+   * 3. Use shuffle sort merge join if:
+   *    a) it is an equi-join; and
+   *    b) the equi-join keys are sortable; and
+   *    c) either side has `MERGE` hint.
    *
-   * - BroadcastNestedLoopJoin (BNLJ):
-   *     For the other join types, BNLJ is the fallback option. Here, we just pick the broadcast
-   *     side with the broadcast hint. If neither side has a hint, we broadcast the side with
-   *     the smaller estimated physical size.
+   * 4. Use shuffle hash join if:
+   *    a) it is an equi-join; and
+   *    b) either side has `SHUFFLE_HASH` hint and is buildable.
+   *    If both sides satisfy b), choose the smaller side to build.
+   *
+   * 5. Use shuffle-and-replicate nested loop join if:
+   *    a) it is an inner-like join; and
+   *    b) either side has `SHUFFLE_REPLICATE_NL` hint.
+   *
+   * Second, use the [[ExtractEquiJoinKeys]] pattern to find equi-join keys from the join predicates
+   * and choose an equi-join algorithm based on the following precedence:
+   *
+   * 1. Use broadcast hash join if:
+   *    a) it is an equi-join; and
+   *    b) either side is buildable and is of a size equal to or smaller than
+   *       [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]].
+   *    If both sides satisfy b), choose the smaller side to broadcast.
+   *
+   * 2. Use shuffle hash join if:
+   *    a) it is an equi-join; and
+   *    b) either of the following holds:
+   *       - the equi-join keys are not sortable;
+   *       - [[SQLConf.PREFER_SORTMERGEJOIN]] is `false` and either side is buildable and its
+   *         average partition size is equal to or smaller than
+   *         [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] and that side is much smaller than the other
+   *         side.
+   *
+   * 3. Use shuffle sort merge join if:
+   *    a) it is an equi-join; and
+   *    b) the equi-join keys are sortable.
+   *
+   * Last, given there is no equi-join keys, choose the join algorithm for non-equi-joins based on
+   * the following precedence:
+   *
+   * 1. Use broadcast nested loop join if:
+   *    either side is buildable and is of a size equal to or smaller than
+   *    [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]].
+   *    If both sides satisfy, choose the smaller side to broadcast.
+   *
+   * 2. Use shuffle-and-replicate nested loop join if:
+   *    it is an inner-like join.
+   *
+   * 3. Use broadcast nested loop join as the fallback option. Choose the smaller side to broadcast.
    */
   object JoinSelection extends Strategy with PredicateHelper {
 

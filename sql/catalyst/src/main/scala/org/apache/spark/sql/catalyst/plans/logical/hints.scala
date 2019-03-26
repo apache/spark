@@ -112,6 +112,10 @@ object JoinStrategyHint {
     SHUFFLE_REPLICATE_NL)
 }
 
+/**
+ * The hint for broadcast hash join or broadcast nested loop join, depending on the availability of
+ * equi-join keys.
+ */
 case object BROADCAST extends JoinStrategyHint {
   override def displayName: String = "broadcast-hash"
   override def hintAliases: Set[String] = Set(
@@ -120,6 +124,9 @@ case object BROADCAST extends JoinStrategyHint {
     "MAPJOIN")
 }
 
+/**
+ * The hint for shuffle sort merge join.
+ */
 case object SHUFFLE_MERGE extends JoinStrategyHint {
   override def displayName: String = "shuffle-merge"
   override def hintAliases: Set[String] = Set(
@@ -128,12 +135,18 @@ case object SHUFFLE_MERGE extends JoinStrategyHint {
     "MERGEJOIN")
 }
 
+/**
+ * The hint for shuffle hash join.
+ */
 case object SHUFFLE_HASH extends JoinStrategyHint {
   override def displayName: String = "shuffle-hash"
   override def hintAliases: Set[String] = Set(
     "SHUFFLE_HASH")
 }
 
+/**
+ * The hint for shuffle-and-replicate nested loop join, a.k.a. cartesian product join.
+ */
 case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
   override def displayName: String = "shuffle-replicate-nested-loop"
   override def hintAliases: Set[String] = Set(
