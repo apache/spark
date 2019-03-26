@@ -48,8 +48,8 @@ abstract class FileTable(
 
   lazy val dataSchema: StructType = userSpecifiedSchema.map { schema =>
     val partitionSchema = fileIndex.partitionSchema
-    val equality = sparkSession.sessionState.conf.resolver
-    StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
+    val resolver = sparkSession.sessionState.conf.resolver
+    StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
   }.orElse {
     inferSchema(fileIndex.allFiles())
   }.getOrElse {
