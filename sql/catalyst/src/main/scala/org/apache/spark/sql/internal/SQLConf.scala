@@ -1717,6 +1717,11 @@ object SQLConf {
       "and java.sql.Date are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val INTERSECT_WITH_GROUPBY_PLACEMENT = buildConf("spark.sql.intersect.groupby.placement")
+    .doc("When true, group by will be placed under intersect")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -2162,6 +2167,8 @@ class SQLConf extends Serializable with Logging {
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
+  def intersectWithGroupByPlacement: Boolean =
+    getConf(INTERSECT_WITH_GROUPBY_PLACEMENT)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

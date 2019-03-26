@@ -1505,7 +1505,14 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2
  *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
  * }}}
+ * or be replaced to a left-simi [[Join]] with GroupBy Placement,
+ * if spark.sql.intersect.groupby.placement is set to true.
+ * {{{
+ *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2
+ *   ==>  SELECT X.a1, X.a2 FROM (SELECT a1, a2 FROM Tab1 GROUP BY a1, a2) X LEFT SEMI JOIN
+ *   (SELECT b1, b2 from Tab2 GROUP BY b1, b2) Y ON a1<=>b1 AND a2<=>b2
  *
+ * }}}
  * Note:
  * 1. This rule is only applicable to INTERSECT DISTINCT. Do not use it for INTERSECT ALL.
  * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
@@ -1513,10 +1520,32 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Intersect(left, right, false) =>
+    case i @ Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE))
+
+      if (SQLConf.get.intersectWithGroupByPlacement) {
+        val intersects = extractIntersects(i)
+        intersects._1
+      } else {
+        val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+        Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE))
+      }
+  }
+
+  private def extractIntersects(plan: LogicalPlan): (LogicalPlan, Seq[Attribute]) = {
+    plan match {
+      case i @ Intersect(left, right, false) =>
+        val leftPlan = extractIntersects(left)
+        val rightPlan = extractIntersects(right)
+
+        val joinCond = leftPlan._2.zip(rightPlan._2).map { case (l, r) => EqualNullSafe(l, r) }
+        assert(leftPlan._2.size == rightPlan._2.size)
+
+        (Join(leftPlan._1, rightPlan._1, LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE)
+          , i.output)
+      case _ =>
+        (Aggregate(plan.output, plan.output, plan), plan.output)
+    }
   }
 }
 

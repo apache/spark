@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.expressions.{And, EqualNullSafe, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
+import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.BooleanType
@@ -195,6 +195,30 @@ class SetOperationSuite extends PlanTest {
         planFragment
       ))
     comparePlans(expectedPlan, rewrittenPlan)
+  }
+
+  test("INTERSECT DISTINCT is replaced to left-semin join with GroupBy Placement") {
+    val input = Intersect(testRelation, testRelation2, isAll = false)
+    object OptimizeIntersect extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("interset distinct", Once,
+          ReplaceIntersectWithSemiJoin) :: Nil
+    }
+
+    val rewrittenPlan1 = OptimizeIntersect.execute(input)
+    val joinCond =
+      input.left.output.zip(input.right.output).map { case (l, r) => EqualNullSafe(l, r) }
+    val expectedPlan1 = Distinct(Join(input.left, input.right, LeftSemi,
+      joinCond.reduceLeftOption(And), JoinHint.NONE))
+    comparePlans(expectedPlan1, rewrittenPlan1)
+    assert(rewrittenPlan1.collect {case a @ Aggregate(_, _, _) => a}.isEmpty)
+
+    // set spark.sql.intersect.groupby.placement to true
+    withSQLConf("spark.sql.intersect.groupby.placement" -> "true") {
+      val rewrittenPlan2 = OptimizeIntersect.execute(input)
+      assert(rewrittenPlan2.collect {case a @ Aggregate(_, _, _) => a}.size == 2)
+      assert(rewrittenPlan2.collect {case d @ Distinct(_) => d}.size == 0)
+    }
   }
 
   test("SPARK-23356 union: expressions with literal in project list are pushed down") {
