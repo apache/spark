@@ -355,12 +355,11 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("SPARK-27244 toDebugString should redact passwords") {
-    val EXPECTED_LOG = s"dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}"
     val conf = new SparkConf().set("dummy.password", "dummy-password")
     conf.validateSettings()
 
     assert(conf.get("dummy.password") === "dummy-password")
-    assert(conf.toDebugString.contains(EXPECTED_LOG))
+    assert(conf.toDebugString.contains(s"dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
   }
 
   val defaultIllegalValue = "SomeIllegalValue"
