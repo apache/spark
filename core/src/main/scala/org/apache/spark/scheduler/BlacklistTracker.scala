@@ -60,6 +60,7 @@ private[scheduler] class BlacklistTracker (
   BlacklistTracker.validateBlacklistConfs(conf)
   private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
   private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
+  private val MAX_FETCH_FAILURES_PER_NODE = conf.get(config.MAX_FETCH_FAILURES_PER_NODE)
   val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
   private val BLACKLIST_FETCH_FAILURE_ENABLED = conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
 
@@ -220,7 +221,7 @@ private[scheduler] class BlacklistTracker (
         fetchFailuresOnHost.dropFailuresWithTimeoutBefore(now)
         val totalFailures = fetchFailuresOnHost.numUniqueTaskFailures
 
-        if (totalFailures >= MAX_FAILED_EXEC_PER_NODE &&
+        if (totalFailures >= MAX_FETCH_FAILURES_PER_NODE &&
             !nodeIdToBlacklistExpiryTime.contains(host)) {
           logInfo(s"Blacklisting node $host due to fetch failure of external shuffle service")
           nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)

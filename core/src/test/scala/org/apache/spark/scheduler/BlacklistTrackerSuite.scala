@@ -565,7 +565,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     })
 
     conf.set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
-    conf.set(config.MAX_FAILED_EXEC_PER_NODE, 1)
+    conf.set(config.MAX_FETCH_FAILURES_PER_NODE, 1)
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
@@ -610,7 +610,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklist.nextExpiryTime === 1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
 
     // Ensure MAX_FAILED_EXEC_PER_NODE config is used for blacklisting
-    conf.set(config.MAX_FAILED_EXEC_PER_NODE, 2)
+    conf.set(config.MAX_FETCH_FAILURES_PER_NODE, 2)
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
     clock.advance(1000)
     blacklist.updateBlacklistForFetchFailure(1, 1, 1, "hostB", exec = "2")
