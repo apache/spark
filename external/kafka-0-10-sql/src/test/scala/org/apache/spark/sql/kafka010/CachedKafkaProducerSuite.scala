@@ -148,6 +148,9 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     def release(producer: CachedKafkaProducer): Unit = {
       if (producer != null) {
         CachedKafkaProducer.release(producer, true)
+        if (producer.getInUseCount > 0) {
+          assert(!producer.isClosed, "Should not close an inuse producer.")
+        }
       }
     }
     val threadPool = Executors.newFixedThreadPool(numThreads)
@@ -160,20 +163,18 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
         })
       }
       val futuresRelease = (1 to 10 * numConcurrentProducers).map { i =>
-        threadPool.submit(new Runnable {
-          override def run(): Unit = {
-            // 2x release should not corrupt the state of cache.
-            val cachedKafkaProducer = toBeReleasedQueue.poll()
-            release(cachedKafkaProducer)
-            release(cachedKafkaProducer)
-            if (cachedKafkaProducer.getInUseCount > 0) {
-              assert(!cachedKafkaProducer.isClosed, "Should not close an inuse producer.")
+        val cachedKafkaProducer = toBeReleasedQueue.poll()
+        // 2x release should not corrupt the state of cache.
+        (1 to 2).map { j =>
+          threadPool.submit(new Runnable {
+            override def run(): Unit = {
+              release(cachedKafkaProducer)
             }
-          }
-        })
+          })
+        }
       }
       futuresAcquire.foreach(_.get(1, TimeUnit.MINUTES))
-      futuresRelease.foreach(_.get(1, TimeUnit.MINUTES))
+      futuresRelease.flatten.foreach(_.get(1, TimeUnit.MINUTES))
     } finally {
       threadPool.shutdown()
     }
