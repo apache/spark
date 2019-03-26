@@ -23,7 +23,7 @@ import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
 import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.sources.{And, Filter}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
 /**
@@ -56,27 +56,7 @@ import org.apache.spark.sql.types._
  * builder methods mentioned above can only be found in test code, where all tested filters are
  * known to be convertible.
  */
-private[sql] object OrcFilters {
-  private[sql] def buildTree(filters: Seq[Filter]): Option[Filter] = {
-    filters match {
-      case Seq() => None
-      case Seq(filter) => Some(filter)
-      case Seq(filter1, filter2) => Some(And(filter1, filter2))
-      case _ => // length > 2
-        val (left, right) = filters.splitAt(filters.length / 2)
-        Some(And(buildTree(left).get, buildTree(right).get))
-    }
-  }
-
-  // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
-  // in order to distinguish predicate pushdown for nested columns.
-  private def quoteAttributeNameIfNeeded(name: String) : String = {
-    if (!name.contains("`") && name.contains(".")) {
-      s"`$name`"
-    } else {
-      name
-    }
-  }
+private[sql] object OrcFilters extends OrcFiltersBase {
 
   /**
    * Create ORC filter as a SearchArgument instance.
@@ -99,16 +79,6 @@ private[sql] object OrcFilters {
       filter <- filters
       _ <- buildSearchArgument(dataTypeMap, filter, newBuilder())
     } yield filter
-  }
-
-  /**
-   * Return true if this is a searchable type in ORC.
-   * Both CharType and VarcharType are cleaned at AstBuilder.
-   */
-  private def isSearchableType(dataType: DataType) = dataType match {
-    case BinaryType => false
-    case _: AtomicType => true
-    case _ => false
   }
 
   /**
