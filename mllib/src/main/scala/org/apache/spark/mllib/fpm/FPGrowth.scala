@@ -84,8 +84,6 @@ class FPGrowthModel[Item: ClassTag] @Since("2.4.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     FPGrowthModel.SaveLoadV1_0.save(this, path)
   }
-
-  override protected val formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")

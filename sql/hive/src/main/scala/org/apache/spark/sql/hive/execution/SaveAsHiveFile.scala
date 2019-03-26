@@ -114,7 +114,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // be removed by Hive when Hive is trying to empty the table directory.
     val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
     val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] =
-      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3)
+      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_1)
 
     // Ensure all the supported versions are considered here.
     assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
@@ -227,7 +227,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
     // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
     // under the table directory.
-    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs) &&
+    if (isSubDir(new Path(stagingPathName), inputPath, fs) &&
       !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
         "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
@@ -251,6 +251,13 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
           "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
     }
     dir
+  }
+
+  // HIVE-14259 removed FileUtils.isSubDir(). Adapted it from Hive 1.2's FileUtils.isSubDir().
+  private def isSubDir(p1: Path, p2: Path, fs: FileSystem): Boolean = {
+    val path1 = fs.makeQualified(p1).toString + Path.SEPARATOR
+    val path2 = fs.makeQualified(p2).toString + Path.SEPARATOR
+    path1.startsWith(path2)
   }
 
   private def executionId: String = {

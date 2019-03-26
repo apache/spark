@@ -20,7 +20,8 @@ package org.apache.spark.ml.clustering
 import scala.language.existentials
 import scala.util.Random
 
-import org.dmg.pmml.{ClusteringModel, PMML}
+import org.dmg.pmml.PMML
+import org.dmg.pmml.clustering.ClusteringModel
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -166,7 +167,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
     val model = new KMeans()
       .setK(3)
-      .setSeed(1)
+      .setSeed(42)
       .setInitMode(MLlibKMeans.RANDOM)
       .setTol(1e-6)
       .setDistanceMeasure(DistanceMeasure.COSINE)
@@ -243,6 +244,13 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       assert(pmmlClusteringModel.getNumberOfClusters === clusterCenters.length)
     }
     testPMMLWrite(sc, kmeansModel, checkModel)
+  }
+
+  test("prediction on single instance") {
+    val kmeans = new KMeans().setSeed(123L)
+    val model = kmeans.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
   }
 }
 

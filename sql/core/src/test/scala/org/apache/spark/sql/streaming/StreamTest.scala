@@ -39,12 +39,11 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.v2.{OldStreamingDataSourceV2Relation, StreamingDataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -692,16 +691,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                   case r: StreamingExecutionRelation => r.source
                   // v2 source
                   case r: StreamingDataSourceV2Relation => r.stream
-                  case r: OldStreamingDataSourceV2Relation => r.readSupport
                   // We can add data to memory stream before starting it. Then the input plan has
                   // not been processed by the streaming engine and contains `StreamingRelationV2`.
                   case r: StreamingRelationV2 if r.sourceName == "memory" =>
-                    // TODO: remove this null hack after finish API refactor for continuous stream.
-                    if (r.table == null) {
-                      r.dataSource.asInstanceOf[ContinuousReadSupport]
-                    } else {
-                      r.table.asInstanceOf[MemoryStreamTable].stream
-                    }
+                    r.table.asInstanceOf[MemoryStreamTable].stream
                 }
                 .zipWithIndex
                 .find(_._1 == source)

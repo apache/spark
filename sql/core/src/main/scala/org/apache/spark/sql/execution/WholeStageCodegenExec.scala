@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.io.Writer
 import java.util.Locale
-import java.util.function.Supplier
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -288,6 +287,18 @@ trait CodegenSupport extends SparkPlan {
       }
     }
     evaluateVars.toString()
+  }
+
+  /**
+   * Returns source code to evaluate the variables for non-deterministic expressions, and clear the
+   * code of evaluated variables, to prevent them to be evaluated twice.
+   */
+  protected def evaluateNondeterministicVariables(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      expressions: Seq[NamedExpression]): String = {
+    val nondeterministicAttrs = expressions.filterNot(_.deterministic).map(_.toAttribute)
+    evaluateRequiredVariables(attributes, variables, AttributeSet(nondeterministicAttrs))
   }
 
   /**
@@ -567,9 +578,7 @@ object WholeStageCodegenId {
   // is created, e.g. for special fallback handling when an existing WholeStageCodegenExec
   // failed to generate/compile code.
 
-  private val codegenStageCounter = ThreadLocal.withInitial(new Supplier[Integer] {
-    override def get() = 1  // TODO: change to Scala lambda syntax when upgraded to Scala 2.12+
-  })
+  private val codegenStageCounter: ThreadLocal[Integer] = ThreadLocal.withInitial(() => 1)
 
   def resetPerQuery(): Unit = codegenStageCounter.set(1)
 

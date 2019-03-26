@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -31,8 +32,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -58,7 +57,7 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
       case PhysicalOperation(_, filters,
         DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        val scanBuilder = orcTable.newScanBuilder(new DataSourceOptions(options.asJava))
+        val scanBuilder = orcTable.newScanBuilder(options)
         scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
         val pushedFilters = scanBuilder.pushedFilters()
         assert(pushedFilters.nonEmpty, "No filter is pushed down")
@@ -88,34 +87,6 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
       assert(filter.toString == stringExpr)
     }
     checkFilterPredicate(df, predicate, checkLogicalOperator)
-  }
-
-  protected def checkNoFilterPredicate
-      (predicate: Predicate, noneSupported: Boolean = false)
-      (implicit df: DataFrame): Unit = {
-    val output = predicate.collect { case a: Attribute => a }.distinct
-    val query = df
-      .select(output.map(e => Column(e)): _*)
-      .where(Column(predicate))
-
-    query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-      DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
-        assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        val scanBuilder = orcTable.newScanBuilder(new DataSourceOptions(options.asJava))
-        scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
-        val pushedFilters = scanBuilder.pushedFilters()
-        if (noneSupported) {
-          assert(pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
-        } else {
-          assert(pushedFilters.nonEmpty, "No filter is pushed down")
-          val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
-          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for $pushedFilters")
-        }
-
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
-    }
   }
 
   test("filter pushdown - integer") {
@@ -424,6 +395,18 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
           GreaterThan("a", 1)
         )
       )).get.toString
+    }
+  }
+
+  test("SPARK-27160: Fix casting of the DecimalType literal") {
+    import org.apache.spark.sql.sources._
+    val schema = StructType(Array(StructField("a", DecimalType(3, 2))))
+    assertResult("leaf-0 = (LESS_THAN a 3.14), expr = leaf-0") {
+      OrcFilters.createFilter(schema, Array(
+        LessThan(
+          "a",
+          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2)))
+      ).get.toString
     }
   }
 }

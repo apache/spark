@@ -283,7 +283,7 @@ class Graph[VD, ED] {
   // Functions for caching graphs ==================================================================
   def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
   def cache(): Graph[VD, ED]
-  def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
+  def unpersistVertices(blocking: Boolean = false): Graph[VD, ED]
   // Change the partitioning heuristic  ============================================================
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
   // Transform vertex and edge attributes ==========================================================
@@ -317,7 +317,7 @@ class Graph[VD, ED] {
   // Iterative graph-parallel computation ==========================================================
   def pregel[A](initialMsg: A, maxIterations: Int, activeDirection: EdgeDirection)(
       vprog: (VertexId, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED]
   // Basic graph algorithms ========================================================================

@@ -187,11 +187,19 @@ private[kafka010] class KafkaSource(
       until.map {
         case (tp, end) =>
           tp -> sizes.get(tp).map { size =>
-            val begin = from.get(tp).getOrElse(fromNew(tp))
+            val begin = from.getOrElse(tp, fromNew(tp))
             val prorate = limit * (size / total)
             logDebug(s"rateLimit $tp prorated amount is $prorate")
             // Don't completely starve small topicpartitions
-            val off = begin + (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
+            val prorateLong = (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
+            // need to be careful of integer overflow
+            // therefore added canary checks where to see if off variable could be overflowed
+            // refer to [https://issues.apache.org/jira/browse/SPARK-26718]
+            val off = if (prorateLong > Long.MaxValue - begin) {
+              Long.MaxValue
+            } else {
+              begin + prorateLong
+            }
             logDebug(s"rateLimit $tp new offset is $off")
             // Paranoia, make sure not to return an offset that's past end
             Math.min(end, off)
@@ -265,13 +273,11 @@ private[kafka010] class KafkaSource(
 
     // Calculate offset ranges
     val offsetRanges = topicPartitions.map { tp =>
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
-        newPartitionOffsets.getOrElse(tp, {
-          // This should not happen since newPartitionOffsets contains all partitions not in
-          // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a from offset")
-        })
-      }
+      val fromOffset = fromPartitionOffsets.getOrElse(tp, newPartitionOffsets.getOrElse(tp, {
+        // This should not happen since newPartitionOffsets contains all partitions not in
+        // fromPartitionOffsets
+        throw new IllegalStateException(s"$tp doesn't have a from offset")
+      }))
       val untilOffset = untilPartitionOffsets(tp)
       val preferredLoc = if (numExecutors > 0) {
         // This allows cached KafkaConsumers in the executors to be re-used to read the same

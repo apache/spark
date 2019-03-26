@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 import java.net.{URL, URLClassLoader}
-import java.nio.charset.StandardCharsets
-import java.sql.Timestamp
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -28,12 +26,11 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -62,7 +59,8 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        s"<code>0.12.0</code> through <code>2.3.4</code>.")
+        "<code>0.12.0</code> through <code>2.3.4</code> and " +
+        "<code>3.1.0</code> through <code>3.1.1</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -328,10 +326,17 @@ private[spark] object HiveUtils extends Logging {
 
       val classLoader = Utils.getContextOrSparkClassLoader
       val jars = allJars(classLoader)
-      if (jars.length == 0) {
-        throw new IllegalArgumentException(
-          "Unable to locate hive jars to connect to metastore. " +
-            s"Please set ${HIVE_METASTORE_JARS.key}.")
+      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+        // Do nothing. The system classloader is no longer a URLClassLoader in Java 9,
+        // so it won't match the case in allJars above. It no longer exposes URLs of
+        // the system classpath
+      } else {
+        // Verify at least one jar was found
+        if (jars.length == 0) {
+          throw new IllegalArgumentException(
+            "Unable to locate hive jars to connect to metastore. " +
+              s"Please set ${HIVE_METASTORE_JARS.key}.")
+        }
       }
 
       logInfo(

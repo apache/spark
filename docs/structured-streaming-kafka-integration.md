@@ -265,7 +265,7 @@ Each row in the source has the following schema:
 </tr>
 <tr>
   <td>timestamp</td>
-  <td>long</td>
+  <td>timestamp</td>
 </tr>
 <tr>
   <td>timestampType</td>
@@ -692,6 +692,10 @@ Delegation token uses `SCRAM` login module for authentication and because of tha
 must match with Kafka broker configuration.
 
 When delegation token is available on an executor it can be overridden with JAAS login configuration.
+
+#### Caveats
+
+- Obtaining delegation token for proxy user is not yet supported ([KAFKA-6945](https://issues.apache.org/jira/browse/KAFKA-6945)).
 
 ### JAAS login configuration
 

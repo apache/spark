@@ -365,16 +365,17 @@ case class Join(
 }
 
 /**
- * Append data to an existing table.
+ * Base trait for DataSourceV2 write commands
  */
-case class AppendData(
-    table: NamedRelation,
-    query: LogicalPlan,
-    isByName: Boolean) extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Seq(query)
-  override def output: Seq[Attribute] = Seq.empty
+trait V2WriteCommand extends Command {
+  def table: NamedRelation
+  def query: LogicalPlan
 
-  override lazy val resolved: Boolean = {
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = outputResolved
+
+  def outputResolved: Boolean = {
     table.resolved && query.resolved && query.output.size == table.output.size &&
         query.output.zip(table.output).forall {
           case (inAttr, outAttr) =>
@@ -386,15 +387,65 @@ case class AppendData(
   }
 }
 
+/**
+ * Append data to an existing table.
+ */
+case class AppendData(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand
+
 object AppendData {
   def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
-    new AppendData(table, df, true)
+    new AppendData(table, df, isByName = true)
   }
 
   def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
-    new AppendData(table, query, false)
+    new AppendData(table, query, isByName = false)
   }
 }
+
+/**
+ * Overwrite data matching a filter in an existing table.
+ */
+case class OverwriteByExpression(
+    table: NamedRelation,
+    deleteExpr: Expression,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand {
+  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
+}
+
+object OverwriteByExpression {
+  def byName(
+      table: NamedRelation, df: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, df, isByName = true)
+  }
+
+  def byPosition(
+      table: NamedRelation, query: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, query, isByName = false)
+  }
+}
+
+/**
+ * Dynamically overwrite partitions in an existing table.
+ */
+case class OverwritePartitionsDynamic(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand
+
+object OverwritePartitionsDynamic {
+  def byName(table: NamedRelation, df: LogicalPlan): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, df, isByName = true)
+  }
+
+  def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, query, isByName = false)
+  }
+}
+
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the

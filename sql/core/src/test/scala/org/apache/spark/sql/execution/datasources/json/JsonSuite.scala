@@ -2426,6 +2426,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     countForMalformedJSON(0, Seq(""))
   }
 
+  test("SPARK-26745: count() for non-multiline input with empty lines") {
+    withTempPath { tempPath =>
+      val path = tempPath.getCanonicalPath
+      Seq("""{ "a" : 1 }""", "", """     { "a" : 2 }""", " \t ")
+        .toDS()
+        .repartition(1)
+        .write
+        .text(path)
+      assert(spark.read.json(path).count() === 2)
+    }
+  }
+
   test("SPARK-25040: empty strings should be disallowed") {
     def failedOnEmptyString(dataType: DataType): Unit = {
        val df = spark.read.schema(s"a ${dataType.catalogString}")

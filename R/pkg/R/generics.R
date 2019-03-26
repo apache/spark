@@ -1080,11 +1080,19 @@ setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("map_concat", function(x, ...) { standardGeneric("map_concat") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("map_entries", function(x) { standardGeneric("map_entries") })
 
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("map_from_arrays", function(x, y) { standardGeneric("map_from_arrays") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("map_from_entries", function(x) { standardGeneric("map_from_entries") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1113,7 +1121,7 @@ setGeneric("month", function(x) { standardGeneric("month") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
-setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
+setGeneric("months_between", function(y, x, ...) { standardGeneric("months_between") })
 
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
@@ -1385,6 +1393,10 @@ setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("window", function(x, ...) { standardGeneric("window") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("xxhash64", function(x, ...) { standardGeneric("xxhash64") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

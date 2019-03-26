@@ -298,6 +298,12 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/PowerIterat
 {% include_example java/org/apache/spark/examples/ml/JavaPowerIterationClusteringExample.java %}
 </div>
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.PowerIterationClustering) for more details.
+
+{% include_example python/ml/power_iteration_clustering_example.py %}
+</div>
+
 <div data-lang="r" markdown="1">
 
 Refer to the [R API docs](api/R/spark.powerIterationClustering.html) for more details.

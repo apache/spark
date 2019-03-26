@@ -585,11 +585,13 @@ for more details on the API.
 ## StringIndexer
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
-The indices are in `[0, numLabels)`, and four ordering options are supported:
+`StringIndexer` can encode multiple columns. The indices are in `[0, numLabels)`, and four ordering options are supported:
 "frequencyDesc": descending order by label frequency (most frequent label assigned 0),
 "frequencyAsc": ascending order by label frequency (least frequent label assigned 0),
 "alphabetDesc": descending alphabetical order, and "alphabetAsc": ascending alphabetical order 
-(default = "frequencyDesc").
+(default = "frequencyDesc"). Note that in case of equal frequency when under
+"frequencyDesc"/"frequencyAsc", the strings are further sorted by alphabet.
+
 The unseen labels will be put at index numLabels if user chooses to keep them.
 If the input column is numeric, we cast it to string and index the string
 values. When downstream pipeline components such as `Estimator` or

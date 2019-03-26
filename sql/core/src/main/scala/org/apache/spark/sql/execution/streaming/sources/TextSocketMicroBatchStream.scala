@@ -26,11 +26,9 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.LongOffset
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.unsafe.types.UTF8String
@@ -40,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * and debugging. This MicroBatchReadSupport will *not* work in production applications due to
  * multiple reasons, including no support for fault recovery.
  */
-class TextSocketMicroBatchStream(host: String, port: Int, options: DataSourceOptions)
+class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
   extends MicroBatchStream with Logging {
 
   @GuardedBy("this")
@@ -123,10 +121,6 @@ class TextSocketMicroBatchStream(host: String, port: Int, options: DataSourceOpt
       val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)
     }
-
-    assert(SparkSession.getActiveSession.isDefined)
-    val spark = SparkSession.getActiveSession.get
-    val numPartitions = spark.sparkContext.defaultParallelism
 
     val slices = Array.fill(numPartitions)(new ListBuffer[(UTF8String, Long)])
     rawList.zipWithIndex.foreach { case (r, idx) =>

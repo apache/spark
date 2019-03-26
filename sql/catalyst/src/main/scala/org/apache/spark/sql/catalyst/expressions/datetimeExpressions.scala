@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.LocalDate
+import java.time.{Instant, LocalDate, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -49,6 +49,7 @@ trait TimeZoneAwareExpression extends Expression {
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
   @transient lazy val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId.get)
+  @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 }
 
 /**
@@ -96,7 +97,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def dataType: DataType = TimestampType
 
   override def eval(input: InternalRow): Any = {
-    System.currentTimeMillis() * 1000L
+    instantToMicros(Instant.now())
   }
 
   override def prettyName: String = "current_timestamp"
@@ -532,16 +533,16 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = TimestampFormatter(format.toString, timeZone)
+    val df = TimestampFormatter(format.toString, zoneId)
     UTF8String.fromString(df.format(timestamp.asInstanceOf[Long]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId")
     val locale = ctx.addReferenceObj("locale", Locale.US)
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
+      s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
           .format($timestamp))"""
     })
   }
@@ -635,7 +636,7 @@ abstract class UnixTime
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone)
+      TimestampFormatter(constFormat.toString, zoneId)
     } catch {
       case NonFatal(_) => null
     }
@@ -668,7 +669,7 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter(formatString, timeZone).parse(
+              TimestampFormatter(formatString, zoneId).parse(
                 t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
             } catch {
               case NonFatal(_) => null
@@ -694,7 +695,7 @@ abstract class UnixTime
             $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / 1000000L;
+                ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / $MICROS_PER_SECOND;
               } catch (java.lang.IllegalArgumentException e) {
                 ${ev.isNull} = true;
               } catch (java.text.ParseException e) {
@@ -707,14 +708,14 @@ abstract class UnixTime
             }""")
         }
       case StringType =>
-        val tz = ctx.addReferenceObj("timeZone", timeZone)
+        val tz = ctx.addReferenceObj("zoneId", zoneId)
         val locale = ctx.addReferenceObj("locale", Locale.US)
         val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
               ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
-                .parse($string.toString()) / 1000000L;
+                .parse($string.toString()) / $MICROS_PER_SECOND;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
@@ -733,7 +734,7 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = ${eval1.value} / 1000000L;
+            ${ev.value} = ${eval1.value} / $MICROS_PER_SECOND;
           }""")
       case DateType =>
         val tz = ctx.addReferenceObj("timeZone", timeZone)
@@ -744,7 +745,7 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / 1000L;
+            ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / $MILLIS_PER_SECOND;
           }""")
     }
   }
@@ -789,7 +790,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, timeZone)
+      TimestampFormatter(constFormat.toString, zoneId)
     } catch {
       case NonFatal(_) => null
     }
@@ -815,7 +816,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(TimestampFormatter(f.toString, timeZone)
+            UTF8String.fromString(TimestampFormatter(f.toString, zoneId)
               .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
@@ -846,7 +847,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           }""")
       }
     } else {
-      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val tz = ctx.addReferenceObj("zoneId", zoneId)
       val locale = ctx.addReferenceObj("locale", Locale.US)
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {

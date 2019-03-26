@@ -48,8 +48,8 @@ trait KafkaContinuousTest extends KafkaSourceTest {
       assert(
         query.lastExecution.executedPlan.collectFirst {
           case scan: ContinuousScanExec
-              if scan.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-            scan.scanConfig.asInstanceOf[KafkaContinuousScanConfig]
+              if scan.stream.isInstanceOf[KafkaContinuousStream] =>
+            scan.stream.asInstanceOf[KafkaContinuousStream]
         }.exists(_.knownPartitions.size == newCount),
         s"query never reconfigured to $newCount partitions")
     }

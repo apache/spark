@@ -29,6 +29,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
@@ -63,9 +64,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     math.min(1, conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).getOrElse(0.0))
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
-  private val maxRegisteredWaitingTimeMs =
-    conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME)
-  private val createTime = System.currentTimeMillis()
+  private val maxRegisteredWaitingTimeNs = TimeUnit.MILLISECONDS.toNanos(
+    conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
+  private val createTimeNs = System.nanoTime()
 
   // Accessing `executorDataMap` in `DriverEndpoint.receive/receiveAndReply` doesn't need any
   // protection. But accessing `executorDataMap` out of `DriverEndpoint.receive/receiveAndReply`
@@ -110,13 +111,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
-  class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-    extends ThreadSafeRpcEndpoint with Logging {
+  class DriverEndpoint extends ThreadSafeRpcEndpoint with Logging {
+
+    override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
 
     // Executors that have been lost, but for which we don't yet know the real exit reason.
     protected val executorsPendingLossReason = new HashSet[String]
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
+
+    // Spark configuration sent to executors. This is a lazy val so that subclasses of the
+    // scheduler can modify the SparkConf object before this view is created.
+    private lazy val sparkProperties = scheduler.sc.conf.getAll
+      .filter { case (k, _) => k.startsWith("spark.") }
+      .toSeq
+
+    private val logUrlHandler: ExecutorLogUrlHandler = new ExecutorLogUrlHandler(
+      conf.get(UI.CUSTOM_EXECUTOR_LOG_URL))
 
     override def onStart() {
       // Periodically revive offers to allow delay scheduling to work
@@ -176,7 +187,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
-      case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls) =>
+      case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls, attributes) =>
         if (executorDataMap.contains(executorId)) {
           executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
           context.reply(true)
@@ -200,7 +211,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val data = new ExecutorData(executorRef, executorAddress, hostname,
-            cores, cores, logUrls)
+            cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -247,7 +258,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       // Make sure no executor is killed while some task is launching on it
-      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+      val taskDescs = withLock {
         // Filter out executors under killing
         val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
         val workOffers = activeExecutors.map {
@@ -273,7 +284,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
       // Make sure no executor is killed while some task is launching on it
-      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+      val taskDescs = withLock {
         // Filter out executors under killing
         if (executorIsAlive(executorId)) {
           val executorData = executorDataMap(executorId)
@@ -386,46 +397,32 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
-  var driverEndpoint: RpcEndpointRef = null
+  val driverEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint())
 
   protected def minRegisteredRatio: Double = _minRegisteredRatio
 
   override def start() {
-    val properties = new ArrayBuffer[(String, String)]
-    for ((key, value) <- scheduler.sc.conf.getAll) {
-      if (key.startsWith("spark.")) {
-        properties += ((key, value))
-      }
-    }
-
-    // TODO (prashant) send conf instead of properties
-    driverEndpoint = createDriverEndpointRef(properties)
-
     if (UserGroupInformation.isSecurityEnabled()) {
-      delegationTokenManager = createTokenManager(driverEndpoint)
+      delegationTokenManager = createTokenManager()
       delegationTokenManager.foreach { dtm =>
+        val ugi = UserGroupInformation.getCurrentUser()
         val tokens = if (dtm.renewalEnabled) {
           dtm.start()
-        } else {
-          val creds = UserGroupInformation.getCurrentUser().getCredentials()
+        } else if (ugi.hasKerberosCredentials() || SparkHadoopUtil.get.isProxyUser(ugi)) {
+          val creds = ugi.getCredentials()
           dtm.obtainDelegationTokens(creds)
           SparkHadoopUtil.get.serialize(creds)
+        } else {
+          null
         }
         if (tokens != null) {
-          delegationTokens.set(tokens)
+          updateDelegationTokens(tokens)
         }
       }
     }
   }
 
-  protected def createDriverEndpointRef(
-      properties: ArrayBuffer[(String, String)]): RpcEndpointRef = {
-    rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint(properties))
-  }
-
-  protected def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new DriverEndpoint(rpcEnv, properties)
-  }
+  protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()
 
   def stopExecutors() {
     try {
@@ -506,9 +503,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
     }
-    if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTimeMs) {
+    if ((System.nanoTime() - createTimeNs) >= maxRegisteredWaitingTimeNs) {
       logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
-        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTimeMs(ms)")
+        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTimeNs(ns)")
       return true
     }
     false
@@ -634,7 +631,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       force: Boolean): Seq[String] = {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
 
-    val response = synchronized {
+    val response = withLock {
       val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
       unknownExecutors.foreach { id =>
         logWarning(s"Executor to kill $id does not exist!")
@@ -715,12 +712,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Create the delegation token manager to be used for the application. This method is called
    * once during the start of the scheduler backend (so after the object has already been
    * fully constructed), only if security is enabled in the Hadoop configuration.
-   *
-   * @param schedulerRef RPC endpoint for the scheduler, where updated delegation tokens should be
-   *                     sent.
    */
-  protected def createTokenManager(
-      schedulerRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = None
+  protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
 
   /**
    * Called when a new set of delegation tokens is sent to the driver. Child classes can override
@@ -736,6 +729,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
+
+  // SPARK-27112: We need to ensure that there is ordering of lock acquisition
+  // between TaskSchedulerImpl and CoarseGrainedSchedulerBackend objects in order to fix
+  // the deadlock issue exposed in SPARK-27112
+  private def withLock[T](fn: => T): T = scheduler.synchronized {
+    CoarseGrainedSchedulerBackend.this.synchronized { fn }
+  }
 
 }
 
