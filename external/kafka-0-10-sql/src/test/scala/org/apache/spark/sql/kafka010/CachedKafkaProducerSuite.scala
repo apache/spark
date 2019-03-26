@@ -130,7 +130,7 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     import scala.collection.JavaConverters._
 
     val numThreads: Int = 100
-    val numConcurrentProducers: Int = 500
+    val numConcurrentProducers: Int = 1000
 
     val kafkaParamsUniqueMap = mutable.HashMap.empty[Int, ju.Map[String, Object]]
     ( 1 to numConcurrentProducers).map {
@@ -140,8 +140,8 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
 
     def acquire(i: Int): Unit = {
       val producer = CachedKafkaProducer.acquire(kafkaParamsUniqueMap(i))
-      producer.kafkaProducer // materialize producer.
-      assert(!producer.isClosed)
+      producer.kafkaProducer // materialize producer for the first time.
+      assert(!producer.isClosed, "Acquired producer cannot be closed.")
       toBeReleasedQueue.add(producer)
     }
 
@@ -152,17 +152,23 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     }
     val threadPool = Executors.newFixedThreadPool(numThreads)
     try {
-      val futuresAcquire = (1 to numConcurrentProducers).map { i =>
+      val futuresAcquire = (1 to 10 * numConcurrentProducers).map { i =>
         threadPool.submit(new Runnable {
           override def run(): Unit = {
-            acquire(i)
+            acquire(i % numConcurrentProducers + 1)
           }
         })
       }
-      val futuresRelease = (1 to numConcurrentProducers).map { i =>
+      val futuresRelease = (1 to 10 * numConcurrentProducers).map { i =>
         threadPool.submit(new Runnable {
           override def run(): Unit = {
-            release(toBeReleasedQueue.poll())
+            // 2x release should not corrupt the state of cache.
+            val cachedKafkaProducer = toBeReleasedQueue.poll()
+            release(cachedKafkaProducer)
+            release(cachedKafkaProducer)
+            if (cachedKafkaProducer.getInUseCount > 0) {
+              assert(!cachedKafkaProducer.isClosed, "Should not close an inuse producer.")
+            }
           }
         })
       }
@@ -171,8 +177,8 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     } finally {
       threadPool.shutdown()
     }
-
   }
+
   /*
    * The following stress suite will cause frequent eviction of kafka producers from
    * the guava cache. Since these producers remain in use, because they are used by
@@ -186,22 +192,23 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
 
     val df = spark.readStream
       .format("rate")
-      .option("numPartitions", "10")
-      .option("rowsPerSecond", "100")
+      .option("numPartitions", "100")
+      .option("rowsPerSecond", "200")
       .load()
       .selectExpr("CAST(timestamp AS STRING) key", "CAST(value AS STRING) value")
 
     val checkpointDir = Utils.createTempDir()
     val topic = newTopic()
     testUtils.createTopic(topic, 100)
-    val queries = for (i <- 1 to 5) yield {
+    val queries = for (i <- 1 to 20) yield {
       df.writeStream
         .format("kafka")
         .option("checkpointLocation", checkpointDir.getCanonicalPath + i)
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .option("kafka.max.block.ms", "1000")
+        // to make it create 5 unique producers.
+        .option("kafka.max.block.ms", s"100${i % 5}")
         .option("topic", topic)
-        .trigger(Trigger.Continuous(1000))
+        .trigger(Trigger.Continuous(500))
         .queryName(s"kafkaStream$i")
         .start()
     }
