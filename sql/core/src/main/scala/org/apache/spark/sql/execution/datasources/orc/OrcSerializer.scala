@@ -137,7 +137,7 @@ class OrcSerializer(dataSchema: StructType) {
       new BytesWritable(getter.getBinary(ordinal))
 
     case DateType =>
-      OrcSerializeUtils.getDateWritable(reuseObj)
+      OrcShimUtils.getDateWritable(reuseObj)
 
     // The following cases are already expensive, reusing object or not doesn't matter.
 
@@ -148,7 +148,7 @@ class OrcSerializer(dataSchema: StructType) {
       result
 
     case DecimalType.Fixed(precision, scale) =>
-      OrcSerializeUtils.getHiveDecimalWritable(precision, scale)
+      OrcShimUtils.getHiveDecimalWritable(precision, scale)
 
     case st: StructType => (getter, ordinal) =>
       val result = createOrcValue(st).asInstanceOf[OrcStruct]

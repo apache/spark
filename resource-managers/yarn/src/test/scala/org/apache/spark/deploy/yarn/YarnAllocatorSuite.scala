@@ -33,6 +33,7 @@ import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
@@ -48,8 +49,8 @@ class MockResolver extends SparkRackResolver {
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   val conf = new YarnConfiguration()
   val sparkConf = new SparkConf()
-  sparkConf.set("spark.driver.host", "localhost")
-  sparkConf.set("spark.driver.port", "4040")
+  sparkConf.set(DRIVER_HOST_ADDRESS, "localhost")
+  sparkConf.set(DRIVER_PORT, 4040)
   sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
   sparkConf.set("spark.yarn.launchContainers", "false")
 
@@ -95,9 +96,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       "--class", "SomeClass")
     val sparkConfClone = sparkConf.clone()
     sparkConfClone
-      .set("spark.executor.instances", maxExecutors.toString)
-      .set("spark.executor.cores", "5")
-      .set("spark.executor.memory", "2048")
+      .set(EXECUTOR_INSTANCES, maxExecutors)
+      .set(EXECUTOR_CORES, 5)
+      .set(EXECUTOR_MEMORY, 2048L)
 
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
@@ -394,7 +395,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("window based failure executor counting") {
-    sparkConf.set("spark.yarn.executor.failuresValidityInterval", "100s")
+    sparkConf.set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS, 100 * 1000L)
     val handler = createAllocator(4)
 
     handler.updateResourceRequests()
@@ -444,8 +445,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       maxExecutors,
       rmClientSpy,
       Map(
-        "spark.yarn.blacklist.executor.launch.blacklisting.enabled" -> "true",
-        "spark.blacklist.application.maxFailedExecutorsPerNode" -> "0"))
+        YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED.key -> "true",
+        MAX_FAILED_EXEC_PER_NODE.key -> "0"))
     handler.updateResourceRequests()
 
     val hosts = (0 until maxExecutors).map(i => s"host$i")

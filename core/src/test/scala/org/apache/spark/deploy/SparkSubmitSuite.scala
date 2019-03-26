@@ -681,7 +681,7 @@ class SparkSubmitSuite
       appArgs.jars should be(Utils.resolveURIs(jars))
       appArgs.files should be(Utils.resolveURIs(files))
       conf.get(JARS) should be(Utils.resolveURIs(jars + ",thejar.jar").split(",").toSeq)
-      conf.get("spark.files") should be(Utils.resolveURIs(files))
+      conf.get(FILES) should be(Utils.resolveURIs(files).split(",").toSeq)
 
       // Test files and archives (Yarn)
       val clArgs2 = Seq(

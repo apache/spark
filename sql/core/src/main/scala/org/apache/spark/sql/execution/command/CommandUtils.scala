@@ -168,7 +168,7 @@ object CommandUtils extends Logging {
   private[sql] def computeColumnStats(
       sparkSession: SparkSession,
       relation: LogicalPlan,
-      columns: Seq[Attribute]): (Long, Map[String, CatalogColumnStat]) = {
+      columns: Seq[Attribute]): (Long, Map[Attribute, ColumnStat]) = {
     val conf = sparkSession.sessionState.conf
 
     // Collect statistics per column.
@@ -195,8 +195,8 @@ object CommandUtils extends Logging {
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
       // according to `statExprs`, the stats struct always have 7 fields.
-      (attr.name, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
-        attributePercentiles.get(attr)).toCatalogColumnStat(attr.name, attr.dataType))
+      (attr, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
+        attributePercentiles.get(attr)))
     }.toMap
     (rowCount, columnStats)
   }

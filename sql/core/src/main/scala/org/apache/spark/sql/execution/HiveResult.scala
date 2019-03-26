@@ -79,7 +79,7 @@ object HiveResult {
 
   private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(
-    DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone))
+    DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
 
   /** Hive outputs fields of structs slightly differently than top level attributes. */
   private def toHiveStructString(a: (Any, DataType)): String = a match {

@@ -63,6 +63,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleMultipartIdentifier
+    : multipartIdentifier EOF
+    ;
+
 singleFunctionIdentifier
     : functionIdentifier EOF
     ;
@@ -77,12 +81,15 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
+    | insertStatement                                                  #insertStatementDefault
+    | multiSelectStatement                                             #multiSelectStatementDefault
     | USE db=identifier                                                #use
     | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
     | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitionColumnNames=identifierList) |
@@ -153,7 +160,6 @@ statement
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
-    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
@@ -354,9 +360,14 @@ resource
     : identifier STRING
     ;
 
+insertStatement
+    : (ctes)? insertInto queryTerm queryOrganization                                       #singleInsertQuery
+    | (ctes)? fromClause multiInsertQueryBody+                                             #multiInsertQuery
+    ;
+
 queryNoWith
-    : insertInto? queryTerm queryOrganization                                              #singleInsertQuery
-    | fromClause multiInsertQueryBody+                                                     #multiInsertQuery
+    : queryTerm queryOrganization                                               #noWithQuery
+    | fromClause selectStatement                                                #queryWithFrom
     ;
 
 queryOrganization
@@ -369,9 +380,15 @@ queryOrganization
     ;
 
 multiInsertQueryBody
-    : insertInto?
-      querySpecification
-      queryOrganization
+    : insertInto selectStatement
+    ;
+
+multiSelectStatement
+    : (ctes)? fromClause selectStatement+                                                #multiSelect
+    ;
+
+selectStatement
+    : querySpecification queryOrganization
     ;
 
 queryTerm
@@ -552,6 +569,10 @@ rowFormat
       (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
       (LINES TERMINATED BY linesSeparatedBy=STRING)?
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
+    ;
+
+multipartIdentifier
+    : parts+=identifier ('.' parts+=identifier)*
     ;
 
 tableIdentifier
