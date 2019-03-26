@@ -405,4 +405,3 @@ case class ThreadStackTrace(
     val blockedByThreadId: Option[Long],
     val blockedByLock: String,
     val holdingLocks: Seq[String])
-
