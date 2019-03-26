@@ -564,10 +564,16 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val stats2 = getTableStats(s"$database.v")
       assert(stats2.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
       assert(stats2.rowCount === None)
-      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS")
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS NOSCAN")
       val stats3 = getTableStats(s"$database.v")
-      assert(stats3.sizeInBytes === stats1.sizeInBytes)
-      assert(stats3.rowCount === Some(1))
+      assert(stats3.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
+      assert(stats3.rowCount === None)
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS")
+      val stats4 = getTableStats(s"$database.v")
+      assert(stats4.sizeInBytes === stats1.sizeInBytes)
+      assert(stats4.rowCount === Some(1))
     }
   }
 }

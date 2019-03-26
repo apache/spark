@@ -39,8 +39,10 @@ case class AnalyzeTableCommand(
       val table = sparkSession.table(tableIdent.quotedString)
       val cacheManager = sparkSession.sharedState.cacheManager
       if (cacheManager.lookupCachedData(table.logicalPlan).isDefined) {
-        // To collect table stats, materializes an underlying columnar RDD
-        table.collect()
+        if (!noscan) {
+          // To collect table stats, materializes an underlying columnar RDD
+          table.collect()
+        }
       } else {
         throw new AnalysisException("ANALYZE TABLE is not supported on views.")
       }
