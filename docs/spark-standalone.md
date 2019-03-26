@@ -262,7 +262,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td><spark.shuffle.service.db.enabled</code></td>
+  <td><code>spark.shuffle.service.db.enabled</code></td>
   <td>true</td>
   <td>
     Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
