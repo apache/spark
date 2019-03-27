@@ -41,7 +41,7 @@ abstract class FileScan(
     val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val splitFiles = selectedPartitions.flatMap { partition =>
-      partition.files.filter(_.getLen > 0).flatMap { file =>
+      partition.files.flatMap { file =>
         val filePath = file.getPath
         PartitionedFileUtil.splitFiles(
           sparkSession = sparkSession,
