@@ -219,6 +219,5 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
       assert(q.exception.isEmpty, "None of the queries should fail.")
       q.stop()
     }
-
   }
 }

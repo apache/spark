@@ -68,19 +68,15 @@ private[kafka010] case class CachedKafkaProducer(
     }
   }
 
-  private def inUse(): Boolean = {
-    inUseCount.get() > 0
-  }
-  private def unCache(): Unit = {
-    isCached = false
-  }
+  private def inUse(): Boolean = inUseCount.get() > 0
+
+  private def unCache(): Unit = isCached = false
+
   private[kafka010] def getInUseCount: Int = inUseCount.get()
 
   private[kafka010] def getKafkaParams: Seq[(String, Object)] = kafkaParams
 
-  private[kafka010] def flush(): Unit = {
-    kafkaProducer.flush()
-  }
+  private[kafka010] def flush(): Unit = kafkaProducer.flush()
 
   private[kafka010] def isClosed: Boolean = closed
 }
