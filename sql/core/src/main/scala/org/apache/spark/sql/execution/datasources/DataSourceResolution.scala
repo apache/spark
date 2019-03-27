@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.logical.expressions.Transform
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule

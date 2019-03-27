@@ -15,21 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.logical.expressions;
+package org.apache.spark.sql.catalog.v2.expressions;
 
 import org.apache.spark.annotation.Experimental;
 
 /**
- * Represents a field or column reference in the public logical expression API.
+ * Base class of the public logical expression API.
  */
 @Experimental
-public interface NamedReference extends Expression {
+public interface Expression {
   /**
-   * Returns the referenced field name.
-   * <p>
-   * Names that identify nested fields are formatted using a "." separator without quoting or
-   * additional escape characters. A struct column "a" with a field named "b.c" will produce the
-   * field name "a.b.c".
+   * Format the expression as a human readable SQL-like string.
    */
-  String fieldName();
+  String describe();
 }

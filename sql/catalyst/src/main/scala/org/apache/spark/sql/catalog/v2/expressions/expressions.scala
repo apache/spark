@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.logical.expressions
+package org.apache.spark.sql.catalog.v2.expressions
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
@@ -51,6 +52,11 @@ private[sql] object LogicalExpressions {
 
       idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference.fieldName)
     }
+  }
+
+  def literal[T](value: T): LiteralValue[T] = {
+    val internalLit = catalyst.expressions.Literal(value)
+    LiteralValue(value, internalLit.dataType)
   }
 
   def literal[T](value: T, dataType: DataType): LiteralValue[T] = LiteralValue(value, dataType)

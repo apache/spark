@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
-import javax.xml.bind.DatatypeConverter
 
+import javax.xml.bind.DatatypeConverter
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -28,6 +28,8 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
@@ -35,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.logical.expressions.{ApplyTransform, BucketTransform, DateHourTransform, DateTransform, FieldReference, IdentityTransform, LiteralValue, MonthTransform, Transform, YearTransform}
 import org.apache.spark.sql.catalyst.logical.expressions
-import org.apache.spark.sql.catalyst.logical.expressions.Transform
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2051,7 +2052,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTransformList(ctx: TransformListContext): Seq[Transform] = withOrigin(ctx) {
     def getFieldReference(
         ctx: ApplyTransformContext,
-        arg: expressions.Expression): FieldReference = {
+        arg: v2.expressions.Expression): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       arg match {
         case ref: FieldReference =>
@@ -2064,7 +2065,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     def getSingleFieldReference(
         ctx: ApplyTransformContext,
-        arguments: Seq[expressions.Expression]): FieldReference = {
+        arguments: Seq[v2.expressions.Expression]): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       if (arguments.size > 1) {
         throw new ParseException(s"Too many arguments for transform $name", ctx)
@@ -2121,7 +2122,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Parse an argument to a transform. An argument may be a field reference (qualified name) or
    * a value literal.
    */
-  override def visitTransformArgument(ctx: TransformArgumentContext): expressions.Expression = {
+  override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
     withOrigin(ctx) {
       val reference = Option(ctx.qualifiedName)
           .map(nameCtx => FieldReference(nameCtx.getText))

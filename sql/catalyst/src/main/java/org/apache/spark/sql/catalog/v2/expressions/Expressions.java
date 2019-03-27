@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.logical.expressions;
+package org.apache.spark.sql.catalog.v2.expressions;
+
+import org.apache.spark.annotation.Experimental;
 
 /**
  * Helper methods to create logical transforms to pass into Spark.
  */
-public class Transforms {
-  private Transforms() {
+@Experimental
+public class Expressions {
+  private Expressions() {
   }
 
   /**
@@ -35,6 +38,27 @@ public class Transforms {
    */
   public Transform apply(String name, Expression[] args) {
     return LogicalExpressions.apply(name, args);
+  }
+
+  /**
+   * Create a named reference expression for a column.
+   *
+   * @param name a column name
+   * @return a named reference for the column
+   */
+  public NamedReference column(String name) {
+    return LogicalExpressions.reference(name);
+  }
+
+  /**
+   * Create a literal from a value.
+   *
+   * @param value a value
+   * @param <T> the JVM type of the value
+   * @return a literal expression for the value
+   */
+  public <T> Literal<T> literal(T value) {
+    return LogicalExpressions.literal(value);
   }
 
   /**

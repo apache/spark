@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.logical.expressions;
+package org.apache.spark.sql.catalog.v2.expressions;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.types.DataType;

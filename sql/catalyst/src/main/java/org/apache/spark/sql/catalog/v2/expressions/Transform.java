@@ -15,17 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.logical.expressions;
+package org.apache.spark.sql.catalog.v2.expressions;
 
 import org.apache.spark.annotation.Experimental;
 
 /**
- * Base class of the public logical expression API.
+ * Represents a transform function in the public logical expression API.
+ * <p>
+ * For example, the transform date(ts) is used to derive a date value from a timestamp column. The
+ * transform name is "date" and its argument is a reference to the "ts" column.
  */
 @Experimental
-public interface Expression {
+public interface Transform extends Expression {
   /**
-   * Format the expression as a human readable SQL-like string.
+   * Returns the transform function name.
    */
-  String describe();
+  String name();
+
+  /**
+   * Returns all field references in the transform arguments.
+   */
+  NamedReference[] references();
+
+  /**
+   * Returns the arguments passed to the transform function.
+   */
+  Expression[] arguments();
 }

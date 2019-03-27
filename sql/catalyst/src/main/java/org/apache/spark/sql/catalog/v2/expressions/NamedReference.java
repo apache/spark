@@ -15,30 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.logical.expressions;
+package org.apache.spark.sql.catalog.v2.expressions;
 
 import org.apache.spark.annotation.Experimental;
 
 /**
- * Represents a transform function in the public logical expression API.
- * <p>
- * For example, the transform date(ts) is used to derive a date value from a timestamp column. The
- * transform name is "date" and its argument is a reference to the "ts" column.
+ * Represents a field or column reference in the public logical expression API.
  */
 @Experimental
-public interface Transform extends Expression {
+public interface NamedReference extends Expression {
   /**
-   * Returns the transform function name.
+   * Returns the referenced field name.
+   * <p>
+   * Names that identify nested fields are formatted using a "." separator without quoting or
+   * additional escape characters. A struct column "a" with a field named "b.c" will produce the
+   * field name "a.b.c".
    */
-  String name();
-
-  /**
-   * Returns all field references in the transform arguments.
-   */
-  NamedReference[] references();
-
-  /**
-   * Returns the arguments passed to the transform function.
-   */
-  Expression[] arguments();
+  String fieldName();
 }
