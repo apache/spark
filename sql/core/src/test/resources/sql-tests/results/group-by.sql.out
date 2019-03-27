@@ -475,7 +475,7 @@ SELECT count(*) FROM test_agg WHERE count(*) > 1
 struct<>
 -- !query 47 output
 org.apache.spark.sql.AnalysisException
-Aggregate expressions are not allowed in where clause of the query;
+Aggregate/Window/Generate expressions are not allowed in where clause of the query;
 
 
 -- !query 48
@@ -484,4 +484,4 @@ SELECT count(*) FROM test_agg WHERE count(*) + 1 > 1
 struct<>
 -- !query 48 output
 org.apache.spark.sql.AnalysisException
-Aggregate expressions are not allowed in where clause of the query;
+Aggregate/Window/Generate expressions are not allowed in where clause of the query;
