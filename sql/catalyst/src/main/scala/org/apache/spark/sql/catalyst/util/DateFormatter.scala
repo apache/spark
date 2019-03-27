@@ -26,7 +26,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
-sealed trait DateFormatter extends Serializable {
+sealed trait DateFormatter {
   def parse(s: String): Int // returns days since epoch
   def format(days: Int): String
 }
@@ -35,8 +35,7 @@ class Iso8601DateFormatter(
     pattern: String,
     locale: Locale) extends DateFormatter with DateTimeFormatterHelper {
 
-  @transient
-  private lazy val formatter = buildFormatter(pattern, locale)
+  private val formatter = buildFormatter(pattern, locale)
   private val UTC = ZoneId.of("UTC")
 
   private def toInstant(s: String): Instant = {
@@ -57,8 +56,7 @@ class Iso8601DateFormatter(
 }
 
 class LegacyDateFormatter(pattern: String, locale: Locale) extends DateFormatter {
-  @transient
-  private lazy val format = FastDateFormat.getInstance(pattern, locale)
+  private val format = FastDateFormat.getInstance(pattern, locale)
 
   override def parse(s: String): Int = {
     val milliseconds = format.parse(s).getTime
