@@ -172,7 +172,7 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
               s"conditions: $condition")
 
-          case f@ Filter(condition, _) if PlanHelper.specialExpressionInUnsupportedOperator(f) =>
+          case f @ Filter(condition, _) if PlanHelper.specialExpressionInUnsupportedOperator(f) =>
             failAnalysis("Aggregate/Window/Generate expressions are not allowed in where " +
               "clause of the query")
 
