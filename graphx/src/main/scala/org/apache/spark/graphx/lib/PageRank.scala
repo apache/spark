@@ -178,7 +178,7 @@ object PageRank extends Logging {
    * @param graph The graph on which to compute personalized pagerank
    * @param numIter The number of iterations to run
    * @param resetProb The random reset probability
-   * @param sources The list of sources to compute personalized pagerank from
+   * @param sources The list of (source, initial score) to compute personalized pagerank from
    * @return the graph with vertex attributes
    *         containing the pagerank relative to all starting nodes (as a sparse vector
    *         indexed by the position of nodes in the sources list) and
@@ -188,7 +188,7 @@ object PageRank extends Logging {
       graph: Graph[VD, ED],
       numIter: Int,
       resetProb: Double = 0.15,
-      sources: Array[VertexId]): Graph[Vector, Double] = {
+      sources: Array[(VertexId, Double)]): Graph[Vector, Double] = {
     require(numIter > 0, s"Number of iterations must be greater than 0," +
       s" but got ${numIter}")
     require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
@@ -199,8 +199,8 @@ object PageRank extends Logging {
     val zero = Vectors.sparse(sources.size, List()).asBreeze
     // map of vid -> vector where for each vid, the _position of vid in source_ is set to 1.0
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
-      val v = Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
-      (vid, v)
+      val v = Vectors.sparse(sources.size, Array(i), Array(vid._2)).asBreeze
+      (vid._1, v)
     }.toMap
 
     val sc = graph.vertices.sparkContext
