@@ -32,7 +32,7 @@ import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.StructType
 
 case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport  {
-  import org.apache.spark.sql.catalog.v2.expressions.LogicalExpressions.TransformHelper
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.TransformHelper
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(

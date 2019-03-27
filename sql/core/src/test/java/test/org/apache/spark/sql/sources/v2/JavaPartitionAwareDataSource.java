@@ -20,6 +20,8 @@ package test.org.apache.spark.sql.sources.v2;
 import java.io.IOException;
 import java.util.Arrays;
 
+import org.apache.spark.sql.catalog.v2.expressions.Expressions;
+import org.apache.spark.sql.catalog.v2.expressions.Transform;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.v2.Table;
@@ -56,6 +58,11 @@ public class JavaPartitionAwareDataSource implements TableProvider {
   @Override
   public Table getTable(CaseInsensitiveStringMap options) {
     return new JavaSimpleBatchTable() {
+      @Override
+      public Transform[] partitioning() {
+        return new Transform[] { Expressions.identity("i") };
+      }
+
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
         return new MyScanBuilder();

@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.TableCapability._
@@ -34,6 +37,8 @@ abstract class FileTable(
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
   extends Table with SupportsRead with SupportsWrite {
+
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
@@ -82,7 +87,11 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def capabilities(): java.util.Set[TableCapability] = FileTable.CAPABILITIES
+  override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
+
+  override def properties: util.Map[String, String] = options.asCaseSensitiveMap
+
+  override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
