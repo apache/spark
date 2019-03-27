@@ -1414,6 +1414,23 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <!-- Hive 2.3.4 -->
+          <exclusion>
+            <groupId>org.eclipse.jetty.aggregate</groupId>
+            <artifactId>jetty-all</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty.orbit</groupId>
+            <artifactId>javax.servlet</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1531,6 +1548,31 @@
           <exclusion>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
+          </exclusion>
+          <!-- Hive 2.3.4 -->
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-vector-code-gen</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+          <artifactId>hive-llap-tez</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-tools</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica-metrics</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1697,6 +1739,35 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <!-- Hive 2.3.4 -->
+          <exclusion>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+          </exclusion>
+          <exclusion>
+            <artifactId>HikariCP</artifactId>
+            <groupId>com.zaxxer</groupId>
+          </exclusion>
+          <exclusion>
+            <groupId>co.cask.tephra</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty.aggregate</groupId>
+            <artifactId>jetty-all</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop-bundle</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-compiler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-runtime</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1761,6 +1832,11 @@
           <exclusion>
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
+          </exclusion>
+          <!-- Hive 2.3.4 -->
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2656,7 +2732,67 @@
         <hadoop.version>3.2.0</hadoop.version>
         <curator.version>2.13.0</curator.version>
         <zookeeper.version>3.4.13</zookeeper.version>
+        <hive.group>org.apache.hive</hive.group>
+        <hive.classifier>core</hive.classifier>
+        <hive.version>2.3.4</hive.version>
+        <hive.version.short>${hive.version}</hive.version.short>
+        <hive.parquet.version>${parquet.version}</hive.parquet.version>
+        <orc.classifier></orc.classifier>
+        <hive.parquet.group>org.apache.parquet</hive.parquet.group>
+        <datanucleus-core.version>4.1.17</datanucleus-core.version>
       </properties>
+      <dependencies>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-common</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-serde</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-shims</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-llap-client</artifactId>
+          <version>${hive.version}</version>
+          <scope>${hive.deps.scope}</scope>
+          <exclusions>
+            <exclusion>
+              <groupId>${hive.group}</groupId>
+              <artifactId>hive-common</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>${hive.group}</groupId>
+              <artifactId>hive-serde</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.apache.zookeeper</groupId>
+              <artifactId>zookeeper</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.apache.curator</groupId>
+              <artifactId>curator-framework</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.apache.curator</groupId>
+              <artifactId>apache-curator</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.slf4j</groupId>
+              <artifactId>slf4j-api</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+
+        <dependency>
+          <groupId>org.apache.hive</groupId>
+          <artifactId>hive-storage-api</artifactId>
+          <version>2.6.0</version>
+        </dependency>
+      </dependencies>
     </profile>
 
     <profile>
