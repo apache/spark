@@ -287,6 +287,8 @@ _window_functions = {
 
 # Wraps deprecated functions (keys) with the messages (values).
 _functions_deprecated = {
+    'from_utc_timestamp': 'Deprecated in 3.0.',
+    'to_utc_timestamp': 'Deprecated in 3.0.',
 }
 
 for _name, _doc in _functions.items():
