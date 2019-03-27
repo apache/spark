@@ -475,7 +475,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(lines(1).contains("SparkListenerApplicationStart"))
       assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
       var logIdx = 1
-      events.foreach {event =>
+      events.foreach { event =>
         event match {
           case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
           case stageCompleted: SparkListenerStageCompleted =>
@@ -489,9 +489,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
             assert(execIds.size == 3) // check that each executor/driver was logged
             checkEvent(lines(logIdx), event)
             logIdx += 1
-        case _ =>
-          checkEvent(lines(logIdx), event)
-          logIdx += 1
+          case _ =>
+            checkEvent(lines(logIdx), event)
+            logIdx += 1
         }
       }
     } finally {
@@ -565,14 +565,14 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     (event, parsed) match {
       case (expected: SparkListenerStageSubmitted, actual: SparkListenerStageSubmitted) =>
         // accumulables can be different, so only check the stage Id
-        assert(expected.stageInfo.stageId == actual.stageInfo.stageId)
+        assert(expected.stageInfo.stageId === actual.stageInfo.stageId)
       case (expected: SparkListenerStageCompleted, actual: SparkListenerStageCompleted) =>
         // accumulables can be different, so only check the stage Id
-        assert(expected.stageInfo.stageId == actual.stageInfo.stageId)
+        assert(expected.stageInfo.stageId === actual.stageInfo.stageId)
       case (expected: SparkListenerTaskEnd, actual: SparkListenerTaskEnd) =>
         // taskInfo, taskExecutorMetrics, and taskMetrics will be different object references,
         // so only check stageId
-        assert(expected.stageId == actual.stageId)
+        assert(expected.stageId === actual.stageId)
       case (expected: SparkListenerEvent, actual: SparkListenerEvent) =>
         assert(expected === actual)
     }

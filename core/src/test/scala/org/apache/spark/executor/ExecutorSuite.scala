@@ -341,12 +341,7 @@ class ExecutorSuite extends SparkFunSuite
 
       // Ensure that the executor's metricsPoller is polled at least once so that values are
       // recorded for the task metrics
-      val executorClass = classOf[Executor]
-      val metricsPollerField =
-        executorClass.getDeclaredField("org$apache$spark$executor$Executor$$metricsPoller")
-      metricsPollerField.setAccessible(true)
-      val metricsPoller = metricsPollerField.get(executor).asInstanceOf[ExecutorMetricsPoller]
-      metricsPoller.poll()
+      executor.metricsPoller.poll()
       eventually(timeout(1.seconds), interval(10.milliseconds)) {
         assert(executor.numRunningTasks === 0)
       }
@@ -460,12 +455,7 @@ class ExecutorSuite extends SparkFunSuite
         // Ensure that the executor's metricsPoller is polled at least once so that values are
         // recorded for the task metrics.
         // When the task fails, peak values for these metrics get sent in the TaskFailedReason.
-        val executorClass = classOf[Executor]
-        val metricsPollerField =
-          executorClass.getDeclaredField("org$apache$spark$executor$Executor$$metricsPoller")
-        metricsPollerField.setAccessible(true)
-        val metricsPoller = metricsPollerField.get(executor).asInstanceOf[ExecutorMetricsPoller]
-        metricsPoller.poll()
+        executor.metricsPoller.poll()
       }
       if (killTask) {
         val killingThread = new Thread("kill-task") {

@@ -78,11 +78,10 @@ private[spark] class DirectTaskResult[T](
     if (numMetrics == 0) {
       metricPeaks = Array.empty
     } else {
-      val _metricPeaks = new ArrayBuffer[Long]
-      for (i <- 0 until numMetrics) {
-        _metricPeaks += in.readLong
+      metricPeaks = new Array[Long](numMetrics)
+      (0 until numMetrics).foreach { i =>
+        metricPeaks(i) = in.readLong
       }
-      metricPeaks = _metricPeaks.toArray
     }
     valueObjectDeserialized = false
   }

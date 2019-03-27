@@ -195,8 +195,8 @@ private[spark] class Executor(
 
   private val pollOnHeartbeat = if (METRICS_POLLING_INTERVAL_MS > 0) false else true
 
-  // Poller for the memory metrics.
-  private val metricsPoller = new ExecutorMetricsPoller(
+  // Poller for the memory metrics. Visible for testing.
+  private[executor] val metricsPoller = new ExecutorMetricsPoller(
     env.memoryManager,
     METRICS_POLLING_INTERVAL_MS)
 
@@ -225,7 +225,6 @@ private[spark] class Executor(
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
-    metricsPoller.onTaskLaunch(taskDescription.taskId)
     threadPool.execute(tr)
   }
 
@@ -400,6 +399,7 @@ private[spark] class Executor(
       var taskStartTimeNs: Long = 0
       var taskStartCpu: Long = 0
       startGCTime = computeTotalGcTime()
+      var taskStarted: Boolean = false
 
       try {
         // Must be set before updateDependencies() is called, in case fetching dependencies
@@ -434,7 +434,8 @@ private[spark] class Executor(
 
         val stageId = task.stageId
         val stageAttemptId = task.stageAttemptId
-        metricsPoller.onTaskStart(stageId, stageAttemptId)
+        metricsPoller.onTaskStart(taskId, stageId, stageAttemptId)
+        taskStarted = true
 
         // Run the actual task and measure its runtime.
         taskStartTimeNs = System.nanoTime()
@@ -581,7 +582,6 @@ private[spark] class Executor(
           }
         }
 
-        metricsPoller.onTaskCompletion(stageId, stageAttemptId)
         executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
@@ -664,7 +664,13 @@ private[spark] class Executor(
           }
       } finally {
         runningTasks.remove(taskId)
-        metricsPoller.onTaskCleanup(taskId)
+        if (taskStarted) {
+          // This means the task was successfully deserialized, the stageId and stageAttemptId
+          // are known, and metricsPoller.onTaskStart was called.
+          val stageId = task.stageId
+          val stageAttemptId = task.stageAttemptId
+          metricsPoller.onTaskCompletion(taskId, stageId, stageAttemptId)
+        }
       }
     }
 

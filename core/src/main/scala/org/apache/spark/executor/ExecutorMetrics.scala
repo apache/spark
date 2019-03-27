@@ -57,7 +57,7 @@ class ExecutorMetrics private[spark] extends Serializable {
   }
 
   /**
-   * Constructor: create the ExecutorMetrics with using a given map.
+   * Constructor: create the ExecutorMetrics using a given map.
    *
    * @param executorMetrics map of executor metric name to value
    */

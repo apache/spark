@@ -32,6 +32,12 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * :: DeveloperApi ::
  * A class that polls executor metrics, and tracks their peaks per task and per stage.
  * Each executor keeps an instance of this class.
+ * The poll method polls the executor metrics, and is either run in its own thread or
+ * called by the executor's heartbeater thread, depending on configuration.
+ * The class keeps two ConcurrentHashMaps that are accessed (via its methods) by the
+ * executor's task runner threads concurrently with the polling thread. One thread may
+ * update one of these maps while another reads it, so the reading thread may not get
+ * the latest metrics, but this is ok.
  *
  * @param memoryManager the memory manager used by the executor.
  * @param pollingInterval the polling interval in milliseconds.
@@ -54,7 +60,7 @@ private[spark] class ExecutorMetricsPoller(
 
   private val poller =
     if (pollingInterval > 0) {
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-poller")
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-metrics-poller")
     } else {
       null
     }
@@ -99,21 +105,16 @@ private[spark] class ExecutorMetricsPoller(
   }
 
   /**
-   * Called by Executor#launchTask.
-   *
-   * @param taskId the id of the task being launched.
-   */
-  def onTaskLaunch(taskId: Long): Unit = {
-    taskMetricPeaks.put(taskId, new AtomicLongArray(ExecutorMetricType.numMetrics))
-  }
-
-  /**
    * Called by TaskRunner#run.
    *
+   * @param taskId the id of the task being launched.
    * @param stageId the id of the stage the task belongs to.
    * @param stageAttemptId the attempt number of the stage the task belongs to.
    */
-  def onTaskStart(stageId: Int, stageAttemptId: Int): Unit = {
+  def onTaskStart(taskId: Long, stageId: Int, stageAttemptId: Int): Unit = {
+    // Put an entry in taskMetricPeaks for the task.
+    taskMetricPeaks.put(taskId, new AtomicLongArray(ExecutorMetricType.numMetrics))
+
     // Put a new entry in stageTCMP for the stage if there isn't one already.
     // Increment the task count.
     val (count, _) = stageTCMP.computeIfAbsent((stageId, stageAttemptId),
@@ -123,14 +124,16 @@ private[spark] class ExecutorMetricsPoller(
   }
 
   /**
-   * Called by TaskRunner#run.
+   * Called by TaskRunner#run. It should only be called if onTaskStart has been called with
+   * the same arguments.
    *
+   * @param taskId the id of the task that was run.
    * @param stageId the id of the stage the task belongs to.
    * @param stageAttemptId the attempt number of the stage the task belongs to.
    */
-  def onTaskCompletion(stageId: Int, stageAttemptId: Int): Unit = {
+  def onTaskCompletion(taskId: Long, stageId: Int, stageAttemptId: Int): Unit = {
     // Decrement the task count.
-    // Remove the entry from stageTCMP if the task count reaches zero
+    // Remove the entry from stageTCMP if the task count reaches zero.
 
     def decrementCount(stage: StageKey, countAndPeaks: TCMP): TCMP = {
       val count = countAndPeaks._1
@@ -145,14 +148,8 @@ private[spark] class ExecutorMetricsPoller(
     }
 
     stageTCMP.computeIfPresent((stageId, stageAttemptId), decrementCount)
-  }
 
-  /**
-   * Called by TaskRunner#run.
-   *
-   * @param taskId the id of the task that was run.
-   */
-  def onTaskCleanup(taskId: Long): Unit = {
+    // Remove the entry from taskMetricPeaks for the task.
     taskMetricPeaks.remove(taskId)
   }
 
@@ -180,16 +177,7 @@ private[spark] class ExecutorMetricsPoller(
   def getExecutorUpdates(): HashMap[StageKey, ExecutorMetrics] = {
     // build the executor level memory metrics
     val executorUpdates = new HashMap[StageKey, ExecutorMetrics]
-
-    def peaksForStage(k: StageKey, v: TCMP): (StageKey, AtomicLongArray) =
-      if (v._1.get() > 0) (k, v._2) else null
-
-    def addPeaks(nested: (StageKey, AtomicLongArray)): Unit = {
-      val (k, v) = nested
-      executorUpdates.put(k, new ExecutorMetrics(v))
-    }
-
-    stageTCMP.forEach[(StageKey, AtomicLongArray)](LONG_MAX_VALUE, peaksForStage, addPeaks)
+    stageTCMP.forEach((k, v) => executorUpdates.put(k, new ExecutorMetrics(v._2)))
 
     // reset the peaks
     def resetPeaks(k: StageKey, v: TCMP): TCMP =
