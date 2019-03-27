@@ -22,8 +22,9 @@ import java.net.URI
 import java.sql.{Date, Timestamp}
 
 import com.google.common.collect.{HashMultiset, Multiset}
-import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
 import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.{DebugFilesystem, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}

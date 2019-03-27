@@ -22,16 +22,10 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.DateTimeFormatter
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
-class CSVInferSchema(val options: CSVOptions) extends Serializable {
-
-  @transient
-  private lazy val timeParser = DateTimeFormatter(
-    options.timestampFormat,
-    options.timeZone,
-    options.locale)
+class CSVInferSchema(options: CSVOptions) extends Serializable {
 
   private val decimalParser = {
     ExprUtils.getDecimalParser(options.locale)
@@ -160,7 +154,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private def tryParseTimestamp(field: String): DataType = {
     // This case infers a custom `dataFormat` is set.
-    if ((allCatch opt timeParser.parse(field)).isDefined) {
+    if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
+      TimestampType
+    } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
+      // We keep this for backwards compatibility.
       TimestampType
     } else {
       tryParseBoolean(field)

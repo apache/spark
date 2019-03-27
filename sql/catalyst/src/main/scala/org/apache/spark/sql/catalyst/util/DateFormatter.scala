@@ -17,42 +17,15 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{Instant, ZoneId}
 import java.util.Locale
 
 import scala.util.Try
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.sql.internal.SQLConf
-
 sealed trait DateFormatter {
   def parse(s: String): Int // returns days since epoch
   def format(days: Int): String
-}
-
-class Iso8601DateFormatter(
-    pattern: String,
-    locale: Locale) extends DateFormatter with DateTimeFormatterHelper {
-
-  private val formatter = buildFormatter(pattern, locale)
-  private val UTC = ZoneId.of("UTC")
-
-  private def toInstant(s: String): Instant = {
-    val temporalAccessor = formatter.parse(s)
-    toInstantWithZoneId(temporalAccessor, UTC)
-  }
-
-  override def parse(s: String): Int = {
-    val seconds = toInstant(s).getEpochSecond
-    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
-    days.toInt
-  }
-
-  override def format(days: Int): String = {
-    val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)
-    formatter.withZone(UTC).format(instant)
-  }
 }
 
 class LegacyDateFormatter(pattern: String, locale: Locale) extends DateFormatter {
@@ -87,10 +60,6 @@ class LegacyFallbackDateFormatter(
 
 object DateFormatter {
   def apply(format: String, locale: Locale): DateFormatter = {
-    if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackDateFormatter(format, locale)
-    } else {
-      new Iso8601DateFormatter(format, locale)
-    }
+    new LegacyFallbackDateFormatter(format, locale)
   }
 }
