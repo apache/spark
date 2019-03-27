@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{Instant, ZoneId}
 import java.util.Locale
-import org.apache.commons.lang3.time.FastDateFormat
 
 import scala.util.Try
+
+import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
