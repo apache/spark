@@ -19,11 +19,9 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{Instant, ZoneId}
 import java.util.Locale
-
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToDays
-import scala.util.Try
-
 import org.apache.commons.lang3.time.FastDateFormat
+
+import scala.util.Try
 
 import org.apache.spark.sql.internal.SQLConf
 
@@ -45,7 +43,11 @@ class Iso8601DateFormatter(
     toInstantWithZoneId(temporalAccessor, UTC)
   }
 
-  override def parse(s: String): Int = instantToDays(toInstant(s))
+  override def parse(s: String): Int = {
+    val seconds = toInstant(s).getEpochSecond
+    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
+    days.toInt
+  }
 
   override def format(days: Int): String = {
     val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)

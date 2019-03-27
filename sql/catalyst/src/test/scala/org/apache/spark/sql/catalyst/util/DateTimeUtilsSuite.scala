@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.{Locale, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
@@ -31,6 +31,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
   val TimeZonePST = TimeZone.getTimeZone("PST")
   private def defaultTz = DateTimeUtils.defaultTimeZone()
+
+  private[this] def getInUTCDays(timestamp: Long): Int = {
+    val tz = TimeZone.getDefault
+    ((timestamp + tz.getOffset(timestamp)) / MILLIS_PER_DAY).toInt
+  }
 
   test("nanoseconds truncation") {
     val tf = TimestampFormatter(DateTimeUtils.defaultTimeZone())
@@ -118,10 +123,28 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("string to date") {
-    assert(stringToDate(UTF8String.fromString("2015-01-28")).get === days(2015, 1, 28))
-    assert(stringToDate(UTF8String.fromString("2015")).get === days(2015, 1, 1))
-    assert(stringToDate(UTF8String.fromString("0001")).get === days(1, 1, 1))
-    assert(stringToDate(UTF8String.fromString("2015-03")).get === days(2015, 3, 1))
+
+    var c = Calendar.getInstance()
+    c.set(2015, 0, 28, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToDate(UTF8String.fromString("2015-01-28")).get ===
+      millisToDays(c.getTimeInMillis))
+    c.set(2015, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToDate(UTF8String.fromString("2015")).get ===
+      millisToDays(c.getTimeInMillis))
+    c.set(1, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToDate(UTF8String.fromString("0001")).get ===
+      millisToDays(c.getTimeInMillis))
+    c = Calendar.getInstance()
+    c.set(2015, 2, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToDate(UTF8String.fromString("2015-03")).get ===
+      millisToDays(c.getTimeInMillis))
+    c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
     Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
       "2015-03-18T123123", "2015-03-18T").foreach { s =>
       assert(stringToDate(UTF8String.fromString(s)).get === days(2015, 3, 18))
@@ -138,15 +161,59 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
   }
 
+  test("string to time") {
+    // Tests with UTC.
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-00:00") === c.getTime())
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30T10:00:00Z") === c.getTime())
+
+    // Tests with set time zone.
+    c.setTimeZone(TimeZone.getTimeZone("GMT-04:00"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00-04:00") === c.getTime())
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-04:00") === c.getTime())
+
+    // Tests with local time zone.
+    c.setTimeZone(TimeZone.getDefault())
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(2000, 11, 30, 0, 0, 0)
+    assert(stringToTime("2000-12-30") === new Date(c.getTimeInMillis()))
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30 10:00:00") === new Timestamp(c.getTimeInMillis()))
+  }
+
   test("string to timestamp") {
     for (tz <- ALL_TIMEZONES) {
       def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
         assert(stringToTimestamp(UTF8String.fromString(str), tz) === expected)
       }
 
-      checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, tz = tz)))
-      checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, tz = tz)))
-      checkStringToTimestamp("2015-03", Option(date(2015, 3, 1, tz = tz)))
+      var c = Calendar.getInstance(tz)
+      c.set(1969, 11, 31, 16, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("1969-12-31 16:00:00", Option(c.getTimeInMillis * 1000))
+      c.set(1, 0, 1, 0, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("0001", Option(c.getTimeInMillis * 1000))
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 1, 0, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("2015-03", Option(c.getTimeInMillis * 1000))
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 18, 0, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+
       Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
         checkStringToTimestamp(s, Option(date(2015, 3, 18, tz = tz)))
       }
@@ -308,45 +375,73 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("get day in year") {
-    assert(getDayInYear(days(2015, 3, 18)) === 77)
-    assert(getDayInYear(days(2012, 3, 18)) === 78)
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 77)
+    c.set(2012, 2, 18, 0, 0, 0)
+    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 78)
   }
 
-  test("day of year calculations for old years") {
-    assert(getDayInYear(days(1582, 3)) === 60)
-
-    (1000 to 1600 by 10).foreach { year =>
+  test("SPARK-26002: correct day of year calculations for Julian calendar years") {
+    val c = Calendar.getInstance()
+    c.set(Calendar.MILLISECOND, 0)
+    (1000 to 1600 by 100).foreach { year =>
       // January 1 is the 1st day of year.
-      assert(getYear(days(year)) === year)
-      assert(getMonth(days(year, 1)) === 1)
-      assert(getDayInYear(days(year, 1, 1)) === 1)
+      c.set(year, 0, 1, 0, 0, 0)
+      assert(getYear(getInUTCDays(c.getTimeInMillis)) === year)
+      assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 1)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 1)
 
-      // December 31 is the 1st day of year.
-      val date = days(year, 12, 31)
-      assert(getYear(date) === year)
-      assert(getMonth(date) === 12)
-      assert(getDayOfMonth(date) === 31)
+      // March 1 is the 61st day of the year as they are leap years. It is true for
+      // even the multiples of 100 as before 1582-10-4 the Julian calendar leap year calculation
+      // is used in which every multiples of 4 are leap years
+      c.set(year, 2, 1, 0, 0, 0)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 61)
+      assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 3)
+
+      // testing leap day (February 29) in leap years
+      c.set(year, 1, 29, 0, 0, 0)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
+
+      // For non-leap years:
+      c.set(year + 1, 2, 1, 0, 0, 0)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
     }
+
+    c.set(1582, 2, 1, 0, 0, 0)
+    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
   }
 
   test("get year") {
-    assert(getYear(days(2015, 2, 18)) === 2015)
-    assert(getYear(days(2012, 2, 18)) === 2012)
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    assert(getYear(getInUTCDays(c.getTimeInMillis)) === 2015)
+    c.set(2012, 2, 18, 0, 0, 0)
+    assert(getYear(getInUTCDays(c.getTimeInMillis)) === 2012)
   }
 
   test("get quarter") {
-    assert(getQuarter(days(2015, 2, 18)) === 1)
-    assert(getQuarter(days(2012, 11, 18)) === 4)
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    assert(getQuarter(getInUTCDays(c.getTimeInMillis)) === 1)
+    c.set(2012, 11, 18, 0, 0, 0)
+    assert(getQuarter(getInUTCDays(c.getTimeInMillis)) === 4)
   }
 
   test("get month") {
-    assert(getMonth(days(2015, 3, 18)) === 3)
-    assert(getMonth(days(2012, 12, 18)) === 12)
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 3)
+    c.set(2012, 11, 18, 0, 0, 0)
+    assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 12)
   }
 
   test("get day of month") {
-    assert(getDayOfMonth(days(2015, 3, 18)) === 18)
-    assert(getDayOfMonth(days(2012, 12, 24)) === 24)
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    assert(getDayOfMonth(getInUTCDays(c.getTimeInMillis)) === 18)
+    c.set(2012, 11, 24, 0, 0, 0)
+    assert(getDayOfMonth(getInUTCDays(c.getTimeInMillis)) === 24)
   }
 
   test("date add months") {
