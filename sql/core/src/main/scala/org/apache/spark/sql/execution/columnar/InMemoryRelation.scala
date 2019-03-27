@@ -65,7 +65,7 @@ case class CachedRDDBuilder(
     _cachedColumnBuffers
   }
 
-  def clearCache(blocking: Boolean = true): Unit = {
+  def clearCache(blocking: Boolean = false): Unit = {
     if (_cachedColumnBuffers != null) {
       synchronized {
         if (_cachedColumnBuffers != null) {
