@@ -20,10 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
-import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -147,7 +145,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.MILLISECOND, 0)
     Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
       "2015-03-18T123123", "2015-03-18T").foreach { s =>
-      assert(stringToDate(UTF8String.fromString(s)).get === days(2015, 3, 18))
+      assert(stringToDate(UTF8String.fromString(s)).get === millisToDays(c.getTimeInMillis))
     }
 
     assert(stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
@@ -194,7 +192,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("string to timestamp") {
-    for (tz <- ALL_TIMEZONES) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
         assert(stringToTimestamp(UTF8String.fromString(str), tz) === expected)
       }
@@ -215,83 +213,112 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       c.set(Calendar.MILLISECOND, 0)
 
       Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
-        checkStringToTimestamp(s, Option(date(2015, 3, 18, tz = tz)))
+        checkStringToTimestamp(s, Option(c.getTimeInMillis * 1000))
       }
 
-      var expected = Option(date(2015, 3, 18, 12, 3, 17, tz = tz))
-      checkStringToTimestamp("2015-03-18 12:03:17", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17", expected)
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("2015-03-18 12:03:17", Option(c.getTimeInMillis * 1000))
+      checkStringToTimestamp("2015-03-18T12:03:17", Option(c.getTimeInMillis * 1000))
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the tz parameter.
-      var timeZone = TimeZone.getTimeZone("GMT-13:53")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17-13:53", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-13:53"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("2015-03-18T12:03:17-13:53", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("UTC")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17Z", expected)
-      checkStringToTimestamp("2015-03-18 12:03:17Z", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("2015-03-18T12:03:17Z", Option(c.getTimeInMillis * 1000))
+      checkStringToTimestamp("2015-03-18 12:03:17Z", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT-01:00")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17-1:0", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17-01:00", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("2015-03-18T12:03:17-1:0", Option(c.getTimeInMillis * 1000))
+      checkStringToTimestamp("2015-03-18T12:03:17-01:00", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17+07:30", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("2015-03-18T12:03:17+07:30", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:03")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17+07:03", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("2015-03-18T12:03:17+07:03", Option(c.getTimeInMillis * 1000))
 
       // tests for the string including milliseconds.
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = tz))
-      checkStringToTimestamp("2015-03-18 12:03:17.123", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123", expected)
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp("2015-03-18 12:03:17.123", Option(c.getTimeInMillis * 1000))
+      checkStringToTimestamp("2015-03-18T12:03:17.123", Option(c.getTimeInMillis * 1000))
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the tz parameter.
-      timeZone = TimeZone.getTimeZone("UTC")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 456000, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17.456Z", expected)
-      checkStringToTimestamp("2015-03-18 12:03:17.456Z", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 456)
+      checkStringToTimestamp("2015-03-18T12:03:17.456Z", Option(c.getTimeInMillis * 1000))
+      checkStringToTimestamp("2015-03-18 12:03:17.456Z", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT-01:00")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17.123-1:0", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123-01:00", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp("2015-03-18T12:03:17.123-1:0", Option(c.getTimeInMillis * 1000))
+      checkStringToTimestamp("2015-03-18T12:03:17.123-01:00", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123121, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17.123121+7:30", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp(
+        "2015-03-18T12:03:17.123121+7:30", Option(c.getTimeInMillis * 1000 + 121))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123120, tz = timeZone))
-      checkStringToTimestamp("2015-03-18T12:03:17.12312+7:30", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp(
+        "2015-03-18T12:03:17.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
 
-      expected = Option(time(18, 12, 15, tz = tz))
-      checkStringToTimestamp("18:12:15", expected)
+      c = Calendar.getInstance(tz)
+      c.set(Calendar.HOUR_OF_DAY, 18)
+      c.set(Calendar.MINUTE, 12)
+      c.set(Calendar.SECOND, 15)
+      c.set(Calendar.MILLISECOND, 0)
+      checkStringToTimestamp("18:12:15", Option(c.getTimeInMillis * 1000))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(time(18, 12, 15, 123120, tz = timeZone))
-      checkStringToTimestamp("T18:12:15.12312+7:30", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(Calendar.HOUR_OF_DAY, 18)
+      c.set(Calendar.MINUTE, 12)
+      c.set(Calendar.SECOND, 15)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp("T18:12:15.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(time(18, 12, 15, 123120, tz = timeZone))
-      checkStringToTimestamp("18:12:15.12312+7:30", expected)
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(Calendar.HOUR_OF_DAY, 18)
+      c.set(Calendar.MINUTE, 12)
+      c.set(Calendar.SECOND, 15)
+      c.set(Calendar.MILLISECOND, 123)
+      checkStringToTimestamp("18:12:15.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
 
-      expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, tz = tz))
-      checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
+      c = Calendar.getInstance(tz)
+      c.set(2011, 4, 6, 7, 8, 9)
+      c.set(Calendar.MILLISECOND, 100)
+      checkStringToTimestamp("2011-05-06 07:08:09.1000", Option(c.getTimeInMillis * 1000))
 
       checkStringToTimestamp("238", None)
       checkStringToTimestamp("00238", None)
@@ -309,10 +336,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
 
       // Truncating the fractional seconds
-      timeZone = TimeZone.getTimeZone("GMT+00:00")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, tz = timeZone))
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
       checkStringToTimestamp(
-        "2015-03-18T12:03:17.123456789+0:00", expected)
+        "2015-03-18T12:03:17.123456789+0:00", Option(c.getTimeInMillis * 1000 + 123456))
     }
   }
 
@@ -336,32 +364,35 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("hours") {
-    var input = date(2015, 3, 18, 13, 2, 11, 0, TimeZonePST)
-    assert(getHours(input, TimeZonePST) === 13)
-    assert(getHours(input, TimeZoneGMT) === 20)
-    input = date(2015, 12, 8, 2, 7, 9, 0, TimeZonePST)
-    assert(getHours(input, TimeZonePST) === 2)
-    assert(getHours(input, TimeZoneGMT) === 10)
+    val c = Calendar.getInstance(TimeZonePST)
+    c.set(2015, 2, 18, 13, 2, 11)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZonePST) === 13)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZoneGMT) === 20)
+    c.set(2015, 12, 8, 2, 7, 9)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZonePST) === 2)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZoneGMT) === 10)
   }
 
   test("minutes") {
-    var input = date(2015, 3, 18, 13, 2, 11, 0, TimeZonePST)
-    assert(getMinutes(input, TimeZonePST) === 2)
-    assert(getMinutes(input, TimeZoneGMT) === 2)
-    assert(getMinutes(input, TimeZone.getTimeZone("Australia/North")) === 32)
-    input = date(2015, 3, 8, 2, 7, 9, 0, TimeZonePST)
-    assert(getMinutes(input, TimeZonePST) === 7)
-    assert(getMinutes(input, TimeZoneGMT) === 7)
-    assert(getMinutes(input, TimeZone.getTimeZone("Australia/North")) === 37)
+    val c = Calendar.getInstance(TimeZonePST)
+    c.set(2015, 2, 18, 13, 2, 11)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZonePST) === 2)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZoneGMT) === 2)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZone.getTimeZone("Australia/North")) === 32)
+    c.set(2015, 2, 8, 2, 7, 9)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZonePST) === 7)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZoneGMT) === 7)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZone.getTimeZone("Australia/North")) === 37)
   }
 
   test("seconds") {
-    var input = date(2015, 3, 18, 13, 2, 11, 0, TimeZonePST)
-    assert(getSeconds(input, TimeZonePST) === 11)
-    assert(getSeconds(input, TimeZoneGMT) === 11)
-    input = date(2015, 3, 8, 2, 7, 9, 0, TimeZonePST)
-    assert(getSeconds(input, TimeZonePST) === 9)
-    assert(getSeconds(input, TimeZoneGMT) === 9)
+    val c = Calendar.getInstance(TimeZonePST)
+    c.set(2015, 2, 18, 13, 2, 11)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZonePST) === 11)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZoneGMT) === 11)
+    c.set(2015, 2, 8, 2, 7, 9)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZonePST) === 9)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZoneGMT) === 9)
   }
 
   test("hours / minutes / seconds") {
@@ -445,42 +476,78 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("date add months") {
-    val input = days(1997, 2, 28, 10, 30)
-    assert(dateAddMonths(input, 36) === days(2000, 2, 29))
-    assert(dateAddMonths(input, -13) === days(1996, 1, 31))
+    val c1 = Calendar.getInstance()
+    c1.set(1997, 1, 28, 10, 30, 0)
+    val days1 = millisToDays(c1.getTimeInMillis)
+    val c2 = Calendar.getInstance()
+    c2.set(2000, 1, 29)
+    assert(dateAddMonths(days1, 36) === millisToDays(c2.getTimeInMillis))
+    c2.set(1996, 0, 31)
+    assert(dateAddMonths(days1, -13) === millisToDays(c2.getTimeInMillis))
   }
 
   test("timestamp add months") {
-    val ts1 = date(1997, 2, 28, 10, 30, 0)
-    val ts2 = date(2000, 2, 29, 10, 30, 0, 123000)
-    assert(timestampAddInterval(ts1, 36, 123000, defaultTz) === ts2)
+    val c1 = Calendar.getInstance()
+    c1.set(1997, 1, 28, 10, 30, 0)
+    c1.set(Calendar.MILLISECOND, 0)
+    val ts1 = c1.getTimeInMillis * 1000L
+    val c2 = Calendar.getInstance()
+    c2.set(2000, 1, 29, 10, 30, 0)
+    c2.set(Calendar.MILLISECOND, 123)
+    val ts2 = c2.getTimeInMillis * 1000L
+    assert(timestampAddInterval(ts1, 36, 123000, defaultTimeZone()) === ts2)
 
-    val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
-    val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
-    val ts5 = date(2000, 2, 29, 0, 0, 0, 123000, TimeZoneGMT)
+    val c3 = Calendar.getInstance(TimeZonePST)
+    c3.set(1997, 1, 27, 16, 0, 0)
+    c3.set(Calendar.MILLISECOND, 0)
+    val ts3 = c3.getTimeInMillis * 1000L
+    val c4 = Calendar.getInstance(TimeZonePST)
+    c4.set(2000, 1, 27, 16, 0, 0)
+    c4.set(Calendar.MILLISECOND, 123)
+    val ts4 = c4.getTimeInMillis * 1000L
+    val c5 = Calendar.getInstance(TimeZoneGMT)
+    c5.set(2000, 1, 29, 0, 0, 0)
+    c5.set(Calendar.MILLISECOND, 123)
+    val ts5 = c5.getTimeInMillis * 1000L
     assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST) === ts4)
     assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT) === ts5)
   }
 
   test("monthsBetween") {
-    val date1 = date(1997, 2, 28, 10, 30, 0)
-    var date2 = date(1996, 10, 30)
-    assert(monthsBetween(date1, date2, true, TimeZoneUTC) === 3.94959677)
-    assert(monthsBetween(date1, date2, false, TimeZoneUTC) === 3.9495967741935485)
+    val c1 = Calendar.getInstance()
+    c1.set(1997, 1, 28, 10, 30, 0)
+    val c2 = Calendar.getInstance()
+    c2.set(1996, 9, 30, 0, 0, 0)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, true, c1.getTimeZone) === 3.94959677)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, false, c1.getTimeZone)
+      === 3.9495967741935485)
     Seq(true, false).foreach { roundOff =>
-      date2 = date(2000, 2, 28)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === -36)
-      date2 = date(2000, 2, 29)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === -36)
-      date2 = date(1996, 3, 31)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === 11)
+      c2.set(2000, 1, 28, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(2000, 1, 29, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(1996, 2, 31, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === 11)
     }
 
-    val date3 = date(2000, 2, 28, 16, tz = TimeZonePST)
-    val date4 = date(1997, 2, 28, 16, tz = TimeZonePST)
-    assert(monthsBetween(date3, date4, true, TimeZonePST) === 36.0)
-    assert(monthsBetween(date3, date4, true, TimeZoneGMT) === 35.90322581)
-    assert(monthsBetween(date3, date4, false, TimeZoneGMT) === 35.903225806451616)
+    val c3 = Calendar.getInstance(TimeZonePST)
+    c3.set(2000, 1, 28, 16, 0, 0)
+    val c4 = Calendar.getInstance(TimeZonePST)
+    c4.set(1997, 1, 28, 16, 0, 0)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZonePST)
+      === 36.0)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZoneGMT)
+      === 35.90322581)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, false, TimeZoneGMT)
+        === 35.903225806451616)
   }
 
   test("from UTC timestamp") {
@@ -488,8 +555,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-    for (tz <- ALL_TIMEZONES) {
-      withDefaultTimeZone(tz) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
         test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
         test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
         test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
@@ -497,7 +564,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       }
     }
 
-    withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
       // Daylight Saving Time
       test("2016-03-13 09:59:59.0", "PST", "2016-03-13 01:59:59.0")
       test("2016-03-13 10:00:00.0", "PST", "2016-03-13 03:00:00.0")
@@ -513,8 +580,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         === expected)
     }
 
-    for (tz <- ALL_TIMEZONES) {
-      withDefaultTimeZone(tz) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
         test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
         test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
         test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
@@ -522,7 +589,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       }
     }
 
-    withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
       // Daylight Saving Time
       test("2016-03-13 01:59:59", "PST", "2016-03-13 09:59:59.0")
       // 2016-03-13 02:00:00 PST does not exists
@@ -575,8 +642,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", defaultInputTS1.get)
     testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", defaultInputTS2.get)
 
-    for (tz <- ALL_TIMEZONES) {
-      withDefaultTimeZone(tz) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
         val inputTS = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("2015-03-05T09:32:05.359"), defaultTz)
         val inputTS1 = DateTimeUtils.stringToTimestamp(
@@ -607,15 +674,20 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("daysToMillis and millisToDays") {
-    val input = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, 16, tz = TimeZonePST))
-    assert(millisToDays(input, TimeZonePST) === 16800)
-    assert(millisToDays(input, TimeZoneGMT) === 16801)
+    val c = Calendar.getInstance(TimeZonePST)
 
-    var expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZonePST))
-    assert(daysToMillis(16800, TimeZonePST) === expected)
+    c.set(2015, 11, 31, 16, 0, 0)
+    assert(millisToDays(c.getTimeInMillis, TimeZonePST) === 16800)
+    assert(millisToDays(c.getTimeInMillis, TimeZoneGMT) === 16801)
 
-    expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZoneGMT))
-    assert(daysToMillis(16800, TimeZoneGMT) === expected)
+    c.set(2015, 11, 31, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(daysToMillis(16800, TimeZonePST) === c.getTimeInMillis)
+
+    c.setTimeZone(TimeZoneGMT)
+    c.set(2015, 11, 31, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(daysToMillis(16800, TimeZoneGMT) === c.getTimeInMillis)
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
@@ -626,7 +698,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       "Pacific/Kiritimati" -> Set(9130, 9131),
       "Pacific/Kwajalein" -> Set(8632),
       "MIT" -> Set(15338))
-    for (tz <- ALL_TIMEZONES) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
       (-20000 to 20000).foreach { d =>
         if (!skipped.contains(d)) {
