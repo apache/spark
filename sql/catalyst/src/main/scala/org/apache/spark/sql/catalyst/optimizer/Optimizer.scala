@@ -886,8 +886,15 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       left: LogicalPlan,
       right: LogicalPlan,
       conditionOpt: Option[Expression]): Set[Expression] = {
-    val baseConstraints = left.constraints.union(right.constraints)
-      .union(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil).toSet)
+    val conjunctivePredicates = conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil).toSet
+    val inferMorePredicates = conjunctivePredicates.flatMap {
+      case or @ Or(_, _) =>
+        commonPredicatesInOr(or)
+        .filter(c => canEvaluate(c, left) || canEvaluate(c, right))
+      case c => Seq(c)
+    }
+
+    val baseConstraints = left.constraints.union(right.constraints).union(inferMorePredicates)
     baseConstraints.union(inferAdditionalConstraints(baseConstraints))
   }
 
@@ -902,6 +909,50 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
+  }
+
+  /**
+   * for example, A join B, condition is
+   * (
+   *  (
+   *   x = y && (a IN (HZ,BJ) && (b >= 0)) && (b <= 20)
+   *  )
+   *  ||
+   *  (
+   *   x && y && (a IN (SH,SZ) && (b >= 15)) && (b <= 30)
+   *  )
+   * )
+   * ===> infer two predicates which can be push down
+   * 1) a IN (VA,TX,IA) || a IN (VA,TX,IA)
+   * 2) ((b >= 0) && (b <= 20)) || ((b >= 15) && (b <= 30))
+   * then, 1) can be pushed to table A and 2) can be pushed to table B
+   */
+  private def commonPredicatesInOr(e: Expression): Seq[Expression] = {
+    e match {
+      case Or(l, r) =>
+        val left = commonPredicatesInOr(l)
+        val right = commonPredicatesInOr(r)
+        val commonPredicates = left.filter(p => right.exists(_.references == p.references))
+        if (commonPredicates.nonEmpty) {
+          commonPredicates.map { e =>
+            (Seq(e) ++ right.filter(_.references == e.references)).reduce(Or)
+          }
+        } else {
+          Seq()
+        }
+      case And(l, r) =>
+        val p = splitConjunctivePredicates(l) ++ splitConjunctivePredicates(r)
+        processAndPredicates(p)
+      case _ => Seq(e)
+    }
+  }
+
+  private def processAndPredicates(es: Seq[Expression]): Seq[Expression] = {
+    if (es.size > 1) {
+      val (first, rest) = es.splitAt(1)
+      val (hold, other) = rest.partition(_.references == first.head.references)
+      Seq((first ++ hold).reduce(And)) ++ processAndPredicates(other)
+    } else es
   }
 }
 

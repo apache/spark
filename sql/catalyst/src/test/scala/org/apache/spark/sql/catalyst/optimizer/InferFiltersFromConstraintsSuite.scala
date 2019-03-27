@@ -40,6 +40,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
 
   private def testConstraintsAfterJoin(
       x: LogicalPlan,
@@ -262,5 +263,52 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
+  }
+
+  test("infer filters from inner join disjunctive condition") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation2.subquery('t2)
+
+    val originalQuery = t1
+      .join(t2, Inner, Some(
+        ('a === 'd && 'b === 1 && 'e === 3) || ('a === 'd && 'b === 5 && 'e === 7)))
+      .analyze
+    val correctAnswer = t1
+      .where(('b === 1 || 'b === 5) && IsNotNull('a))
+      .join(t2.where(IsNotNull('d) && ('e === 3 || 'e === 7)), Inner,
+        Some(('a === 'd) && (('b === 1 && 'e === 3) || ('b === 5 && 'e === 7))))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("infer filters from outer join disjunctive condition") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation2.subquery('t2)
+
+    // left outer join
+    val originalQuery = t1
+      .join(t2, LeftOuter, Some(
+        ('a === 'd && 'b === 1 && 'e === 3) || ('a === 'd && 'b === 5 && 'e === 7)))
+      .analyze
+    val correctAnswer = t1
+      .join(t2.where(IsNotNull('d) && ('e === 3 || 'e === 7)), LeftOuter,
+        Some(('a === 'd) && (('b === 1 && 'e === 3) || ('b === 5 && 'e === 7))))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+
+    // right outer join
+    val originalQuery1 = t1
+      .join(t2, RightOuter, Some(
+        ('a === 'd && 'b === 1 && 'e === 3) || ('a === 'd && 'b === 5 && 'e === 7)))
+      .analyze
+    val correctAnswer1 = t1
+      .where(('b === 1 || 'b === 5) && IsNotNull('a))
+      .join(t2, RightOuter,
+        Some(('a === 'd) && (('b === 1 && 'e === 3) || ('b === 5 && 'e === 7))))
+      .analyze
+    val optimized1 = Optimize.execute(originalQuery1)
+    comparePlans(optimized1, correctAnswer1)
   }
 }
