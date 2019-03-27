@@ -1301,11 +1301,13 @@ def from_utc_timestamp(timestamp, tz):
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.
 
+    >>> spark.conf.set("spark.sql.legacy.utcTimestampFunc.enabled", "true")
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
+    >>> spark.conf.unset("spark.sql.legacy.utcTimestampFunc.enabled")
     """
     sc = SparkContext._active_spark_context
     if isinstance(tz, Column):
@@ -1335,11 +1337,13 @@ def to_utc_timestamp(timestamp, tz):
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.
 
+    >>> spark.conf.set("spark.sql.legacy.utcTimestampFunc.enabled", "true")
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
+    >>> spark.conf.unset("spark.sql.legacy.utcTimestampFunc.enabled")
     """
     sc = SparkContext._active_spark_context
     if isinstance(tz, Column):
