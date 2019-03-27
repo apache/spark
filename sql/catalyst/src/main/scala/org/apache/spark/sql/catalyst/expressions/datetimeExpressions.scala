@@ -612,14 +612,9 @@ case class ToUnixTimestamp(
 }
 
 /**
-<<<<<<< HEAD
- * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
- * See [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
-=======
  * Converts time string with given pattern.
  * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
  * to Unix time stamp (in seconds), returns null if fail.
->>>>>>> parent of 7c7fccfeb5... [SPARK-26424][SQL] Use java.time API in date/timestamp expressions
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
