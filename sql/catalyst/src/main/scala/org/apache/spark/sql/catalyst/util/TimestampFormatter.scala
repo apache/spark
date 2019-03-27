@@ -42,7 +42,7 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
-  def parse(s: String): Long
+  def parse(s: String): Long // returns microseconds since epoch
   def format(us: Long): String
 }
 
@@ -105,22 +105,11 @@ class LegacyFallbackTimestampFormatter(
 }
 
 object TimestampFormatter {
-  val defaultPattern: String = "yyyy-MM-dd HH:mm:ss"
-  val defaultLocale: Locale = Locale.US
-
   def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
       new LegacyFallbackTimestampFormatter(format, timeZone, locale)
     } else {
       new Iso8601TimestampFormatter(format, timeZone, locale)
     }
-  }
-
-  def apply(format: String, timeZone: TimeZone): TimestampFormatter = {
-    apply(format, timeZone, defaultLocale)
-  }
-
-  def apply(timeZone: TimeZone): TimestampFormatter = {
-    apply(defaultPattern, timeZone, defaultLocale)
   }
 }
