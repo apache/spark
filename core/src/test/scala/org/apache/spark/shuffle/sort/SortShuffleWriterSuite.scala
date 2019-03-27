@@ -52,11 +52,11 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
     }
   }
 
-  override def afterEach(): Unit = {
+  override def afterAll(): Unit = {
     try {
       shuffleBlockResolver.stop()
     } finally {
-      super.afterEach()
+      super.afterAll()
     }
   }
 
