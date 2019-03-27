@@ -28,6 +28,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -831,9 +832,11 @@ private[spark] class Executor(
     }
 
     val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
+    val heartbeatIntervalInSec =
+      conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s").millis.toSeconds.seconds
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
-          message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
+          message, new RpcTimeout(heartbeatIntervalInSec, "spark.executor.heartbeatInterval"))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
