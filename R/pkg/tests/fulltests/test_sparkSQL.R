@@ -1909,18 +1909,19 @@ test_that("date functions on a DataFrame", {
   isUtcTimestampFuncEnabled <- callJMethod(conf, "get", "spark.sql.legacy.utcTimestampFunc.enabled")
   callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", "true")
   tryCatch({
-    expect_equal(collect(select(df2, from_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
-    expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
-    expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
-    expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
-    expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
+    # Both from_utc_timestamp and to_utc_timestamp are deprecated as of SPARK-25496
+    expect_equal(suppressWarnings(collect(select(df2, from_utc_timestamp(df2$b, "JST"))))[, 1],
+                 c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
+    expect_equal(suppressWarnings(collect(select(df2, to_utc_timestamp(df2$b, "JST"))))[, 1],
+                 c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
   },
   finally = {
     # Reverting the conf back
     callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", isUtcTimestampFuncEnabled)
   })
+  expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
   expect_equal(collect(select(df2, month(date_trunc("yyyy", df2$b))))[, 1], c(1, 1))
 
   l3 <- list(list(a = 1000), list(a = -1000))
