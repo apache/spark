@@ -29,8 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalP
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
-import org.apache.spark.sql.sources.v2.reader.streaming.{BaseStreamingSource, MicroBatchStream}
-import org.apache.spark.sql.sources.v2.writer.streaming.BaseStreamingSink
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock

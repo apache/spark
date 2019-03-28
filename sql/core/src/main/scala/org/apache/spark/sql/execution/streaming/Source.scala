@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.sources.v2.reader.streaming.BaseStreamingSource
 import org.apache.spark.sql.types.StructType
 
 /**

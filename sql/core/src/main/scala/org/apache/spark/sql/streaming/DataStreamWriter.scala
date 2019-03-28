@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, TableProvider}
-import org.apache.spark.sql.sources.v2.writer.streaming.BaseStreamingSink
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**

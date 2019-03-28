@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
-import org.apache.spark.sql.sources.v2.writer.streaming.BaseStreamingSink
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**

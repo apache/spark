@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.streaming;
+package org.apache.spark.sql.execution.streaming;
 
 /**
  * The shared interface between V1 streaming sources and V2 streaming readers.

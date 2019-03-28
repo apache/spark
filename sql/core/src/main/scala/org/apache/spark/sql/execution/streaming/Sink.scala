@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.sources.v2.writer.streaming.BaseStreamingSink
 
 /**
  * An interface for systems that can collect the results of a streaming query. In order to preserve

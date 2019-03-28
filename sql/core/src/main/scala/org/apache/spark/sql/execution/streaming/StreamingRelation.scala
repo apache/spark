@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Stati
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.sources.v2.{Table, TableProvider}
-import org.apache.spark.sql.sources.v2.reader.streaming.BaseStreamingSource
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object StreamingRelation {

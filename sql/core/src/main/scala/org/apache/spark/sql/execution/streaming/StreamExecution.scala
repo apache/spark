@@ -41,9 +41,8 @@ import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
-import org.apache.spark.sql.sources.v2.reader.streaming.BaseStreamingSource
 import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
-import org.apache.spark.sql.sources.v2.writer.streaming.{BaseStreamingSink, StreamingWrite}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
