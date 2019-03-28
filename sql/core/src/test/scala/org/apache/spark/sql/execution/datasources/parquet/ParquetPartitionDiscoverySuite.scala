@@ -32,7 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -56,8 +56,6 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   val timeZone = TimeZone.getDefault()
   val timeZoneId = timeZone.getID
-  val df = DateFormatter()
-  val tf = TimestampFormatter(timestampPartitionPattern, timeZone)
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -71,7 +69,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   test("column type inference") {
     def check(raw: String, literal: Literal, timeZone: TimeZone = timeZone): Unit = {
-      assert(inferPartitionColumnValue(raw, true, timeZone, df, tf) === literal)
+      assert(inferPartitionColumnValue(raw, true, timeZone) === literal)
     }
 
     check("10", Literal.create(10, IntegerType))
@@ -199,13 +197,13 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   test("parse partition") {
     def check(path: String, expected: Option[PartitionValues]): Unit = {
       val actual = parsePartition(new Path(path), true, Set.empty[Path],
-        Map.empty, true, timeZone, df, tf)._1
+        Map.empty, true, timeZone)._1
       assert(expected === actual)
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), true, Set.empty[Path], Map.empty, true, timeZone, df, tf)
+        parsePartition(new Path(path), true, Set.empty[Path], Map.empty, true, timeZone)
       }.getMessage
 
       assert(message.contains(expected))
@@ -251,9 +249,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       basePaths = Set(new Path("file://path/a=10")),
       Map.empty,
       true,
-      timeZone = timeZone,
-      df,
-      tf)._1
+      timeZone = timeZone)._1
 
     assert(partitionSpec1.isEmpty)
 
@@ -264,9 +260,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       basePaths = Set(new Path("file://path")),
       Map.empty,
       true,
-      timeZone = timeZone,
-      df,
-      tf)._1
+      timeZone = timeZone)._1
 
     assert(partitionSpec2 ==
       Option(PartitionValues(
