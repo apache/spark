@@ -829,7 +829,7 @@ private[spark] class TaskSchedulerImpl(
    * thread-safe -- it can be called without a lock on the TaskScheduler.
    */
   def nodeBlacklist(): Set[String] = {
-    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
+    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(Set.empty)
   }
 
   // By default, rack is unknown
