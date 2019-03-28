@@ -287,8 +287,6 @@ _window_functions = {
 
 # Wraps deprecated functions (keys) with the messages (values).
 _functions_deprecated = {
-    'from_utc_timestamp': 'Deprecated in 3.0.',
-    'to_utc_timestamp': 'Deprecated in 3.0.',
 }
 
 for _name, _doc in _functions.items():
@@ -1303,14 +1301,15 @@ def from_utc_timestamp(timestamp, tz):
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.
 
-    >>> spark.conf.set("spark.sql.legacy.utcTimestampFunc.enabled", "true")
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
-    >>> spark.conf.unset("spark.sql.legacy.utcTimestampFunc.enabled")
+
+    .. note:: Deprecated in 3.0. See SPARK-25496
     """
+    warnings.warn("Deprecated in 3.0. See SPARK-25496", DeprecationWarning)
     sc = SparkContext._active_spark_context
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
@@ -1339,14 +1338,15 @@ def to_utc_timestamp(timestamp, tz):
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.
 
-    >>> spark.conf.set("spark.sql.legacy.utcTimestampFunc.enabled", "true")
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
-    >>> spark.conf.unset("spark.sql.legacy.utcTimestampFunc.enabled")
+
+    .. note:: Deprecated in 3.0. See SPARK-25496
     """
+    warnings.warn("Deprecated in 3.0. See SPARK-25496", DeprecationWarning)
     sc = SparkContext._active_spark_context
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
@@ -3197,9 +3197,13 @@ def _test():
     globs['sc'] = sc
     globs['spark'] = spark
     globs['df'] = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+
+    spark.conf.set("spark.sql.legacy.utcTimestampFunc.enabled", "true")
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+    spark.conf.unset("spark.sql.legacy.utcTimestampFunc.enabled")
+
     spark.stop()
     if failure_count:
         sys.exit(-1)
