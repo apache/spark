@@ -1111,5 +1111,5 @@ private[spark] class TaskSetManager(
 private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
   // this.
-  val TASK_SIZE_TO_WARN_KIB = 100
+  val TASK_SIZE_TO_WARN_KIB = 1000
 }

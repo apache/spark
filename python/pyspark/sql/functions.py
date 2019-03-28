@@ -584,8 +584,8 @@ def rand(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('rand', rand(seed=42) * 3).collect()
-    [Row(age=2, name=u'Alice', rand=1.1568609015300986),
-     Row(age=5, name=u'Bob', rand=1.403379671529166)]
+    [Row(age=2, name=u'Alice', rand=2.4052597283576684),
+     Row(age=5, name=u'Bob', rand=2.3913904055683974)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -604,8 +604,8 @@ def randn(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('randn', randn(seed=42)).collect()
-    [Row(age=2, name=u'Alice', randn=-0.7556247885860078),
-    Row(age=5, name=u'Bob', randn=-0.0861619008451133)]
+    [Row(age=2, name=u'Alice', randn=1.1027054481455365),
+    Row(age=5, name=u'Bob', randn=0.7400395449950132)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:

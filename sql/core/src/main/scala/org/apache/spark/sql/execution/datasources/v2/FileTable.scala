@@ -24,7 +24,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -46,7 +46,11 @@ abstract class FileTable(
       sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
   }
 
-  lazy val dataSchema: StructType = userSpecifiedSchema.orElse {
+  lazy val dataSchema: StructType = userSpecifiedSchema.map { schema =>
+    val partitionSchema = fileIndex.partitionSchema
+    val resolver = sparkSession.sessionState.conf.resolver
+    StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
+  }.orElse {
     inferSchema(fileIndex.allFiles())
   }.getOrElse {
     throw new AnalysisException(
@@ -57,6 +61,12 @@ abstract class FileTable(
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
       "in the data schema", caseSensitive)
+    dataSchema.foreach { field =>
+      if (!supportsDataType(field.dataType)) {
+        throw new AnalysisException(
+          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
+      }
+    }
     val partitionSchema = fileIndex.partitionSchema
     SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
       "in the partition schema", caseSensitive)
@@ -72,6 +82,22 @@ abstract class FileTable(
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
+
+  /**
+   * Returns whether this format supports the given [[DataType]] in read/write path.
+   * By default all data types are supported.
+   */
+  def supportsDataType(dataType: DataType): Boolean = true
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def formatName(): String = "ORC"
+   * }}}
+   */
+  def formatName: String
 }
 
 object FileTable {
