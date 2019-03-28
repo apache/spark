@@ -58,12 +58,12 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    lazy val currentDate = {
+    val currentDate = {
       val dateExpr = CurrentDate()
       val date = dateExpr.eval(EmptyRow).asInstanceOf[Int]
       Literal.create(date, dateExpr.dataType)
     }
-    lazy val currentTime = {
+    val currentTimestamp = {
       val timeExpr = CurrentTimestamp()
       val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
       Literal.create(timestamp, timeExpr.dataType)
@@ -71,7 +71,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 
     plan transformAllExpressions {
       case CurrentDate() => currentDate
-      case CurrentTimestamp() => currentTime
+      case CurrentTimestamp() => currentTimestamp
     }
   }
 }
