@@ -70,10 +70,11 @@ abstract class AggregationIterator(
   // Initialize all AggregateFunctions by binding references if necessary,
   // and set inputBufferOffset and mutableBufferOffset.
   protected def initializeAggregateFunctions(
-      expressions: Seq[AggregateExpression],
+      aggExpressions: Seq[AggregateExpression],
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
+    val expressions = aggExpressions.toArray
     val expressionsLength = expressions.length
     val functions = new Array[AggregateFunction](expressionsLength)
     var i = 0
@@ -153,10 +154,11 @@ abstract class AggregationIterator(
 
   // Initializing functions used to process a row.
   protected def generateProcessRow(
-      expressions: Seq[AggregateExpression],
+      aggExpressions: Seq[AggregateExpression],
       functions: Seq[AggregateFunction],
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
+    val expressions = aggExpressions.toArray
     if (expressions.nonEmpty) {
       val mergeExpressions = functions.zipWithIndex.flatMap {
         case (ae: DeclarativeAggregate, i) =>
