@@ -3316,16 +3316,14 @@ object functions {
     ArrayExcept(col1.expr, col2.expr)
   }
 
-  private def expressionFunction(f: Column => Column)
-  : Expression => Expression =
+  private def expressionFunction(f: Column => Column): Expression => Expression =
     x => f(Column(x)).expr
 
-  private def expressionFunction(f: (Column, Column) => Column)
-  : (Expression, Expression) => Expression =
+  private def expressionFunction(f: (Column, Column) => Column): (Expression, Expression) => Expression =
     (x, y) => f(Column(x), Column(y)).expr
 
   private def expressionFunction(f: (Column, Column, Column) => Column)
-  : (Expression, Expression, Expression) => Expression =
+    : (Expression, Expression, Expression) => Expression =
     (x, y, z) => f(Column(x), Column(y), Column(z)).expr
 
   /**
@@ -3373,18 +3371,15 @@ object functions {
    *
    * @group collection_funcs
    */
-  def aggregate(
-      expr: Column,
-      zero: Column,
-      merge: (Column, Column) => Column,
-      finish: Column => Column): Column = withExpr {
-    HigherOrderUtils.aggregate(
-      expr.expr,
-      zero.expr,
-      expressionFunction(merge),
-      expressionFunction(finish)
-    )
-  }
+  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column, finish: Column => Column): Column =
+    withExpr {
+      HigherOrderUtils.aggregate(
+        expr.expr,
+        zero.expr,
+        expressionFunction(merge),
+        expressionFunction(finish)
+      )
+    }
 
   /**
    * (Scala-specific) Applies a binary operator to an initial state and all elements in the array,
@@ -3392,11 +3387,8 @@ object functions {
    *
    * @group collection_funcs
    */
-  def aggregate(
-      expr: Column,
-      zero: Column,
-      merge: (Column, Column) => Column): Column =
-      aggregate(expr, zero, merge, identity)
+  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, zero, merge, identity)
 
   /**
    * (Scala-specific) Merge two given arrays, element-wise, into a signle array using a function.
@@ -3405,10 +3397,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def zip_with(
-      left: Column,
-      right: Column,
-      f: (Column, Column) => Column): Column = withExpr {
+  def zip_with(left: Column, right: Column, f: (Column, Column) => Column): Column = withExpr {
     HigherOrderUtils.zip_with(left.expr, right.expr, expressionFunction(f))
   }
 
@@ -3446,8 +3435,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def map_zip_with(left: Column, right: Column, f: (Column, Column, Column) => Column): Column =
-    withExpr {
+  def map_zip_with(left: Column, right: Column, f: (Column, Column, Column) => Column): Column = withExpr {
       HigherOrderUtils.map_zip_with(left.expr, right.expr, expressionFunction(f))
     }
 
