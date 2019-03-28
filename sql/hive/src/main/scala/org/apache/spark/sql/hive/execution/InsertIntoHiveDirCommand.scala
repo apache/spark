@@ -87,17 +87,17 @@ case class InsertIntoHiveDirCommand(
 
     val targetPath = new Path(storage.locationUri.get)
     val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
-    val writeToPath =
+    val (writeToPath: Path, fs: FileSystem) =
       if (isLocal) {
         val localFileSystem = FileSystem.getLocal(jobConf)
-        localFileSystem.makeQualified(targetPath)
+        (localFileSystem.makeQualified(targetPath), localFileSystem)
       } else {
-        val dfs = qualifiedPath.getFileSystem(jobConf)
-        if (!dfs.exists(qualifiedPath)) {
-          dfs.mkdirs(qualifiedPath.getParent)
-        }
-        qualifiedPath
+        val dfs = qualifiedPath.getFileSystem(hadoopConf)
+        (qualifiedPath, dfs)
       }
+    if (!fs.exists(writeToPath)) {
+      fs.mkdirs(writeToPath)
+    }
 
     // The temporary path must be a HDFS path, not a local path.
     val tmpPath = getExternalTmpPath(sparkSession, hadoopConf, qualifiedPath)
@@ -112,19 +112,19 @@ case class InsertIntoHiveDirCommand(
         fileSinkConf = fileSinkConf,
         outputLocation = tmpPath.toString)
 
-      val fs = writeToPath.getFileSystem(hadoopConf)
       if (overwrite && fs.exists(writeToPath)) {
         fs.listStatus(writeToPath).foreach { existFile =>
           if (Option(existFile.getPath) != createdTempDir) fs.delete(existFile.getPath, true)
         }
       }
 
-      fs.listStatus(tmpPath).foreach {
+      val dfs = tmpPath.getFileSystem(hadoopConf)
+      dfs.listStatus(tmpPath).foreach {
         tmpFile =>
           if (isLocal) {
-            fs.copyToLocalFile(tmpFile.getPath, writeToPath)
+            dfs.copyToLocalFile(tmpFile.getPath, writeToPath)
           } else {
-            fs.rename(tmpFile.getPath, writeToPath)
+            dfs.rename(tmpFile.getPath, writeToPath)
           }
       }
     } catch {
