@@ -189,14 +189,7 @@ object PageRank extends Logging {
       numIter: Int,
       resetProb: Double = 0.15,
       sources: Array[VertexId]): Graph[Vector, Double] = {
-    require(numIter > 0, s"Number of iterations must be greater than 0," +
-      s" but got ${numIter}")
-    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
-      s" to [0, 1], but got ${resetProb}")
-    require(sources.nonEmpty, s"The list of sources must be non-empty," +
-      s" but got ${sources.mkString("[", ",", "]")}")
-
-    val sourcesWithScores = sources zip Array.fill(sources.size)(1.0)
+    val sourcesWithScores = sources.map((_, 1.0))
     runParallelPersonalizedPageRank(graph, numIter, resetProb, sourcesWithScores)
   }
 
@@ -231,16 +224,16 @@ object PageRank extends Logging {
       s" but got ${sources.mkString("[", ",", "]")}")
 
     val zero = Vectors.sparse(sources.size, List()).asBreeze
-    // map of vid -> vector where for each vid, the _position of vid in source_ is set to provided score
-    val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
-      val v = Vectors.sparse(sources.size, Array(i), Array(vid._2)).asBreeze
-      (vid._1, v)
+    // map of vid -> vector where for each vid, the _position of vid in source_ is set to initial score
+    val sourcesInitMap = sources.zipWithIndex.map { case ((vid, score), i) =>
+      val v = Vectors.sparse(sources.size, Array(i), Array(score)).asBreeze
+      (vid, v)
     }.toMap
 
     val sc = graph.vertices.sparkContext
     val sourcesInitMapBC = sc.broadcast(sourcesInitMap)
     // Initialize the PageRank graph with each edge attribute having
-    // weight 1/outDegree and each source vertex with attribute 1.0.
+    // weight 1/outDegree and each source vertex with attribute initial score.
     var rankGraph = graph
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
