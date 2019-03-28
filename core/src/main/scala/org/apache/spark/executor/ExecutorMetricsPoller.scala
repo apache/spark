@@ -107,7 +107,7 @@ private[spark] class ExecutorMetricsPoller(
   /**
    * Called by TaskRunner#run.
    *
-   * @param taskId the id of the task being launched.
+   * @param taskId the id of the task being run.
    * @param stageId the id of the stage the task belongs to.
    * @param stageAttemptId the attempt number of the stage the task belongs to.
    */
@@ -159,10 +159,14 @@ private[spark] class ExecutorMetricsPoller(
    * @param taskId the id of the task that was run.
    */
   def getTaskMetricPeaks(taskId: Long): Array[Long] = {
-    val currentPeaks = taskMetricPeaks.get(taskId)
-    val metricPeaks = new Array[Long](ExecutorMetricType.numMetrics)
-    ExecutorMetricType.metricToOffset.foreach { case (_, i) =>
-      metricPeaks(i) = currentPeaks.get(i)
+    // If this is called with an invalid taskId or a valid taskId but the task was killed and
+    // onTaskStart was therefore not called, then we return an array of zeros.
+    val currentPeaks = taskMetricPeaks.get(taskId) // may be null
+    val metricPeaks = new Array[Long](ExecutorMetricType.numMetrics) // initialized to zeros
+    if (currentPeaks != null) {
+      ExecutorMetricType.metricToOffset.foreach { case (_, i) =>
+        metricPeaks(i) = currentPeaks.get(i)
+      }
     }
     metricPeaks
   }
