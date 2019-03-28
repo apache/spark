@@ -217,7 +217,7 @@ class HeartbeatReceiverSuite
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val executorMetrics = new ExecutorMetrics(Array(123456L, 543L, 12345L, 1234L, 123L,
       12L, 432L, 321L, 654L, 765L))
-    val executorUpdates = Map((0, 0) -> executorMetrics)
+    val executorUpdates = mutable.Map((0, 0) -> executorMetrics)
     val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
       Heartbeat(executorId, Array(1L -> metrics.accumulators()), blockManagerId, executorUpdates))
     if (executorShouldReregister) {

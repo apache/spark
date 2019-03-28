@@ -19,8 +19,7 @@ package org.apache.spark
 
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
-import scala.collection.Map
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, Map}
 import scala.concurrent.Future
 
 import org.apache.spark.executor.ExecutorMetrics
@@ -123,14 +122,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       context.reply(true)
 
     // Messages received from executors
-    case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorMetrics) =>
+    case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
           executorLastSeen(executorId) = clock.getTimeMillis()
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
-                executorId, accumUpdates, blockManagerId, executorMetrics)
+                executorId, accumUpdates, blockManagerId, executorUpdates)
               val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
               context.reply(response)
             }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.Map
+import scala.collection.mutable.Map
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
