@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.orc.{OrcFilters => BuiltinOrcFilters}
+import org.apache.spark.sql.execution.datasources.orc.{OrcFilters => DatasourceOrcFilters}
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.sources._
@@ -71,7 +71,7 @@ private[orc] object OrcFilters extends Logging {
 
   def createFilter(schema: StructType, filters: Array[Filter]): Option[SearchArgument] = {
     if (HiveUtils.isHive2) {
-      BuiltinOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
+      DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
     } else {
       val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
 
