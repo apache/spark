@@ -24,7 +24,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * The base interface for v2 data sources which don't have a real catalog. Implementations must
- * have a public, 0-arg constructor.
+ * have a public, 0-arg constructor, and can only deal with existing tables.
  * <p>
  * The major responsibility of this interface is to return a {@link Table} for read/write.
  * </p>

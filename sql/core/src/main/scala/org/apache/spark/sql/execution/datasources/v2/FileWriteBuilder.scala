@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, WriteBuilder}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -43,8 +43,7 @@ abstract class FileWriteBuilder(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
-    supportsDataType: DataType => Boolean)
-  extends WriteBuilder with SupportsSaveMode {
+    supportsDataType: DataType => Boolean) extends WriteBuilder {
   private var schema: StructType = _
   private var queryId: String = _
   private var mode: SaveMode = _
@@ -59,7 +58,7 @@ abstract class FileWriteBuilder(
     this
   }
 
-  override def mode(mode: SaveMode): WriteBuilder = {
+  def mode(mode: SaveMode): WriteBuilder = {
     this.mode = mode
     this
   }

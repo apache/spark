@@ -30,11 +30,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable,
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -267,6 +266,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       provider.getTable(dsOptions) match {
+        // TODO: for backward compatibility reasons, the builtin file source needs to support all
+        // the save modes, which violates the semantic of `TableProvider`. Here we special-case
+        // file source and pass the save mode to file source directly. This hack can be removed
+        // after we figure out a general interface for path-based data sources.
+        case table: FileTable =>
+          val write = table.newWriteBuilder(dsOptions).asInstanceOf[FileWriteBuilder]
+            .mode(mode)
+            .withQueryId(UUID.randomUUID().toString)
+            .withInputDataSchema(df.logicalPlan.schema)
+            .buildForBatch()
+          // The returned `Write` can be null, which indicates that we can skip writing.
+          if (write != null) {
+            runCommand(df.sparkSession, "save") {
+              WriteToDataSourceV2(write, df.logicalPlan)
+            }
+          }
+
         case table: SupportsWrite if table.supports(BATCH_WRITE) =>
           lazy val relation = DataSourceV2Relation.create(table, dsOptions)
           mode match {
@@ -282,24 +298,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
 
             case _ =>
-              table.newWriteBuilder(dsOptions) match {
-                case writeBuilder: SupportsSaveMode =>
-                  val write = writeBuilder.mode(mode)
-                      .withQueryId(UUID.randomUUID().toString)
-                      .withInputDataSchema(df.logicalPlan.schema)
-                      .buildForBatch()
-                  // It can only return null with `SupportsSaveMode`. We can clean it up after
-                  // removing `SupportsSaveMode`.
-                  if (write != null) {
-                    runCommand(df.sparkSession, "save") {
-                      WriteToDataSourceV2(write, df.logicalPlan)
-                    }
-                  }
-
-                case _ =>
-                  throw new AnalysisException(
-                    s"data source ${table.name} does not support SaveMode $mode")
-              }
+              throw new AnalysisException(s"TableProvider implementation $source cannot be " +
+                "written with ErrorIfExists or Ignore modes, please use Append or Overwrite " +
+                "modes instead.")
           }
 
         // Streaming also uses the data source V2 API. So it may be that the data source implements
