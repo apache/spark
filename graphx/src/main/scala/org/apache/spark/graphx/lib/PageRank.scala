@@ -231,7 +231,7 @@ object PageRank extends Logging {
       s" but got ${sources.mkString("[", ",", "]")}")
 
     val zero = Vectors.sparse(sources.size, List()).asBreeze
-    // map of vid -> vector where for each vid, the _position of vid in source_ is set to 1.0
+    // map of vid -> vector where for each vid, the _position of vid in source_ is set to provided score
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
       val v = Vectors.sparse(sources.size, Array(i), Array(vid._2)).asBreeze
       (vid._1, v)
