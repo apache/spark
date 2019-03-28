@@ -51,7 +51,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
   test("Should return the new instance on calling acquire with different params.") {
     val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
     val producer = CachedKafkaProducer.acquire(kafkaParams)
-    kafkaParams.remove("ack") // mutate the kafka params.
+    kafkaParams.remove("acks") // mutate the kafka params.
     val producer2 = CachedKafkaProducer.acquire(kafkaParams)
     assert(producer.kafkaProducer != producer2.kafkaProducer)
     assert(producer.getInUseCount == 1)
@@ -94,7 +94,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
 
   private def generateKafkaParams: ju.HashMap[String, Object] = {
     val kafkaParams = new ju.HashMap[String, Object]()
-    kafkaParams.put("ack", "0")
+    kafkaParams.put("acks", "0")
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
@@ -121,7 +121,6 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
 
   test("concurrent use of CachedKafkaProducer") {
     val topic = "topic" + Random.nextInt()
-    val data = (1 to 10).map(_.toString)
     testUtils.createTopic(topic, 1)
     val kafkaParams: Map[String, Object] = Map("bootstrap.servers" -> testUtils.brokerAddress,
       "key.serializer" -> classOf[ByteArraySerializer].getName,
@@ -129,11 +128,11 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
 
     import scala.collection.JavaConverters._
 
-    val numThreads: Int = 100
-    val numConcurrentProducers: Int = 1000
+    val numThreads = 100
+    val numConcurrentProducers = 1000
 
     val kafkaParamsUniqueMap = mutable.HashMap.empty[Int, ju.Map[String, Object]]
-    ( 1 to numConcurrentProducers).map {
+    (1 to numConcurrentProducers).map {
       i => kafkaParamsUniqueMap.put(i, kafkaParams.updated("retries", s"$i").asJava)
     }
     val toBeReleasedQueue = new ConcurrentLinkedQueue[CachedKafkaProducer]()
@@ -147,7 +146,7 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
 
     def release(producer: CachedKafkaProducer): Unit = {
       if (producer != null) {
-        CachedKafkaProducer.release(producer, true)
+        CachedKafkaProducer.release(producer, Random.nextBoolean())
         if (producer.getInUseCount > 0) {
           assert(!producer.isClosed, "Should not close an inuse producer.")
         }
@@ -177,6 +176,7 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
       futuresRelease.flatten.foreach(_.get(1, TimeUnit.MINUTES))
     } finally {
       threadPool.shutdown()
+      CachedKafkaProducer.clear()
     }
   }
 
@@ -201,23 +201,25 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     val checkpointDir = Utils.createTempDir()
     val topic = newTopic()
     testUtils.createTopic(topic, 100)
-    val queries = for (i <- 1 to 20) yield {
-      df.writeStream
-        .format("kafka")
-        .option("checkpointLocation", checkpointDir.getCanonicalPath + i)
-        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        // to make it create 5 unique producers.
-        .option("kafka.max.block.ms", s"100${i % 5}")
-        .option("topic", topic)
-        .trigger(Trigger.Continuous(500))
-        .queryName(s"kafkaStream$i")
-        .start()
-    }
-    Thread.sleep(15000)
+    failAfter(streamingTimeout) {
+      val queries = for (i <- 1 to 10) yield {
+        df.writeStream
+          .format("kafka")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath + i)
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          // to make it create 5 unique producers.
+          .option("kafka.max.block.ms", s"100${i % 5}")
+          .option("topic", topic)
+          .trigger(Trigger.Continuous(500))
+          .queryName(s"kafkaStream$i")
+          .start()
+      }
+      Thread.sleep(15000)
 
-    queries.foreach{ q =>
-      assert(q.exception.isEmpty, "None of the queries should fail.")
-      q.stop()
+      queries.foreach { q =>
+        assert(q.exception.isEmpty, "None of the queries should fail.")
+        q.stop()
+      }
     }
   }
 }
