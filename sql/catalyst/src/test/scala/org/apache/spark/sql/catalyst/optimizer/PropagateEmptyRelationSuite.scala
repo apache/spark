@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, GlobalLimit, LocalLimit,
+  LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -220,5 +221,80 @@ class PropagateEmptyRelationSuite extends PlanTest {
       LocalRelation('a.int, 'b.int), UsingJoin(FullOuter, "a" :: Nil), None)
     val optimized = Optimize.execute(query.analyze)
     assert(optimized.resolved)
+  }
+
+  test("Limit 0: return empty local relation") {
+    val query = testRelation1.limit(0)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = LocalRelation('a.int)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Limit 0: individual LocalLimit 0 node") {
+    val query = LocalLimit(0, testRelation1)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = LocalRelation('a.int)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Limit 0: individual GlobalLimit 0 node") {
+    val query = GlobalLimit(0, testRelation1)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = LocalRelation('a.int)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Limit 0: Joins") {
+    val testcases = Seq(
+      (Inner, Some(LocalRelation('a.int, 'b.int))),
+      (LeftOuter,
+        Some(Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)),
+      (RightOuter, Some(LocalRelation('a.int, 'b.int))),
+      (FullOuter,
+        Some(Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze))
+    )
+
+    testcases.foreach { case (jt, answer) =>
+      val query = testRelation1
+        .join(testRelation2.limit(0), joinType = jt, condition = Some('a.attr == 'b.attr))
+
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer =
+        answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("Limit 0: 3-way join") {
+    val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int), data = Seq(Row(1)))
+
+    val subJoinQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a.attr == 'b.attr))
+    val query = subJoinQuery
+      .join(testRelation3.limit(0), joinType = Inner, condition = Some('a.attr == 'c.attr))
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = Some(LocalRelation('a.int, 'b.int, 'c.int))
+      .getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Limit 0: intersect") {
+    val query = testRelation1
+      .intersect(testRelation1.limit(0), isAll = false)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = Distinct(Some(LocalRelation('a.int))
+        .getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze)))
+
+    comparePlans(optimized, correctAnswer)
   }
 }
