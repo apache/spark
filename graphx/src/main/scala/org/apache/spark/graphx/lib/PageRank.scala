@@ -178,6 +178,40 @@ object PageRank extends Logging {
    * @param graph The graph on which to compute personalized pagerank
    * @param numIter The number of iterations to run
    * @param resetProb The random reset probability
+   * @param sources The list of sources to compute personalized pagerank from
+   * @return the graph with vertex attributes
+   *         containing the pagerank relative to all starting nodes (as a sparse vector
+   *         indexed by the position of nodes in the sources list) and
+   *         edge attributes the normalized edge weight
+   */
+  def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](
+      graph: Graph[VD, ED],
+      numIter: Int,
+      resetProb: Double = 0.15,
+      sources: Array[VertexId]): Graph[Vector, Double] = {
+    require(numIter > 0, s"Number of iterations must be greater than 0," +
+      s" but got ${numIter}")
+    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
+      s" to [0, 1], but got ${resetProb}")
+    require(sources.nonEmpty, s"The list of sources must be non-empty," +
+      s" but got ${sources.mkString("[", ",", "]")}")
+
+    val sourcesWithScores = sources zip Array.fill(sources.size)(1.0)
+    runParallelPersonalizedPageRank(graph, numIter, resetProb, sourcesWithScores)
+  }
+
+  /**
+   * Run Personalized PageRank for a fixed number of iterations, for a
+   * set of starting nodes in parallel. Returns a graph with vertex attributes
+   * containing the pagerank relative to all starting nodes (as a sparse vector) and
+   * edge attributes the normalized edge weight
+   *
+   * @tparam VD The original vertex attribute (not used)
+   * @tparam ED The original edge attribute (not used)
+   *
+   * @param graph The graph on which to compute personalized pagerank
+   * @param numIter The number of iterations to run
+   * @param resetProb The random reset probability
    * @param sources The list of (source, initial score) to compute personalized pagerank from
    * @return the graph with vertex attributes
    *         containing the pagerank relative to all starting nodes (as a sparse vector
