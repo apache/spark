@@ -210,9 +210,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         try {
           sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
           sql(s"CACHE TABLE $db.cachedTable")
-          assertCached(sql(
-            s"select * from $db.cachedTable"),
-            s"`$db`.`cachedTable`")
+          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`")
           assert(spark.catalog.isCached(s"$db.cachedTable"),
             s"Table '$db.cachedTable' should be cached")
 
@@ -242,19 +240,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   test("Refresh Unqualified Tables") {
     withTempView("cachedTable") {
       try {
-        sql(s"CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
-        sql(s"CACHE TABLE cachedTable")
-        assertCached(sql(s"select * from cachedTable"), s"`cachedTable`")
-        assert(spark.catalog.isCached(s"cachedTable"),
-          s"Table 'cachedTable' should be cached")
+        sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
+        sql("CACHE TABLE cachedTable")
+        assertCached(sql("select * from cachedTable"), "`cachedTable`")
+        assert(spark.catalog.isCached("cachedTable"),
+          "Table 'cachedTable' should be cached")
 
-        sql(s"REFRESH TABLE cachedTable")
-        assertCached(sql(s"select * from cachedTable"), s"`cachedTable`")
-        assert(spark.catalog.isCached(s"cachedTable"),
-          s"Table 'cachedTable' should be cached after refresh")
+        sql("REFRESH TABLE cachedTable")
+        assertCached(sql("select * from cachedTable"), "`cachedTable`")
+        assert(spark.catalog.isCached("cachedTable"),
+          "Table 'cachedTable' should be cached after refresh")
       } finally {
-        sql(s"UNCACHE TABLE cachedTable")
-        sql(s"DROP TABLE cachedTable")
+        sql("UNCACHE TABLE cachedTable")
+        sql("DROP TABLE cachedTable")
       }
     }
   }

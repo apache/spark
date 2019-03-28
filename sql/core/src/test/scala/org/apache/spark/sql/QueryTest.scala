@@ -210,9 +210,9 @@ abstract class QueryTest extends PlanTest {
    */
   def assertCached(query: Dataset[_], cachedName: String): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
-    val cachedTableNames = planWithCaching collect {
+    val cachedTableNames = planWithCaching.collect {
       case cached: InMemoryRelation => cached.cacheBuilder.tableName
-    } flatten
+    }.flatten
 
     assert(
       cachedTableNames.contains(cachedName),

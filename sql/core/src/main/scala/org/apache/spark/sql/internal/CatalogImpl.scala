@@ -504,7 +504,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // recache with the same name.
       sparkSession.sharedState.cacheManager.cacheQuery(table, cacheName, cacheLevel)
     }
-
   }
 
   /**
