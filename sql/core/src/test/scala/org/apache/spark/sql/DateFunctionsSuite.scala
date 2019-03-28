@@ -33,7 +33,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("function current_date") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
       val d0 = System.currentTimeMillis() / MILLIS_PER_DAY
       val d1 = localDateToDays(df1.select(current_date()).collect().head.getAs[LocalDate](0))
