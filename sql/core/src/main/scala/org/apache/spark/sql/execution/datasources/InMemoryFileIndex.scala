@@ -167,36 +167,39 @@ object InMemoryFileIndex extends Logging {
       hadoopConf: Configuration,
       filter: PathFilter,
       sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
+    // Filter out the directory before listing it leaf files
+    val filteredPaths = paths.filter(filter.accept(_))
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
-    if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      return paths.map { path =>
+    if (filteredPaths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+      return filteredPaths.map { path =>
         (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
       }
     }
 
-    logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
+    logInfo(s"Listing leaf files and directories in parallel under: " +
+      s"${filteredPaths.mkString(", ")}")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val sparkContext = sparkSession.sparkContext
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-    val serializedPaths = paths.map(_.toString)
+    val serializedPaths = filteredPaths.map(_.toString)
     val parallelPartitionDiscoveryParallelism =
       sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
 
     // Set the number of parallelism to prevent following file listing from generating many tasks
     // in case of large #defaultParallelism.
-    val numParallelism = Math.min(paths.size, parallelPartitionDiscoveryParallelism)
+    val numParallelism = Math.min(filteredPaths.size, parallelPartitionDiscoveryParallelism)
 
     val previousJobDescription = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
     val statusMap = try {
-      val description = paths.size match {
+      val description = filteredPaths.size match {
         case 0 =>
           s"Listing leaf files and directories 0 paths"
         case 1 =>
-          s"Listing leaf files and directories for 1 path:<br/>${paths(0)}"
+          s"Listing leaf files and directories for 1 path:<br/>${filteredPaths(0)}"
         case s =>
-          s"Listing leaf files and directories for $s paths:<br/>${paths(0)}, ..."
+          s"Listing leaf files and directories for $s paths:<br/>${filteredPaths(0)}, ..."
       }
       sparkContext.setJobDescription(description)
       sparkContext
@@ -288,7 +291,8 @@ object InMemoryFileIndex extends Logging {
         case Some(session) =>
           bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
         case _ =>
-          dirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
+          dirs.filter(fileStatus => filter.accept(fileStatus.getPath))
+            .flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
       }
       val allFiles = topLevelFiles ++ nestedFiles
       if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles

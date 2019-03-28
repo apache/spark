@@ -23,7 +23,7 @@ import java.net.URI
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs._
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
@@ -354,6 +354,49 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
+  test("InMemoryFileIndex should filter out path based on PathFilter") {
+    withSQLConf("mapreduce.input.pathFilter.class" -> classOf[UserDefinedPathFilter].getName) {
+      withTempDir { dir =>
+        val file1 = new File(dir, "text.txt")
+        stringToFile(file1, "text")
+        val file2 = new File(dir, "filteredText.txt")
+        stringToFile(file2, "filtered file")
+        val subDir = new File(dir, "filteredDir")
+        subDir.mkdirs()
+        val file3 = new File(subDir, "text.txt")
+        stringToFile(file3, "text.txt")
+
+        val path = new Path(dir.getCanonicalPath)
+        val inMemoryFileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None) {
+          def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+        }
+        val leafFiles = inMemoryFileIndex.leafFilePaths
+        assert(leafFiles.size === 1)
+        assert(leafFiles.head.toUri.getPath === file1.getCanonicalPath)
+      }
+    }
+  }
+
+  test("filter out dir based on PathFilter before list them") {
+    withSQLConf("mapreduce.input.pathFilter.class" -> classOf[UserDefinedPathFilter].getName) {
+      for ((scale, expectedNumPar, dirName) <- Seq((50, 1, "nofiltered"), (50, 1, "nonFiltered"))) {
+        withTempDir { dir =>
+          val subDir = new File(dir, dirName)
+          subDir.mkdirs()
+          (0 until scale).foreach { i =>
+            val file = new File(subDir, s"$i=${i}")
+            file.mkdir()
+          }
+          HiveCatalogMetrics.reset()
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+          new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
+
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+        }
+      }
+    }
+  }
+
 }
 
 class FakeParentPathFileSystem extends RawLocalFileSystem {
@@ -378,5 +421,11 @@ class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
       start: Long,
       len: Long): Array[BlockLocation] = {
     Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
+  }
+}
+
+class UserDefinedPathFilter extends PathFilter with Serializable {
+  override def accept(path: Path): Boolean = {
+    !path.getName.trim.startsWith("filtered")
   }
 }
