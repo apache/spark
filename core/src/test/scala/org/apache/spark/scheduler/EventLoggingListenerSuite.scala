@@ -570,8 +570,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
         // accumulables can be different, so only check the stage Id
         assert(expected.stageInfo.stageId === actual.stageInfo.stageId)
       case (expected: SparkListenerTaskEnd, actual: SparkListenerTaskEnd) =>
-        // taskInfo, taskExecutorMetrics, and taskMetrics will be different object references,
-        // so only check stageId
         assert(expected.stageId === actual.stageId)
       case (expected: SparkListenerEvent, actual: SparkListenerEvent) =>
         assert(expected === actual)
