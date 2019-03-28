@@ -24,6 +24,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
@@ -3327,6 +3328,17 @@ object functions {
     : (Expression, Expression, Expression) => Expression =
     (x, y, z) => f(Column(x), Column(y), Column(z)).expr
 
+  private def expressionFunction(f: Function[Column, Column]): Expression => Expression =
+    x => f.call(Column(x)).expr
+
+  private def expressionFunction(f: Function2[Column, Column, Column])
+    : (Expression, Expression) => Expression =
+    (x, y) => f.call(Column(x), Column(y)).expr
+
+  private def expressionFunction(f: Function3[Column, Column, Column, Column])
+    : (Expression, Expression, Expression) => Expression =
+    (x, y, z) => f.call(Column(x), Column(y), Column(z)).expr
+
   /**
    * (Scala-specific) Returns an array of elements after applying a tranformation to each element
    * in the input array.
@@ -3389,7 +3401,7 @@ object functions {
    * @group collection_funcs
    */
   def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
-    aggregate(expr, zero, merge, identity)
+    aggregate(expr, zero, merge, c => c)
 
   /**
    * (Scala-specific) Merge two given arrays, element-wise, into a signle array using a function.
@@ -3438,6 +3450,121 @@ object functions {
    */
   def map_zip_with(left: Column, right: Column,
                    f: (Column, Column, Column) => Column): Column = withExpr {
+    HigherOrderUtils.map_zip_with(left.expr, right.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Returns an array of elements after applying a tranformation to each element
+   * in the input array.
+   *
+   * @group collection_funcs
+   */
+  def transform(column: Column, f: Function[Column, Column]): Column = withExpr {
+    HigherOrderUtils.transform(column.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Returns an array of elements after applying a tranformation to each element
+   * in the input array.
+   *
+   * @group collection_funcs
+   */
+  def transform(column: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+    HigherOrderUtils.transform(column.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Returns whether a predicate holds for one or more elements in the array.
+   *
+   * @group collection_funcs
+   */
+  def exists(column: Column, f: Function[Column, Column]): Column = withExpr {
+    HigherOrderUtils.exists(column.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Returns an array of elements for which a predicate holds in a given array.
+   *
+   * @group collection_funcs
+   */
+  def filter(column: Column, f: Function[Column, Column]): Column = withExpr {
+    HigherOrderUtils.filter(column.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state. The final state is converted into the final result
+   * by applying a finish function.
+   *
+   * @group collection_funcs
+   */
+  def aggregate(expr: Column, zero: Column, merge: Function2[Column, Column, Column],
+                finish: Function[Column, Column]): Column = withExpr {
+    HigherOrderUtils.aggregate(
+      expr.expr,
+      zero.expr,
+      expressionFunction(merge),
+      expressionFunction(finish)
+    )
+  }
+
+  /**
+   * (Java-specific) Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state.
+   *
+   * @group collection_funcs
+   */
+  def aggregate(expr: Column, zero: Column, merge: Function2[Column, Column, Column]): Column =
+    aggregate(expr, zero, merge, new Function[Column, Column] { def call(c: Column): Column = c })
+
+  /**
+   * (Java-specific) Merge two given arrays, element-wise, into a signle array using a function.
+   * If one array is shorter, nulls are appended at the end to match the length of the longer
+   * array, before applying the function.
+   *
+   * @group collection_funcs
+   */
+  def zip_with(left: Column, right: Column, f: Function2[Column, Column, Column]): Column =
+    withExpr {
+      HigherOrderUtils.zip_with(left.expr, right.expr, expressionFunction(f))
+    }
+
+  /**
+   * (Java-specific) Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new keys for the pairs.
+   *
+   * @group collection_funcs
+   */
+  def transform_keys(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+    HigherOrderUtils.transformKeys(expr.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new values for the pairs.
+   *
+   * @group collection_funcs
+   */
+  def transform_values(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+    HigherOrderUtils.transformValues(expr.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Returns a map whose key-value pairs satisfy a predicate.
+   *
+   * @group collection_funcs
+   */
+  def map_filter(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+    HigherOrderUtils.mapFilter(expr.expr, expressionFunction(f))
+  }
+
+  /**
+   * (Java-specific) Merge two given maps, key-wise into a single map using a function.
+   *
+   * @group collection_funcs
+   */
+  def map_zip_with(left: Column, right: Column,
+                   f: Function3[Column, Column, Column, Column]): Column = withExpr {
     HigherOrderUtils.map_zip_with(left.expr, right.expr, expressionFunction(f))
   }
 
