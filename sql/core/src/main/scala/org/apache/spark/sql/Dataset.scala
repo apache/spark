@@ -32,7 +32,6 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis._
@@ -52,7 +51,6 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -181,7 +179,7 @@ class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
-  extends Serializable with Logging {
+  extends Serializable {
 
   queryExecution.assertAnalyzed()
 
@@ -2139,6 +2137,11 @@ class Dataset[T] private[sql](
    * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
    * error to add a column that refers to some other Dataset.
    *
+   * Please notice that this method introduces a `Project`. This means that using it in loops in
+   * order to add several columns can generate very big plans which can cause huge performance
+   * issues and even `StackOverflowException`s. A much better alternative use `select` with the
+   * list of columns to add.
+   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -2156,21 +2159,6 @@ class Dataset[T] private[sql](
       colNames,
       "in given column names",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
-    val maxProjects = sparkSession.sessionState.conf.getConf(SQLConf.MAX_WITHCOLUMN_PROJECTS)
-    if (maxProjects > 0) {
-      var numProjects = 0
-      var currPlan = logicalPlan
-      while (currPlan.isInstanceOf[Project] && numProjects < maxProjects) {
-        numProjects += 1
-        currPlan = currPlan.children.head // Since it is a Project, it has 1 and only 1 child
-      }
-      if (numProjects == maxProjects) {
-        logWarning("The current plan contains many projects on the top. This happens usually " +
-          "when using `withColumn` in a loop. Please, avoid this pattern as it can seriously " +
-          "affect  performance and even cause OOM due to the huge size of the generated plan. " +
-          "Please use a single select providing all the needed rows to it instead.")
-      }
-    }
 
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
