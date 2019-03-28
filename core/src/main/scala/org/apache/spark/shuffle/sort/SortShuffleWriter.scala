@@ -47,7 +47,7 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private val writeMetrics = context.taskMetrics().shuffleWriteMetrics
 
-  private val indeterminateAttemptId = context.getIndeterminateAttemptId
+  private val stageAttemptId = context.stageAttemptNumber()
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
@@ -66,18 +66,18 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId, indeterminateAttemptId)
+    val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId, stageAttemptId)
     val tmp = Utils.tempFileWith(output)
     try {
       val blockId = ShuffleBlockId(
         dep.shuffleId,
         mapId,
         IndexShuffleBlockResolver.NOOP_REDUCE_ID,
-        indeterminateAttemptId)
+        stageAttemptId)
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
       shuffleBlockResolver.writeIndexFileAndCommit(
-        dep.shuffleId, mapId, partitionLengths, tmp, indeterminateAttemptId)
-      mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+        dep.shuffleId, mapId, partitionLengths, tmp, stageAttemptId)
+      mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, stageAttemptId)
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logError(s"Error while deleting temp file ${tmp.getAbsolutePath}")

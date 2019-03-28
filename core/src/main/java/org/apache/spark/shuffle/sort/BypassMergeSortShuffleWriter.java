@@ -84,7 +84,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final int mapId;
   private final Serializer serializer;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
-  private final Option<Object> indeterminateAttemptId;
+  private final int stageAttemptId;
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
@@ -119,7 +119,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleBlockResolver = shuffleBlockResolver;
-    this.indeterminateAttemptId = taskContext.getIndeterminateAttemptId();
+    this.stageAttemptId = taskContext.stageAttemptNumber();
   }
 
   @Override
@@ -128,8 +128,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
       shuffleBlockResolver.writeIndexFileAndCommit(
-        shuffleId, mapId, partitionLengths, null, indeterminateAttemptId);
-      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+        shuffleId, mapId, partitionLengths, null, stageAttemptId);
+      mapStatus = MapStatus$.MODULE$.apply(
+        blockManager.shuffleServerId(), partitionLengths, stageAttemptId);
       return;
     }
     final SerializerInstance serInstance = serializer.newInstance();
@@ -161,18 +162,19 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
 
-    File output = shuffleBlockResolver.getDataFile(shuffleId, mapId, indeterminateAttemptId);
+    File output = shuffleBlockResolver.getDataFile(shuffleId, mapId, stageAttemptId);
     File tmp = Utils.tempFileWith(output);
     try {
       partitionLengths = writePartitionedFile(tmp);
       shuffleBlockResolver.writeIndexFileAndCommit(
-        shuffleId, mapId, partitionLengths, tmp, indeterminateAttemptId);
+        shuffleId, mapId, partitionLengths, tmp, stageAttemptId);
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+      blockManager.shuffleServerId(), partitionLengths, stageAttemptId);
   }
 
   @VisibleForTesting

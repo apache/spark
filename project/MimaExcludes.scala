@@ -271,8 +271,6 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.this"),
 
     // [SPARK-25341][CORE] Support rolling back a shuffle map stage and re-generate the shuffle files
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getIndeterminateAttemptId"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.markAsIndeterminate"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleIndexBlockId.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleIndexBlockId.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleDataBlockId.copy"),

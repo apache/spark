@@ -59,7 +59,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   }
 
   private def testWithIndexShuffleBlockResolver(
-      shuffleId: Int, mapId: Int, idxName: String, attemptId: Option[Int]): Unit = {
+      shuffleId: Int, mapId: Int, idxName: String, attemptId: Int): Unit = {
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val lengths = Array[Long](10, 0, 20)
     val dataTmp = File.createTempFile("shuffle", null, tempDir)
@@ -157,14 +157,14 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   test("commit shuffle files multiple times") {
     val shuffleId = 1
     val mapId = 2
-    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
-    testWithIndexShuffleBlockResolver(shuffleId, mapId, idxName, None)
+    val idxName = s"shuffle_${shuffleId}_${mapId}_0_0.index"
+    testWithIndexShuffleBlockResolver(shuffleId, mapId, idxName, 0)
   }
 
   test("commit shuffle files with attempt id multiple times") {
     val shuffleId = 1
     val mapId = 2
-    val attemptId = Some(1)
+    val attemptId = 1
     val idxName = s"shuffle_${shuffleId}_${mapId}_0_1.index"
     testWithIndexShuffleBlockResolver(shuffleId, mapId, idxName, attemptId)
   }

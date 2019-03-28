@@ -82,7 +82,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final int initialSortBufferSize;
   private final int inputBufferSizeInBytes;
   private final int outputBufferSizeInBytes;
-  private final Option<Object> indeterminateAttemptId;
+  private final int stageAttemptId;
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
@@ -151,7 +151,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.outputBufferSizeInBytes =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     open();
-    this.indeterminateAttemptId = taskContext.getIndeterminateAttemptId();
+    this.stageAttemptId = taskContext.stageAttemptNumber();
   }
 
   private void updatePeakMemoryUsed() {
@@ -234,7 +234,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     sorter = null;
     final long[] partitionLengths;
     final File output = shuffleBlockResolver.getDataFile(
-      shuffleId, mapId, indeterminateAttemptId);
+      shuffleId, mapId, stageAttemptId);
     final File tmp = Utils.tempFileWith(output);
     try {
       try {
@@ -247,13 +247,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
       shuffleBlockResolver.writeIndexFileAndCommit(
-        shuffleId, mapId, partitionLengths, tmp, indeterminateAttemptId);
+        shuffleId, mapId, partitionLengths, tmp, stageAttemptId);
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+      blockManager.shuffleServerId(), partitionLengths, stageAttemptId);
   }
 
   @VisibleForTesting

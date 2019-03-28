@@ -87,7 +87,7 @@ class MapStatusSuite extends SparkFunSuite {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
     val avg = sizes.sum / sizes.count(_ != 0)
     val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes)
+    val status = MapStatus(loc, sizes, 1)
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
@@ -97,6 +97,7 @@ class MapStatusSuite extends SparkFunSuite {
         assert(estimate === avg)
       }
     }
+    assert(status1.stageAttemptId == 1)
   }
 
   test("SPARK-22540: ensure HighlyCompressedMapStatus calculates correct avgSize") {
@@ -109,7 +110,7 @@ class MapStatusSuite extends SparkFunSuite {
     val smallBlockSizes = sizes.filter(n => n > 0 && n < threshold)
     val avg = smallBlockSizes.sum / smallBlockSizes.length
     val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes)
+    val status = MapStatus(loc, sizes, 1)
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
@@ -119,6 +120,7 @@ class MapStatusSuite extends SparkFunSuite {
         assert(estimate === avg)
       }
     }
+    assert(status1.stageAttemptId == 1)
   }
 
   def compressAndDecompressMapStatus(status: MapStatus): MapStatus = {

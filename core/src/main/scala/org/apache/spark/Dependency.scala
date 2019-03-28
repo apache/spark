@@ -20,7 +20,7 @@ package org.apache.spark
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
 
@@ -94,9 +94,6 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, _rdd.partitions.length, this)
-
-  val mapSideIndeterminate: Boolean =
-    _rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }

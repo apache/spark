@@ -420,18 +420,18 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     // Cannot find one of the local shuffle blocks.
     val dataFile = sc.env.blockManager.diskBlockManager.getFile(
-      new ShuffleDataBlockId(0, 0, 0, Some(0)))
+      new ShuffleDataBlockId(0, 0, 0, 0))
     val indexFile = sc.env.blockManager.diskBlockManager.getFile(
-      new ShuffleIndexBlockId(0, 0, 0, Some(0)))
+      new ShuffleIndexBlockId(0, 0, 0, 0))
     assert(!dataFile.exists() && !indexFile.exists())
 
     rdd.count()
 
     // Can find one of the local shuffle blocks.
     val dataExistsFile = sc.env.blockManager.diskBlockManager.getFile(
-      new ShuffleDataBlockId(0, 0, 0, Some(0)))
+      new ShuffleDataBlockId(0, 0, 0, 0))
     val indexExistsFile = sc.env.blockManager.diskBlockManager.getFile(
-      new ShuffleIndexBlockId(0, 0, 0, Some(0)))
+      new ShuffleIndexBlockId(0, 0, 0, 0))
     assert(dataExistsFile.exists() && indexExistsFile.exists())
   }
 }

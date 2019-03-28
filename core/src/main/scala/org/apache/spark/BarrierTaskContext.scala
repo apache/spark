@@ -213,18 +213,11 @@ class BarrierTaskContext private[spark] (
     taskContext.markTaskCompleted(error)
   }
 
-  override private[spark] def markAsIndeterminate(): Unit = {
-    taskContext.markAsIndeterminate()
-  }
-
   override private[spark] def fetchFailed: Option[FetchFailedException] = {
     taskContext.fetchFailed
   }
 
   override private[spark] def getLocalProperties: Properties = taskContext.getLocalProperties
-
-  override private[spark] def getIndeterminateAttemptId: Option[Int] =
-    taskContext.getIndeterminateAttemptId
 }
 
 @Experimental

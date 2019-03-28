@@ -85,13 +85,6 @@ private class ShuffleStatus(numPartitions: Int) {
   private[this] var _numAvailableOutputs: Int = 0
 
   /**
-   * The bookkeeping for the indeterminate attempt id for corresponding ShuffleMapStage, most time
-   * its value is None cause the ShuffleMapStage's [[org.apache.spark.rdd.DeterministicLevel]] is
-   * DETERMINATE.
-   */
-  private[this] var _indeterminateAttemptId: Option[Int] = None
-
-  /**
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location.
    */
@@ -214,43 +207,12 @@ private class ShuffleStatus(numPartitions: Int) {
     }
     cachedSerializedMapStatus = null
   }
-
-  /**
-   * Set the _indeterminateAttemptId when the first task for rerunning indeterminate stage
-   * successfully ended, check the value with all following tasks cause the indeterminate stage
-   * should whole stage rerun.
-   */
-  def setAndCheckIndeterminateAttemptId(stageAttemptId: Int): Unit = synchronized {
-    if (_indeterminateAttemptId.isEmpty) {
-      _indeterminateAttemptId = Some(stageAttemptId)
-    } else {
-      require(_indeterminateAttemptId.get == stageAttemptId, "The indeterminate stage should" +
-        s" whole stage rerun by attempt id: ${_indeterminateAttemptId.get}, but found a task" +
-        s" with different stageAttemptId $stageAttemptId.")
-    }
-  }
-
-  /**
-   * The indeterminate attempt id for current shuffle status.
-   */
-  def indeterminateAttemptId: Option[Int] = synchronized {
-    _indeterminateAttemptId
-  }
-
-  /**
-   * Reset the indeterminate attempt id to None.
-   */
-  def resetIndeterminateAttemptId(): Unit = synchronized {
-    _indeterminateAttemptId = None
-  }
 }
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
-private[spark] case class GetIndeterminateAttemptId(shuffleId: Int)
-  extends MapOutputTrackerMessage
 
 private[spark] case class GetMapOutputMessage(shuffleId: Int, context: RpcCallContext)
 
@@ -271,11 +233,6 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
       context.reply(true)
       stop()
-
-    case GetIndeterminateAttemptId(shuffleId: Int) =>
-      val hostPort = context.senderAddress.hostPort
-      logInfo(s"Asked to send indeterminate attempt id for shuffle $shuffleId to $hostPort")
-      context.reply(tracker.shuffleStatuses(shuffleId).indeterminateAttemptId)
   }
 }
 
@@ -338,12 +295,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
    *         describing the shuffle blocks that are stored at that block manager.
    */
-  def getMapSizesByExecutorId(
-    shuffleId: Int,
-    startPartition: Int,
-    endPartition: Int,
-    needFetchIndeterminateAttemptId: Boolean = false)
-    : Iterator[(BlockManagerId, Seq[(BlockId, Long)])]
+  def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
+      : Iterator[(BlockManagerId, Seq[(BlockId, Long)])]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -692,35 +645,17 @@ private[spark] class MapOutputTrackerMaster(
 
   // Get blocks sizes by executor Id. Note that zero-sized blocks are excluded in the result.
   // This method is only called in local-mode.
-  def getMapSizesByExecutorId(
-    shuffleId: Int,
-    startPartition: Int,
-    endPartition: Int,
-    needFetchIndeterminateAttemptId: Boolean = false)
-    : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
+  def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
+      : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
-        val indeterminateAttemptId = if (needFetchIndeterminateAttemptId) {
-          shuffleStatuses(shuffleId).indeterminateAttemptId
-        } else {
-          None
-        }
         shuffleStatus.withMapStatuses { statuses =>
-          MapOutputTracker.convertMapStatuses(
-            shuffleId, startPartition, endPartition, statuses, indeterminateAttemptId)
+          MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
         }
       case None =>
         Iterator.empty
     }
-  }
-
-  def registerIndeterminateShuffle(shuffleId: Int, stageAttemptId: Int): Unit = {
-    shuffleStatuses(shuffleId).setAndCheckIndeterminateAttemptId(stageAttemptId)
-  }
-
-  def unregisterIndeterminateShuffle(shuffleId: Int): Unit = {
-    shuffleStatuses(shuffleId).resetIndeterminateAttemptId()
   }
 
   override def stop() {
@@ -743,47 +678,21 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   val mapStatuses: Map[Int, Array[MapStatus]] =
     new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
 
-  val indeterminateAttemptIds: Map[Int, Option[Int]] =
-    new ConcurrentHashMap[Int, Option[Int]]().asScala
-
   /** Remembers which map output locations are currently being fetched on an executor. */
   private val fetching = new HashSet[Int]
 
   // Get blocks sizes by executor Id. Note that zero-sized blocks are excluded in the result.
-  override def getMapSizesByExecutorId(
-      shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
-      needFetchIndeterminateAttemptId: Boolean = false)
+  override def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     val statuses = getStatuses(shuffleId)
-    val indeterminateAttemptId = if (needFetchIndeterminateAttemptId) {
-      getIndeterminateAttemptId(shuffleId)
-    } else {
-      None
-    }
     try {
-      MapOutputTracker.convertMapStatuses(
-        shuffleId, startPartition, endPartition, statuses, indeterminateAttemptId)
+      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
         mapStatuses.clear()
         throw e
-    }
-  }
-
-  private def getIndeterminateAttemptId(shuffleId: Int): Option[Int] = {
-    val id = indeterminateAttemptIds.get(shuffleId).orNull
-    if (id == null) {
-      val fetchedId = askTracker[Option[Int]](GetIndeterminateAttemptId(shuffleId))
-      indeterminateAttemptIds.put(shuffleId, fetchedId)
-      logInfo(s"Getting the indeterminate attempt id $id for" +
-        s" shuffleId: $shuffleId, and update local cache.")
-      fetchedId
-    } else {
-      id
     }
   }
 
@@ -866,7 +775,6 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         logInfo("Updating epoch to " + newEpoch + " and clearing cache")
         epoch = newEpoch
         mapStatuses.clear()
-        indeterminateAttemptIds.clear()
       }
     }
   }
@@ -963,8 +871,7 @@ private[spark] object MapOutputTracker extends Logging {
       shuffleId: Int,
       startPartition: Int,
       endPartition: Int,
-      statuses: Array[MapStatus],
-      indeterminateAttemptId: Option[Int]): Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      statuses: Array[MapStatus]): Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long)]]
     for ((status, mapId) <- statuses.iterator.zipWithIndex) {
@@ -977,7 +884,7 @@ private[spark] object MapOutputTracker extends Logging {
           val size = status.getSizeForBlock(part)
           if (size != 0) {
             splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, mapId, part, indeterminateAttemptId), size))
+                ((ShuffleBlockId(shuffleId, mapId, part, status.stageAttemptId), size))
           }
         }
       }

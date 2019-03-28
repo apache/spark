@@ -84,8 +84,7 @@ public class ExternalShuffleIntegrationSuite {
 
     dataContext0 = new TestShuffleDataContext(2, 5);
     dataContext0.create();
-    dataContext0.insertSortShuffleData(0, 0, exec0Blocks, false);
-    dataContext0.insertSortShuffleData(0, 0, exec0Blocks, true);
+    dataContext0.insertSortShuffleData(0, 0, exec0Blocks);
 
     conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     handler = new ExternalShuffleBlockHandler(conf, null);
@@ -173,28 +172,6 @@ public class ExternalShuffleIntegrationSuite {
   @Test
   public void testFetchOneSort() throws Exception {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
-    assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
-    exec0Fetch.releaseBuffers();
-  }
-
-  @Test
-  public void testFetchThreeSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult exec0Fetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2" });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
-      exec0Fetch.successBlocks);
-    assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
-    exec0Fetch.releaseBuffers();
-  }
-
-  @Test
-  public void testFetchOneExtendedSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0_0" });
     assertEquals(Sets.newHashSet("shuffle_0_0_0_0"), exec0Fetch.successBlocks);
     assertTrue(exec0Fetch.failedBlocks.isEmpty());
@@ -203,7 +180,7 @@ public class ExternalShuffleIntegrationSuite {
   }
 
   @Test
-  public void testFetchThreeExtendedSort() throws Exception {
+  public void testFetchThreeSort() throws Exception {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult exec0Fetch = fetchBlocks("exec-0",
         new String[] { "shuffle_0_0_0_0", "shuffle_0_0_1_0", "shuffle_0_0_2_0" });
@@ -222,36 +199,36 @@ public class ExternalShuffleIntegrationSuite {
   @Test
   public void testFetchWrongBlockId() throws Exception {
     registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { "rdd_1_0_0" });
+    FetchResult execFetch = fetchBlocks("exec-1", new String[] { "rdd_1_0_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("rdd_1_0_0"), execFetch.failedBlocks);
+    assertEquals(Sets.newHashSet("rdd_1_0_0_0"), execFetch.failedBlocks);
   }
 
   @Test
   public void testFetchNonexistent() throws Exception {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_2_0_0" });
+      new String[] { "shuffle_2_0_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_2_0_0"), execFetch.failedBlocks);
+    assertEquals(Sets.newHashSet("shuffle_2_0_0_0"), execFetch.failedBlocks);
   }
 
   @Test
   public void testFetchWrongExecutor() throws Exception {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch0 = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" /* right */});
-    FetchResult execFetch1 = fetchBlocks("exec-0", new String[] { "shuffle_1_0_0" /* wrong */ });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch0.successBlocks);
-    assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch1.failedBlocks);
+    FetchResult execFetch0 = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0_0" /* right */});
+    FetchResult execFetch1 = fetchBlocks("exec-0", new String[] { "shuffle_1_0_0_0" /* wrong */ });
+    assertEquals(Sets.newHashSet("shuffle_0_0_0_0"), execFetch0.successBlocks);
+    assertEquals(Sets.newHashSet("shuffle_1_0_0_0"), execFetch1.failedBlocks);
   }
 
   @Test
   public void testFetchUnregisteredExecutor() throws Exception {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-2",
-      new String[] { "shuffle_0_0_0", "shuffle_1_0_0" });
+      new String[] { "shuffle_0_0_0_0", "shuffle_1_0_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
+    assertEquals(Sets.newHashSet("shuffle_0_0_0_0", "shuffle_1_0_0_0"), execFetch.failedBlocks);
   }
 
   @Test
@@ -260,9 +237,9 @@ public class ExternalShuffleIntegrationSuite {
       new MapConfigProvider(ImmutableMap.of("spark.shuffle.io.maxRetries", "0")));
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
-      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
+      new String[]{"shuffle_1_0_0_0", "shuffle_1_0_1_0"}, clientConf, 1 /* port */);
     assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+    assertEquals(Sets.newHashSet("shuffle_1_0_0_0", "shuffle_1_0_1_0"), execFetch.failedBlocks);
   }
 
   private static void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)

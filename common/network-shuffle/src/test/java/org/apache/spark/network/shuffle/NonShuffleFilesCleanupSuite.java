@@ -211,7 +211,7 @@ public class NonShuffleFilesCleanupSuite {
     Random rand = new Random(123);
     dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000), new byte[][] {
         "ABC".getBytes(StandardCharsets.UTF_8),
-        "DEF".getBytes(StandardCharsets.UTF_8)}, false);
+        "DEF".getBytes(StandardCharsets.UTF_8)});
   }
 
   private static void createNonShuffleFiles(TestShuffleDataContext dataContext) throws IOException {

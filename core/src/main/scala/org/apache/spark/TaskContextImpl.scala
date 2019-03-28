@@ -73,9 +73,6 @@ private[spark] class TaskContextImpl(
   // Throwable that caused the task to fail
   private var failure: Throwable = _
 
-  // Whether the task is determinate.
-  private var determinate: Boolean = true
-
   // If there was a fetch failure in the task, we store it here, to make sure user-code doesn't
   // hide the exception.  See SPARK-19276
   @volatile private var _fetchFailedException: Option[FetchFailedException] = None
@@ -146,10 +143,6 @@ private[spark] class TaskContextImpl(
     reasonIfKilled = Some(reason)
   }
 
-  private[spark] override def markAsIndeterminate(): Unit = {
-    determinate = false
-  }
-
   private[spark] override def killTaskIfInterrupted(): Unit = {
     val reason = reasonIfKilled
     if (reason.isDefined) {
@@ -181,8 +174,5 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
-  private[spark] override def getLocalProperties: Properties = localProperties
-
-  private[spark] override def getIndeterminateAttemptId: Option[Int] =
-    if (!determinate) Some(stageAttemptNumber) else None
+  private[spark] override def getLocalProperties(): Properties = localProperties
 }

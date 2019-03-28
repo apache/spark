@@ -53,10 +53,7 @@ public class ExternalShuffleBlockResolverSuite {
     // Write some sort data.
     dataContext.insertSortShuffleData(0, 0, new byte[][] {
         sortBlock0.getBytes(StandardCharsets.UTF_8),
-        sortBlock1.getBytes(StandardCharsets.UTF_8)}, false);
-    dataContext.insertSortShuffleData(0, 0, new byte[][] {
-        sortBlock0.getBytes(StandardCharsets.UTF_8),
-        sortBlock1.getBytes(StandardCharsets.UTF_8)}, true);
+        sortBlock1.getBytes(StandardCharsets.UTF_8)});
   }
 
   @AfterClass
@@ -69,7 +66,7 @@ public class ExternalShuffleBlockResolverSuite {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     // Unregistered executor
     try {
-      resolver.getBlockData("app0", "exec1", 1, 1, 0);
+      resolver.getBlockData("app0", "exec1", 1, 1, 0, 0);
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
@@ -78,7 +75,7 @@ public class ExternalShuffleBlockResolverSuite {
     // Invalid shuffle manager
     try {
       resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
-      resolver.getBlockData("app0", "exec2", 1, 1, 0);
+      resolver.getBlockData("app0", "exec2", 1, 1, 0, 0);
       fail("Should have failed");
     } catch (UnsupportedOperationException e) {
       // pass
@@ -88,7 +85,7 @@ public class ExternalShuffleBlockResolverSuite {
     resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo(SORT_MANAGER));
     try {
-      resolver.getBlockData("app0", "exec3", 1, 1, 0);
+      resolver.getBlockData("app0", "exec3", 1, 1, 0, 0);
       fail("Should have failed");
     } catch (Exception e) {
       // pass
@@ -102,37 +99,16 @@ public class ExternalShuffleBlockResolverSuite {
       dataContext.createExecutorInfo(SORT_MANAGER));
 
     try (InputStream block0Stream = resolver.getBlockData(
-        "app0", "exec0", 0, 0, 0).createInputStream()) {
+        "app0", "exec0", 0, 0, 0, 0).createInputStream()) {
       String block0 =
         CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
       assertEquals(sortBlock0, block0);
     }
 
     try (InputStream block1Stream = resolver.getBlockData(
-        "app0", "exec0", 0, 0, 1).createInputStream()) {
-      String block1 =
-        CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
-      assertEquals(sortBlock1, block1);
-    }
-  }
-
-  @Test
-  public void testExtendedSortShuffleBlocks() throws IOException {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
-    resolver.registerExecutor("app0", "exec0",
-        dataContext.createExecutorInfo(SORT_MANAGER));
-
-    try (InputStream block0Stream = resolver.getBlockData(
-        "app0", "exec0", 0, 0, 0, 0).createInputStream()) {
-      String block0 =
-          CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
-      assertEquals(sortBlock0, block0);
-    }
-
-    try (InputStream block1Stream = resolver.getBlockData(
         "app0", "exec0", 0, 0, 1, 0).createInputStream()) {
       String block1 =
-          CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
+        CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
       assertEquals(sortBlock1, block1);
     }
   }

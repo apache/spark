@@ -103,7 +103,6 @@ private[spark] class ShuffleMapStage(
    */
   override def clearIntermediateState(): Unit = {
     if (isIndeterminate) {
-      mapOutputTrackerMaster.unregisterIndeterminateShuffle(shuffleDep.shuffleId)
       mapOutputTrackerMaster.unregisterAllMapOutput(shuffleDep.shuffleId)
     }
   }

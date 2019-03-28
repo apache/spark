@@ -58,12 +58,10 @@ case class ShuffleBlockId(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    indeterminateAttemptId: Option[Int] = None)
+    stageAttemptId: Int = 0)
   extends BlockId {
-  override def name: String = {
-    val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
-    if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
-  }
+  override def name: String =
+    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + stageAttemptId
 }
 
 @DeveloperApi
@@ -71,14 +69,10 @@ case class ShuffleDataBlockId(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    indeterminateAttemptId: Option[Int] = None)
+    stageAttemptId: Int = 0)
   extends BlockId {
-  override def name: String = {
-    val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
-    val nameStrWithIndeterminateAttempt =
-      if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
-    nameStrWithIndeterminateAttempt + ".data"
-  }
+  override def name: String =
+    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + stageAttemptId + ".data"
 }
 
 @DeveloperApi
@@ -86,14 +80,10 @@ case class ShuffleIndexBlockId(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    indeterminateAttemptId: Option[Int] = None)
+    stageAttemptId: Int = 0)
   extends BlockId {
-  override def name: String = {
-    val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
-    val nameStrWithIndeterminateAttempt =
-      if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
-    nameStrWithIndeterminateAttempt + ".index"
-  }
+  override def name: String =
+    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + stageAttemptId + ".index"
 }
 
 @DeveloperApi
@@ -133,13 +123,9 @@ class UnrecognizedBlockId(name: String)
 @DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
-  val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
-  val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
-  val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
-  // the extend shuffle/data/index is only used when INDETERMINATE stage rerun
-  val EXTEND_SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
-  val EXTEND_SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).data".r
-  val EXTEND_SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).index".r
+  val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).data".r
+  val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
@@ -150,18 +136,12 @@ object BlockId {
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)
-    case SHUFFLE(shuffleId, mapId, reduceId) =>
-      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
-      ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
-      ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case EXTEND_SHUFFLE(shuffleId, mapId, reduceId, stageAttemptId) =>
-      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(stageAttemptId.toInt))
-    case EXTEND_SHUFFLE_DATA(shuffleId, mapId, reduceId, stageAttemptId) =>
-      ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(stageAttemptId.toInt))
-    case EXTEND_SHUFFLE_INDEX(shuffleId, mapId, reduceId, stageAttemptId) =>
-      ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(stageAttemptId.toInt))
+    case SHUFFLE(shuffleId, mapId, reduceId, stageAttemptId) =>
+      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, stageAttemptId.toInt)
+    case SHUFFLE_DATA(shuffleId, mapId, reduceId, stageAttemptId) =>
+      ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, stageAttemptId.toInt)
+    case SHUFFLE_INDEX(shuffleId, mapId, reduceId, stageAttemptId) =>
+      ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, stageAttemptId.toInt)
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>
