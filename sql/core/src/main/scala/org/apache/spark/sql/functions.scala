@@ -3334,7 +3334,7 @@ object functions {
     (x, y, z) => f(Column(x), Column(y), Column(z)).expr
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * (Scala-specific) Returns an array of elements after applying a tranformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3344,7 +3344,7 @@ object functions {
   }
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * (Scala-specific) Returns an array of elements after applying a tranformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3354,7 +3354,7 @@ object functions {
   }
 
   /**
-   * Returns whether a predicate holds for one or more elements in the array.
+   * (Scala-specific) Returns whether a predicate holds for one or more elements in the array.
    *
    * @group collection_funcs
    */
@@ -3363,7 +3363,7 @@ object functions {
   }
 
   /**
-   * Returns an array of elements for which a predicate holds in a given array.
+   * (Scala-specific) Returns an array of elements for which a predicate holds in a given array.
    *
    * @group collection_funcs
    */
@@ -3372,7 +3372,7 @@ object functions {
   }
 
   /**
-   * Applies a binary operator to an initial state and all elements in the array,
+   * (Scala-specific) Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state. The final state is converted into the final result
    * by applying a finish function.
    *
@@ -3392,7 +3392,7 @@ object functions {
   }
 
   /**
-   * Applies a binary operator to an initial state and all elements in the array,
+   * (Scala-specific) Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state.
    *
    * @group collection_funcs
@@ -3404,7 +3404,7 @@ object functions {
       aggregate(expr, zero, merge, identity)
 
   /**
-   * Merge two given arrays, element-wise, into a signle array using a function.
+   * (Scala-specific) Merge two given arrays, element-wise, into a signle array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
    *
@@ -3418,7 +3418,7 @@ object functions {
   }
 
   /**
-   * Applies a function to every key-value pair in a map and returns
+   * (Scala-specific) Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new keys for the pairs.
    *
    * @group collection_funcs
@@ -3428,7 +3428,7 @@ object functions {
   }
 
   /**
-   * Applies a function to every key-value pair in a map and returns
+   * (Scala-specific) Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new values for the pairs.
    *
    * @group collection_funcs
@@ -3438,7 +3438,7 @@ object functions {
   }
 
   /**
-   * Returns a map whose key-value pairs satisfy a predicate.
+   * (Scala-specific) Returns a map whose key-value pairs satisfy a predicate.
    *
    * @group collection_funcs
    */
@@ -3447,7 +3447,7 @@ object functions {
   }
 
   /**
-   * Merge two given maps, key-wise into a single map using a function.
+   * (Scala-specific) Merge two given maps, key-wise into a single map using a function.
    *
    * @group collection_funcs
    */
