@@ -380,6 +380,10 @@ trait CheckAnalysis extends PredicateHelper {
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
 
+          case other if PlanHelper.specialExpressionInUnsupportedOperator(other) =>
+            failAnalysis(s"The query operator  `${other.nodeName}` contains " +
+              "one or more unsupported expression types Aggregate, Window or Generate.")
+
           case _ => // Analysis successful!
         }
     }

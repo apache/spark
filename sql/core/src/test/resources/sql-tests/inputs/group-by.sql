@@ -142,6 +142,10 @@ SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 
+-- Having referencing aggregate expressions is ok.
+SELECT count(*) FROM test_agg HAVING count(*) > 1;
+SELECT k, max(v) FROM test_agg GROUP BY k HAVING max(v) = true;
+
 -- Aggrgate expressions can be referenced through an alias
 SELECT * FROM (SELECT COUNT(*) AS cnt FROM test_agg) WHERE cnt > 1;
 
