@@ -284,14 +284,6 @@ case class AttributeReference(
     }
   }
 
-  override def withDataType(dt: DataType): AttributeReference = {
-    if (dataType == dt) {
-      this
-    } else {
-      AttributeReference(name, dt, nullable, metadata)(exprId, qualifier)
-    }
-  }
-
   override def withName(newName: String): AttributeReference = {
     if (name == newName) {
       this
