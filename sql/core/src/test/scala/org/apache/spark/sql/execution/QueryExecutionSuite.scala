@@ -120,10 +120,7 @@ class QueryExecutionSuite extends SharedSQLContext {
   }
 
   test("toString() exception/error handling") {
-    spark.experimental.extraStrategies = Seq(
-        new SparkStrategy {
-          override def apply(plan: LogicalPlan): Seq[SparkPlan] = Nil
-        })
+    spark.experimental.extraStrategies = Seq[SparkStrategy]((_: LogicalPlan) => Nil)
 
     def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
 
@@ -131,19 +128,13 @@ class QueryExecutionSuite extends SharedSQLContext {
     assert(qe.toString.contains("OneRowRelation"))
 
     // Throw an AnalysisException - this should be captured.
-    spark.experimental.extraStrategies = Seq(
-      new SparkStrategy {
-        override def apply(plan: LogicalPlan): Seq[SparkPlan] =
-          throw new AnalysisException("exception")
-      })
+    spark.experimental.extraStrategies = Seq[SparkStrategy](
+      (_: LogicalPlan) => throw new AnalysisException("exception"))
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.
-    spark.experimental.extraStrategies = Seq(
-      new SparkStrategy {
-        override def apply(plan: LogicalPlan): Seq[SparkPlan] =
-          throw new Error("error")
-      })
+    spark.experimental.extraStrategies = Seq[SparkStrategy](
+      (_: LogicalPlan) => throw new Error("error"))
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
   }

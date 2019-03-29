@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -146,11 +146,7 @@ private[sql] class SharedState(
     val wrapped = new ExternalCatalogWithListener(externalCatalog)
 
     // Make sure we propagate external catalog events to the spark listener bus
-    wrapped.addListener(new ExternalCatalogEventListener {
-      override def onEvent(event: ExternalCatalogEvent): Unit = {
-        sparkContext.listenerBus.post(event)
-      }
-    })
+    wrapped.addListener((event: ExternalCatalogEvent) => sparkContext.listenerBus.post(event))
 
     wrapped
   }

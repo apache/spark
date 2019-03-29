@@ -35,12 +35,8 @@ package object util extends Logging {
     val origErr = System.err
     val origOut = System.out
     try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
+      System.setErr(new PrintStream((_: Int) => {}))
+      System.setOut(new PrintStream((_: Int) => {}))
 
       f
     } finally {

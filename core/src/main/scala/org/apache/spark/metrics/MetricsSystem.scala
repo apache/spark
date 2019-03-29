@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -168,9 +168,7 @@ private[spark] class MetricsSystem private (
   def removeSource(source: Source) {
     sources -= source
     val regName = buildRegistryName(source)
-    registry.removeMatching(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name.startsWith(regName)
-    })
+    registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
   }
 
   private def registerSources() {
