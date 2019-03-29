@@ -168,7 +168,7 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
     // Filter out the directory before listing it leaf files
-    val filteredPaths = paths.filter(filter.accept(_))
+    val filteredPaths = paths.filter(filter.accept)
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (filteredPaths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
