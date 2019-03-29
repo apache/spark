@@ -27,7 +27,6 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
 
   override type Result = RelationalCypherResult[DataFrameTable]
   override type Records = SparkCypherRecords
-  override type Graph = RelationalCypherGraph[DataFrameTable]
 
   implicit def sparkCypherSession: SparkCypherSession = this
 

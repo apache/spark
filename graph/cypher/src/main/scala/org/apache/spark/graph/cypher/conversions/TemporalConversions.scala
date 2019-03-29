@@ -85,7 +85,7 @@ object TemporalConversions {
 
         Some(Right(s))
 
-      case NullLit(_) => None
+      case NullLit => None
 
       case other =>
         throw NotImplementedException(s"Parsing temporal values is currently only supported for Literal-Maps and String literals, got $other")
