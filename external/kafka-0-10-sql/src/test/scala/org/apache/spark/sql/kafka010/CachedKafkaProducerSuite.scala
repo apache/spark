@@ -26,7 +26,7 @@ import scala.util.Random
 import org.apache.kafka.common.serialization.ByteArraySerializer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -73,8 +73,14 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
         .option("kafka.bootstrap.servers", "12.0.0.1:39022")
         .save()
     }
-    assert(ex.getMessage.contains("org.apache.kafka.common.errors.TimeoutException"),
+    assert(ex.getMessage.contains("TimeoutException"),
       "Spark command should fail due to service not reachable.")
+    // Kafka first tries to fetch metadata and reports failures as, " not present in metadata after
+    // max.block.ms time."
+    assert(ex.getMessage.toLowerCase(ju.Locale.ROOT)
+      .contains("not present in metadata after 2 ms."),
+      "Spark command should fail due to service not reachable.")
+
     // Since failing kafka producer is released on error and also invalidated, it should not be in
     // cache.
     val map = CachedKafkaProducer.getAsMap
@@ -129,7 +135,7 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     import scala.collection.JavaConverters._
 
     val numThreads = 100
-    val numConcurrentProducers = 1000
+    val numConcurrentProducers = 500
 
     val kafkaParamsUniqueMap = mutable.HashMap.empty[Int, ju.Map[String, Object]]
     (1 to numConcurrentProducers).map {
@@ -201,23 +207,29 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     val checkpointDir = Utils.createTempDir()
     val topic = newTopic()
     testUtils.createTopic(topic, 100)
-    failAfter(streamingTimeout) {
-      val queries = for (i <- 1 to 10) yield {
-        df.writeStream
-          .format("kafka")
-          .option("checkpointLocation", checkpointDir.getCanonicalPath + i)
-          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-          // to make it create 5 unique producers.
-          .option("kafka.max.block.ms", s"100${i % 5}")
-          .option("topic", topic)
-          .trigger(Trigger.Continuous(500))
-          .queryName(s"kafkaStream$i")
-          .start()
-      }
-      Thread.sleep(15000)
+    var queries: Seq[StreamingQuery] = Seq.empty[StreamingQuery]
+    try {
+      failAfter(streamingTimeout) {
+        queries = for (i <- 1 to 10) yield {
+          df.writeStream
+            .format("kafka")
+            .option("checkpointLocation", checkpointDir.getCanonicalPath + i)
+            .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+            // to make it create 5 unique producers.
+            .option("kafka.max.block.ms", s"100${i % 5}")
+            .option("topic", topic)
+            .trigger(Trigger.Continuous(500))
+            .queryName(s"kafkaStream$i")
+            .start()
+        }
+        Thread.sleep(15000)
 
+        queries.foreach { q =>
+          assert(q.exception.isEmpty, "None of the queries should fail.")
+        }
+      }
+    } finally {
       queries.foreach { q =>
-        assert(q.exception.isEmpty, "None of the queries should fail.")
         q.stop()
       }
     }
