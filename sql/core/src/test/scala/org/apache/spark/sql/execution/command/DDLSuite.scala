@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.sources.v2.SimpleWritableDataSource
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -165,6 +166,25 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       }
       assert(e.message.contains("The format of the existing table default.t1 is "))
       assert(e.message.contains("It doesn't match the specified format"))
+    }
+  }
+
+  test("Create external table with v2 data source") {
+    withTable("t") {
+      withTempDir { dir =>
+        val source = s"${classOf[SimpleWritableDataSource]}"
+        val path = new File(dir, "test")
+        spark.range(1, 10)
+          .toDF("id")
+          .write
+          .format(source)
+          .save(path.getCanonicalPath)
+
+        spark.sql(s"CREATE TABLE t (id Long) USING ${source} LOCATION ${path.getCanonicalPath}")
+        val table = spark.table("t")
+        assert(table.count() === 10)
+        assert(spark.sql("select count(*) from t") === 10)
+      }
     }
   }
 }

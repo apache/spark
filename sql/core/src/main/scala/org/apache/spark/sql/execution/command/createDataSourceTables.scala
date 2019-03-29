@@ -18,15 +18,20 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
+import java.util.Locale
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A command used to create a data source table.
@@ -57,6 +62,39 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
+    val v2Class = tryToProcessInV1(sparkSession, table)
+    if (v2Class.nonEmpty) {
+      // treat it as V2 data source
+      val newTable = if (table.schema.nonEmpty) {
+        table
+      } else {
+        val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+        val provider = v2Class.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          source = provider, conf = sparkSession.sessionState.conf)
+        val finalOptions = sessionOptions ++ pathOption
+        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+        val v2Table = provider.getTable(dsOptions)
+        table.copy(schema = v2Table.schema())
+      }
+
+      // We will return Nil or throw exception at the beginning if the table already exists, so when
+      // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
+      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    }
+
+    Seq.empty[Row]
+  }
+
+  /**
+   * We try to treat the source in V1 data source.
+   * @return None if this table source can be processed in V1 data source. Retrun the source class
+   *         if this table source is a V2 data source. Otherwise, an exception will be thrown.
+   */
+  def tryToProcessInV1(
+      sparkSession: SparkSession,
+      table: CatalogTable): Option[Class[_]] = {
+    val sessionState = sparkSession.sessionState
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
     val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
@@ -66,16 +104,33 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         database = Some(
           table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase))),
       tracksPartitionsInCatalog = sessionState.conf.manageFilesourcePartitions)
-    val dataSource: BaseRelation =
-      DataSource(
-        sparkSession = sparkSession,
-        userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-        partitionColumns = table.partitionColumnNames,
-        className = table.provider.get,
-        bucketSpec = table.bucketSpec,
-        options = table.storage.properties ++ pathOption,
-        // As discussed in SPARK-19583, we don't check if the location is existed
-        catalogTable = Some(tableWithDefaultOptions)).resolveRelation(checkFilesExist = false)
+
+    val dataSource: DataSource = DataSource(
+      sparkSession = sparkSession,
+      userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+      partitionColumns = table.partitionColumnNames,
+      className = table.provider.get,
+      bucketSpec = table.bucketSpec,
+      options = table.storage.properties ++ pathOption,
+      // As discussed in SPARK-19583, we don't check if the location is existed
+      catalogTable = Some(tableWithDefaultOptions))
+
+    lazy val useV1Sources =
+      sparkSession.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
+    lazy val providingClass = dataSource.providingClass
+
+    val baseRelation: BaseRelation = try {
+      dataSource.resolveRelation(checkFilesExist = false)
+    } catch {
+      case ex: AnalysisException if !useV1Sources.contains(
+          providingClass.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        if (classOf[TableProvider].isAssignableFrom(providingClass)) {
+          return Some(providingClass)
+        }
+
+        throw ex
+      case others => throw others
+    }
 
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
@@ -88,7 +143,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
-    val newTable = dataSource match {
+    val newTable = baseRelation match {
       // Since Spark 2.1, we store the inferred schema of data source in metastore, to avoid
       // inferring the schema again at read path. However if the data source has overlapped columns
       // between data and partition schema, we can't store it in metastore as it breaks the
@@ -104,21 +159,20 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
       case _ =>
         table.copy(
-          schema = dataSource.schema,
+          schema = baseRelation.schema,
           partitionColumnNames = partitionColumnNames,
           // If metastore partition management for file source tables is enabled, we start off with
           // partition provider hive, but no partitions in the metastore. The user has to call
           // `msck repair table` to populate the table partitions.
           tracksPartitionsInCatalog = partitionColumnNames.nonEmpty &&
             sessionState.conf.manageFilesourcePartitions)
-
     }
 
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
 
-    Seq.empty[Row]
+    None
   }
 }
 
