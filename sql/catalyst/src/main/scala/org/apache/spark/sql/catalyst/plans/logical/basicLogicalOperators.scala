@@ -235,17 +235,22 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   override def output: Seq[Attribute] = {
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
-      val outAttr = try {
-        firstAttr.withDataType(attrs.map(_.dataType).reduce(StructType.merge))
+      try {
+        val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+        if (firstAttr.dataType == newDt) {
+          firstAttr
+        } else {
+          AttributeReference(firstAttr.name, newDt, attrs.exists(_.nullable), firstAttr.metadata)(
+            firstAttr.exprId, firstAttr.qualifier)
+        }
       } catch {
         // This should never happen, since `output` is called only when the plan is `resolved`, so
         // all the data types have been checked to be the same.
         case e: SparkException if !Utils.isTesting =>
-          logError("[BUG] Error in determinin Union output (for more details see the stacktrace" +
+          logError("[BUG] Error in determining Union output (for more details see the stacktrace" +
             " below). Please open a JIRA ticket to report it with the full error message.", e)
           firstAttr
       }
-      outAttr.withNullability(attrs.exists(_.nullable))
     }
   }
 

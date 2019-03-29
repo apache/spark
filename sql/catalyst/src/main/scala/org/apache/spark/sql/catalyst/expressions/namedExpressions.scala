@@ -112,7 +112,6 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   override def references: AttributeSet = AttributeSet(this)
 
   def withNullability(newNullability: Boolean): Attribute
-  def withDataType(dt: DataType): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
   def withName(newName: String): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
@@ -370,7 +369,6 @@ case class PrettyAttribute(
   override def withNullability(newNullability: Boolean): Attribute =
     throw new UnsupportedOperationException
   override def newInstance(): Attribute = throw new UnsupportedOperationException
-  override def withDataType(dt: DataType): Attribute = throw new UnsupportedOperationException
   override def withQualifier(newQualifier: Seq[String]): Attribute =
     throw new UnsupportedOperationException
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException

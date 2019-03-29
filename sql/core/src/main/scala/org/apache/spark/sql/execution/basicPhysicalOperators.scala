@@ -603,16 +603,21 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
   override def output: Seq[Attribute] = {
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
-      val outAttr = try {
-        firstAttr.withDataType(attrs.map(_.dataType).reduce(StructType.merge))
+      try {
+        val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+        if (firstAttr.dataType == newDt) {
+          firstAttr
+        } else {
+          AttributeReference(firstAttr.name, newDt, attrs.exists(_.nullable), firstAttr.metadata)(
+            firstAttr.exprId, firstAttr.qualifier)
+        }
       } catch {
         // This should never happen
         case e: SparkException if !Utils.isTesting =>
-          logError("[BUG] Error in determinin Union output (for more details see the stacktrace" +
+          logError("[BUG] Error in determining Union output (for more details see the stacktrace" +
             " below). Please open a JIRA ticket to report it with the full error message.", e)
           firstAttr
       }
-      outAttr.withNullability(attrs.exists(_.nullable))
     }
   }
 
