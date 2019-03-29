@@ -143,11 +143,11 @@ def _create_local_socket(sock_info):
     # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
-    return sockfile, sock
+    return sockfile
 
 
 def _load_from_socket(sock_info, serializer):
-    (sockfile, _) = _create_local_socket(sock_info)
+    sockfile = _create_local_socket(sock_info)
     # The socket will be automatically closed when garbage-collected.
     return serializer.load_stream(sockfile)
 
@@ -156,7 +156,7 @@ class _PyLocalIterable(object):
     """ Create a synchronous local iterable over a socket """
 
     def __init__(self, sock_info, serializer):
-        (self.sockfile, self.sock) = _create_local_socket(sock_info)
+        self.sockfile = _create_local_socket(sock_info)
         self.serializer = serializer
         self.read_iter = iter([])  # Initialize as empty iterator
 
