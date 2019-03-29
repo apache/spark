@@ -58,6 +58,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     val trueLit = functions.lit(true)
     val falseLit = functions.lit(false)
 
+    // TODO: add empty set
     val nodeFrames = labelColumns.subsets().map { labelSet =>
       val predicate = labelColumns.map {
         case labelColumn if labelSet.contains(labelColumn) => nodes.col(labelColumn) === trueLit
@@ -82,7 +83,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
 
   override def cypher(graph: PropertyGraph, query: String, parameters: Map[String, Any]): CypherResult = {
     val relationalGraph = toRelationalGraph(graph)
-    SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records, relationalGraph.schema, this)
+    SparkCypherResult(relationalGraph.cypher(query, CypherMap(parameters.toSeq: _*)).records)
   }
 
   private val DEFAULT_FORMAT = "parquet"
