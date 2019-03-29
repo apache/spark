@@ -70,18 +70,17 @@ abstract class AggregationIterator(
   // Initialize all AggregateFunctions by binding references if necessary,
   // and set inputBufferOffset and mutableBufferOffset.
   protected def initializeAggregateFunctions(
-      aggExpressions: Seq[AggregateExpression],
+      expressions: Seq[AggregateExpression],
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
-    val expressions = aggExpressions.toArray
     val expressionsLength = expressions.length
     val functions = new Array[AggregateFunction](expressionsLength)
     var i = 0
     val inputAttributeSeq: AttributeSeq = inputAttributes
-    while (i < expressionsLength) {
-      val func = expressions(i).aggregateFunction
-      val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
+    for (expression <- expressions)  {
+      val func = expression.aggregateFunction
+      val funcWithBoundReferences: AggregateFunction = expression.mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
@@ -154,15 +153,14 @@ abstract class AggregationIterator(
 
   // Initializing functions used to process a row.
   protected def generateProcessRow(
-      aggExpressions: Seq[AggregateExpression],
+      expressions: Seq[AggregateExpression],
       functions: Seq[AggregateFunction],
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
-    val expressions = aggExpressions.toArray
     if (expressions.nonEmpty) {
-      val mergeExpressions = functions.zipWithIndex.flatMap {
-        case (ae: DeclarativeAggregate, i) =>
-          expressions(i).mode match {
+      val mergeExpressions = functions.zip(expressions).flatMap {
+        case (ae: DeclarativeAggregate, expression) =>
+          expression.mode match {
             case Partial | Complete => ae.updateExpressions
             case PartialMerge | Final => ae.mergeExpressions
           }
