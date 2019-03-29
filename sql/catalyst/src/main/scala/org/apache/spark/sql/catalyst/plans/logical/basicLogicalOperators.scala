@@ -229,6 +229,11 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     }
   }
 
+  def duplicateResolved: Boolean = {
+    children.map(_.outputSet.size).sum ==
+      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
+  }
+
   // updating nullability to make all the children consistent
   override def output: Seq[Attribute] =
     children.map(_.output).transpose.map(attrs =>
