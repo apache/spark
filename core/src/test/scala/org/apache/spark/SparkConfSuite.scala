@@ -30,7 +30,7 @@ import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -337,6 +337,14 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
+  }
+
+  test("SPARK-27244 toDebugString should redact passwords") {
+    val conf = new SparkConf().set("dummy.password", "dummy-password")
+    conf.validateSettings()
+
+    assert(conf.get("dummy.password") === "dummy-password")
+    assert(conf.toDebugString.contains(s"dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
   }
 
   val defaultIllegalValue = "SomeIllegalValue"

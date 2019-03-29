@@ -625,7 +625,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * configuration out for debugging.
    */
   def toDebugString: String = {
-    getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+    Utils.redact(this, getAll).sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
   }
 
 }
