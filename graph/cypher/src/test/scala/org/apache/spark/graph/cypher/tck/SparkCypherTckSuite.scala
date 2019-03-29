@@ -23,9 +23,9 @@ class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
 
   private val failingBlacklist = getClass.getResource("/tck/failing_blacklist").getFile
   private val temporalBlacklist = getClass.getResource("/tck/temporal_blacklist").getFile
-  private val wontFixBlacklistFile = getClass.getResource("/tck/wont_fix_blacklist").getFile
-  private val failureReportingBlacklistFile = getClass.getResource("/tck/failure_reporting_blacklist").getFile
-  private val scenarios = ScenariosFor(failingBlacklist, temporalBlacklist, wontFixBlacklistFile, failureReportingBlacklistFile)
+  private val wontFixBlacklist = getClass.getResource("/tck/wont_fix_blacklist").getFile
+  private val failureReportingBlacklist = getClass.getResource("/tck/failure_reporting_blacklist").getFile
+  private val scenarios = ScenariosFor(failingBlacklist, temporalBlacklist, wontFixBlacklist, failureReportingBlacklist)
 
   forAll(scenarios.whiteList) { scenario =>
     test(s"[${WhiteList.name}] $scenario", WhiteList, tckSparkCypherTag, Tag(graphFactory.name)) {
@@ -46,9 +46,11 @@ class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
   }
 
   test("compute TCK coverage") {
-    val failingScenarios = Source.fromFile(failingBlacklist).getLines().size
-    val failingTemporalScenarios = Source.fromFile(temporalBlacklist).getLines().size
-    val failureReportingScenarios = Source.fromFile(failureReportingBlacklistFile).getLines().size
+    def withSource[T](s: Source)(f: Source => T) = try { f(s) } finally { s.close() }
+
+    val failingScenarios = withSource(Source.fromFile(failingBlacklist))(_.getLines().size)
+    val failingTemporalScenarios = withSource(Source.fromFile(temporalBlacklist))(_.getLines().size)
+    val failureReportingScenarios = withSource(Source.fromFile(failureReportingBlacklist))(_.getLines().size)
 
     val white = scenarios.whiteList.groupBy(_.featureName).mapValues(_.size)
     val black = scenarios.blackList.groupBy(_.featureName).mapValues(_.size)
