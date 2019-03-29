@@ -957,7 +957,8 @@ class Analyzer(
       case e @ Except(left, right, _) if !e.duplicateResolved =>
         e.copy(right = dedupRight(left, right))
       case u @ Union(children) if !u.duplicateResolved =>
-        // Use projection-based de-duplication for Union to avoid behavior changes in streaming.
+        // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
+        // feature in streaming.
         val newChildren = children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
           head +: tail.map {
             case child if head.outputSet.intersect(child.outputSet).isEmpty =>
