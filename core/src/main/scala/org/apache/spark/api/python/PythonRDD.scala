@@ -176,13 +176,23 @@ private[spark] object PythonRDD extends Logging {
         }
 
         // Read request for data and send next partition if nonzero
-        while (in.readInt() != 0 && collectPartitionIter.hasNext) {
+        var complete = false
+        while (in.readInt() != 0 && !complete) {
+          if (collectPartitionIter.hasNext) {
 
-          // Write the next object and signal end of data for this iteration
-          val partitionArray = collectPartitionIter.next()
-          writeIteratorToStream(partitionArray.toIterator, out)
-          out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
-          out.flush()
+            // Send response there is a partition to read
+            out.writeInt(1)
+
+            // Write the next object and signal end of data for this iteration
+            val partitionArray = collectPartitionIter.next()
+            writeIteratorToStream(partitionArray.toIterator, out)
+            out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+            out.flush()
+          } else {
+            // Send response there are no more partitions to read and close
+            out.writeInt(0)
+            complete = true
+          }
         }
       } {
         out.close()
