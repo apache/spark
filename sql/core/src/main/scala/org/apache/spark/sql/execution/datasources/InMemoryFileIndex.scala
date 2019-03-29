@@ -295,8 +295,12 @@ object InMemoryFileIndex extends Logging {
         case Some(session) =>
           bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
         case _ =>
-          dirs.filter(fileStatus => filter.accept(fileStatus.getPath))
-            .flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
+          val filteredDirs = if (filter != null) {
+            dirs.filter(fileStatus => filter.accept(fileStatus.getPath))
+          } else {
+            dirs
+          }
+          filteredDirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
       }
       val allFiles = topLevelFiles ++ nestedFiles
       if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
