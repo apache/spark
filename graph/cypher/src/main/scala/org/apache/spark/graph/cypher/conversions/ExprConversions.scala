@@ -3,7 +3,7 @@ package org.apache.spark.graph.cypher.conversions
 import org.apache.spark.sql.functions.{array_contains => _, translate => _, _}
 import org.apache.spark.graph.cypher.conversions.TemporalConversions._
 import org.apache.spark.graph.cypher.conversions.TypeConversions._
-import org.apache.spark.graph.cypher.udfs.SparkCypherFunctions._
+import org.apache.spark.graph.cypher.SparkCypherFunctions._
 import org.apache.spark.graph.cypher.udfs.TemporalUdfs
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame}

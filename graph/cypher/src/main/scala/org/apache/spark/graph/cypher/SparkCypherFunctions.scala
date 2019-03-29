@@ -1,9 +1,9 @@
-package org.apache.spark.graph.cypher.udfs
+package org.apache.spark.graph.cypher
 
 import org.apache.spark.graph.cypher.conversions.ExprConversions._
 import org.apache.spark.graph.cypher.conversions.TypeConversions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
-import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayFilter, ArrayTransform, CaseWhen, EqualTo, Expression, GenericRowWithSchema, GetArrayItem, GetStructField, IsNotNull, LambdaFunction, NamedLambdaVariable, RLike, Slice, StringTranslate, XxHash64}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 import org.apache.spark.sql.{Column, DataFrame, functions}
