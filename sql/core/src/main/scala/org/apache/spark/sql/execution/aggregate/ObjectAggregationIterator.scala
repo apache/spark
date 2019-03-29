@@ -58,7 +58,7 @@ class ObjectAggregationIterator(
 
   private[this] var aggBufferIterator: Iterator[AggregationBufferEntry] = _
 
-  val (sortBasedAggExpressions, sortBasedAggFunctions): (
+  val (sortBasedMergeAggExpressions, sortBasedMergeAggFunctions): (
     Seq[AggregateExpression], Array[AggregateFunction]) = {
     val newExpressions = aggregateExpressions.map {
       case agg @ AggregateExpression(_, Partial, _, _) =>
@@ -72,8 +72,9 @@ class ObjectAggregationIterator(
 
   // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
   private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
-    val newInputAttributes = sortBasedAggFunctions.flatMap(_.inputAggBufferAttributes)
-    generateProcessRow(sortBasedAggExpressions, sortBasedAggFunctions, newInputAttributes)
+    val newInputAttributes = sortBasedMergeAggFunctions.flatMap(_.inputAggBufferAttributes)
+    generateProcessRow(
+      sortBasedMergeAggExpressions, sortBasedMergeAggFunctions, newInputAttributes)
   }
 
   /**
@@ -184,7 +185,9 @@ class ObjectAggregationIterator(
           StructType.fromAttributes(groupingAttributes),
           processRow,
           mergeAggregationBuffers,
-          createNewAggregationBuffer(sortBasedAggFunctions))
+          createNewAggregationBuffer(aggregateFunctions),
+          createNewAggregationBuffer(sortBasedMergeAggFunctions),
+          aggregateFunctions)
 
         while (inputRows.hasNext) {
           // NOTE: The input row is always UnsafeRow
@@ -212,7 +215,12 @@ class ObjectAggregationIterator(
  * @param processRow  Function to update the aggregation buffer with input rows
  * @param mergeAggregationBuffers Function used to merge the input aggregation buffers into existing
  *                                aggregation buffers
- * @param makeEmptyAggregationBuffer Creates an empty aggregation buffer
+ * @param makeEmptyAggregationBufferForSortBasedUpdateAggFunctions Creates an empty aggregation
+ *                                                                 buffer for update operation
+ * @param makeEmptyAggregationBufferForSortBasedMergeAggFunctions Creates an empty aggregation
+ *                                                                buffer for merge operation
+ * @param sortBasedUpdateAggFunctions aggregate functions needed to serialize the
+ *                                    aggregation buffer
  *
  * @todo Try to eliminate this class by refactor and reuse code paths in [[SortAggregateExec]].
  */
@@ -222,7 +230,9 @@ class SortBasedAggregator(
     groupingSchema: StructType,
     processRow: (InternalRow, InternalRow) => Unit,
     mergeAggregationBuffers: (InternalRow, InternalRow) => Unit,
-    makeEmptyAggregationBuffer: => InternalRow) {
+    makeEmptyAggregationBufferForSortBasedUpdateAggFunctions: => InternalRow,
+    makeEmptyAggregationBufferForSortBasedMergeAggFunctions: => InternalRow,
+    sortBasedUpdateAggFunctions: Array[AggregateFunction]) {
 
   // external sorter to sort the input (grouping key + input row) with grouping key.
   private val inputSorter = createExternalSorterForInput()
@@ -230,6 +240,10 @@ class SortBasedAggregator(
 
   def addInput(groupingKey: UnsafeRow, inputRow: UnsafeRow): Unit = {
     inputSorter.insertKV(groupingKey, inputRow)
+  }
+  private def serializeBuffer(buffer: InternalRow): Unit = {
+    sortBasedUpdateAggFunctions.collect { case f: TypedImperativeAggregate[_] => f }.foreach(
+      _.serializeAggregateBufferInPlace(buffer))
   }
 
   /**
@@ -241,16 +255,18 @@ class SortBasedAggregator(
       val inputIterator = inputSorter.sortedIterator()
       var hasNextInput: Boolean = inputIterator.next()
       var hasNextAggBuffer: Boolean = initialAggBufferIterator.next()
-      private var result: AggregationBufferEntry = _
+      private var updateResult: AggregationBufferEntry = _
+      private var finalResult: AggregationBufferEntry = _
       private var groupingKey: UnsafeRow = _
 
       override def hasNext(): Boolean = {
-        result != null || findNextSortedGroup()
+        updateResult != null || finalResult != null || findNextSortedGroup()
       }
 
       override def next(): AggregationBufferEntry = {
-        val returnResult = result
-        result = null
+        val returnResult = finalResult
+        updateResult = null
+        finalResult = null
         returnResult
       }
 
@@ -259,21 +275,31 @@ class SortBasedAggregator(
         if (hasNextInput || hasNextAggBuffer) {
           // Find smaller key of the initialAggBufferIterator and initialAggBufferIterator
           groupingKey = findGroupingKey()
-          result = new AggregationBufferEntry(groupingKey, makeEmptyAggregationBuffer)
+          updateResult = new AggregationBufferEntry(
+            groupingKey, makeEmptyAggregationBufferForSortBasedUpdateAggFunctions)
+          finalResult = new AggregationBufferEntry(
+            groupingKey, makeEmptyAggregationBufferForSortBasedMergeAggFunctions)
 
           // Firstly, update the aggregation buffer with input rows.
           while (hasNextInput &&
             groupingKeyOrdering.compare(inputIterator.getKey, groupingKey) == 0) {
-            processRow(result.aggregationBuffer, inputIterator.getValue)
+            processRow(updateResult.aggregationBuffer, inputIterator.getValue)
             hasNextInput = inputIterator.next()
           }
 
+          // This step ensures that the contents of the updateResult aggregation buffer are
+          // merged with the finalResult aggregation buffer to maintain consistency
+          if (hasNextAggBuffer) {
+            serializeBuffer(updateResult.aggregationBuffer)
+            mergeAggregationBuffers(finalResult.aggregationBuffer, updateResult.aggregationBuffer)
+          }
           // Secondly, merge the aggregation buffer with existing aggregation buffers.
           // NOTE: the ordering of these two while-block matter, mergeAggregationBuffer() should
           // be called after calling processRow.
           while (hasNextAggBuffer &&
             groupingKeyOrdering.compare(initialAggBufferIterator.getKey, groupingKey) == 0) {
-            mergeAggregationBuffers(result.aggregationBuffer, initialAggBufferIterator.getValue)
+            mergeAggregationBuffers(
+              finalResult.aggregationBuffer, initialAggBufferIterator.getValue)
             hasNextAggBuffer = initialAggBufferIterator.next()
           }
 
