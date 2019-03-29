@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DateHourTransform, DateTransform, FieldReference, IdentityTransform, LiteralValue, MonthTransform, YearTransform}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.logical.expressions.{ApplyTransform, BucketTransform, DateHourTransform, DateTransform, FieldReference, IdentityTransform, LiteralValue, MonthTransform, YearTransform}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String

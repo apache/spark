@@ -25,11 +25,9 @@ import org.apache.spark.annotation.Experimental;
 @Experimental
 public interface NamedReference extends Expression {
   /**
-   * Returns the referenced field name.
+   * Returns the referenced field name as an array of String parts.
    * <p>
-   * Names that identify nested fields are formatted using a "." separator without quoting or
-   * additional escape characters. A struct column "a" with a field named "b.c" will produce the
-   * field name "a.b.c".
+   * Each string in the returned array represents a field name.
    */
-  String fieldName();
+  String[] fieldNames();
 }

@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
-
 import javax.xml.bind.DatatypeConverter
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -29,14 +29,12 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2
-import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DateHourTransform, DateTransform, FieldReference, IdentityTransform, LiteralValue, MonthTransform, Transform, YearTransform}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.logical.expressions.{ApplyTransform, BucketTransform, DateHourTransform, DateTransform, FieldReference, IdentityTransform, LiteralValue, MonthTransform, Transform, YearTransform}
-import org.apache.spark.sql.catalyst.logical.expressions
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2078,7 +2076,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     ctx.transforms.asScala.map {
       case identityCtx: IdentityTransformContext =>
-        IdentityTransform(FieldReference(identityCtx.qualifiedName.getText))
+        IdentityTransform(FieldReference(
+          identityCtx.qualifiedName.identifier.asScala.map(_.getText)))
 
       case applyCtx: ApplyTransformContext =>
         val arguments = applyCtx.argument.asScala.map(visitTransformArgument)
@@ -2125,7 +2124,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
     withOrigin(ctx) {
       val reference = Option(ctx.qualifiedName)
-          .map(nameCtx => FieldReference(nameCtx.getText))
+          .map(nameCtx => FieldReference(nameCtx.identifier.asScala.map(_.getText)))
       val literal = Option(ctx.constant)
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))

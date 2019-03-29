@@ -36,7 +36,7 @@ public class Expressions {
    * @param args expression arguments to the transform
    * @return a logical transform
    */
-  public Transform apply(String name, Expression[] args) {
+  public Transform apply(String name, Expression... args) {
     return LogicalExpressions.apply(name, args);
   }
 
@@ -71,7 +71,7 @@ public class Expressions {
    * @param columns input columns for the bucket transform
    * @return a logical bucket transform
    */
-  public Transform bucket(int numBuckets, String[] columns) {
+  public Transform bucket(int numBuckets, String... columns) {
     return LogicalExpressions.bucket(numBuckets, columns);
   }
 

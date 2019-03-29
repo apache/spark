@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalog.v2.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 /**
@@ -29,6 +31,10 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  * logical and internal expressions are used.
  */
 private[sql] object LogicalExpressions {
+  // a generic parser that is only used for parsing multi-part field names.
+  // because this is only used for field names, the SQL conf passed in does not matter.
+  private lazy val parser = new CatalystSqlParser(SQLConf.get)
+
   def fromPartitionColumns(columns: String*): Array[IdentityTransform] =
     columns.map(identity).toArray
 
@@ -50,28 +56,36 @@ private[sql] object LogicalExpressions {
             nonIdTransforms.map(_.describe).mkString(", "))
       }
 
-      idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference.fieldName)
+      idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
+        val parts = ref.fieldNames
+        if (parts.size > 1) {
+          throw new AnalysisException(s"Cannot partition by nested column: $ref")
+        } else {
+          parts(0)
+        }
+      }
     }
   }
 
   def literal[T](value: T): LiteralValue[T] = {
     val internalLit = catalyst.expressions.Literal(value)
-    LiteralValue(value, internalLit.dataType)
+    literal(value, internalLit.dataType)
   }
 
   def literal[T](value: T, dataType: DataType): LiteralValue[T] = LiteralValue(value, dataType)
 
-  def reference(name: String): NamedReference = FieldReference(name)
+  def reference(name: String): NamedReference =
+    FieldReference(parser.parseMultipartIdentifier(name))
 
   def apply(name: String, arguments: Array[Expression]): Transform = ApplyTransform(name, arguments)
 
-  def apply(name: String, arguments: Expression*): Transform =
-    ApplyTransform(name, arguments)
+  def apply(name: String, arguments: Expression*): Transform = ApplyTransform(name, arguments)
 
-  def bucket(numBuckets: Int, columns: Array[String]): BucketTransform = bucket(numBuckets, columns)
+  def bucket(numBuckets: Int, columns: Array[String]): BucketTransform =
+    BucketTransform(literal(numBuckets, IntegerType), columns.map(reference))
 
   def bucket(numBuckets: Int, columns: String*): BucketTransform =
-    BucketTransform(literal(numBuckets, IntegerType), columns.map(FieldReference))
+    BucketTransform(literal(numBuckets, IntegerType), columns.map(reference))
 
   def identity(column: String): IdentityTransform = IdentityTransform(reference(column))
 
@@ -139,7 +153,7 @@ private[sql] final case class ApplyTransform(
 private[sql] final case class IdentityTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
   override lazy val name: String = "identity"
-  override lazy val describe: String = ref.fieldName
+  override lazy val describe: String = ref.describe
 }
 
 private[sql] final case class YearTransform(
@@ -173,7 +187,22 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
   override def toString: String = describe
 }
 
-private[sql] final case class FieldReference(fieldName: String) extends NamedReference {
-  override def describe: String = fieldName
+private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
+  override lazy val fieldNames: Array[String] = parts.toArray
+  override lazy val describe: String = fieldNames.map(quote).mkString(".")
   override def toString: String = describe
+
+  private def quote(part: String): String = {
+    if (part.contains(".")) {
+      s"`${part.replace("`", "``")}`"
+    } else {
+      part
+    }
+  }
+}
+
+private[sql] object FieldReference {
+  def apply(column: String): NamedReference = {
+    LogicalExpressions.reference(column)
+  }
 }
