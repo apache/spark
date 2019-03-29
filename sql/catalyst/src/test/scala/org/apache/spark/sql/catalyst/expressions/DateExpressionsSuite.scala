@@ -54,12 +54,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("datetime function current_date") {
     val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis(), TimeZoneGMT)
-    val cd = CurrentDate(gmtId).eval(EmptyRow).asInstanceOf[Int]
+    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
     val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis(), TimeZoneGMT)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
-    val cdjst = CurrentDate(jstId).eval(EmptyRow).asInstanceOf[Int]
-    val cdpst = CurrentDate(pstId).eval(EmptyRow).asInstanceOf[Int]
+    val cdjst = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
+    val cdpst = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
     assert(cdpst <= cd && cd <= cdjst)
   }
 
