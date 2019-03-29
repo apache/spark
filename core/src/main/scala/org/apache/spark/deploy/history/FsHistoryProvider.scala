@@ -425,7 +425,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
       if (diskStoreCacheEnabled) {
-        Seq(replayPool.get).foreach { executor =>
+        replayPool.foreach { executor =>
           executor.shutdown()
           if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
             executor.shutdownNow()
