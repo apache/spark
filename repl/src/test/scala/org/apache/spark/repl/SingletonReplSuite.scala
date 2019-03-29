@@ -20,8 +20,6 @@ package org.apache.spark.repl
 import java.io._
 import java.net.URLClassLoader
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.SparkFunSuite
@@ -43,18 +41,16 @@ class SingletonReplSuite extends SparkFunSuite {
     super.beforeAll()
 
     val cl = getClass.getClassLoader
-    var paths = new ArrayBuffer[String]
-    if (cl.isInstanceOf[URLClassLoader]) {
-      val urlLoader = cl.asInstanceOf[URLClassLoader]
-      for (url <- urlLoader.getURLs) {
-        if (url.getProtocol == "file") {
-          paths += url.getFile
-        }
-      }
-    }
-    val classpath = paths.map(new File(_).getAbsolutePath).mkString(File.pathSeparator)
 
-    System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
+    val classpath = cl match {
+      case urlLoader: URLClassLoader =>
+        val paths = urlLoader.getURLs.filter(_.getProtocol == "file").map(_.getFile)
+        val classpath = paths.map(new File(_).getAbsolutePath).mkString(File.pathSeparator)
+        System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
+        classpath
+      case _ => System.getProperty("java.class.path")
+    }
+
     Main.conf.set("spark.master", "local-cluster[2,1,1024]")
     val interp = new SparkILoop(
       new BufferedReader(new InputStreamReader(new PipedInputStream(in))),
