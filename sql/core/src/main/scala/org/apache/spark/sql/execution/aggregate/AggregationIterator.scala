@@ -77,7 +77,7 @@ abstract class AggregationIterator(
     val functions = new Array[AggregateFunction](expressions.length)
     var i = 0
     val inputAttributeSeq: AttributeSeq = inputAttributes
-    for (expression <- expressions)  {
+    for (expression <- expressions) {
       val func = expression.aggregateFunction
       val funcWithBoundReferences: AggregateFunction = expression.mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
