@@ -5,6 +5,7 @@ import org.apache.spark.graph.cypher.conversions.TemporalConversions._
 import org.apache.spark.graph.cypher.conversions.TypeConversions._
 import org.apache.spark.graph.cypher.SparkCypherFunctions._
 import org.apache.spark.graph.cypher.udfs.TemporalUdfs
+import org.apache.spark.sql.catalyst.expressions.CaseWhen
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame}
 import org.opencypher.okapi.api.types._
@@ -17,6 +18,32 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object ExprConversions {
+
+  /**
+    * Converts `expr` with the `withConvertedChildren` function, which is passed the converted child expressions as its
+    * argument.
+    *
+    * Iff the expression has `expr.nullInNullOut == true`, then any child being mapped to `null` will also result in
+    * the parent expression being mapped to null.
+    *
+    * For these expressions the `withConvertedChildren` function is guaranteed to not receive any `null`
+    * values from the evaluated children.
+    */
+  def nullSafeConversion(expr: Expr)(withConvertedChildren: Seq[Column] => Column)
+    (implicit header: RecordHeader, df: DataFrame, parameters: CypherMap): Column = {
+    if (expr.cypherType == CTNull) {
+      NULL_LIT
+    } else {
+      val evaluatedArgs = expr.children.map(_.asSparkSQLExpr)
+      val withConvertedChildrenResult = withConvertedChildren(evaluatedArgs).expr
+      if (expr.children.nonEmpty && expr.nullInNullOut && expr.cypherType.isNullable) {
+        val nullPropagationCases = evaluatedArgs.map(_.isNull.expr).zip(Seq.fill(evaluatedArgs.length)(NULL_LIT.expr))
+        new Column(CaseWhen(nullPropagationCases, withConvertedChildrenResult))
+      } else {
+        new Column(withConvertedChildrenResult)
+      }
+    }
+  }
 
   implicit class RichExpression(expr: Expr) {
 
@@ -33,7 +60,7 @@ object ExprConversions {
         // Evaluate based on already present data; no recursion
         case _: Var | _: HasLabel | _: HasType | _: StartNode | _: EndNode => column_for(expr)
         // Evaluate bottom-up
-        case _ => null_safe_conversion(expr)(convert)
+        case _ => nullSafeConversion(expr)(convert)
       }
       header.getColumn(expr) match {
         case None => outCol

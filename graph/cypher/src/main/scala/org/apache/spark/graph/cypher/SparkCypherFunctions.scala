@@ -101,32 +101,6 @@ object SparkCypherFunctions {
     new Column(StringTranslate(src.expr, matchingString.expr, replaceString.expr))
   }
 
-  /**
-    * Converts `expr` with the `withConvertedChildren` function, which is passed the converted child expressions as its
-    * argument.
-    *
-    * Iff the expression has `expr.nullInNullOut == true`, then any child being mapped to `null` will also result in
-    * the parent expression being mapped to null.
-    *
-    * For these expressions the `withConvertedChildren` function is guaranteed to not receive any `null`
-    * values from the evaluated children.
-    */
-  def null_safe_conversion(expr: Expr)(withConvertedChildren: Seq[Column] => Column)
-    (implicit header: RecordHeader, df: DataFrame, parameters: CypherMap): Column = {
-    if (expr.cypherType == CTNull) {
-      NULL_LIT
-    } else {
-      val evaluatedArgs = expr.children.map(_.asSparkSQLExpr)
-      val withConvertedChildrenResult = withConvertedChildren(evaluatedArgs).expr
-      if (expr.children.nonEmpty && expr.nullInNullOut && expr.cypherType.isNullable) {
-        val nullPropagationCases = evaluatedArgs.map(_.isNull.expr).zip(Seq.fill(evaluatedArgs.length)(NULL_LIT.expr))
-        new Column(CaseWhen(nullPropagationCases, withConvertedChildrenResult))
-      } else {
-        new Column(withConvertedChildrenResult)
-      }
-    }
-  }
-
   def column_for(expr: Expr)(implicit header: RecordHeader, df: DataFrame): Column = {
     val columnName = header.getColumn(expr).getOrElse(throw IllegalArgumentException(
       expected = s"Expression in ${header.expressions.mkString("[", ", ", "]")}",
