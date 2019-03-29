@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate, ZoneId}
+import java.time.{Instant, LocalDate, ZoneId, ZoneOffset}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -52,30 +52,26 @@ trait TimeZoneAwareExpression extends Expression {
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 }
 
+// scalastyle:off line.size.limit
 /**
- * Returns the current date at the start of query evaluation.
+ * Returns the current date in the UTC time zone at the start of query evaluation.
  * All calls of current_date within the same query return the same value.
  *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current date at the start of query evaluation.",
+  usage = "_FUNC_() - Returns the current date in the UTC time zone at the start of query evaluation.",
   since = "1.5.0")
-case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
-
-  def this() = this(None)
+// scalastyle:on line.size.limit
+case class CurrentDate() extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = false
 
   override def dataType: DataType = DateType
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
   override def eval(input: InternalRow): Any = {
-    DateTimeUtils.millisToDays(System.currentTimeMillis(), timeZone)
+    LocalDate.now(ZoneOffset.UTC).toEpochDay.toInt
   }
 
   override def prettyName: String = "current_date"

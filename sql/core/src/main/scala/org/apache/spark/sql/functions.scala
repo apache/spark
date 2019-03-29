@@ -2572,7 +2572,7 @@ object functions {
   }
 
   /**
-   * Returns the current date as a date column.
+   * Returns the current date in the UTC time zone as a date column.
    *
    * @group datetime_funcs
    * @since 1.5.0
