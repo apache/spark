@@ -219,7 +219,6 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     val max = TypedMax(column.expr, nullable = true)
     Column(max.toAggregateExpression())
   }
-
 }
 
 object TypedImperativeAggregateSuite {
