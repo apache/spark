@@ -74,8 +74,7 @@ abstract class AggregationIterator(
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
-    val expressionsLength = expressions.length
-    val functions = new Array[AggregateFunction](expressionsLength)
+    val functions = new Array[AggregateFunction](expressions.length)
     var i = 0
     val inputAttributeSeq: AttributeSeq = inputAttributes
     for (expression <- expressions)  {
