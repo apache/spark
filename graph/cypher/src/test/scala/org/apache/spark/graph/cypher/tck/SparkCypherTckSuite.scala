@@ -17,7 +17,7 @@ import scala.util.{Failure, Success, Try}
 
 class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
 
-  object TckCapsTag extends Tag("TckSparkCypher")
+  private val tckSparkCypherTag = Tag("TckSparkCypher")
 
   private val graphFactory: CypherTestGraphFactory[SparkCypherSession] = ScanGraphFactory
 
@@ -28,13 +28,13 @@ class SparkCypherTckSuite extends SparkFunSuite with SharedCypherContext {
   private val scenarios = ScenariosFor(failingBlacklist, temporalBlacklist, wontFixBlacklistFile, failureReportingBlacklistFile)
 
   forAll(scenarios.whiteList) { scenario =>
-    test(s"[${WhiteList.name}] $scenario", WhiteList, TckCapsTag, Tag(graphFactory.name)) {
+    test(s"[${WhiteList.name}] $scenario", WhiteList, tckSparkCypherTag, Tag(graphFactory.name)) {
       scenario(TCKGraph(graphFactory, internalCypherSession.graphs.empty)(internalCypherSession)).execute()
     }
   }
 
   forAll(scenarios.blackList) { scenario =>
-    test(s"[${graphFactory.name}, ${BlackList.name}] $scenario", BlackList, TckCapsTag) {
+    test(s"[${graphFactory.name}, ${BlackList.name}] $scenario", BlackList, tckSparkCypherTag) {
       val tckGraph = TCKGraph(graphFactory, internalCypherSession.graphs.empty)(internalCypherSession)
 
       Try(scenario(tckGraph).execute()) match {
