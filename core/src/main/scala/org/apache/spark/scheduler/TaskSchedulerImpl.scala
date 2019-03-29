@@ -818,37 +818,20 @@ private[spark] class TaskSchedulerImpl(
     blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
   }
 
-  // Add a on-off switch to save time for rack resolving
-  private def skipRackResolving: Boolean = sc.conf.get(LOCALITY_WAIT_RACK) == 0L
-
-  /**
-   * Get racks info for hosts. This is the internal method of [[getRacksForHosts]].
-   * It should be override in different TaskScheduler.
-   * The return racks must have to be the same length as the hosts passed in.
-   * Return [[defaultRackValue]] sequence by default.
-   */
-  protected def doGetRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
-    hosts.map(_ => defaultRackValue)
-  }
-
   // By default, rack is unknown
   def getRackForHost(hosts: String): Option[String] = {
-    if (skipRackResolving) {
-      defaultRackValue
-    } else {
-      doGetRacksForHosts(Seq(hosts)).head
-    }
+    getRacksForHosts(Seq(hosts)).head
   }
 
   /**
-   * null in return sequences will be replaced to [[defaultRackValue]].
+   * Get racks info for hosts.
+   *
+   * The returned Sequence must have to be the same length as the hosts
+   * passed in.
+   * Return [[defaultRackValue]] sequence by default.
    */
   def getRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
-    if (skipRackResolving) {
-      hosts.map(_ => defaultRackValue)
-    } else {
-      doGetRacksForHosts(hosts)
-    }
+    hosts.map(_ => defaultRackValue)
   }
 
   private def waitBackendReady(): Unit = {

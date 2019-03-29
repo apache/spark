@@ -190,19 +190,19 @@ private[spark] class TaskSetManager(
 
   private def addPendingTasks(): Unit = {
     val (_, duration) = Utils.timeTakenMs {
-      val hostToIndices = new HashMap[String, ArrayBuffer[Int]]()
       for (i <- (0 until numTasks).reverse) {
-        addPendingTask(i, initializing = true, Some(hostToIndices))
+        addPendingTask(i, resolveRacks = false)
       }
       // Resolve the rack for each host. This can be slow, so de-dupe the list of hosts,
       // and assign the rack to all relevant task indices.
-      for (
-        (Some(rack), indices) <- sched.getRacksForHosts(hostToIndices.keySet.toSeq)
-          .zip(hostToIndices.values)) {
-        pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) ++= indices
+      val racks = sched.getRacksForHosts(pendingTasksForHost.keySet.toSeq)
+      racks.zip(pendingTasksForHost.values).foreach {
+        case (Some(rack), indices) =>
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) ++= indices
+        case (None, _) => // no rack, nothing to do
       }
     }
-    logDebug(s"Adding pending tasks take $duration ms")
+    logDebug(s"Adding pending tasks took $duration ms")
   }
 
   /**
@@ -231,8 +231,7 @@ private[spark] class TaskSetManager(
   /** Add a task to all the pending-task lists that it should be on. */
   private[spark] def addPendingTask(
       index: Int,
-      initializing: Boolean = false,
-      initializingMap: Option[HashMap[String, ArrayBuffer[Int]]] = None) {
+      resolveRacks: Boolean = true): Unit = {
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -253,11 +252,8 @@ private[spark] class TaskSetManager(
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
 
-      if (initializing) {
-        // preferredLocation -> task indices, initializingMap used when TaskSetManager initializing
-        initializingMap.foreach(_.getOrElseUpdate(loc.host, new ArrayBuffer) += index)
-      } else {
-        for (rack <- sched.getRackForHost(loc.host)) {
+      if (resolveRacks) {
+        sched.getRackForHost(loc.host).foreach { rack =>
           pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
         }
       }
@@ -273,27 +269,24 @@ private[spark] class TaskSetManager(
   /**
    * Return the pending tasks list for a given executor ID, or an empty list if
    * there is no map entry for that host
-   * This is visible for testing.
    */
-  private[scheduler] def getPendingTasksForExecutor(executorId: String): ArrayBuffer[Int] = {
+  private def getPendingTasksForExecutor(executorId: String): ArrayBuffer[Int] = {
     pendingTasksForExecutor.getOrElse(executorId, ArrayBuffer())
   }
 
   /**
    * Return the pending tasks list for a given host, or an empty list if
    * there is no map entry for that host
-   * This is visible for testing.
    */
-  private[scheduler] def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
+  private def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
     pendingTasksForHost.getOrElse(host, ArrayBuffer())
   }
 
   /**
    * Return the pending rack-local task list for a given rack, or an empty list if
    * there is no map entry for that rack
-   * This is visible for testing.
    */
-  private[scheduler] def getPendingTasksForRack(rack: String): ArrayBuffer[Int] = {
+  private def getPendingTasksForRack(rack: String): ArrayBuffer[Int] = {
     pendingTasksForRack.getOrElse(rack, ArrayBuffer())
   }
 

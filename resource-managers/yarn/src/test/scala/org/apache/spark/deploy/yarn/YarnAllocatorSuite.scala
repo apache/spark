@@ -38,9 +38,9 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
 
-class MockResolver() extends SparkRackResolver(SparkHadoopUtil.get.conf) {
+class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
-  override def resolve(conf: Configuration, hostName: String): String = {
+  override def resolve(hostName: String): String = {
     if (hostName == "host3") "/rack2" else "/rack1"
   }
 

@@ -153,7 +153,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     }
   }
 
-  override def doGetRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
+  override def getRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
     FakeRackUtil.getRacksForHosts(hosts)
   }
 }
@@ -1326,7 +1326,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
 
     // Assert the task has been black listed on the executor it was last executed on.
-    when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean(), any())).thenAnswer(
+    when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean())).thenAnswer(
       new Answer[Unit] {
         override def answer(invocationOnMock: InvocationOnMock): Unit = {
           val task: Int = invocationOnMock.getArgument(0)
@@ -1340,7 +1340,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val e = new ExceptionFailure("a", "b", Array(), "c", None)
     taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
-    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt(), anyBoolean(), any())
+    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt(), anyBoolean())
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
@@ -1647,25 +1647,5 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       }
     }
     assert(FakeRackUtil.numBatchInvocation === 1)
-  }
-
-  test("SPARK-13704 Rack resolving is skipped when spark.locality.wait is zero") {
-    val conf = new SparkConf().set(config.LOCALITY_WAIT.key, "0")
-    sc = new SparkContext("local", "test", conf)
-    for (i <- 0 to 99) {
-      FakeRackUtil.assignHostToRack("host" + i, "rack" + (i % 20))
-    }
-    sched = new FakeTaskScheduler(sc,
-      ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
-    val locations = new ArrayBuffer[Seq[TaskLocation]]()
-    for (i <- 0 to 99) {
-      locations += Seq(TaskLocation("host" + i))
-    }
-    val taskSet = FakeTask.createTaskSet(100, locations: _*)
-    val clock = new ManualClock
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    // verify the total number not changed with SPARK-13704
-    assert(manager.getPendingTasksForRack(sched.defaultRackValue.get).length === 100)
-    assert(FakeRackUtil.numBatchInvocation === 0)
   }
 }
