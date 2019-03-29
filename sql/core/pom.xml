@@ -190,7 +190,7 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>add-scala-sources</id>
+            <id>add-sources</id>
             <phase>generate-sources</phase>
             <goals>
               <goal>add-source</goal>

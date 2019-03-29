@@ -22,9 +22,10 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.{URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
-import java.util.UUID
+import java.util.{ServiceLoader, UUID}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.{Properties, Try}
 
@@ -96,20 +97,35 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   /**
-   * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
+   * Kill an existing submission.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient(args.master)
-      .killSubmission(args.submissionToKill)
+    if (RestSubmissionClient.supportsRestClient(args.master)) {
+      new RestSubmissionClient(args.master)
+        .killSubmission(args.submissionToKill)
+    } else {
+      val sparkConf = args.toSparkConf()
+      sparkConf.set("spark.master", args.master)
+      SparkSubmitUtils
+        .getSubmitOperations(args.master)
+        .kill(args.submissionToKill, sparkConf)
+    }
   }
 
   /**
-   * Request the status of an existing submission using the REST protocol.
-   * Standalone and Mesos cluster mode only.
+   * Request the status of an existing submission.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient(args.master)
-      .requestSubmissionStatus(args.submissionToRequestStatusFor)
+    if (RestSubmissionClient.supportsRestClient(args.master)) {
+      new RestSubmissionClient(args.master)
+        .requestSubmissionStatus(args.submissionToRequestStatusFor)
+    } else {
+      val sparkConf = args.toSparkConf()
+      sparkConf.set("spark.master", args.master)
+      SparkSubmitUtils
+        .getSubmitOperations(args.master)
+        .printSubmissionStatus(args.submissionToRequestStatusFor, sparkConf)
+    }
   }
 
   /** Print version information to the log. */
@@ -320,7 +336,8 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    args.sparkProperties.foreach { case (k, v) => sparkConf.set(k, v) }
+    // update spark config from args
+    args.toSparkConf(Option(sparkConf))
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
     val targetDir = Utils.createTempDir()
 
@@ -542,10 +559,10 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = CORES_MAX.key),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.files"),
-      OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
+        confKey = FILES.key),
+      OptionAssigner(args.jars, LOCAL, CLIENT, confKey = JARS.key),
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.jars"),
+        confKey = JARS.key),
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
         confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
@@ -1336,6 +1353,23 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
+  private[deploy] def getSubmitOperations(master: String): SparkSubmitOperation = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+      ServiceLoader.load(classOf[SparkSubmitOperation], loader)
+        .asScala
+        .filter(_.supports(master))
+
+    serviceLoaders.size match {
+      case x if x > 1 =>
+        throw new SparkException(s"Multiple($x) external SparkSubmitOperations " +
+          s"clients registered for master url ${master}.")
+      case 1 => serviceLoaders.headOption.get
+      case _ =>
+        throw new IllegalArgumentException(s"No external SparkSubmitOperations " +
+          s"clients found for master url: '$master'")
+    }
+  }
 }
 
 /**
@@ -1348,3 +1382,12 @@ private case class OptionAssigner(
     deployMode: Int,
     clOption: String = null,
     confKey: String = null)
+
+private[spark] trait SparkSubmitOperation {
+
+  def kill(submissionId: String, conf: SparkConf): Unit
+
+  def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit
+
+  def supports(master: String): Boolean
+}

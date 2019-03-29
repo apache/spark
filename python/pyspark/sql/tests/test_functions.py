@@ -83,9 +83,9 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
 
     def test_sampleby(self):
-        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(10)]).toDF()
+        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(100)]).toDF()
         sampled = df.stat.sampleBy(u"b", fractions={0: 0.5, 1: 0.5}, seed=0)
-        self.assertTrue(sampled.count() == 3)
+        self.assertTrue(sampled.count() == 35)
 
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()

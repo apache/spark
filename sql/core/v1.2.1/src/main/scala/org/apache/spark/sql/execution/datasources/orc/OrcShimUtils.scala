@@ -58,7 +58,7 @@ private[sql] object OrcShimUtils {
   }
 
   def getHiveDecimalWritable(precision: Int, scale: Int):
-  (SpecializedGetters, Int) => HiveDecimalWritable = {
+      (SpecializedGetters, Int) => HiveDecimalWritable = {
     (getter, ordinal) =>
       val d = getter.getDecimal(ordinal, precision, scale)
       new HiveDecimalWritable(HiveDecimal.create(d.toJavaBigDecimal))

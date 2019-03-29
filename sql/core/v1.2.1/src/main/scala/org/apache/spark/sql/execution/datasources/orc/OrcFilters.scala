@@ -23,7 +23,7 @@ import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
 import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.sources.{And, Filter}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
 /**
@@ -56,7 +56,7 @@ import org.apache.spark.sql.types._
  * builder methods mentioned above can only be found in test code, where all tested filters are
  * known to be convertible.
  */
-private[sql] object OrcFilters extends OrcFiltersBase  {
+private[sql] object OrcFilters extends OrcFiltersBase {
 
   /**
    * Create ORC filter as a SearchArgument instance.
