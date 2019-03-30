@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, BitSet, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
 
@@ -799,7 +799,11 @@ private[spark] class TaskSetManager(
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
-        isZombie = true
+        // clean up finished partitions for the stage when the active TaskSetManager succeed
+        if (!isZombie) {
+          sched.stageIdToFinishedPartitions -= stageId
+          isZombie = true
+        }
       }
     } else {
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
@@ -818,16 +822,21 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
+  private[scheduler] def markPartitionCompleted(
+      partitionId: Int,
+      taskInfo: Option[TaskInfo]): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
         if (speculationEnabled && !isZombie) {
-          successfulTaskDurations.insert(taskInfo.duration)
+          taskInfo.foreach { info => successfulTaskDurations.insert(info.duration) }
         }
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
-          isZombie = true
+          if (!isZombie) {
+            sched.stageIdToFinishedPartitions -= stageId
+            isZombie = true
+          }
         }
         maybeFinishTaskSet()
       }
@@ -1122,5 +1131,5 @@ private[spark] class TaskSetManager(
 private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
   // this.
-  val TASK_SIZE_TO_WARN_KIB = 100
+  val TASK_SIZE_TO_WARN_KIB = 1000
 }

@@ -167,7 +167,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
     val model = new KMeans()
       .setK(3)
-      .setSeed(1)
+      .setSeed(42)
       .setInitMode(MLlibKMeans.RANDOM)
       .setTol(1e-6)
       .setDistanceMeasure(DistanceMeasure.COSINE)

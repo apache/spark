@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
@@ -468,6 +469,79 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
         assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
       }
+    }
+  }
+
+  def getStatAttrNames(tableName: String): Set[String] = {
+    val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
+    queryStats.map(_._1.name).toSet
+  }
+
+  test("analyzes column statistics in cached query") {
+    withTempView("cachedQuery") {
+      sql(
+        """CACHE TABLE cachedQuery AS
+          |  SELECT c0, avg(c1) AS v1, avg(c2) AS v2
+          |  FROM (SELECT id % 3 AS c0, id % 5 AS c1, 2 AS c2 FROM range(1, 30))
+          |  GROUP BY c0
+        """.stripMargin)
+
+      // Analyzes one column in the cached logical plan
+      sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS v1")
+      assert(getStatAttrNames("cachedQuery") === Set("v1"))
+
+      // Analyzes two more columns
+      sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS c0, v2")
+      assert(getStatAttrNames("cachedQuery")  === Set("c0", "v1", "v2"))
+    }
+  }
+
+  test("analyzes column statistics in cached local temporary view") {
+    withTempView("tempView") {
+      // Analyzes in a temporary view
+      sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
+      val errMsg = intercept[AnalysisException] {
+        sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg.contains(s"Table or view 'tempView' not found in database 'default'"))
+
+      // Cache the view then analyze it
+      sql("CACHE TABLE tempView")
+      assert(getStatAttrNames("tempView") !== Set("id"))
+      sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+      assert(getStatAttrNames("tempView") === Set("id"))
+    }
+  }
+
+  test("analyzes column statistics in cached global temporary view") {
+    withGlobalTempView("gTempView") {
+      val globalTempDB = spark.sharedState.globalTempViewManager.database
+      val errMsg1 = intercept[NoSuchTableException] {
+        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg1.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      // Analyzes in a global temporary view
+      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
+      val errMsg2 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg2.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+
+      // Cache the view then analyze it
+      sql(s"CACHE TABLE $globalTempDB.gTempView")
+      assert(getStatAttrNames(s"$globalTempDB.gTempView") !== Set("id"))
+      sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      assert(getStatAttrNames(s"$globalTempDB.gTempView") === Set("id"))
+    }
+  }
+
+  test("analyzes column statistics in cached catalog view") {
+    withTempDatabase { database =>
+      sql(s"CREATE VIEW $database.v AS SELECT 1 c")
+      sql(s"CACHE TABLE $database.v")
+      assert(getStatAttrNames(s"$database.v") !== Set("c"))
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS FOR COLUMNS c")
+      assert(getStatAttrNames(s"$database.v") === Set("c"))
     }
   }
 }

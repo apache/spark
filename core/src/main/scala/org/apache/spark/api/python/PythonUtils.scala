@@ -76,7 +76,7 @@ private[spark] object PythonUtils {
     jm.asScala.toMap
   }
 
-  def getEncryptionEnabled(sc: JavaSparkContext): Boolean = {
+  def isEncryptionEnabled(sc: JavaSparkContext): Boolean = {
     sc.conf.get(org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED)
   }
 }

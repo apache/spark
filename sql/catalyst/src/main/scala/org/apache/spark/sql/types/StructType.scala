@@ -310,13 +310,19 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   protected[sql] def toAttributes: Seq[AttributeReference] =
     map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
-  def treeString: String = {
+  def treeString: String = treeString(Int.MaxValue)
+
+  def treeString(level: Int): String = {
     val builder = new StringBuilder
     builder.append("root\n")
     val prefix = " |"
     fields.foreach(field => field.buildFormattedString(prefix, builder))
 
-    builder.toString()
+    if (level <= 0 || level == Int.MaxValue) {
+      builder.toString()
+    } else {
+      builder.toString().split("\n").filter(_.lastIndexOf("|--") < level * 5 + 1).mkString("\n")
+    }
   }
 
   // scalastyle:off println

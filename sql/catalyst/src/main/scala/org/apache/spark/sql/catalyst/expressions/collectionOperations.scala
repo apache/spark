@@ -452,7 +452,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val z = ctx.freshName("z")
     val calculateHeader = "UnsafeArrayData.calculateHeaderPortionInBytes"
 
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
+    val baseOffset = "Platform.BYTE_ARRAY_OFFSET"
     val wordSize = UnsafeRow.WORD_SIZE
     val structSizeAsLong = s"${structSize}L"
 
@@ -1929,7 +1929,8 @@ case class ArrayPosition(left: Expression, right: Expression)
        b
   """,
   since = "2.4.0")
-case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
+case class ElementAt(left: Expression, right: Expression)
+  extends GetMapValueUtil with GetArrayItemUtil {
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
@@ -1974,7 +1975,10 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
     }
   }
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = left.dataType match {
+    case _: ArrayType => computeNullabilityFromArray(left, right)
+    case _: MapType => true
+  }
 
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
 
@@ -3108,29 +3112,29 @@ case class ArrayDistinct(child: Expression)
     (data: Array[AnyRef]) => new GenericArrayData(data.distinct.asInstanceOf[Array[Any]])
   } else {
     (data: Array[AnyRef]) => {
-      var foundNullElement = false
-      var pos = 0
+      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
+      var alreadyStoredNull = false
       for (i <- 0 until data.length) {
-        if (data(i) == null) {
-          if (!foundNullElement) {
-            foundNullElement = true
-            pos = pos + 1
+        if (data(i) != null) {
+          var found = false
+          var j = 0
+          while (!found && j < arrayBuffer.size) {
+            val va = arrayBuffer(j)
+            found = (va != null) && ordering.equiv(va, data(i))
+            j += 1
+          }
+          if (!found) {
+            arrayBuffer += data(i)
           }
         } else {
-          var j = 0
-          var done = false
-          while (j <= i && !done) {
-            if (data(j) != null && ordering.equiv(data(j), data(i))) {
-              done = true
-            }
-            j = j + 1
-          }
-          if (i == j - 1) {
-            pos = pos + 1
+          // De-duplicate the null values.
+          if (!alreadyStoredNull) {
+            arrayBuffer += data(i)
+            alreadyStoredNull = true
           }
         }
       }
-      new GenericArrayData(data.slice(0, pos))
+      new GenericArrayData(arrayBuffer)
     }
   }
 

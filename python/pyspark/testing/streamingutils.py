@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import glob
 import os
 import tempfile
 import time
@@ -22,32 +21,7 @@ import unittest
 
 from pyspark import SparkConf, SparkContext, RDD
 from pyspark.streaming import StreamingContext
-
-
-def search_kinesis_asl_assembly_jar():
-    kinesis_asl_assembly_dir = os.path.join(
-        os.environ["SPARK_HOME"], "external/kinesis-asl-assembly")
-
-    # We should ignore the following jars
-    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-
-    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
-    # build because the artifact jars are in different directories.
-    name_prefix = "spark-streaming-kinesis-asl-assembly"
-    sbt_build = glob.glob(os.path.join(
-        kinesis_asl_assembly_dir, "target/scala-*/%s-*.jar" % name_prefix))
-    maven_build = glob.glob(os.path.join(
-        kinesis_asl_assembly_dir, "target/%s_*.jar" % name_prefix))
-    jar_paths = sbt_build + maven_build
-    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
-
-    if not jars:
-        return None
-    elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs: %s; please "
-                         "remove all but one") % (", ".join(jars)))
-    else:
-        return jars[0]
+from pyspark.testing.utils import search_jar
 
 
 # Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
@@ -59,7 +33,8 @@ if should_skip_kinesis_tests:
         "Skipping all Kinesis Python tests as environmental variable 'ENABLE_KINESIS_TESTS' "
         "was not set.")
 else:
-    kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
+    kinesis_asl_assembly_jar = search_jar("external/kinesis-asl-assembly",
+                                          "spark-streaming-kinesis-asl-assembly")
     if kinesis_asl_assembly_jar is None:
         kinesis_requirement_message = (
             "Skipping all Kinesis Python tests as the optional Kinesis project was "

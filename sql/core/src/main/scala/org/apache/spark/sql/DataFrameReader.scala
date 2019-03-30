@@ -37,9 +37,11 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -176,7 +178,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    option(DataSourceOptions.PATH_KEY, path).load(Seq.empty: _*)
+    option("path", path).load(Seq.empty: _*)
   }
 
   /**
@@ -206,20 +208,23 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = {
+      val pathsOption = if (paths.isEmpty) {
+        None
+      } else {
         val objectMapper = new ObjectMapper()
-        DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
+        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
-      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "true"
-      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption + checkFilesExistsOption
-      val dsOptions = new DataSourceOptions(finalOptions.asJava)
+
+      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
+      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
         case _ => provider.getTable(dsOptions)
       }
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
-        case _: SupportsBatchRead =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
+        case _: SupportsRead if table.supports(BATCH_READ) =>
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
 
         case _ => loadV1Source(paths: _*)
       }
@@ -716,6 +721,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
+   * The text files must be encoded as UTF-8.
    *
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
@@ -753,6 +759,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
    * contains a single string column named "value".
+   * The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.

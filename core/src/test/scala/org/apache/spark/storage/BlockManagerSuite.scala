@@ -195,9 +195,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(id2_.eq(id1), "Deserialized id2 is not the same object as original id1")
   }
 
-  test("BlockManagerId.isDriver() backwards-compatibility with legacy driver ids (SPARK-6716)") {
+  test("BlockManagerId.isDriver() with DRIVER_IDENTIFIER (SPARK-27090)") {
     assert(BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "XXX", 1).isDriver)
-    assert(BlockManagerId(SparkContext.LEGACY_DRIVER_IDENTIFIER, "XXX", 1).isDriver)
     assert(!BlockManagerId("notADriverIdentifier", "XXX", 1).isDriver)
   }
 
@@ -895,6 +894,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, 0)
+    allStores += store
     store.initialize("app-id")
 
     // The put should fail since a1 is not serializable.
@@ -1360,74 +1360,76 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val tryAgainExecutor = "tryAgainExecutor"
     val succeedingExecutor = "succeedingExecutor"
 
-    // a server which delays response 50ms and must try twice for success.
-    def newShuffleServer(port: Int): (TransportServer, Int) = {
-      val failure = new Exception(tryAgainMsg)
-      val success = ByteBuffer.wrap(new Array[Byte](0))
+    val failure = new Exception(tryAgainMsg)
+    val success = ByteBuffer.wrap(new Array[Byte](0))
 
-      var secondExecutorFailedOnce = false
-      var thirdExecutorFailedOnce = false
+    var secondExecutorFailedOnce = false
+    var thirdExecutorFailedOnce = false
 
-      val handler = new NoOpRpcHandler {
-        override def receive(
-            client: TransportClient,
-            message: ByteBuffer,
-            callback: RpcResponseCallback): Unit = {
-          val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
-          msgObj match {
+    val handler = new NoOpRpcHandler {
+      override def receive(
+          client: TransportClient,
+          message: ByteBuffer,
+          callback: RpcResponseCallback): Unit = {
+        val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
+        msgObj match {
 
-            case exec: RegisterExecutor if exec.execId == timingoutExecutor =>
-              () // No reply to generate client-side timeout
+          case exec: RegisterExecutor if exec.execId == timingoutExecutor =>
+            () // No reply to generate client-side timeout
 
-            case exec: RegisterExecutor
-              if exec.execId == tryAgainExecutor && !secondExecutorFailedOnce =>
-              secondExecutorFailedOnce = true
-              callback.onFailure(failure)
+          case exec: RegisterExecutor
+            if exec.execId == tryAgainExecutor && !secondExecutorFailedOnce =>
+            secondExecutorFailedOnce = true
+            callback.onFailure(failure)
 
-            case exec: RegisterExecutor if exec.execId == tryAgainExecutor =>
-              callback.onSuccess(success)
+          case exec: RegisterExecutor if exec.execId == tryAgainExecutor =>
+            callback.onSuccess(success)
 
-            case exec: RegisterExecutor
-              if exec.execId == succeedingExecutor && !thirdExecutorFailedOnce =>
-              thirdExecutorFailedOnce = true
-              callback.onFailure(failure)
+          case exec: RegisterExecutor
+            if exec.execId == succeedingExecutor && !thirdExecutorFailedOnce =>
+            thirdExecutorFailedOnce = true
+            callback.onFailure(failure)
 
-            case exec: RegisterExecutor if exec.execId == succeedingExecutor =>
-              callback.onSuccess(success)
+          case exec: RegisterExecutor if exec.execId == succeedingExecutor =>
+            callback.onSuccess(success)
 
-          }
         }
       }
-
-      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
-      val transCtx = new TransportContext(transConf, handler, true)
-      (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
     }
 
-    val candidatePort = RandomUtils.nextInt(1024, 65536)
-    val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
-      newShuffleServer, conf, "ShuffleServer")
+    val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
 
-    conf.set(SHUFFLE_SERVICE_ENABLED.key, "true")
-    conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
-    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
-    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
-    var e = intercept[SparkException] {
-      makeBlockManager(8000, timingoutExecutor)
-    }.getMessage
-    assert(e.contains("TimeoutException"))
+    Utils.tryWithResource(new TransportContext(transConf, handler, true)) { transCtx =>
+      // a server which delays response 50ms and must try twice for success.
+      def newShuffleServer(port: Int): (TransportServer, Int) = {
+        (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
+      }
 
-    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
-    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
-    e = intercept[SparkException] {
-      makeBlockManager(8000, tryAgainExecutor)
-    }.getMessage
-    assert(e.contains(tryAgainMsg))
+      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
+        newShuffleServer, conf, "ShuffleServer")
 
-    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
-    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "2")
-    makeBlockManager(8000, succeedingExecutor)
-    server.close()
+      conf.set(SHUFFLE_SERVICE_ENABLED.key, "true")
+      conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
+      conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
+      conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
+      var e = intercept[SparkException] {
+        makeBlockManager(8000, timingoutExecutor)
+      }.getMessage
+      assert(e.contains("TimeoutException"))
+
+      conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
+      conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
+      e = intercept[SparkException] {
+        makeBlockManager(8000, tryAgainExecutor)
+      }.getMessage
+      assert(e.contains(tryAgainMsg))
+
+      conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
+      conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "2")
+      makeBlockManager(8000, succeedingExecutor)
+      server.close()
+    }
   }
 
   test("fetch remote block to local disk if block size is larger than threshold") {
