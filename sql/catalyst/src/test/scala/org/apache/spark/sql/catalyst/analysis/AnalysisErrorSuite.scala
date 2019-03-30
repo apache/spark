@@ -605,6 +605,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     val b = AttributeReference("b", IntegerType)()
     val plan = Filter('a === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
     assertAnalysisError(plan,
-      "Aggregate/Window/Generate expressions are not allowed in where clause of the query" :: Nil)
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
   }
 }

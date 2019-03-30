@@ -172,10 +172,6 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
               s"conditions: $condition")
 
-          case f @ Filter(condition, _) if PlanHelper.specialExpressionInUnsupportedOperator(f) =>
-            failAnalysis("Aggregate/Window/Generate expressions are not allowed in where " +
-              "clause of the query")
-
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
@@ -379,6 +375,13 @@ trait CheckAnalysis extends PredicateHelper {
           case _: UnresolvedHint =>
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
+
+          case f @ Filter(condition, _) if PlanHelper.specialExpressionInUnsupportedOperator(f) =>
+            failAnalysis(
+              s"""
+                 |Aggregate/Window/Generate expressions are not valid in where clause of the query.
+                 |Expression in where clause: ${condition.sql}
+               """.stripMargin)
 
           case other if PlanHelper.specialExpressionInUnsupportedOperator(other) =>
             failAnalysis(s"The query operator  `${other.nodeName}` contains " +

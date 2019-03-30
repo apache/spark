@@ -462,7 +462,7 @@ struct<k:int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RA
 
 
 -- !query 46
-SELECT count(*) FROM test_agg HAVING count(*) > 1
+SELECT count(*) FROM test_agg HAVING count(*) > 1L
 -- !query 46 schema
 struct<count(1):bigint>
 -- !query 46 output
@@ -480,7 +480,7 @@ struct<k:int,max(v):boolean>
 
 
 -- !query 48
-SELECT * FROM (SELECT COUNT(*) AS cnt FROM test_agg) WHERE cnt > 1
+SELECT * FROM (SELECT COUNT(*) AS cnt FROM test_agg) WHERE cnt > 1L
 -- !query 48 schema
 struct<cnt:bigint>
 -- !query 48 output
@@ -488,18 +488,24 @@ struct<cnt:bigint>
 
 
 -- !query 49
-SELECT count(*) FROM test_agg WHERE count(*) > 1
+SELECT count(*) FROM test_agg WHERE count(*) > 1L
 -- !query 49 schema
 struct<>
 -- !query 49 output
 org.apache.spark.sql.AnalysisException
-Aggregate/Window/Generate expressions are not allowed in where clause of the query;
+
+Aggregate/Window/Generate expressions are not valid in where clause of the query.
+Expression in where clause: (count(1) > 1L)
+               ;
 
 
 -- !query 50
-SELECT count(*) FROM test_agg WHERE count(*) + 1 > 1
+SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L
 -- !query 50 schema
 struct<>
 -- !query 50 output
 org.apache.spark.sql.AnalysisException
-Aggregate/Window/Generate expressions are not allowed in where clause of the query;
+
+Aggregate/Window/Generate expressions are not valid in where clause of the query.
+Expression in where clause: ((count(1) + 1L) > 1L)
+               ;

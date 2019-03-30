@@ -143,13 +143,13 @@ SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 
 -- Having referencing aggregate expressions is ok.
-SELECT count(*) FROM test_agg HAVING count(*) > 1;
+SELECT count(*) FROM test_agg HAVING count(*) > 1L;
 SELECT k, max(v) FROM test_agg GROUP BY k HAVING max(v) = true;
 
 -- Aggrgate expressions can be referenced through an alias
-SELECT * FROM (SELECT COUNT(*) AS cnt FROM test_agg) WHERE cnt > 1;
+SELECT * FROM (SELECT COUNT(*) AS cnt FROM test_agg) WHERE cnt > 1L;
 
 -- Error when aggregate expressions are in where clause directly
-SELECT count(*) FROM test_agg WHERE count(*) > 1;
-SELECT count(*) FROM test_agg WHERE count(*) + 1 > 1;
+SELECT count(*) FROM test_agg WHERE count(*) > 1L;
+SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L;
 
