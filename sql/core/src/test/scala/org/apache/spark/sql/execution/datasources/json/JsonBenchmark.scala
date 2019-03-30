@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions.{from_json, get_json_object, json_tuple, lit}
 import org.apache.spark.sql.types._
@@ -206,20 +206,21 @@ object JSONBenchmark extends SqlBasedBenchmark {
 
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
       val schema = StructType(fields)
-      val columnNames = schema.fieldNames
 
       spark.range(rowsNum)
         .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
         .write
         .json(path.getAbsolutePath)
 
-      val ds = spark.read.schema(schema).json(path.getAbsolutePath)
+      val in = spark.read.schema(schema).json(path.getAbsolutePath)
 
-      benchmark.addCase(s"Select $colsNum columns + count()", numIters) { _ =>
-        ds.select("*").filter((_: Row) => true).count()
+      benchmark.addCase(s"Select $colsNum columns", numIters) { _ =>
+        val ds = in.select("*")
+        run(ds)
       }
-      benchmark.addCase(s"Select 1 column + count()", numIters) { _ =>
-        ds.select($"col1").filter((_: Row) => true).count()
+      benchmark.addCase(s"Select 1 column", numIters) { _ =>
+        val ds = in.select($"col1")
+        run(ds)
       }
 
       benchmark.run()
@@ -239,37 +240,29 @@ object JSONBenchmark extends SqlBasedBenchmark {
       val wideSchema = writeWideColumn(wideColumnPath, rowsNum)
 
       benchmark.addCase("Short column without encoding", numIters) { _ =>
-        spark.read
-          .schema(shortSchema)
-          .json(shortColumnPath)
-          .filter((_: Row) => true)
-          .count()
+        val ds = spark.read.schema(shortSchema).json(shortColumnPath)
+        run(ds)
       }
 
       benchmark.addCase("Short column with UTF-8", numIters) { _ =>
-        spark.read
+        val ds = spark.read
           .option("encoding", "UTF-8")
           .schema(shortSchema)
           .json(shortColumnPath)
-          .filter((_: Row) => true)
-          .count()
+        run(ds)
       }
 
       benchmark.addCase("Wide column without encoding", numIters) { _ =>
-        spark.read
-          .schema(wideSchema)
-          .json(wideColumnPath)
-          .filter((_: Row) => true)
-          .count()
+        val ds = spark.read.schema(wideSchema).json(wideColumnPath)
+        run(ds)
       }
 
       benchmark.addCase("Wide column with UTF-8", numIters) { _ =>
-        spark.read
+        val ds = spark.read
           .option("encoding", "UTF-8")
           .schema(wideSchema)
           .json(wideColumnPath)
-          .filter((_: Row) => true)
-          .count()
+        run(ds)
       }
 
       benchmark.run()
@@ -356,7 +349,8 @@ object JSONBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Parsing with UTF-8", iters) { _ =>
         val utf8_charset = spark.read
           .schema(schema)
-          .option("multiLine", false).option("charset", "UTF-8")
+          .option("multiLine", false)
+          .option("charset", "UTF-8")
           .json(path.getAbsolutePath)
 
         run(utf8_charset)
