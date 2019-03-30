@@ -110,11 +110,25 @@ object Encoders {
   def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
 
   /**
+   * An encoder for nullable date type.
+   *
+   * @since 3.0.0
+   */
+  def LOCALDATE: Encoder[java.time.LocalDate] = ExpressionEncoder()
+
+  /**
    * An encoder for nullable timestamp type.
    *
    * @since 1.6.0
    */
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable timestamp type.
+   *
+   * @since 3.0.0
+   */
+  def INSTANT: Encoder[java.time.Instant] = ExpressionEncoder()
 
   /**
    * An encoder for arrays of bytes.

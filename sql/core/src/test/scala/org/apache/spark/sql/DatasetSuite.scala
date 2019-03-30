@@ -1731,9 +1731,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
   }
 
-  test("implicit encoder for LocalDate") {
+  test("implicit encoder for LocalDate and Instant") {
     val localDate = java.time.LocalDate.of(2019, 3, 30)
-    assert(spark.range(1).map { x => localDate }.head == localDate)
+    assert(spark.range(1).map { _ => localDate }.head == localDate)
+
+    val instant = java.time.Instant.parse("2019-03-30T09:54:00Z")
+    assert(spark.range(1).map { _ => instant }.head == instant)
   }
 }
 
