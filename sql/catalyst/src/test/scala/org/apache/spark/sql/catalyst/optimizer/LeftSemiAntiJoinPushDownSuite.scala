@@ -117,7 +117,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Aggregate: LeftSemiAnti join partial pushdown") {
+  test("Aggregate: LeftSemi join partial pushdown") {
     val originalQuery = testRelation
       .groupBy('b)('b, sum('c).as('sum))
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 10))
@@ -130,6 +130,15 @@ class LeftSemiPushdownSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("Aggregate: LeftAnti join no pushdown") {
+    val originalQuery = testRelation
+      .groupBy('b)('b, sum('c).as('sum))
+      .join(testRelation1, joinType = LeftAnti, condition = Some('b === 'd && 'sum === 10))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
   }
 
   test("LeftSemiAnti join over aggregate - no pushdown") {
@@ -174,7 +183,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Window: LeftSemiAnti partial pushdown") {
+  test("Window: LeftSemi partial pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
     val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
@@ -192,6 +201,25 @@ class LeftSemiPushdownSuite extends PlanTest {
       .where('b > 5)
       .select('a, 'b, 'c, 'window).analyze
 
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Window: LeftAnti no pushdown") {
+    // Attributes from join condition which does not refer to the window partition spec
+    // are kept up in the plan as a Filter operator above Window.
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation
+      .select('a, 'b, 'c, winExpr.as('window))
+      .join(testRelation1, joinType = LeftAnti, condition = Some('a === 'd && 'b > 5))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+      .join(testRelation1, joinType = LeftAnti, condition = Some('a === 'd && 'b > 5))
+      .select('a, 'b, 'c, 'window).analyze
     comparePlans(optimized, correctAnswer)
   }
 

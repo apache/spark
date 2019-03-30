@@ -70,10 +70,12 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         }
 
         // Check if the remaining predicates do not contain columns from the right
-        // hand side of the join. Since the remaining predicates will be kept
-        // as a filter over aggregate, this check is necessary after the left semi
-        // or left anti join is moved below aggregate. The reason is, for this kind
-        // of join, we only output from the left leg of the join.
+        // hand side of the join. In case of LeftSemi join, since remaining predicates
+        // will be kept as a filter over aggregate, this check is necessary after the left semi join
+        // is moved below aggregate. The reason is, for this kind of join, we only output from the
+        // left leg of the join. In case of left anti join, the join is pushed down when
+        // the entire join condition is eligible to be pushdown to preserve the semantics of
+        // left anti join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
@@ -82,7 +84,14 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newAgg = agg.copy(child = Join(agg.child, rightOp, joinType, Option(replaced), hint))
           // If there is no more filter to stay up, just return the Aggregate over Join.
           // Otherwise, create "Filter(stayUp) <- Aggregate <- Join(pushDownPredicate)".
-          if (stayUp.isEmpty) newAgg else Filter(stayUp.reduce(And), newAgg)
+          if (stayUp.isEmpty) {
+            newAgg
+          } else {
+            joinType match {
+              case LeftSemi => Filter(stayUp.reduce(And), newAgg)
+              case _ => join
+            }
+          }
         } else {
           // The join condition is not a subset of the Aggregate's GROUP BY columns,
           // no push down.
@@ -105,16 +114,23 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         }
 
         // Check if the remaining predicates do not contain columns from the right
-        // hand side of the join. Since the remaining predicates will be kept
-        // as a filter over window, this check is necessary after the left semi
-        // or left anti join is moved below window. The reason is, for this kind
-        // of join, we only output from the left leg of the join.
+        // hand side of the join. In case of LeftSemi join, since remaining predicates
+        // will be kept as a filter over aggregate, this check is necessary after the left semi join
+        // is moved below aggregate. The reason is, for this kind of join, we only output from the
+        // left leg of the join. In case of left anti join, the join is pushed down when
+        // the entire join condition is eligible to be pushdown to preserve the semantics of
+        // left anti join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
           val predicate = pushDown.reduce(And)
           val newPlan = w.copy(child = Join(w.child, rightOp, joinType, Option(predicate), hint))
-          if (stayUp.isEmpty) newPlan else Filter(stayUp.reduce(And), newPlan)
+          if (stayUp.isEmpty) newPlan else {
+            joinType match {
+              case LeftSemi => Filter(stayUp.reduce(And), newPlan)
+              case _ => join
+            }
+          }
         } else {
           // The join condition is not a subset of the Window's PARTITION BY clause,
           // no push down.
