@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2, FileTable}
 
 /**
@@ -32,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
  * This is a temporary hack for making current data source V2 work. It should be
  * removed when Catalog support of file data source v2 is finished.
  */
-class FallbackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(d @ DataSourceV2Relation(table: FileTable, _, _), _, _, _, _) =>
       val v1FileFormat = table.fallbackFileFormat.newInstance()
