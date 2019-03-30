@@ -139,7 +139,6 @@
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.12.v20180830</jetty.version>
-    <jetty.test.version>${jetty.version}</jetty.test.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.9.3</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -2657,7 +2656,6 @@
         <hadoop.version>3.2.0</hadoop.version>
         <curator.version>2.13.0</curator.version>
         <zookeeper.version>3.4.13</zookeeper.version>
-        <jetty.test.version>9.3.24.v20180605</jetty.test.version>
       </properties>
     </profile>
 
