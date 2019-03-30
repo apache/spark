@@ -52,4 +52,32 @@ Short column with UTF-8                            8031           8079          
 Wide column without encoding                     107093         108539         NaN          0.1       10709.3       0.1X
 Wide column with UTF-8                           130983         132518        1346          0.1       13098.3       0.0X
 
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+JSON functions:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                           939            950          11         10.6          93.9       1.0X
+from_json                                         12924          12944          26          0.8        1292.4       0.1X
+json_tuple                                        15312          15771         432          0.7        1531.2       0.1X
+get_json_object                                   13049          13475         714          0.8        1304.9       0.1X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Dataset of json strings:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                          4556           4630         108         11.0          91.1       1.0X
+schema inferring                                  23624          24338         626          2.1         472.5       0.2X
+parsing                                           22342          22420          81          2.2         446.8       0.2X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Json files in the per-line mode:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                          7537           7556          26          6.6         150.7       1.0X
+Schema inferring                                  27875          28306         499          1.8         557.5       0.3X
+Parsing without charset                           26030          26083          67          1.9         520.6       0.3X
+Parsing with UTF-8                                37115          37480         392          1.3         742.3       0.2X
 
