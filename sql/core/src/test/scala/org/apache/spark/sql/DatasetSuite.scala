@@ -1730,6 +1730,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     def assertExecutionId: UserDefinedFunction = udf(AssertExecutionId.apply _)
     spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
   }
+
+  test("implicit encoder for LocalDate") {
+    val localDate = java.time.LocalDate.of(2019, 3, 30)
+    assert(spark.range(1).map { x => localDate }.head == localDate)
+  }
 }
 
 object AssertExecutionId {
