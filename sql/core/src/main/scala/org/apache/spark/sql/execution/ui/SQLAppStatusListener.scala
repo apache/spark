@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.ui
 
-import java.util.Date
+import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Function
 
@@ -77,7 +77,29 @@ class SQLAppStatusListener(
 
     val executionId = executionIdString.toLong
     val jobId = event.jobId
-    val exec = getOrCreateExecution(executionId)
+    val exec = Option(liveExecutions.get(executionId))
+      .orElse {
+        try {
+          // Should not overwrite the kvstore with new entry, if it already has the SQLExecution
+          // data corresponding to the execId.
+          val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
+          val executionData = new LiveExecutionData(executionId)
+          executionData.description = sqlStoreData.description
+          executionData.details = sqlStoreData.details
+          executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
+          executionData.metrics = sqlStoreData.metrics
+          executionData.submissionTime = sqlStoreData.submissionTime
+          executionData.completionTime = sqlStoreData.completionTime
+          executionData.jobs = sqlStoreData.jobs
+          executionData.stages = sqlStoreData.stages
+          executionData.metricsValues = sqlStoreData.metricValues
+          executionData.endEvents = sqlStoreData.jobs.size + 1
+          liveExecutions.put(executionId, executionData)
+          Some(executionData)
+        } catch {
+          case _: NoSuchElementException => None
+        }
+      }.getOrElse(getOrCreateExecution(executionId))
 
     // Record the accumulator IDs for the stages of this job, so that the code that keeps
     // track of the metrics knows which accumulators to look at.
@@ -275,14 +297,18 @@ class SQLAppStatusListener(
       exec.endEvents += 1
       update(exec)
 
-      // Remove stale LiveStageMetrics objects for stages that are not active anymore.
-      val activeStages = liveExecutions.values().asScala.flatMap { other =>
-        if (other != exec) other.stages else Nil
-      }.toSet
-      stageMetrics.keySet().asScala
-        .filter(!activeStages.contains(_))
-        .foreach(stageMetrics.remove)
+      removeStaleMetricsData(exec)
     }
+  }
+
+  private def removeStaleMetricsData(exec: LiveExecutionData): Unit = {
+    // Remove stale LiveStageMetrics objects for stages that are not active anymore.
+    val activeStages = liveExecutions.values().asScala.flatMap { other =>
+      if (other != exec) other.stages else Nil
+    }.toSet
+    stageMetrics.keySet().asScala
+      .filter(!activeStages.contains(_))
+      .foreach(stageMetrics.remove)
   }
 
   private def onDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Unit = {
@@ -311,6 +337,7 @@ class SQLAppStatusListener(
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
       exec.write(kvstore, now)
+      removeStaleMetricsData(exec)
       liveExecutions.remove(exec.executionId)
     } else if (force) {
       exec.write(kvstore, now)

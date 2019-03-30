@@ -152,7 +152,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       _.asInstanceOf[KinesisBackedBlockRDDPartition] }.toSeq
     assert(partitions.map { _.seqNumberRanges } === Seq(seqNumRanges1, seqNumRanges2))
     assert(partitions.map { _.blockId } === Seq(blockId1, blockId2))
-    assert(partitions.forall { _.isBlockIdValid === true })
+    assert(partitions.forall { _.isBlockIdValid })
 
     // Verify that KinesisBackedBlockRDD is generated even when there are no blocks
     val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)

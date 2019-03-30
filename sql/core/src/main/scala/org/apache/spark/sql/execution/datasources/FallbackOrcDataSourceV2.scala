@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -33,10 +35,15 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
  */
 class FallbackOrcDataSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(d @DataSourceV2Relation(table: OrcTable, _, _), _, _, _, _) =>
+    case i @ InsertIntoTable(d @ DataSourceV2Relation(table: OrcTable, _, _), _, _, _, _) =>
       val v1FileFormat = new OrcFileFormat
-      val relation = HadoopFsRelation(table.fileIndex, table.fileIndex.partitionSchema,
-        table.schema(), None, v1FileFormat, d.options)(sparkSession)
+      val relation = HadoopFsRelation(
+        table.fileIndex,
+        table.fileIndex.partitionSchema,
+        table.schema,
+        None,
+        v1FileFormat,
+        d.options.asScala.toMap)(sparkSession)
       i.copy(table = LogicalRelation(relation))
   }
 }

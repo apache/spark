@@ -25,7 +25,7 @@ RUN apt-get update && \
     apt-get install -y less openjdk-8-jre-headless iproute2 vim-tiny sudo openssh-server && \
     rm -rf /var/lib/apt/lists/*
 
-ENV SCALA_VERSION 2.11.8
+ENV SCALA_VERSION 2.12.8
 ENV CDH_VERSION cdh4
 ENV SCALA_HOME /opt/scala-$SCALA_VERSION
 ENV SPARK_HOME /opt/spark

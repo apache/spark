@@ -53,6 +53,12 @@ trait ParserInterface {
   def parseFunctionIdentifier(sqlText: String): FunctionIdentifier
 
   /**
+   * Parse a string to a multi-part identifier.
+   */
+  @throws[ParseException]("Text cannot be parsed to a multi-part identifier")
+  def parseMultipartIdentifier(sqlText: String): Seq[String]
+
+  /**
    * Parse a string to a [[StructType]]. The passed SQL string should be a comma separated list
    * of field definitions which will preserve the correct Hive metadata.
    */

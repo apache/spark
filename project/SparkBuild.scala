@@ -93,6 +93,8 @@ object SparkBuild extends PomBuild {
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
+    // TODO: revisit for Scala 2.13 support
+    /*
     Option(System.getProperty("scala.version"))
       .filter(_.startsWith("2.11"))
       .foreach { versionString =>
@@ -104,6 +106,7 @@ object SparkBuild extends PomBuild {
       // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
       System.setProperty("scala-2.11", "true")
     }
+     */
     profiles
   }
 
@@ -569,7 +572,8 @@ object Catalyst {
     antlr4Version in Antlr4 := SbtPomKeys.effectivePom.value.getProperties.get("antlr4.version").asInstanceOf[String],
     antlr4PackageName in Antlr4 := Some("org.apache.spark.sql.catalyst.parser"),
     antlr4GenListener in Antlr4 := true,
-    antlr4GenVisitor in Antlr4 := true
+    antlr4GenVisitor in Antlr4 := true,
+    antlr4TreatWarningsAsErrors in Antlr4 := true
   )
 }
 
@@ -853,12 +857,15 @@ object CopyDependencies {
 object TestSettings {
   import BuildCommons._
 
-  private val scalaBinaryVersion =
+  // TODO revisit for Scala 2.13 support
+  private val scalaBinaryVersion = "2.12"
+    /*
     if (System.getProperty("scala-2.11") == "true") {
       "2.11"
     } else {
       "2.12"
     }
+     */
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
