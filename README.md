@@ -124,3 +124,9 @@ in the online documentation for an overview on how to configure Spark.
 
 Please review the [Contribution to Spark guide](http://spark.apache.org/contributing.html)
 for information on how to get started contributing to the project.
+
+## Developing with IntelliJ
+
+1. Open the root `pom.xml` in IntelliJ and select `Open as Project`.
+2. Make sure that the Java SDK is 1.8 (Right click on root project: `Open Module Settings > Project Settings > Project > Project SDK = 1.8`).
+3. Make sure that Scala compilation is set to "Java then Scala" (`Preferences > Build, Execution, Deployment > Compiler > Scala Compiler > Scala Comiple Server > Compile order = Java then Scala`).
