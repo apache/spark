@@ -26,7 +26,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * {@link #newWriteBuilder(CaseInsensitiveStringMap)} that is used to create a write
  * for batch or streaming.
  */
-interface SupportsWrite extends Table {
+public interface SupportsWrite extends Table {
 
   /**
    * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call

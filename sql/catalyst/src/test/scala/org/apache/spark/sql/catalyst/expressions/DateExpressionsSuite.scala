@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.ZoneOffset
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -43,7 +44,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val jstId = Option(TimeZoneJST.getID)
 
   def toMillis(timestamp: String): Long = {
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", TimeZoneGMT)
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
     TimeUnit.MICROSECONDS.toMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
@@ -53,12 +54,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("datetime function current_date") {
     val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis(), TimeZoneGMT)
-    val cd = CurrentDate(gmtId).eval(EmptyRow).asInstanceOf[Int]
+    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
     val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis(), TimeZoneGMT)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
-    val cdjst = CurrentDate(jstId).eval(EmptyRow).asInstanceOf[Int]
-    val cdpst = CurrentDate(pstId).eval(EmptyRow).asInstanceOf[Int]
+    val cdjst = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
+    val cdpst = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
     assert(cdpst <= cd && cd <= cdjst)
   }
 

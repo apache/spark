@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
-
 import scala.collection.immutable.IndexedSeq
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -99,13 +98,11 @@ class CacheManager extends Logging {
    * @param query     The [[Dataset]] to be un-cached.
    * @param cascade   If true, un-cache all the cache entries that refer to the given
    *                  [[Dataset]]; otherwise un-cache the given [[Dataset]] only.
-   * @param blocking  Whether to block until all blocks are deleted.
    */
   def uncacheQuery(
       query: Dataset[_],
-      cascade: Boolean,
-      blocking: Boolean = true): Unit = {
-    uncacheQuery(query.sparkSession, query.logicalPlan, cascade, blocking)
+      cascade: Boolean): Unit = {
+    uncacheQuery(query.sparkSession, query.logicalPlan, cascade)
   }
 
   /**
@@ -120,7 +117,7 @@ class CacheManager extends Logging {
       spark: SparkSession,
       plan: LogicalPlan,
       cascade: Boolean,
-      blocking: Boolean): Unit = {
+      blocking: Boolean = false): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
         _.find(_.sameResult(plan)).isDefined
@@ -152,6 +149,17 @@ class CacheManager extends Logging {
         cd.plan.find(_.sameResult(plan)).isDefined && !cacheAlreadyLoaded
       })
     }
+  }
+
+  // Analyzes column statistics in the given cache data
+  private[sql] def analyzeColumnCacheQuery(
+      sparkSession: SparkSession,
+      cachedData: CachedData,
+      column: Seq[Attribute]): Unit = {
+    val relation = cachedData.cachedRepresentation
+    val (rowCount, newColStats) =
+      CommandUtils.computeColumnStats(sparkSession, relation, column)
+    relation.updateStats(rowCount, newColStats)
   }
 
   /**

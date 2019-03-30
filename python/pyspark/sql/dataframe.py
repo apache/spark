@@ -795,9 +795,9 @@ class DataFrame(object):
 
         >>> df = spark.range(10)
         >>> df.sample(0.5, 3).count()
-        4
+        7
         >>> df.sample(fraction=0.5, seed=3).count()
-        4
+        7
         >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
         1
         >>> df.sample(1.0).count()
@@ -865,8 +865,8 @@ class DataFrame(object):
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    5|
-        |  1|    9|
+        |  0|    3|
+        |  1|    6|
         +---+-----+
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
@@ -898,10 +898,10 @@ class DataFrame(object):
 
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
         >>> splits[0].count()
-        1
+        2
 
         >>> splits[1].count()
-        3
+        2
         """
         for w in weights:
             if w < 0.0:
@@ -1000,8 +1000,9 @@ class DataFrame(object):
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
-            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
-            ``left_semi``, and ``left_anti``.
+            ``full``, ``fullouter``, ``full_outer``, ``left``, ``leftouter``, ``left_outer``,
+            ``right``, ``rightouter``, ``right_outer``, ``semi``, ``leftsemi``, ``left_semi``,
+            ``anti``, ``leftanti`` and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 

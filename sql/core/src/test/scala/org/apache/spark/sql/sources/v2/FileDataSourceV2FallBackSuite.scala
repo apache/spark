@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.sources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -38,7 +40,7 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
   }
 }
 
-class DummyReadOnlyFileTable extends Table with SupportsBatchRead {
+class DummyReadOnlyFileTable extends Table with SupportsRead {
   override def name(): String = "dummy"
 
   override def schema(): StructType = StructType(Nil)
@@ -46,6 +48,9 @@ class DummyReadOnlyFileTable extends Table with SupportsBatchRead {
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     throw new AnalysisException("Dummy file reader")
   }
+
+  override def capabilities(): java.util.Set[TableCapability] =
+    Set(TableCapability.BATCH_READ).asJava
 }
 
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
@@ -59,13 +64,16 @@ class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
   }
 }
 
-class DummyWriteOnlyFileTable extends Table with SupportsBatchWrite {
+class DummyWriteOnlyFileTable extends Table with SupportsWrite {
   override def name(): String = "dummy"
 
   override def schema(): StructType = StructType(Nil)
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
     throw new AnalysisException("Dummy file writer")
+
+  override def capabilities(): java.util.Set[TableCapability] =
+    Set(TableCapability.BATCH_WRITE).asJava
 }
 
 class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {

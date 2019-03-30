@@ -2520,8 +2520,9 @@ setMethod("dropDuplicates",
 #' Column expression. If joinExpr is omitted, the default, inner join is attempted and an error is
 #' thrown if it would be a Cartesian Product. For Cartesian join, use crossJoin instead.
 #' @param joinType The type of join to perform, default 'inner'.
-#' Must be one of: 'inner', 'cross', 'outer', 'full', 'full_outer',
-#' 'left', 'left_outer', 'right', 'right_outer', 'left_semi', or 'left_anti'.
+#' Must be one of: 'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',
+#' 'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer', 'semi',
+#' 'leftsemi', 'left_semi', 'anti', 'leftanti', 'left_anti'.
 #' @return A SparkDataFrame containing the result of the join operation.
 #' @family SparkDataFrame functions
 #' @aliases join,SparkDataFrame,SparkDataFrame-method
@@ -2553,14 +2554,14 @@ setMethod("join",
                     "outer", "full", "fullouter", "full_outer",
                     "left", "leftouter", "left_outer",
                     "right", "rightouter", "right_outer",
-                    "left_semi", "leftsemi", "left_anti", "leftanti")) {
+                    "semi", "left_semi", "leftsemi", "anti", "left_anti", "leftanti")) {
                   joinType <- gsub("_", "", joinType)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
-                  stop("joinType must be one of the following types: ",
-                       "'inner', 'cross', 'outer', 'full', 'full_outer',",
-                       "'left', 'left_outer', 'right', 'right_outer',",
-                       "'left_semi', or 'left_anti'.")
+                  stop(paste("joinType must be one of the following types:",
+                       "'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',",
+                       "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
+                       "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'."))
                 }
               }
             }

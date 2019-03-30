@@ -736,6 +736,25 @@ setMethod("hash",
           })
 
 #' @details
+#' \code{xxhash64}: Calculates the hash code of given columns using the 64-bit
+#' variant of the xxHash algorithm, and returns the result as a long
+#' column.
+#'
+#' @rdname column_misc_functions
+#' @aliases xxhash64 xxhash64,Column-method
+#' @note xxhash64 since 3.0.0
+setMethod("xxhash64",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{dayofmonth}: Extracts the day of the month as an integer from a
 #' given date/timestamp/string.
 #'

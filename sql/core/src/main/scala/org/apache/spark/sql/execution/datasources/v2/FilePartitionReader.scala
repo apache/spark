@@ -58,7 +58,18 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
         return false
       }
     }
-    if (currentReader.next()) {
+
+    // In PartitionReader.next(), the current reader proceeds to next record.
+    // It might throw RuntimeException/IOException and Spark should handle these exceptions.
+    val hasNext = try {
+      currentReader.next()
+    } catch {
+      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+        logWarning(
+          s"Skipped the rest of the content in the corrupted file: $currentReader", e)
+        false
+    }
+    if (hasNext) {
       true
     } else {
       close()

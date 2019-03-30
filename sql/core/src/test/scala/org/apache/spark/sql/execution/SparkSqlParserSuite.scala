@@ -215,30 +215,6 @@ class SparkSqlParserSuite extends AnalysisTest {
       "no viable alternative at input")
   }
 
-  test("create table using - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet",
-      createTableUsing(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType)
-      )
-    )
-    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
-      "no viable alternative at input")
-  }
-
-  test("create view as insert into table") {
-    // Single insert query
-    intercept("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)",
-      "Operation not allowed: CREATE VIEW ... AS INSERT INTO")
-
-    // Multi insert query
-    intercept("CREATE VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
-      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
-      "Operation not allowed: CREATE VIEW ... AS FROM ... [INSERT INTO ...]+")
-  }
-
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     assertEqual("describe t",
       DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
@@ -380,17 +356,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(
       "SELECT a || b || c FROM t",
       Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
-  }
-
-  test("SPARK-25046 Fix Alter View ... As Insert Into Table") {
-    // Single insert query
-    intercept("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)",
-      "Operation not allowed: ALTER VIEW ... AS INSERT INTO")
-
-    // Multi insert query
-    intercept("ALTER VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
-      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
-      "Operation not allowed: ALTER VIEW ... AS FROM ... [INSERT INTO ...]+")
   }
 
   test("database and schema tokens are interchangeable") {

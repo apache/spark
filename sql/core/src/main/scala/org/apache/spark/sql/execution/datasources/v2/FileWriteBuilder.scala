@@ -39,7 +39,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.SerializableConfiguration
 
-abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
+abstract class FileWriteBuilder(
+    options: CaseInsensitiveStringMap,
+    paths: Seq[String],
+    formatName: String,
+    supportsDataType: DataType => Boolean)
   extends WriteBuilder with SupportsSaveMode {
   private var schema: StructType = _
   private var queryId: String = _
@@ -64,16 +68,16 @@ abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[St
     val sparkSession = SparkSession.active
     validateInputs(sparkSession.sessionState.conf.caseSensitiveAnalysis)
     val path = new Path(paths.head)
-    val optionsAsScala = options.asScala.toMap
-
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
+    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+    // Hadoop Configurations are case sensitive.
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = paths.head)
     lazy val description =
-      createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, optionsAsScala)
+      createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
     val fs = path.getFileSystem(hadoopConf)
     mode match {
@@ -107,22 +111,6 @@ abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[St
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
-
-  /**
-   * Returns whether this format supports the given [[DataType]] in write path.
-   * By default all data types are supported.
-   */
-  def supportsDataType(dataType: DataType): Boolean = true
-
-  /**
-   * The string that represents the format that this data source provider uses. This is
-   * overridden by children to provide a nice alias for the data source. For example:
-   *
-   * {{{
-   *   override def formatName(): String = "ORC"
-   * }}}
-   */
-  def formatName: String
 
   private def validateInputs(caseSensitiveAnalysis: Boolean): Unit = {
     assert(schema != null, "Missing input data schema")
