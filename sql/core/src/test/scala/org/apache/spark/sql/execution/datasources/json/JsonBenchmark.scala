@@ -270,7 +270,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
   }
 
   def jsonFunctions(rows: Int, iters: Int): Unit = {
-    val benchmark = new Benchmark("JSON functions", rows)
+    val benchmark = new Benchmark("JSON functions", rows, output = output)
 
     prepareDataInfo(benchmark)
 
@@ -300,7 +300,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
   }
 
   def jsonInDS(rows: Int, iters: Int): Unit = {
-    val benchmark = new Benchmark("Dataset of json strings", rows)
+    val benchmark = new Benchmark("Dataset of json strings", rows, output = output)
 
     prepareDataInfo(benchmark)
 
@@ -326,7 +326,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
   }
 
   def jsonInFile(rows: Int, iters: Int): Unit = {
-    val benchmark = new Benchmark("Json files in the per-line mode", rows)
+    val benchmark = new Benchmark("Json files in the per-line mode", rows, output = output)
 
     withTempPath { path =>
       prepareDataInfo(benchmark)
