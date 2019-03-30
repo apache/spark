@@ -198,6 +198,7 @@ class StreamingTests(ReusedSQLTestCase):
             self.assertTrue(duration >= 2)
             self.assertFalse(res)
         finally:
+            q.processAllAvailable()
             q.stop()
             shutil.rmtree(tmpPath)
 
@@ -255,6 +256,7 @@ class StreamingTests(ReusedSQLTestCase):
             self.assertTrue(duration >= 2)
             self.assertFalse(res)
         finally:
+            q.processAllAvailable()
             q.stop()
             shutil.rmtree(tmpPath)
 

@@ -23,10 +23,13 @@ import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, Scan}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 abstract class FileScan(
     sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex) extends Scan with Batch {
+    fileIndex: PartitioningAwareFileIndex,
+    readSchema: StructType,
+    options: CaseInsensitiveStringMap) extends Scan with Batch {
   /**
    * Returns whether a file with `path` could be split or not.
    */

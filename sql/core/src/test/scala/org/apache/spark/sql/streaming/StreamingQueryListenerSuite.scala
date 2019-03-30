@@ -215,14 +215,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       val listener2 = new EventCollector
 
       spark.streams.addListener(listener1)
-      assert(isListenerActive(listener1) === true)
+      assert(isListenerActive(listener1))
       assert(isListenerActive(listener2) === false)
       spark.streams.addListener(listener2)
-      assert(isListenerActive(listener1) === true)
-      assert(isListenerActive(listener2) === true)
+      assert(isListenerActive(listener1))
+      assert(isListenerActive(listener2))
       spark.streams.removeListener(listener1)
       assert(isListenerActive(listener1) === false)
-      assert(isListenerActive(listener2) === true)
+      assert(isListenerActive(listener2))
     } finally {
       addedListeners().foreach(spark.streams.removeListener)
     }

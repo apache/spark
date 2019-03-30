@@ -19,7 +19,7 @@
 
 from __future__ import print_function
 import itertools
-from optparse import OptionParser
+from argparse import ArgumentParser
 import os
 import random
 import re
@@ -175,14 +175,20 @@ def run_apache_rat_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "check-license")])
 
 
-def run_scala_style_checks():
+def run_scala_style_checks(build_profiles):
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Scala style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala"), profiles])
 
 
-def run_java_style_checks():
+def run_java_style_checks(build_profiles):
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
+    # The same profiles used for building are used to run Checkstyle by SBT as well because
+    # the previous build looks reused for Checkstyle and affecting Checkstyle. See SPARK-27130.
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Java style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
 
 
 def run_python_style_checks():
@@ -274,6 +280,7 @@ def get_hadoop_profiles(hadoop_version):
 
     sbt_maven_hadoop_profiles = {
         "hadoop2.7": ["-Phadoop-2.7"],
+        "hadoop3.2": ["-Phadoop-3.2"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -332,7 +339,7 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     exec_sbt(profiles_and_goals)
 
     if checkstyle:
-        run_java_style_checks()
+        run_java_style_checks(build_profiles)
 
     build_spark_unidoc_sbt(hadoop_version)
 
@@ -354,7 +361,10 @@ def build_apache_spark(build_tool, hadoop_version):
 def detect_binary_inop_with_mima(hadoop_version):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "mima")] + build_profiles)
+    profiles = " ".join(build_profiles)
+    print("[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
+          profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "mima"), profiles])
 
 
 def run_scala_tests_maven(test_profiles):
@@ -484,20 +494,20 @@ def run_sparkr_tests():
 
 
 def parse_opts():
-    parser = OptionParser(
+    parser = ArgumentParser(
         prog="run-tests"
     )
-    parser.add_option(
-        "-p", "--parallelism", type="int", default=8,
-        help="The number of suites to test in parallel (default %default)"
+    parser.add_argument(
+        "-p", "--parallelism", type=int, default=8,
+        help="The number of suites to test in parallel (default %(default)d)"
     )
 
-    (opts, args) = parser.parse_args()
-    if args:
-        parser.error("Unsupported arguments: %s" % ' '.join(args))
-    if opts.parallelism < 1:
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+    if args.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
-    return opts
+    return args
 
 
 def main():
@@ -577,7 +587,8 @@ def main():
     if not changed_files or any(f.endswith(".scala")
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
-        run_scala_style_checks()
+        build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+        run_scala_style_checks(build_profiles)
     should_run_java_style_checks = False
     if not changed_files or any(f.endswith(".java")
                                 or f.endswith("checkstyle.xml")
@@ -635,6 +646,7 @@ def _test():
     failure_count = doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

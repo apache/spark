@@ -57,6 +57,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     }
   }
 
+  /** Creates a multi-part identifier for a given SQL string */
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
+    }
+  }
+
   /**
    * Creates StructType for a given SQL string, which is a comma separated list of field
    * definitions which will preserve the correct Hive metadata.
@@ -85,6 +92,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
+    lexer.ansi = SQLConf.get.ansiParserEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -92,6 +100,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
+    parser.ansi = SQLConf.get.ansiParserEnabled
 
     try {
       try {
@@ -131,7 +140,7 @@ class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
 
 /** For test-only. */
 object CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder(new SQLConf())
+  val astBuilder = new AstBuilder(SQLConf.get)
 }
 
 /**

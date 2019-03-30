@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.io.File
 import java.nio.ByteBuffer
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{Semaphore, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -147,10 +147,10 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks
-    val startTime = System.currentTimeMillis()
+    val startTimeNs = System.nanoTime()
     blockGenerator.start()
     var count = 0
-    while(System.currentTimeMillis - startTime < waitTime) {
+    while(System.nanoTime() - startTimeNs < TimeUnit.MILLISECONDS.toNanos(waitTime)) {
       blockGenerator.addData(count)
       generatedData += count
       count += 1

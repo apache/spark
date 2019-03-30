@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
 /**
@@ -91,8 +91,8 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 
 private[kafka010] object KafkaOffsetRangeCalculator {
 
-  def apply(options: DataSourceOptions): KafkaOffsetRangeCalculator = {
-    val optionalValue = Option(options.get("minPartitions").orElse(null)).map(_.toInt)
+  def apply(options: CaseInsensitiveStringMap): KafkaOffsetRangeCalculator = {
+    val optionalValue = Option(options.get("minPartitions")).map(_.toInt)
     new KafkaOffsetRangeCalculator(optionalValue)
   }
 }

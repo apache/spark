@@ -20,16 +20,15 @@ package org.apache.spark.sql.sources.v2;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.Set;
+
 /**
  * An interface representing a logical structured data set of a data source. For example, the
  * implementation can be a directory on the file system, a topic of Kafka, or a table in the
  * catalog, etc.
  * <p>
- * This interface can mixin the following interfaces to support different operations:
- * </p>
- * <ul>
- *   <li>{@link SupportsBatchRead}: this table can be read in batch queries.</li>
- * </ul>
+ * This interface can mixin the following interfaces to support different operations, like
+ * {@code SupportsRead}.
  */
 @Evolving
 public interface Table {
@@ -45,4 +44,9 @@ public interface Table {
    * empty schema can be returned here.
    */
   StructType schema();
+
+  /**
+   * Returns the set of capabilities for this table.
+   */
+  Set<TableCapability> capabilities();
 }

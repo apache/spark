@@ -1613,9 +1613,15 @@ def to_arrow_type(dt):
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
     elif type(dt) == ArrayType:
-        if type(dt.elementType) == TimestampType:
+        if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
+    elif type(dt) == StructType:
+        if any(type(field.dataType) == StructType for field in dt):
+            raise TypeError("Nested StructType not supported in conversion to Arrow")
+        fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+                  for field in dt]
+        arrow_type = pa.struct(fields)
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -1668,6 +1674,16 @@ def from_arrow_type(at):
         if types.is_timestamp(at.value_type):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
+    elif types.is_struct(at):
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
+                            "\nPlease install pyarrow >= 0.10.0 for StructType support.")
+        if any(types.is_struct(field.type) for field in at):
+            raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
+        return StructType(
+            [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+             for field in at])
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
@@ -1681,38 +1697,52 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _check_series_convert_date(series, data_type):
-    """
-    Cast the series to datetime.date if it's a date type, otherwise returns the original series.
+def _arrow_column_to_pandas(column, data_type):
+    """ Convert Arrow Column to pandas Series.
 
-    :param series: pandas.Series
-    :param data_type: a Spark data type for the series
+    :param series: pyarrow.lib.Column
+    :param data_type: a Spark data type for the column
     """
-    import pyarrow
+    import pandas as pd
+    import pyarrow as pa
     from distutils.version import LooseVersion
-    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
-    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0") and type(data_type) == DateType:
-        return series.dt.date
+    # If the given column is a date type column, creates a series of datetime.date directly instead
+    # of creating datetime64[ns] as intermediate data to avoid overflow caused by datetime64[ns]
+    # type handling.
+    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+        if type(data_type) == DateType:
+            return pd.Series(column.to_pylist(), name=column.name)
+        else:
+            return column.to_pandas()
     else:
-        return series
+        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
+        # np.datetime64.
+        return column.to_pandas(date_as_object=True)
 
 
-def _check_dataframe_convert_date(pdf, schema):
-    """ Correct date type value to use datetime.date.
+def _arrow_table_to_pandas(table, schema):
+    """ Convert Arrow Table to pandas DataFrame.
 
     Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
     use datetime.date to match the behavior with when Arrow optimization is disabled.
 
-    :param pdf: pandas.DataFrame
-    :param schema: a Spark schema of the pandas.DataFrame
+    :param table: pyarrow.lib.Table
+    :param schema: a Spark schema of the pyarrow.lib.Table
     """
-    import pyarrow
+    import pandas as pd
+    import pyarrow as pa
     from distutils.version import LooseVersion
-    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
-    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0"):
-        for field in schema:
-            pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
-    return pdf
+    # If the given table contains a date type column, use `_arrow_column_to_pandas` for pyarrow<0.11
+    # or use `date_as_object` option for pyarrow>=0.11 to avoid creating datetime64[ns] as
+    # intermediate data.
+    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+        if any(type(field.dataType) == DateType for field in schema):
+            return pd.concat([_arrow_column_to_pandas(column, field.dataType)
+                              for column, field in zip(table.itercolumns(), schema)], axis=1)
+        else:
+            return table.to_pandas()
+    else:
+        return table.to_pandas(date_as_object=True)
 
 
 def _get_local_timezone():

@@ -114,6 +114,7 @@ class SparkSessionTests3(unittest.TestCase):
             self.assertEqual(spark.table("table1").columns, ['name', 'age'])
             self.assertEqual(spark.range(3).count(), 3)
         finally:
+            spark.sql("DROP DATABASE test_db CASCADE")
             spark.stop()
 
     def test_global_default_session(self):
