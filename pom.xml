@@ -1414,15 +1414,18 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
-          <!-- Hive 2.3.4 -->
+          <!-- Begin of Hive 2.3.4 exclusion -->
+          <!-- jetty-all conflict with jetty 9.4.12.v20180830 -->
           <exclusion>
             <groupId>org.eclipse.jetty.aggregate</groupId>
             <artifactId>jetty-all</artifactId>
           </exclusion>
+          <!-- org.apache.logging.log4j:* conflict with log4j 1.2.17 -->
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <!-- End of Hive 2.3.4 exclusion -->
         </exclusions>
       </dependency>
 
@@ -1541,11 +1544,13 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
           </exclusion>
-          <!-- Hive 2.3.4 -->
+          <!-- Begin of Hive 2.3.4 exclusion -->
+          <!-- Do not need Tez -->
           <exclusion>
             <groupId>${hive.group}</groupId>
           <artifactId>hive-llap-tez</artifactId>
           </exclusion>
+          <!-- Do not need Calcite, see SPARK-27054 -->
           <exclusion>
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-druid</artifactId>
@@ -1554,10 +1559,12 @@
             <groupId>org.apache.calcite.avatica</groupId>
             <artifactId>avatica</artifactId>
           </exclusion>
+          <!-- org.apache.logging.log4j:* conflict with log4j 1.2.17 -->
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <!-- End of Hive 2.3.4 exclusion -->
         </exclusions>
       </dependency>
       <dependency>
@@ -1723,19 +1730,22 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
-          <!-- Hive 2.3.4 -->
+          <!-- Begin of Hive 2.3.4 exclusion -->
+          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.10.1 -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop-bundle</artifactId>
           </exclusion>
+          <!-- Do not need Jasper, see HIVE-19799 -->
           <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-compiler</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>jsp-api</artifactId>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-runtime</artifactId>
           </exclusion>
+          <!-- End of Hive 2.3.4 exclusion -->
         </exclusions>
       </dependency>
 
@@ -1801,11 +1811,13 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
-          <!-- Hive 2.3.4 -->
+          <!-- Begin of Hive 2.3.4 exclusion -->
+          <!-- Exclude log4j-slf4j-impl, otherwise throw NCDFE when starting spark-shell -->
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
           </exclusion>
+          <!-- End of Hive 2.3.4 exclusion -->
         </exclusions>
       </dependency>
       <dependency>

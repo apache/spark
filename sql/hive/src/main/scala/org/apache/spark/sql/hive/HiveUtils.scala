@@ -55,11 +55,11 @@ private[spark] object HiveUtils extends Logging {
     sc
   }
 
-  private val hive1Version = "1.2.1"
-  private val hive2Version = "2.3.4"
-  val isHive2: Boolean = HiveVersionInfo.getVersion.equals(hive2Version)
+  private val supportedHive2ShortVersions = Set("2.3.0")
+  val isSupportedHive2 = supportedHive2ShortVersions.contains(HiveVersionInfo.getShortVersion)
+
   /** The version of hive used internally by Spark SQL. */
-  val builtinHiveVersion: String = if (isHive2) hive2Version else hive1Version
+  val builtinHiveVersion: String = if (isSupportedHive2) HiveVersionInfo.getVersion else "1.2.1"
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
