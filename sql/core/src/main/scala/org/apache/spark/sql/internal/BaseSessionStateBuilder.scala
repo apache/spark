@@ -160,7 +160,7 @@ abstract class BaseSessionStateBuilder(
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
-        new FallbackOrcDataSourceV2(session) +:
+        new FallbackFileSourceV2(session) +:
         DataSourceResolution(conf) +:
         customResolutionRules
 
