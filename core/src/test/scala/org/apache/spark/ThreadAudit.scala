@@ -89,7 +89,13 @@ trait ThreadAudit extends Logging {
     /**
      * A global thread pool for broadcast exchange executions.
      */
-    "broadcast-exchange.*"
+    "broadcast-exchange.*",
+
+    /**
+     * A thread started by JRE to support safe parallel execution of waitFor() and exitStatus()
+     * methods to forked subprocesses.
+     */
+    "process reaper"
   )
   private var threadNamesSnapshot: Set[String] = Set.empty
 
