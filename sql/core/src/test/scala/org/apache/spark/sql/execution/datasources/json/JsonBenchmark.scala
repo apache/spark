@@ -17,9 +17,9 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
-import org.apache.spark.sql.functions.{from_json, get_json_object, json_tuple, lit, max}
+import org.apache.spark.sql.functions.{from_json, get_json_object, json_tuple, lit}
 import org.apache.spark.sql.types._
 
 /**
@@ -39,10 +39,14 @@ import org.apache.spark.sql.types._
 object JSONBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  def prepareDataInfo(benchmark: Benchmark): Unit = {
+  private def prepareDataInfo(benchmark: Benchmark): Unit = {
     // scalastyle:off println
     benchmark.out.println("Preparing data for benchmarking ...")
     // scalastyle:on println
+  }
+
+  private def run(ds: Dataset[_]): Unit = {
+    ds.write.format("noop").save()
   }
 
   def schemaInferring(rowsNum: Int, numIters: Int): Unit = {
@@ -277,25 +281,22 @@ object JSONBenchmark extends SqlBasedBenchmark {
 
     prepareDataInfo(benchmark)
 
-    val in = spark.range(0, rows, 1, 1)
-      .map(_ => """{"a":1}""")
+    val in = spark.range(0, rows, 1, 1).map(_ => """{"a":1}""")
 
-    val schema = new StructType().add("a", IntegerType)
-    val from_json_ds = in.select(from_json('value, schema) as "v").select(max($"v.a"))
     benchmark.addCase("from_json", iters) { _ =>
-      from_json_ds.first()
+      val schema = new StructType().add("a", IntegerType)
+      val from_json_ds = in.select(from_json('value, schema))
+      run(from_json_ds)
     }
 
-    val json_tuple_ds = in.select(json_tuple($"value", "a") as "v")
-      .filter($"v" === lit("a"))
     benchmark.addCase("json_tuple", iters) { _ =>
-      json_tuple_ds.count()
+      val json_tuple_ds = in.select(json_tuple($"value", "a"))
+      run(json_tuple_ds)
     }
 
-    val get_json_object_ds = in.select(get_json_object($"value", "$.a") as "v")
-      .filter($"v" === lit("a"))
     benchmark.addCase("get_json_object", iters) { _ =>
-      get_json_object_ds.count()
+      val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
+      run(get_json_object_ds)
     }
 
     benchmark.run()
@@ -306,17 +307,18 @@ object JSONBenchmark extends SqlBasedBenchmark {
 
     prepareDataInfo(benchmark)
 
-    val in = spark.range(0, rows, 1, 1)
-      .map(_ => """{"a":1}""")
+    val in = spark.range(0, rows, 1, 1).map(_ => """{"a":1}""")
 
     benchmark.addCase("schema inferring", iters) { _ =>
       spark.read.json(in).schema
     }
 
-    val schema = new StructType().add("a", IntegerType)
-    val ds = spark.read.schema(schema).json(in)
     benchmark.addCase("parsing", iters) { _ =>
-      ds.count()
+      val schema = new StructType().add("a", IntegerType)
+      val ds = spark.read
+        .schema(schema)
+        .json(in)
+      run(ds)
     }
 
     benchmark.run()
@@ -335,24 +337,29 @@ object JSONBenchmark extends SqlBasedBenchmark {
         .json(path.getAbsolutePath)
 
       benchmark.addCase("Schema inferring", iters) { _ =>
-        spark.read.option("multiLine", false).json(path.getAbsolutePath).schema
+        spark.read
+          .option("multiLine", false)
+          .json(path.getAbsolutePath)
+          .schema
       }
 
       val schema = new StructType().add("a", IntegerType)
-      val no_charset = spark.read
-        .schema(schema)
-        .option("multiLine", false)
-        .json(path.getAbsolutePath)
+
       benchmark.addCase("Parsing without charset", iters) { _ =>
-        no_charset.count()
+        val no_charset = spark.read
+          .schema(schema)
+          .option("multiLine", false)
+          .json(path.getAbsolutePath)
+        run(no_charset)
       }
 
-      val utf8_charset = spark.read
-        .schema(schema)
-        .option("multiLine", false).option("charset", "UTF-8")
-        .json(path.getAbsolutePath)
       benchmark.addCase("Parsing with UTF-8", iters) { _ =>
-        utf8_charset.count()
+        val utf8_charset = spark.read
+          .schema(schema)
+          .option("multiLine", false).option("charset", "UTF-8")
+          .json(path.getAbsolutePath)
+
+        run(utf8_charset)
       }
 
       benchmark.run()
