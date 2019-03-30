@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions.{from_json, get_json_object, json_tuple, lit}
 import org.apache.spark.sql.types._
