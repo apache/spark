@@ -140,13 +140,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(sc.appName === "My other app")
   }
 
-  test("creating SparkContext with cpus per tasks bigger than cores per executors") {
-    val conf = new SparkConf(false)
-      .set(EXECUTOR_CORES, 1)
-      .set(CPUS_PER_TASK, 2)
-    intercept[SparkException] { sc = new SparkContext(conf) }
-  }
-
   test("nested property names") {
     // This wasn't supported by some external conf parsing libraries
     System.setProperty("spark.test.a", "a")
