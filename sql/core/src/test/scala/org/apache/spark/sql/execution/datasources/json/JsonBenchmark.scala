@@ -276,6 +276,10 @@ object JSONBenchmark extends SqlBasedBenchmark {
 
     val in = spark.range(0, rows, 1, 1).map(_ => """{"a":1}""")
 
+    benchmark.addCase("Text read", iters) { _ =>
+      run(in)
+    }
+
     benchmark.addCase("from_json", iters) { _ =>
       val schema = new StructType().add("a", IntegerType)
       val from_json_ds = in.select(from_json('value, schema))
@@ -302,6 +306,10 @@ object JSONBenchmark extends SqlBasedBenchmark {
 
     val in = spark.range(0, rows, 1, 1).map(_ => """{"a":1}""")
 
+    benchmark.addCase("Text read", iters) { _ =>
+      run(in)
+    }
+
     benchmark.addCase("schema inferring", iters) { _ =>
       spark.read.json(in).schema
     }
@@ -324,36 +332,42 @@ object JSONBenchmark extends SqlBasedBenchmark {
       prepareDataInfo(benchmark)
 
       spark.sparkContext.range(0, rows, 1, 1)
-        .map(_ => "a")
         .toDF("a")
         .write
         .json(path.getAbsolutePath)
 
-      benchmark.addCase("Schema inferring", iters) { _ =>
-        spark.read
-          .option("multiLine", false)
-          .json(path.getAbsolutePath)
-          .schema
+      benchmark.addCase("Text read", iters) { _ =>
+        val ds = spark.read
+          .format("text")
+          .load(path.getAbsolutePath)
+        run(ds)
       }
 
-      val schema = new StructType().add("a", IntegerType)
+      benchmark.addCase("Schema inferring", iters) { _ =>
+        val ds = spark.read
+          .option("multiLine", false)
+          .json(path.getAbsolutePath)
+        ds.schema
+      }
+
+      val schema = new StructType().add("a", LongType)
 
       benchmark.addCase("Parsing without charset", iters) { _ =>
-        val no_charset = spark.read
+        val ds = spark.read
           .schema(schema)
           .option("multiLine", false)
           .json(path.getAbsolutePath)
-        run(no_charset)
+        run(ds)
       }
 
       benchmark.addCase("Parsing with UTF-8", iters) { _ =>
-        val utf8_charset = spark.read
+        val ds = spark.read
           .schema(schema)
           .option("multiLine", false)
           .option("charset", "UTF-8")
           .json(path.getAbsolutePath)
 
-        run(utf8_charset)
+        run(ds)
       }
 
       benchmark.run()
@@ -369,9 +383,9 @@ object JSONBenchmark extends SqlBasedBenchmark {
       countWideRow(500 * 1000, numIters)
       selectSubsetOfColumns(10 * 1000 * 1000, numIters)
       jsonParserCreation(10 * 1000 * 1000, numIters)
-      jsonFunctions(100 * 1000 * 1000, numIters)
-      jsonInDS(100 * 1000 * 1000, numIters)
-      jsonInFile(100 * 1000 * 1000, numIters)
+      jsonFunctions(10 * 1000 * 1000, numIters)
+      jsonInDS(50 * 1000 * 1000, numIters)
+      jsonInFile(50 * 1000 * 1000, numIters)
     }
   }
 }
