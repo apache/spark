@@ -35,7 +35,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
    *    source via SQL configuration and fall back to FileFormat.
    * 2. Catalog support is required, which is still under development for data source V2.
    */
-  def fallBackFileFormat: Class[_ <: FileFormat]
+  def fallbackFileFormat: Class[_ <: FileFormat]
 
   lazy val sparkSession = SparkSession.active
 

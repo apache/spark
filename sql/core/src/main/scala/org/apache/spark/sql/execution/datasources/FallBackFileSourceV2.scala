@@ -22,21 +22,19 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2}
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2, FileTable}
 
 /**
- * Replace the ORC V2 data source of table in [[InsertIntoTable]] to V1 [[FileFormat]].
+ * Replace the File source V2 table in [[InsertIntoTable]] to V1 [[FileFormat]].
  * E.g, with temporary view `t` using [[FileDataSourceV2]], inserting into  view `t` fails
  * since there is no corresponding physical plan.
  * This is a temporary hack for making current data source V2 work. It should be
  * removed when Catalog support of file data source v2 is finished.
  */
-class FallbackOrcDataSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(d @ DataSourceV2Relation(table: OrcTable, _, _), _, _, _, _) =>
-      val v1FileFormat = new OrcFileFormat
+    case i @ InsertIntoTable(d @ DataSourceV2Relation(table: FileTable, _, _), _, _, _, _) =>
+      val v1FileFormat = table.fallbackFileFormat.newInstance()
       val relation = HadoopFsRelation(
         table.fileIndex,
         table.fileIndex.partitionSchema,
