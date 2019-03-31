@@ -60,8 +60,8 @@ class FileIndexSuite extends SharedSQLContext {
       val schema = StructType(Seq(StructField("a", StringType, false)))
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
       val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
-      assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-        partitionValues(0).getString(0) == "4d")
+      assert(partitionValues.length === 1 && partitionValues(0).numFields === 1 &&
+        partitionValues(0).getString(0) === "4d")
     }
   }
 
@@ -75,7 +75,8 @@ class FileIndexSuite extends SharedSQLContext {
       val schema = StructType(Seq(StructField("A", StringType, false)))
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
-        assert(fileIndex.partitionSchema.length == 1 && fileIndex.partitionSchema.head.name == "A")
+        assert(fileIndex.partitionSchema.length === 1 &&
+          fileIndex.partitionSchema.head.name === "A")
       }
     }
   }
@@ -95,7 +96,7 @@ class FileIndexSuite extends SharedSQLContext {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
-        assert(partitionValues.length == 2)
+        assert(partitionValues.length === 2)
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -123,13 +124,13 @@ class FileIndexSuite extends SharedSQLContext {
         val msg = intercept[RuntimeException] {
           fileIndex.partitionSpec()
         }.getMessage
-        assert(msg == "Failed to cast value `foo` to `IntegerType` for partition column `a`")
+        assert(msg === "Failed to cast value `foo` to `IntegerType` for partition column `a`")
       }
 
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
-        assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
+        assert(partitionValues.length === 1 && partitionValues(0).numFields === 1 &&
           partitionValues(0).isNullAt(0))
       }
     }
@@ -180,9 +181,9 @@ class FileIndexSuite extends SharedSQLContext {
           new Path(tmp.getCanonicalPath)
         }
         HiveCatalogMetrics.reset()
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === 0)
         new InMemoryFileIndex(spark, topLevelDirs, Map.empty, None)
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === expectedNumPar)
       }
     }
   }
@@ -194,9 +195,9 @@ class FileIndexSuite extends SharedSQLContext {
           new File(dir, s"foo=$i.txt").mkdir()
         }
         HiveCatalogMetrics.reset()
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === 0)
         new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === expectedNumPar)
       }
     }
   }
@@ -216,9 +217,9 @@ class FileIndexSuite extends SharedSQLContext {
           }
         }
         HiveCatalogMetrics.reset()
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === 0)
         new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === expectedNumPar)
       }
     }
   }
@@ -301,11 +302,11 @@ class FileIndexSuite extends SharedSQLContext {
 
       catalog.refresh()
 
-      assert(catalog.leafFilePaths.size == 1)
-      assert(catalog.leafFilePaths.head == fs.makeQualified(new Path(file.getAbsolutePath)))
+      assert(catalog.leafFilePaths.size === 1)
+      assert(catalog.leafFilePaths.head === fs.makeQualified(new Path(file.getAbsolutePath)))
 
-      assert(catalog.leafDirPaths.size == 1)
-      assert(catalog.leafDirPaths.head == fs.makeQualified(dirPath))
+      assert(catalog.leafDirPaths.size === 1)
+      assert(catalog.leafDirPaths.head === fs.makeQualified(dirPath))
     }
   }
 
@@ -331,7 +332,7 @@ class FileIndexSuite extends SharedSQLContext {
         .range(1)
         .select(col("id").as(colToUnescape), col("id"))
         .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
-      assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
+      assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name === colToUnescape))
     }
   }
 
@@ -349,7 +350,7 @@ class FileIndexSuite extends SharedSQLContext {
         val blockLocations = inMemoryFileIndex.leafFileStatuses.flatMap(
           _.asInstanceOf[LocatedFileStatus].getBlockLocations)
 
-        assert(blockLocations.forall(_.getClass == classOf[BlockLocation]))
+        assert(blockLocations.forall(_.getClass === classOf[BlockLocation]))
       }
     }
   }
@@ -388,10 +389,10 @@ class FileIndexSuite extends SharedSQLContext {
             file.mkdir()
           }
           HiveCatalogMetrics.reset()
-          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === 0)
           new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
 
-          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === expectedNumPar)
         }
       }
     }
