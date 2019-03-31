@@ -111,7 +111,7 @@ object Encoders {
 
   /**
    * Creates an encoder that serializes instances of the `java.time.LocalDate` class
-   * to the internal representation of Catalyst's DateType.
+   * to the internal representation of nullable Catalyst's DateType.
    *
    * @since 3.0.0
    */
@@ -126,7 +126,7 @@ object Encoders {
 
   /**
    * Creates an encoder that serializes instances of the `java.time.Instant` class
-   * to the internal representation of Catalyst's TimestampType.
+   * to the internal representation of nullable Catalyst's TimestampType.
    *
    * @since 3.0.0
    */
