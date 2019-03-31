@@ -130,6 +130,12 @@
     <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
+    <!--
+      Hive 2.3 need hive-common, hive-serde, hive-shims and hive-llap-client,
+      but Hive 1.2 does not need these dependencies. We use hive.extra.deps.scope to implement it.
+      It should be removed once we drop Hive 1.2 support.
+    -->
+    <hive.extra.deps.scope>provided</hive.extra.deps.scope>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.2.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
@@ -1384,7 +1390,7 @@
         <groupId>${hive.group}</groupId>
         <artifactId>hive-common</artifactId>
         <version>${hive.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.extra.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -1680,7 +1686,7 @@
         <groupId>${hive.group}</groupId>
         <artifactId>hive-serde</artifactId>
         <version>${hive.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.extra.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -1769,7 +1775,7 @@
         <groupId>${hive.group}</groupId>
         <artifactId>hive-shims</artifactId>
         <version>${hive.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.extra.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>com.google.guava</groupId>
@@ -2716,41 +2722,14 @@
         <hive.classifier>core</hive.classifier>
         <hive.version>2.3.4</hive.version>
         <hive.version.short>${hive.version}</hive.version.short>
+        <hive.extra.deps.scope>${hive.deps.scope}</hive.extra.deps.scope>
         <hive.parquet.version>${parquet.version}</hive.parquet.version>
         <orc.classifier></orc.classifier>
         <hive.parquet.group>org.apache.parquet</hive.parquet.group>
         <datanucleus-core.version>4.1.17</datanucleus-core.version>
       </properties>
       <dependencies>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-common</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-serde</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-shims</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-llap-client</artifactId>
-          <version>${hive.version}</version>
-          <scope>${hive.deps.scope}</scope>
-          <exclusions>
-            <exclusion>
-              <groupId>org.apache.curator</groupId>
-              <artifactId>curator-framework</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.curator</groupId>
-              <artifactId>apache-curator</artifactId>
-            </exclusion>
-          </exclusions>
-        </dependency>
-        <!-- Need hive-storage-api because we exclude it from orc-mapreduce -->
+        <!-- Both ORC and Parquet need hive-storage-api, but it is excluded by orc-mapreduce -->
         <dependency>
           <groupId>org.apache.hive</groupId>
           <artifactId>hive-storage-api</artifactId>
