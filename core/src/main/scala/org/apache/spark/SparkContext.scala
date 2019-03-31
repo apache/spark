@@ -2667,23 +2667,25 @@ object SparkContext extends Logging {
 
     // SPARK-26340: Ensure that executor's core num meets at least one task requirement.
     def checkCpusPerTask(
-      executorCoreNum: Int = sc.conf.get(EXECUTOR_CORES),
-      clusterMode: Boolean = true): Unit = {
+      clusterMode: Boolean,
+      maxCoresPerExecutor: Option[Int]): Unit = {
       val cpusPerTask = sc.conf.get(CPUS_PER_TASK)
-      if (executorCoreNum < cpusPerTask) {
-        val message = if (clusterMode) {
-          s"${CPUS_PER_TASK.key} must be <= ${EXECUTOR_CORES.key} when run on $master."
-        } else {
-          s"Only $executorCoreNum cores available per executor when run on $master," +
-            s" and ${CPUS_PER_TASK.key} must be <= it."
+      if (clusterMode && sc.conf.contains(EXECUTOR_CORES)) {
+        if (sc.conf.get(EXECUTOR_CORES) < cpusPerTask) {
+          throw new SparkException(s"${CPUS_PER_TASK.key}" +
+            s" must be <= ${EXECUTOR_CORES.key} when run on $master.")
         }
-        throw new SparkException(message)
+      } else if (maxCoresPerExecutor.isDefined) {
+        if (maxCoresPerExecutor.get < cpusPerTask) {
+          throw new SparkException(s"Only ${maxCoresPerExecutor.get} cores available per executor" +
+            s" when run on $master, and ${CPUS_PER_TASK.key} must be <= it.")
+        }
       }
     }
 
     master match {
       case "local" =>
-        checkCpusPerTask(1, clusterMode = false)
+        checkCpusPerTask(clusterMode = false, Some(1))
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
@@ -2696,7 +2698,7 @@ object SparkContext extends Logging {
         if (threadCount <= 0) {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
-        checkCpusPerTask(threadCount, clusterMode = false)
+        checkCpusPerTask(clusterMode = false, Some(threadCount))
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
@@ -2707,14 +2709,14 @@ object SparkContext extends Logging {
         // local[*, M] means the number of cores on the computer with M failures
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
-        checkCpusPerTask(threadCount, clusterMode = false)
+        checkCpusPerTask(clusterMode = false, Some(threadCount))
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
-        checkCpusPerTask()
+        checkCpusPerTask(clusterMode = true, None)
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
         val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
@@ -2722,7 +2724,7 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        checkCpusPerTask()
+        checkCpusPerTask(clusterMode = true, Some(coresPerSlave.toInt))
         // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
         val memoryPerSlaveInt = memoryPerSlave.toInt
         if (sc.executorMemory > memoryPerSlaveInt) {
@@ -2743,7 +2745,7 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case masterUrl =>
-        checkCpusPerTask()
+        checkCpusPerTask(clusterMode = true, None)
         val cm = getClusterManager(masterUrl) match {
           case Some(clusterMgr) => clusterMgr
           case None => throw new SparkException("Could not parse Master URL: '" + master + "'")
