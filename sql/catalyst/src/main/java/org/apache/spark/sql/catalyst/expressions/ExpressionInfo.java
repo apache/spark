@@ -30,6 +30,7 @@ public class ExpressionInfo {
     private String examples;
     private String note;
     private String since;
+    private String deprecated;
 
     public String getClassName() {
         return className;
@@ -63,6 +64,10 @@ public class ExpressionInfo {
         return note;
     }
 
+    public String getDeprecated() {
+        return deprecated;
+    }
+
     public String getDb() {
         return db;
     }
@@ -75,13 +80,15 @@ public class ExpressionInfo {
             String arguments,
             String examples,
             String note,
-            String since) {
+            String since,
+            String deprecated) {
         assert name != null;
         assert arguments != null;
         assert examples != null;
         assert examples.isEmpty() || examples.startsWith(System.lineSeparator() + "    Examples:");
         assert note != null;
         assert since != null;
+        assert deprecated != null;
 
         this.className = className;
         this.db = db;
@@ -91,6 +98,7 @@ public class ExpressionInfo {
         this.examples = examples;
         this.note = note;
         this.since = since;
+        this.deprecated = deprecated;
 
         // Make the extended description.
         this.extended = arguments + examples;
@@ -98,25 +106,31 @@ public class ExpressionInfo {
             this.extended = "\n    No example/argument for _FUNC_.\n";
         }
         if (!note.isEmpty()) {
+            assert note.startsWith("    ") && note.endsWith(System.lineSeparator());
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
         }
         if (!since.isEmpty()) {
+            assert Integer.parseInt(since.split("\\.")[0]) >= 0;
             this.extended += "\n    Since: " + since + "\n";
+        }
+        if (!deprecated.isEmpty()) {
+            assert deprecated.startsWith("    ") && deprecated.endsWith(System.lineSeparator());
+            this.extended += "\n    Deprecated:\n      " + deprecated.trim() + "\n";
         }
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, null, name, null, "", "", "", "");
+        this(className, null, name, null, "", "", "", "", "");
     }
 
     public ExpressionInfo(String className, String db, String name) {
-        this(className, db, name, null, "", "", "", "");
+        this(className, db, name, null, "", "", "", "", "");
     }
 
     // This is to keep the original constructor just in case.
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.
-        this(className, db, name, usage, extended, "", "", "");
+        this(className, db, name, usage, extended, "", "", "", "");
     }
 }

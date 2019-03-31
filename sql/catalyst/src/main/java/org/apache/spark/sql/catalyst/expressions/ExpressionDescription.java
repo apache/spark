@@ -49,17 +49,21 @@ import java.lang.annotation.RetentionPolicy;
  *     > SELECT ...;
  *      ...
  *
- * `note()` contains some notes for the expression optionally.
+ * `note()` contains some notes for the expression optionally. This property should have 4
+ * leading spaces and end with a newline.
  *
  * `since()` contains version information for the expression. Version is specified by,
- * for example, "2.2.0".
+ * for example, "2.2.0". It should not start with non-number characters.
+ *
+ * `deprecated()` contains deprecation information for the expression optionally, for example,
+ * "Deprecated since 2.2.0. Use something else instead". This property should have 4
+ *  leading spaces and end with a newline.
  *
  *  We can refer the function name by `_FUNC_`, in `usage`, `arguments` and `examples`, as it's
  *  registered in `FunctionRegistry`.
  *
- *  Note that, if `extended()` is defined, `arguments()`, `examples()`, `note()` and `since()` will
- *  be ignored and `extended()` will be used for the extended description for backward
- *  compatibility.
+ *  Note that, if `extended()` is defined, `arguments()`, `examples()`, `note()`, `since()` and
+ *  `deprecated()` should be not defined together. `extended()` exists for backward compatibility.
  */
 @DeveloperApi
 @Retention(RetentionPolicy.RUNTIME)
@@ -70,4 +74,5 @@ public @interface ExpressionDescription {
     String examples() default "";
     String note() default "";
     String since() default "";
+    String deprecated() default "";
 }
