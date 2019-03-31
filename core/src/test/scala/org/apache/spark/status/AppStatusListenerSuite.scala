@@ -239,7 +239,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       }
 
       check[StageDataWrapper](key(stages.head)) { stage =>
-        assert(stage.info.metrics.memoryBytesSpilled === s1Tasks.size * value)
+        assert(stage.info.memoryBytesSpilled === s1Tasks.size * value)
       }
 
       val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")

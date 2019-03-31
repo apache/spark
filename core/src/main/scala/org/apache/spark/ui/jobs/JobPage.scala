@@ -26,6 +26,7 @@ import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
@@ -201,19 +202,12 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       // This could be empty if the listener hasn't received information about the
       // stage or if the stage information has been garbage collected
       store.asOption(store.lastStageAttempt(stageId)).getOrElse {
-        val metrics = new v1.TaskMetrics(
-          0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L,
-          new v1.InputMetrics(0L, 0L),
-          new v1.OutputMetrics(0L, 0L),
-          new v1.ShuffleReadMetrics(0L, 0L, 0L, 0L, 0L, 0L, 0L),
-          new v1.ShuffleWriteMetrics(0L, 0L, 0L))
-
         new v1.StageData(
           v1.StageStatus.PENDING,
           stageId,
           0, 0, 0, 0, 0, 0, 0,
-          None, None, None, None,
-          metrics,
+          0L, 0L, None, None, None, None,
+          0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L,
           "Unknown",
           None,
           "Unknown",

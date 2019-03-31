@@ -152,7 +152,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         <ul class="unstyled">
           <li>
             <strong>Total Time Across All Tasks: </strong>
-            {UIUtils.formatDuration(stageData.metrics.executorRunTime)}
+            {UIUtils.formatDuration(stageData.executorRunTime)}
           </li>
           <li>
             <strong>Locality Level Summary: </strong>
@@ -161,39 +161,37 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           {if (hasInput(stageData)) {
             <li>
               <strong>Input Size / Records: </strong>
-              {s"${Utils.bytesToString(stageData.metrics.inputMetrics.bytesRead)} / " +
-                s"${stageData.metrics.inputMetrics.recordsRead}"}
+              {s"${Utils.bytesToString(stageData.inputBytes)} / ${stageData.inputRecords}"}
             </li>
           }}
           {if (hasOutput(stageData)) {
             <li>
               <strong>Output Size / Records: </strong>
-              {s"${Utils.bytesToString(stageData.metrics.outputMetrics.bytesWritten)} / " +
-                s"${stageData.metrics.outputMetrics.recordsWritten}"}
+              {s"${Utils.bytesToString(stageData.outputBytes)} / ${stageData.outputRecords}"}
             </li>
           }}
           {if (hasShuffleRead(stageData)) {
             <li>
               <strong>Shuffle Read Size / Records: </strong>
-              {s"${Utils.bytesToString(stageData.metrics.shuffleReadMetrics.bytesRead)} / " +
-               s"${stageData.metrics.shuffleReadMetrics.recordsRead}"}
+              {s"${Utils.bytesToString(stageData.shuffleReadBytes)} / " +
+               s"${stageData.shuffleReadRecords}"}
             </li>
           }}
           {if (hasShuffleWrite(stageData)) {
             <li>
               <strong>Shuffle Write Size / Records: </strong>
-               {s"${Utils.bytesToString(stageData.metrics.shuffleWriteMetrics.bytesWritten)} / " +
-               s"${stageData.metrics.shuffleWriteMetrics.recordsWritten}"}
+               {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
+               s"${stageData.shuffleWriteRecords}"}
             </li>
           }}
           {if (hasBytesSpilled(stageData)) {
             <li>
               <strong>Spill (Memory): </strong>
-              {Utils.bytesToString(stageData.metrics.memoryBytesSpilled)}
+              {Utils.bytesToString(stageData.memoryBytesSpilled)}
             </li>
             <li>
               <strong>Spill (Disk): </strong>
-              {Utils.bytesToString(stageData.metrics.diskBytesSpilled)}
+              {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
           }}
           {if (!stageJobIds.isEmpty) {
@@ -835,20 +833,16 @@ private[spark] object ApiHelper {
     stageData.accumulatorUpdates.exists { acc => acc.name != null && acc.value != null }
   }
 
-  def hasInput(stageData: StageData): Boolean = stageData.metrics.inputMetrics.bytesRead > 0
+  def hasInput(stageData: StageData): Boolean = stageData.inputBytes > 0
 
-  def hasOutput(stageData: StageData): Boolean = stageData.metrics.outputMetrics.bytesWritten > 0
+  def hasOutput(stageData: StageData): Boolean = stageData.outputBytes > 0
 
-  def hasShuffleRead(stageData: StageData): Boolean = {
-    stageData.metrics.shuffleReadMetrics.bytesRead > 0
-  }
+  def hasShuffleRead(stageData: StageData): Boolean = stageData.shuffleReadBytes > 0
 
-  def hasShuffleWrite(stageData: StageData): Boolean = {
-    stageData.metrics.shuffleWriteMetrics.bytesWritten > 0
-  }
+  def hasShuffleWrite(stageData: StageData): Boolean = stageData.shuffleWriteBytes > 0
 
   def hasBytesSpilled(stageData: StageData): Boolean = {
-    stageData.metrics.diskBytesSpilled > 0 || stageData.metrics.memoryBytesSpilled > 0
+    stageData.diskBytesSpilled > 0 || stageData.memoryBytesSpilled > 0
   }
 
   def totalBytesRead(metrics: ShuffleReadMetrics): Long = {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui
 
+import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -28,7 +29,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
-import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, InputMetrics, OutputMetrics, ShuffleReadMetrics, ShuffleWriteMetrics, StageData, StageStatus, TaskMetrics => UITaskMetrics}
+import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
 import org.apache.spark.ui.jobs.{ApiHelper, StagePage, StagesTab, TaskPagedTable}
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
@@ -39,41 +40,6 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val statusStore = AppStatusStore.createLiveStore(conf)
     try {
-      val metrics = new UITaskMetrics(
-        executorDeserializeTime = 1L,
-        executorDeserializeCpuTime = 1L,
-        executorRunTime = 1L,
-        executorCpuTime = 1L,
-        resultSize = 1L,
-        jvmGcTime = 1L,
-        resultSerializationTime = 1L,
-        memoryBytesSpilled = 1L,
-        diskBytesSpilled = 1L,
-        peakExecutionMemory = 1L,
-        inputMetrics = new InputMetrics(
-          bytesRead = 1L,
-          recordsRead = 1L
-        ),
-        outputMetrics = new OutputMetrics(
-          bytesWritten = 1L,
-          recordsWritten = 1L
-        ),
-        shuffleReadMetrics = new ShuffleReadMetrics(
-          remoteBlocksFetched = 1L,
-          localBlocksFetched = 1L,
-          fetchWaitTime = 1L,
-          remoteBytesRead = 1L,
-          remoteBytesReadToDisk = 1L,
-          localBytesRead = 1L,
-          recordsRead = 1L
-        ),
-        shuffleWriteMetrics = new ShuffleWriteMetrics(
-          bytesWritten = 1L,
-          writeTime = 1L,
-          recordsWritten = 1L
-        )
-      )
-
       val stageData = new StageData(
         status = StageStatus.ACTIVE,
         stageId = 1,
@@ -85,12 +51,23 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         numKilledTasks = 1,
         numCompletedIndices = 1,
 
+        executorRunTime = 1L,
+        executorCpuTime = 1L,
         submissionTime = None,
         firstTaskLaunchedTime = None,
         completionTime = None,
         failureReason = None,
 
-        metrics = metrics,
+        inputBytes = 1L,
+        inputRecords = 1L,
+        outputBytes = 1L,
+        outputRecords = 1L,
+        shuffleReadBytes = 1L,
+        shuffleReadRecords = 1L,
+        shuffleWriteBytes = 1L,
+        shuffleWriteRecords = 1L,
+        memoryBytesSpilled = 1L,
+        diskBytesSpilled = 1L,
 
         name = "stage1",
         description = Some("description"),

@@ -210,12 +210,23 @@ class StageData private[spark](
     val numKilledTasks: Int,
     val numCompletedIndices: Int,
 
+    val executorRunTime: Long,
+    val executorCpuTime: Long,
     val submissionTime: Option[Date],
     val firstTaskLaunchedTime: Option[Date],
     val completionTime: Option[Date],
     val failureReason: Option[String],
 
-    val metrics: TaskMetrics,
+    val inputBytes: Long,
+    val inputRecords: Long,
+    val outputBytes: Long,
+    val outputRecords: Long,
+    val shuffleReadBytes: Long,
+    val shuffleReadRecords: Long,
+    val shuffleWriteBytes: Long,
+    val shuffleWriteRecords: Long,
+    val memoryBytesSpilled: Long,
+    val diskBytesSpilled: Long,
 
     val name: String,
     val description: Option[String],
@@ -279,10 +290,7 @@ class ShuffleReadMetrics private[spark](
     val remoteBytesRead: Long,
     val remoteBytesReadToDisk: Long,
     val localBytesRead: Long,
-    val recordsRead: Long) {
-
-  def bytesRead: Long = remoteBytesRead + localBytesRead
-}
+    val recordsRead: Long)
 
 class ShuffleWriteMetrics private[spark](
     val bytesWritten: Long,
