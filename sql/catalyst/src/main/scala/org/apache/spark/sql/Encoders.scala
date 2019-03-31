@@ -110,7 +110,8 @@ object Encoders {
   def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
 
   /**
-   * An encoder for nullable date type.
+   * Creates an encoder that serializes instances of the `java.time.LocalDate` class
+   * to the internal representation of Catalyst's DateType.
    *
    * @since 3.0.0
    */
@@ -124,7 +125,8 @@ object Encoders {
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
 
   /**
-   * An encoder for nullable timestamp type.
+   * Creates an encoder that serializes instances of the `java.time.Instant` class
+   * to the internal representation of Catalyst's TimestampType.
    *
    * @since 3.0.0
    */
