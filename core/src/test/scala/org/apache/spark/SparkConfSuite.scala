@@ -339,12 +339,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
-  test("SPARK-27244 toDebugString should redact passwords") {
-    val conf = new SparkConf().set("dummy.password", "dummy-password")
-    conf.validateSettings()
-
-    assert(conf.get("dummy.password") === "dummy-password")
-    assert(conf.toDebugString.contains(s"dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+  test("SPARK-27244 toDebugString redacts sensitive information") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set("dummy.password", "dummy-password")
+      .set("spark.hadoop.hive.server2.keystore.password", "1234")
+      .set("spark.hadoop.javax.jdo.option.ConnectionPassword", "1234")
+      .set("spark.regular.property", "regular_value")
+    assert(conf.toDebugString ==
+      s"""
+        |dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.hive.server2.keystore.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.javax.jdo.option.ConnectionPassword=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.regular.property=regular_value
+      """.stripMargin.trim)
   }
 
   val defaultIllegalValue = "SomeIllegalValue"
