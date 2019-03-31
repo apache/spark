@@ -439,7 +439,7 @@ private[ui] class StageDataSource(
     val outputWriteWithUnit = if (outputWrite > 0) Utils.bytesToString(outputWrite) else ""
     val shuffleRead = stageData.metrics.shuffleReadMetrics.bytesRead
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
-    val shuffleWrite = stageData.metrics.shuffleWriteMetrics.bytesWritten
+    val shuffleWrite = stageData.metrics.shuffleWriteMetrics.recordsWritten
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
 
 
