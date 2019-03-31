@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -57,7 +55,7 @@ object PhysicalOperation extends PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  private def collectProjectsAndFilters(plan: LogicalPlan):
+  private[planning] def collectProjectsAndFilters(plan: LogicalPlan):
       (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
       case Project(fields, child) if fields.forall(_.deterministic) =>
@@ -66,11 +64,12 @@ object PhysicalOperation extends PredicateHelper {
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
       case filter @ Filter(condition, child) =>
-        val determinedCondition = extractDeterministicExpressions(condition)
-        if (determinedCondition.isDefined) {
+        // Extract the deterministic expressions
+        val (candidates, _) = splitConjunctivePredicates(condition).partition(_.deterministic)
+        if (candidates.nonEmpty) {
           val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
-          val substitutedCondition = substitute(aliases)(determinedCondition.get)
-          (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
+          val substitutedConditions = candidates.map(substitute(aliases))
+          (fields, filters ++ substitutedConditions, other, aliases)
         } else {
           (None, Nil, filter, Map.empty)
         }
@@ -96,54 +95,6 @@ object PhysicalOperation extends PredicateHelper {
       case a: AttributeReference =>
         aliases.get(a)
           .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
-    }
-  }
-
-  /**
-   * Extract the deterministic expressions in non-deterministic expressions, i.e. 'And' and 'Or'.
-   *
-   * Example input:
-   * {{{
-   *   col = 1 and rand() < 1
-   *   (col1 = 1 and rand() < 1) and col2 = 1
-   *   col1 = 1 or rand() < 1
-   *   (col1 = 1 and rand() < 1) or (col2 = 1 and rand() < 1)
-   * }}}
-   *
-   * Result:
-   * {{{
-   *   col = 1
-   *   col1 = 1 and col2 = 1
-   *   None
-   *   col1 = 1 or col2 = 1
-   * }}}
-   */
-  private[planning] def extractDeterministicExpressions(expr: Expression): Option[Expression] = {
-    if (expr.deterministic) {
-      Some(expr)
-    } else {
-      expr match {
-        case And(left, right) =>
-          val leftDeterminedExpr = extractDeterministicExpressions(left)
-          val rightDeterminedExpr = extractDeterministicExpressions(right)
-          if (leftDeterminedExpr.isDefined && rightDeterminedExpr.isDefined) {
-            Some(And(leftDeterminedExpr.get, rightDeterminedExpr.get))
-          } else if (leftDeterminedExpr.isDefined || rightDeterminedExpr.isDefined) {
-            Some(leftDeterminedExpr.getOrElse(rightDeterminedExpr.get))
-          } else {
-            None
-          }
-        case Or(left, right) =>
-          val leftDeterminedExpr = extractDeterministicExpressions(left)
-          val rightDeterminedExpr = extractDeterministicExpressions(right)
-          if (leftDeterminedExpr.isDefined && rightDeterminedExpr.isDefined) {
-            Some(Or(leftDeterminedExpr.get, rightDeterminedExpr.get))
-          } else {
-            None
-          }
-        case _ =>
-          None
-      }
     }
   }
 }

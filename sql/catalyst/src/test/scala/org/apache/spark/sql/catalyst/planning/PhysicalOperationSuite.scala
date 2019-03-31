@@ -18,28 +18,28 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{And, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+
 
 class PhysicalOperationSuite extends PlanTest {
-  import PhysicalOperation.extractDeterministicExpressions
+  import PhysicalOperation.collectProjectsAndFilters
 
-  test("Extract deterministic expressions") {
-    val expr1 = ('col.int === Literal(1)) && rand(1) < 1
-    val expr2 = 'col.int === Literal(1)
-    compareExpressions(extractDeterministicExpressions(expr1).get, expr2)
+  val relation = LocalRelation('a.int, 'b.int, 'c.int)
 
-    val expr3 = (('col1.int === Literal(1)) && rand(1) < 1) && ('col2.int === Literal(1))
-    val expr4 = ('col1.int === Literal(1)) && ('col2.int === Literal(1))
-    compareExpressions(extractDeterministicExpressions(expr3).get, expr4)
+  test("test non-deterministic conditions in filter") {
+    val expr1 = ('a.int === Literal(1)) && rand(1) < 1
+    val expr2 = 'a.int === Literal(1)
+    compareExpressions(collectProjectsAndFilters(relation.where(expr1))._2.reduce(And), expr2)
 
-    val expr5 = ('col.int === Literal(1)) || rand(1) < 1
-    val expr6 = Literal(null)
-    compareExpressions(extractDeterministicExpressions(expr5).getOrElse(Literal(null)), expr6)
+    val expr3 = (('a.int === Literal(1)) && rand(1) < 1) && ('b.int === Literal(1))
+    val expr4 = ('a.int === Literal(1)) && ('b.int === Literal(1))
+    compareExpressions(collectProjectsAndFilters(relation.where(expr3))._2.reduce(And), expr4)
 
-    val expr7 = (('col1.int === Literal(1)) && rand(1) < 1) ||
-        (('col2.int === Literal(1)) && rand(1) < 1)
-    val expr8 = ('col1.int === Literal(1)) || ('col2.int === Literal(1))
-    compareExpressions(extractDeterministicExpressions(expr7).getOrElse(Literal(null)), expr8)
+    val expr5 = ('a.int === Literal(1)) || rand(1) < 1
+    assert(collectProjectsAndFilters(relation.where(expr5))._2.isEmpty)
   }
+
 }
