@@ -1349,7 +1349,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |LIMIT 1
           """.stripMargin)
 
-        df.explain(true)
         var countSubqueryExec = 0
         var countReuseSubqueryExec = 0
         df.queryExecution.executedPlan.transformAllExpressions {
